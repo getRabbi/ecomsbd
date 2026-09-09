@@ -1,15 +1,15 @@
 # Implementation status
 
-**Phase A (foundation) — COMPLETE.** Last updated 2026-09-09.
+**Phase B (commerce core) — COMPLETE.** Last updated 2026-09-10.
 
 | | |
 |---|---|
 | **Phase A** | COMPLETE |
-| **GitHub baseline** | PUSHED |
+| **Phase B** | COMPLETE |
 | **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
-| **Baseline commit** | `d70856f66ba206d1f1885235110680fbfc577eaf` |
 | **Branch** | `main` |
-| **Verified at baseline** | 187 backend tests, 74 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean |
+| **Phase A baseline commit** | `d70856f66ba206d1f1885235110680fbfc577eaf` |
+| **Verified at Phase B** | 325 backend tests, 133 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean |
 
 All Phase B–F work is committed to this repository. Workflow: implement a
 vertical slice, test it, commit it, push it — not one commit at the end.
@@ -34,7 +34,7 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Error taxonomy | Stable machine codes + Bangla message + `retryable` + `reference_id`; 30 codes declared, incl. later-phase ones |
 | Request context | contextvars for trace/tenant/actor, propagated through the pure-ASGI middleware |
 | Database | Async SQLAlchemy 2, portable column types (`GUID`, `JSONColumn`, `TZDateTime`, `Paisa`) |
-| **Tenant isolation** | Four central guards on the ORM session; 15 tests, incl. cross-tenant read/write/raw-SQL |
+| **Tenant isolation** | Four central guards on the ORM session; 23 tests, incl. every Phase B table |
 | Alembic | Portable migrations, `render_item` hook, URL from settings; chain + drift + reversibility tested |
 | Money engine | Integer paisa, central half-up rounding, basis points, largest-remainder allocation, BD lakh formatting |
 | Phone normalization | Bangla + Eastern-Arabic + full-width numerals, all E.164 shapes, multi-number extraction that never guesses |
@@ -44,7 +44,7 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Feature flags | Global / per-tenant / deterministic percentage rollout; provider flags default **off** |
 | Idempotency | Key store with replay and body-mismatch conflict |
 | Rate limiting | Fixed-window counters + distributed lock; Redis with an in-process fallback |
-| Cache abstraction | Redis backend, in-process backend for local/test |
+| Cursor pagination | `Page[T]`, opaque `(created_at, id)` cursor, `apply_cursor` written as an explicit OR for PostgreSQL/SQLite parity |
 | Health | `/health/live`, `/health/ready` (DB + migration revision + Redis) |
 | ARQ worker | Bootstrap, cron schedule, outbox dispatcher with per-tenant context and handler registry |
 | Sentry | Optional; `send_default_pii=False` and a redaction `before_send` |
@@ -74,13 +74,51 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Entitlements | 13 keys, 3 plans, `require()` gate, snapshot endpoint, Free default |
 | Subscriptions | State model and resolution; **no path grants a paid plan without verification** |
 
+### Commerce core (Phase B)
+
+| Area | Detail |
+|---|---|
+| Products | CRUD, SKU unique per shop, cost and selling price in paisa, low-stock threshold, **archive rather than delete** |
+| Stock ledger | Append-only `stock_movements` with `balance_after`; the spec §10.4 reason set; stock is never set, only moved |
+| Oversell guard | The balance update is one relative `SET stock = stock + :delta` statement with the non-negative condition inside it, so concurrent adjustments cannot lose each other or drift below zero without `allow_negative` |
+| Customers | Phone-first identity; AES-GCM `phone_enc` + keyed HMAC + `phone_last4` + precomputed mask; denormalised order/delivered/returned counts; `success_rate_basis_points` is `null` with no terminal history, never 0 |
+| Customer flags | `NONE` / `STARRED` / `BLOCKED` with a reason. Advisory only — nothing is enforced, and the wording is about the shop's decision, not the person (§130) |
+| Addresses | `raw_address` is never overwritten by a courier's normalisation; provider location refs kept alongside |
+| Phone reveal | One endpoint returns a plaintext number, requires a stated reason, and writes a `privacy.phone_revealed` audit entry |
+| Orders | Full state machine (`DRAFT → CONFIRMED → PACKED → FULFILLMENT_STARTED → COMPLETED`, `CANCELLED` from the first three), address snapshot, `business_date`, `version` for conflict detection |
+| Order numbering | `CP-YYYYMMDD-NNNN`, allocated with a savepoint retry on collision. The `CP-` prefix is a **stored value** and is deliberately not rebranded |
+| Order items | Snapshot `product_name`, `sku`, `unit_price_paisa` and `unit_cost_snapshot_paisa` at creation, so editing a product later cannot move a past order's cost |
+| **No auto-booking** | `POST /v1/orders` creates a record and contacts nobody. There is no courier HTTP call anywhere in the codebase |
+| Paste parser (layer 1) | Deterministic, offline, no model. Extracts phones, name, address, items with size/colour, and the COD amount; a field it is unsure about comes back empty with a confidence score, and the original text is always echoed |
+| Duplicate detection | 24-hour window, identity signals (same phone/customer) separated from corroborating ones (identical or similar amount, similar items); at least one corroboration is required, so a repeat customer is not flagged for existing. **Warns, never blocks** |
+| Consignments | Full frozen §10.2 status machine incl. `BOOKING_UNKNOWN`, and `consignment_items` with a DB check that `delivered + returned <= shipped`. Schema only — no provider integration |
+| Import framework | Upload → detect → dry-run → commit, for products and orders. SHA-256 refusal of a re-uploaded committed file, Bangla and English column aliases, per-row failure isolation, and **no silent coercion**: a bad phone or amount is reported with the value the file contained |
+| Offline sync | `POST /v1/sync/mutations` idempotent by mutation id, `GET /v1/sync/changes` with tombstones; conflicts return the server's version and apply nothing. Only orders, products, customers and stock adjustments may be queued |
+
 ### API (`/v1`)
 
-`POST /auth/otp/request` · `POST /auth/otp/verify` · `POST /auth/refresh` ·
-`POST /auth/logout` · `POST /auth/select-tenant` · `GET /me` · `POST /tenants` ·
-`GET /tenant` · `PATCH /tenant` · `GET /couriers/providers` ·
-`GET /billing/entitlements` · `GET /billing/plans` · `GET /health/live` ·
-`GET /health/ready`
+**Auth and account:** `POST /auth/otp/request` · `POST /auth/otp/verify` ·
+`POST /auth/refresh` · `POST /auth/logout` · `POST /auth/select-tenant` ·
+`GET /me` · `POST /tenants` · `GET /tenant` · `PATCH /tenant`
+
+**Products:** `GET /products` · `POST /products` · `GET /products/{id}` ·
+`PATCH /products/{id}` · `GET /products/{id}/stock-movements` ·
+`POST /products/{id}/stock-adjustments`
+
+**Customers:** `GET /customers` · `POST /customers` · `GET /customers/lookup` ·
+`GET /customers/{id}` · `PATCH /customers/{id}` ·
+`POST /customers/{id}/reveal-phone`
+
+**Orders:** `GET /orders` · `POST /orders` · `POST /orders/parse` ·
+`POST /orders/check-duplicates` · `GET /orders/{id}` · `PATCH /orders/{id}`
+
+**Imports:** `POST /imports` · `POST /imports/{id}/dry-run` ·
+`POST /imports/{id}/commit` · `GET /imports/{id}` · `GET /imports/{id}/rows`
+
+**Sync:** `POST /sync/mutations` · `GET /sync/changes`
+
+**Other:** `GET /couriers/providers` · `GET /billing/entitlements` ·
+`GET /billing/plans` · `GET /health/live` · `GET /health/ready`
 
 ### Flutter app
 
@@ -89,27 +127,16 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Branding | `ecomsbd` — Android label, `MaterialApp.title`, brand pill, menu title, search copy |
 | Design tokens | Full palette, radii, spacing, shadows and type scale from the prototype CSS |
 | Glass system | `GlassSurface` with a performant non-blur fallback, switched by a device-tier probe |
-| Components | 26 reusable components (see below) |
+| Components | 35 reusable components |
 | Charts | 6 chart types, all `CustomPainter`, zero dependencies |
-| Local database | Drift with the offline mutation outbox, per-tenant cache, sync cursors; timestamps stored as UTC text |
-| API client | Dio with bearer injection, **single-flight** token refresh, trace propagation, idempotency-key support, typed errors |
+| Local database | Drift v2: offline outbox, per-tenant blob cache, sync cursors, and mirrors for products, customers and orders |
+| **Real repositories** | Products, customers, orders and imports read through the API and mirror locally. No production repository can reach `lib/demo` |
+| Cached reads | When the device is offline the mirror is served **labelled with when it was true**; when there is no mirror the screen says "No connection" rather than showing an empty list |
+| Sync engine | Drains the outbox before pulling changes, treats `DUPLICATE` as success, backs off exponentially without losing an entry, parks conflicts, applies tombstones, and re-keys a local row to the server's id |
+| Offline writes | Queued with the id the device minted, which is also the mutation id and the order's `client_id` — the same id on every retry |
+| API client | Dio with bearer injection, **single-flight** token refresh, trace propagation, idempotency-key support, multipart upload, typed errors |
 | Token storage | Android `EncryptedSharedPreferences`, never `SharedPreferences` or Drift |
-| Auth state | Restore / sign-out / onboarding / ready, driving all routing |
-| Router | `go_router` with redirection driven solely by auth stage |
-| Screens | Splash, phone login, OTP verify, shop setup, main shell, Home, Orders, Money, Insights, Menu overlay |
-
-**Components:** `EcomsbdScaffold`, `GlassTopPill`, `BrandPill`, `GlassIconButton`,
-`GlassTopBar`, `GlassBackPill`, `GlassCard`, `StrongGlassCard`, `SectionHeader`,
-`PageHeader`, `HeroMoneyCard`, `MetricTile`, `QuickActionTile`, `AttentionCard`,
-`DarkHighlightPanel`, `SellerFeedCard`, `GlassListRow`, `RowIcon`, `OrderCard`,
-`Timeline`, `FindingCard`, `MoneyAgingRow`, `PremiumChartCard`, `StatusChip`,
-`RiskBadge`, `ProviderBadge`, `DataQualityBadge`, `MoneyText`,
-`BottomGlassNavigation`, `GlassBottomSheet`, `OfflineBanner`,
-`ProviderHealthBanner`, `EmptyState`, `SkeletonLoader`, `DashboardSkeleton`.
-
-**Charts:** `ProfitTrendChart` (smooth gradient line + area), `CodDonutChart`,
-`DeliveryFunnelChart`, `SettledVsDueChart` (grouped bars), `HorizontalBarChart`
-(profitability and return pressure).
+| Screens | Splash, phone login, OTP verify, shop setup, main shell, Home, Orders, Money, Insights, Menu, **Products (list/form/stock adjustment/history), Customers (list/detail), Orders (feed/compose/detail), Imports** |
 
 ---
 
@@ -117,13 +144,15 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 
 | Area | What exists | What is missing |
 |---|---|---|
-| **Home / Orders / Money / Insights screens** | Full layout, charts, components, responsive behaviour | Real data. They render fixtures from `lib/demo/` and each shows a visible **Demo data** marker. Wiring happens with the endpoints in Phases B–E. |
-| Courier adapter | `CourierAdapter` Protocol, `BookingOutcome` incl. `UNKNOWN`, capability manifests, `Unavailable` result type | No provider implementation. No HTTP call exists anywhere in the codebase. |
+| **Home / Money / Insights screens** | Full layout, charts, components, responsive behaviour | Real data. They render fixtures from `lib/demo/` and each shows a visible **Demo data** marker. Wiring happens with the money and profit endpoints in Phases D–E. |
+| Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | The engines that would produce real values (Phases C, D, E). The placeholders are deliberate: a fabricated courier or profit value is worse than an honest gap. |
+| Courier adapter | `CourierAdapter` Protocol, `BookingOutcome` incl. `UNKNOWN`, capability manifests, `Unavailable` result type, and now the `consignments` / `consignment_items` schema | No provider implementation. No HTTP call exists anywhere in the codebase. |
 | Provider manifests | Loader, three-valued capability state, four manifests | Steadfast/Pathao/RedX are entirely `unknown` pending real documentation |
-| Entitlement metering | `require()` and limits work | `consume()` deliberately raises `NotImplementedError` — usage counters need the tables that own the metered actions (Phase B+). A silent no-op would ship a quota that is not enforced. |
+| Entitlement metering | `require()` and limits work | `consume()` deliberately raises `NotImplementedError` — usage counters need per-action tables. A silent no-op would ship a quota that is not enforced. |
 | Subscriptions | State model, resolution, Free default | No verification path; only `manual_admin` can write a subscription |
-| Offline outbox (client) | Drift tables, enqueue/claim/backoff/status, pending count | No sync engine yet — nothing sends the queue. `POST /v1/sync/mutations` is Phase B. |
-| Offline detection | `isOfflineProvider` and the banner | Driven by API results only; no connectivity subscription yet |
+| Offline detection | `isOfflineProvider`, the banner, and the sync controller that sets it from the last attempt | No connectivity subscription; the flag follows API results, which is what actually matters |
+| Conflict resolution UI | A conflicted record is marked, kept, and never overwritten; the detail screen explains it | No side-by-side "yours / theirs" chooser yet |
+| Import formats | CSV, with encoding fallbacks and delimiter sniffing | XLSX is detected and refused with a clear message rather than mis-parsed |
 | RBAC | Roles, permissions, matrix, `require_permission` dependency | Only Owner is reachable; no team-management endpoints |
 | Notifications | `Notification` severity model in the outbox topics | No FCM, no in-app notification centre |
 
@@ -132,10 +161,6 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 ## Not started
 
 Everything below is in the V1 spec and is scheduled, not dropped.
-
-**Phase B — commerce core:** products, stock movements, customers, orders,
-order items, `consignment_items`, manual order entry, paste-parse (deterministic
-layer 1), CSV import framework, duplicate detection, sync protocol.
 
 **Phase C — Steadfast:** credential vault UI, validation, real booking, status
 sync, webhooks, polling, `BOOKING_UNKNOWN` reconciliation, provider health.
@@ -176,7 +201,7 @@ inventing any of it.
 | FCM | Firebase project credentials | Push token is stored; nothing sends |
 | Cloudflare R2 | Bucket + keys | Needed before payout source-file preservation (Phase D) |
 | Sentry | DSN | Integration is wired and inert without one |
-| Risk data source | A licensed provider or courier customer-stats capability | Risk check tile is visibly disabled rather than fake |
+| Risk data source | A licensed provider or courier customer-stats capability | Risk check tile is visibly disabled rather than fake; order cards read "Not checked" |
 
 ---
 
@@ -184,18 +209,30 @@ inventing any of it.
 
 | Suite | Count | Command |
 |---|---:|---|
-| Backend | 187 | `cd backend && pytest -q` |
-| Flutter | 74 | `cd apps/mobile_flutter && flutter test` |
+| Backend | 325 | `cd backend && pytest -q` |
+| Flutter | 133 | `cd apps/mobile_flutter && flutter test` |
 
-**Backend:** config and production guards (17), money rules (26), phone
-normalization (32), tenant isolation (15), auth flow over HTTP (23), onboarding
-and entitlements (14), platform primitives — outbox, idempotency, crypto,
-redaction, flags, rate limiting, time, audit (45), migrations and schema
-invariants (11).
+**Backend (325):** phone normalization (37), platform primitives — outbox,
+idempotency, crypto, redaction, flags, rate limiting, time, audit (45), orders
+and duplicate detection (35), imports and sync (29), money rules (26), products
+and the stock ledger (25), auth flow over HTTP (23), tenant isolation (23),
+parser (22), customers (19), config and production guards (16), onboarding and
+entitlements (14), migrations and schema invariants (11).
 
-**Flutter:** money formatting (13), components and accessibility (16), screens at
-360dp with overflow assertions (12), local database (16), auth models and error
-contract (17).
+**Flutter (133):** commerce screens (18), auth models and error contract (17),
+components and accessibility (17), money formatting (16), commerce repositories
+(16), local database (12), sync engine (10), Phase A screens at 360dp (10),
+performance and large lists (9), commerce flows (8).
+
+### Performance guards
+
+Run as ordinary tests, so a regression fails CI rather than a device:
+
+- a 30-row page off a 2,000-order local mirror, and the same page at offset 1,950
+- search across 2,000 orders, and a low-stock filter across 500 products
+- a full page of order cards and product rows at 360×800, and again at 412×915,
+  with overflow assertions
+- six keystrokes in the search box issuing one request, not six
 
 ### Deliberately not covered yet
 
@@ -205,3 +242,5 @@ contract (17).
   Phase D, where they belong.
 - No integration test for the outbox worker loop end to end (needs Redis).
 - No screenshot/golden tests for the UI.
+- No test drives a real device's file picker; the import screen takes its
+  picker as a parameter and the tests supply a CSV directly.

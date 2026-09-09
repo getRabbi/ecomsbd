@@ -249,3 +249,175 @@ class TestRegistry:
         assert {"tenant_users", "subscriptions", "idempotency_keys"} <= names
         assert "users" not in names
         assert "tenants" not in names
+
+
+class TestCommerceCoreIsolation:
+    """The Phase B tables, checked individually.
+
+    The registry test above proves the guard *knows about* them. These prove the
+    guard actually holds for the tables that carry a shop's stock, customers and
+    money — the ones where a leak would be the section 117 P0 incident rather
+    than a curiosity.
+    """
+
+    async def test_every_phase_b_table_is_tenant_owned(self) -> None:
+        names = tenant_owned_table_names()
+        assert {
+            "products",
+            "stock_movements",
+            "customers",
+            "customer_addresses",
+            "orders",
+            "order_items",
+            "consignments",
+            "consignment_items",
+            "imports",
+            "import_rows",
+            "sync_mutations",
+        } <= names
+
+    async def test_products_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.products.models import Product
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(Product(name="Cotton Abaya", cost_paisa=40000))
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Product))).scalars().all()
+        assert rows == []
+
+    async def test_another_shops_product_cannot_be_fetched_by_id(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.products.models import Product
+
+        _use_tenant(two_tenants["tenant_a"])
+        product = Product(name="Silk Hijab", cost_paisa=30000)
+        db.add(product)
+        await db.commit()
+        product_id = product.id
+
+        _use_tenant(two_tenants["tenant_b"])
+        db.expunge_all()
+        # By id is the dangerous case: an id that leaked into a URL must still
+        # resolve to nothing for the wrong shop (section 47).
+        found = (
+            await db.execute(sa.select(Product).where(Product.id == product_id))
+        ).scalar_one_or_none()
+        assert found is None
+
+    async def test_customers_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.customers.models import Customer
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Customer(
+                phone_enc="enc",
+                phone_search_hmac=f"hmac-{uuid.uuid4().hex}",
+                phone_last4="5678",
+                phone_masked="01712****78",
+                addresses=[],
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Customer))).scalars().all()
+        assert rows == []
+
+    async def test_orders_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.orders.models import Order
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Order(
+                order_number="CP-20260910-0001",
+                client_id=uuid.uuid4(),
+                business_date=utc_now().date(),
+                cod_amount_paisa=125000,
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Order))).scalars().all()
+        assert rows == []
+
+    async def test_writing_an_order_for_another_shop_is_refused(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.orders.models import Order
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Order(
+                tenant_id=two_tenants["tenant_b"],
+                order_number="CP-20260910-0002",
+                client_id=uuid.uuid4(),
+                business_date=utc_now().date(),
+                cod_amount_paisa=125000,
+            )
+        )
+        with pytest.raises(TenantIsolationError):
+            await db.flush()
+        await db.rollback()
+
+    async def test_stock_movements_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.products.models import (
+            Product,
+            StockMovement,
+            StockMovementReason,
+            StockMovementSource,
+        )
+
+        _use_tenant(two_tenants["tenant_a"])
+        product = Product(name="Cotton Abaya", cost_paisa=40000)
+        db.add(product)
+        await db.flush()
+        db.add(
+            StockMovement(
+                product_id=product.id,
+                quantity_delta=10,
+                balance_after=10,
+                reason=StockMovementReason.OPENING,
+                source=StockMovementSource.SELLER,
+                occurred_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        # The ledger is the one table where a leak would also be a money leak.
+        rows = (await db.execute(sa.select(StockMovement))).scalars().all()
+        assert rows == []
+
+    async def test_sync_mutations_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.sync.models import SyncMutation
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            SyncMutation(
+                mutation_id=uuid.uuid4(),
+                entity_type="ORDER",
+                entity_id=uuid.uuid4(),
+                operation="CREATE",
+                status="APPLIED",
+                payload={},
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(SyncMutation))).scalars().all()
+        assert rows == []
