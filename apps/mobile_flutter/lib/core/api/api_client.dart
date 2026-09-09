@@ -135,6 +135,24 @@ class ApiClient {
   Future<Map<String, dynamic>> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
 
+  /// Upload a file as `multipart/form-data`.
+  ///
+  /// Used only by the import flow. The bytes are passed rather than a path so
+  /// the caller decides what is read from disk, and so a test can post a
+  /// fixture without touching the filesystem.
+  Future<Map<String, dynamic>> postFile(
+    String path, {
+    required List<int> bytes,
+    required String filename,
+    Map<String, dynamic> fields = const <String, dynamic>{},
+  }) {
+    final form = FormData.fromMap(<String, dynamic>{
+      ...fields,
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    return _send(() => _dio.post<dynamic>(path, data: form));
+  }
+
   /// Generate an idempotency key for an operation that could duplicate money or
   /// external work (master spec section 77).
   ///

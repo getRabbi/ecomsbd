@@ -37,7 +37,7 @@ void main() {
       // Proves the generated Drift schema actually opens; a broken migration
       // would otherwise surface on a seller's device, not in CI.
       expect(await db.dueOutboxEntries(), isEmpty);
-      expect(db.schemaVersion, 1);
+      expect(db.schemaVersion, 2);
     });
   });
 

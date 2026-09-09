@@ -105,3 +105,81 @@ class SyncCursors extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{entityType, tenantId};
 }
+
+/// Shared shape of the on-device mirror tables.
+///
+/// Each mirror keeps two things about a record: a handful of **columns** for
+/// the queries a list screen actually runs (search, filter, sort, paginate),
+/// and the full server JSON in [payload]. The columns exist so filtering does
+/// not mean decoding every row; the payload exists so a field the backend adds
+/// later still reaches the UI without a client migration.
+///
+/// These are a cache, not a ledger. The server owns stock, money and order
+/// state (master spec section 64); nothing here is ever summed to produce a
+/// figure the seller is shown as authoritative.
+mixin MirroredRecord on Table {
+  /// Server id, or the client-minted id for a record created offline. The two
+  /// are the same value for anything created on this device: the id is also the
+  /// `client_id` the server deduplicates a replayed create on.
+  TextColumn get id => text()();
+
+  TextColumn get tenantId => text()();
+
+  /// The complete record as the server sent it (or as the device composed it
+  /// while offline).
+  TextColumn get payload => text()();
+
+  /// Whether this row is on the server yet.
+  TextColumn get syncState =>
+      textEnum<LocalSyncState>().withDefault(const Constant('synced'))();
+
+  /// Server `updated_at`, used for ordering and for "last synced" display.
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+/// Local mirror of `products`.
+class CachedProducts extends Table with MirroredRecord {
+  TextColumn get name => text()();
+  TextColumn get sku => text().nullable()();
+  IntColumn get stockOnHand => integer().withDefault(const Constant(0))();
+  BoolColumn get isLowStock => boolean().withDefault(const Constant(false))();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{tenantId, id};
+}
+
+/// Local mirror of `customers`.
+///
+/// Stores only the **masked** phone. The plaintext number never lands on the
+/// device: it is available solely from the audited reveal endpoint, and caching
+/// it here would put an unencrypted customer list on a phone that gets lost
+/// (master spec sections 101, 133).
+class CachedCustomers extends Table with MirroredRecord {
+  TextColumn get name => text().nullable()();
+  TextColumn get phoneMasked => text()();
+  TextColumn get phoneLast4 => text()();
+  TextColumn get flag => text().withDefault(const Constant('NONE'))();
+  IntColumn get orderCount => integer().withDefault(const Constant(0))();
+  BoolColumn get isRepeatBuyer =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{tenantId, id};
+}
+
+/// Local mirror of `orders`.
+class CachedOrders extends Table with MirroredRecord {
+  TextColumn get orderNumber => text()();
+  TextColumn get customerName => text().nullable()();
+  TextColumn get phoneMasked => text().nullable()();
+  TextColumn get status => text()();
+  IntColumn get codAmountPaisa => integer().withDefault(const Constant(0))();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{tenantId, id};
+}

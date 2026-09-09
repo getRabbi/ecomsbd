@@ -39,6 +39,11 @@ dependencies:
   # Bangla/English numeral and date formatting.
   intl: ^0.19.0
 
+  # The system file browser, for choosing a CSV to import (master spec
+  # section 7.3). Android has no way to open a document picker without a
+  # platform channel, and this is the maintained wrapper for one.
+  file_picker: ^11.0.3
+
   # @immutable on value classes. Transitively present via Flutter, declared
   # explicitly because this package imports it directly.
   meta: ^1.15.0

@@ -17,7 +17,16 @@ part 'database.g.dart';
 /// It deliberately does **not** hold money totals as authoritative values: the
 /// server owns the ledger, and a device that computed its own balance would
 /// eventually disagree with it (master spec sections 37, 64).
-@DriftDatabase(tables: <Type>[OutboxEntries, CachedDocuments, SyncCursors])
+@DriftDatabase(
+  tables: <Type>[
+    OutboxEntries,
+    CachedDocuments,
+    SyncCursors,
+    CachedProducts,
+    CachedCustomers,
+    CachedOrders,
+  ],
+)
 class EcomsbdDatabase extends _$EcomsbdDatabase {
   EcomsbdDatabase([QueryExecutor? executor])
     : super(executor ?? _openConnection());
@@ -26,7 +35,7 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
   EcomsbdDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   /// Store timestamps as ISO-8601 text rather than unix seconds.
   ///
@@ -42,6 +51,16 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // v2 adds the commerce mirrors. Creating them empty is correct: they
+        // are a cache, and the next sync refills them. The outbox is untouched
+        // — it holds seller work that exists nowhere else.
+        await m.createTable(cachedProducts);
+        await m.createTable(cachedCustomers);
+        await m.createTable(cachedOrders);
+      }
     },
     beforeOpen: (details) async {
       // Foreign keys are off by default in SQLite.
@@ -149,14 +168,193 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
   ///
   /// Called on sign-out and when switching shops, so one seller's figures can
   /// never appear under another's.
-  Future<int> clearTenantCache(String tenantId) =>
-      (delete(cachedDocuments)..where((t) => t.tenantId.equals(tenantId))).go();
+  Future<int> clearTenantCache(String tenantId) async {
+    final documents = await (delete(
+      cachedDocuments,
+    )..where((t) => t.tenantId.equals(tenantId))).go();
+    await (delete(
+      cachedProducts,
+    )..where((t) => t.tenantId.equals(tenantId))).go();
+    await (delete(
+      cachedCustomers,
+    )..where((t) => t.tenantId.equals(tenantId))).go();
+    await (delete(
+      cachedOrders,
+    )..where((t) => t.tenantId.equals(tenantId))).go();
+    return documents;
+  }
+
+  // --- commerce mirrors -----------------------------------------------------
+
+  // Local paging over the mirrors is by offset, not by cursor. The server uses
+  // a cursor because rows are being inserted underneath a scrolling seller; the
+  // local mirror is a fixed snapshot between syncs, where an offset is stable
+  // and far simpler.
+
+  Future<void> putProducts(List<CachedProductsCompanion> rows) async {
+    if (rows.isEmpty) {
+      return;
+    }
+    await batch((b) => b.insertAllOnConflictUpdate(cachedProducts, rows));
+  }
+
+  /// Products for the list screen, newest first.
+  ///
+  /// Locally-created rows sort first regardless of date: a product the seller
+  /// just added offline must be visible where they expect it, not buried.
+  Future<List<CachedProduct>> localProducts({
+    required String tenantId,
+    String? search,
+    bool includeArchived = false,
+    bool lowStockOnly = false,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final query = select(cachedProducts)
+      ..where((t) => t.tenantId.equals(tenantId));
+    if (!includeArchived) {
+      query.where((t) => t.isArchived.equals(false));
+    }
+    if (lowStockOnly) {
+      query.where((t) => t.isLowStock.equals(true));
+    }
+    final term = search?.trim();
+    if (term != null && term.isNotEmpty) {
+      final pattern = '%${term.toLowerCase()}%';
+      query.where(
+        (t) => t.name.lower().like(pattern) | t.sku.lower().like(pattern),
+      );
+    }
+    query
+      ..orderBy(<OrderClauseGenerator<$CachedProductsTable>>[
+        (t) => OrderingTerm.desc(t.syncState.equals('synced')),
+        (t) => OrderingTerm.desc(t.createdAt),
+      ])
+      ..limit(limit, offset: offset);
+    return query.get();
+  }
+
+  Future<CachedProduct?> localProduct(String tenantId, String id) {
+    return (select(cachedProducts)
+          ..where((t) => t.tenantId.equals(tenantId) & t.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  Future<void> putCustomers(List<CachedCustomersCompanion> rows) async {
+    if (rows.isEmpty) {
+      return;
+    }
+    await batch((b) => b.insertAllOnConflictUpdate(cachedCustomers, rows));
+  }
+
+  Future<List<CachedCustomer>> localCustomers({
+    required String tenantId,
+    String? search,
+    bool repeatOnly = false,
+    String? flag,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final query = select(cachedCustomers)
+      ..where((t) => t.tenantId.equals(tenantId));
+    if (repeatOnly) {
+      query.where((t) => t.isRepeatBuyer.equals(true));
+    }
+    if (flag != null) {
+      query.where((t) => t.flag.equals(flag));
+    }
+    final term = search?.trim();
+    if (term != null && term.isNotEmpty) {
+      // Names and the masked form only. There is no plaintext phone on the
+      // device to search, by design.
+      final pattern = '%${term.toLowerCase()}%';
+      query.where(
+        (t) =>
+            t.name.lower().like(pattern) |
+            t.phoneMasked.like(pattern) |
+            t.phoneLast4.like(pattern),
+      );
+    }
+    query
+      ..orderBy(<OrderClauseGenerator<$CachedCustomersTable>>[
+        (t) => OrderingTerm.desc(t.createdAt),
+      ])
+      ..limit(limit, offset: offset);
+    return query.get();
+  }
+
+  Future<CachedCustomer?> localCustomer(String tenantId, String id) {
+    return (select(cachedCustomers)
+          ..where((t) => t.tenantId.equals(tenantId) & t.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  Future<void> putOrders(List<CachedOrdersCompanion> rows) async {
+    if (rows.isEmpty) {
+      return;
+    }
+    await batch((b) => b.insertAllOnConflictUpdate(cachedOrders, rows));
+  }
+
+  Future<List<CachedOrder>> localOrders({
+    required String tenantId,
+    String? search,
+    String? status,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final query = select(cachedOrders)
+      ..where((t) => t.tenantId.equals(tenantId));
+    if (status != null) {
+      query.where((t) => t.status.equals(status));
+    }
+    final term = search?.trim();
+    if (term != null && term.isNotEmpty) {
+      final pattern = '%${term.toLowerCase()}%';
+      query.where(
+        (t) =>
+            t.orderNumber.lower().like(pattern) |
+            t.customerName.lower().like(pattern) |
+            t.phoneMasked.like(pattern),
+      );
+    }
+    query
+      ..orderBy(<OrderClauseGenerator<$CachedOrdersTable>>[
+        (t) => OrderingTerm.desc(t.syncState.equals('synced')),
+        (t) => OrderingTerm.desc(t.createdAt),
+      ])
+      ..limit(limit, offset: offset);
+    return query.get();
+  }
+
+  Future<CachedOrder?> localOrder(String tenantId, String id) {
+    return (select(cachedOrders)
+          ..where((t) => t.tenantId.equals(tenantId) & t.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  /// Rows the seller changed that the server has not accepted yet.
+  ///
+  /// Feeds the "not synced" badge counts on the list screens.
+  Stream<int> watchUnsyncedOrderCount(String tenantId) {
+    final count = cachedOrders.id.count();
+    final query = selectOnly(cachedOrders)
+      ..addColumns(<Expression<Object>>[count])
+      ..where(
+        cachedOrders.tenantId.equals(tenantId) &
+            cachedOrders.syncState.isNotValue(LocalSyncState.synced.name),
+      );
+    return query.map((row) => row.read(count) ?? 0).watchSingle();
+  }
 
   /// Wipe all local state on sign-out.
   Future<void> wipe() async {
     await batch((b) {
       b.deleteWhere(cachedDocuments, (_) => const Constant(true));
       b.deleteWhere(syncCursors, (_) => const Constant(true));
+      b.deleteWhere(cachedProducts, (_) => const Constant(true));
+      b.deleteWhere(cachedCustomers, (_) => const Constant(true));
+      b.deleteWhere(cachedOrders, (_) => const Constant(true));
       // The outbox is deliberately NOT wiped here. Unsent seller work is the
       // one thing on this device that exists nowhere else; discarding it on
       // sign-out would silently destroy orders the seller typed. Callers that
