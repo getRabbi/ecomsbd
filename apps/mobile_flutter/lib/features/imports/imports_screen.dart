@@ -16,6 +16,32 @@ import '../shared/responsive.dart';
 /// Where the seller is in the import.
 enum _Step { choose, map, review, done }
 
+/// A file the seller chose.
+class PickedImportFile {
+  const PickedImportFile({required this.name, required this.bytes});
+
+  final String name;
+  final List<int> bytes;
+}
+
+/// Opens the system document picker.
+///
+/// Injectable so a test can supply a CSV without a platform channel; the
+/// default is the real picker.
+Future<PickedImportFile?> pickImportFile() async {
+  final picked = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: <String>['csv', 'txt'],
+    withData: true,
+  );
+  final file = picked?.files.singleOrNull;
+  final bytes = file?.bytes;
+  if (file == null || bytes == null) {
+    return null;
+  }
+  return PickedImportFile(name: file.name, bytes: bytes);
+}
+
 /// Bring a spreadsheet in.
 ///
 /// Three deliberate steps: choose and detect, check the mapping, dry-run — and
@@ -24,7 +50,10 @@ enum _Step { choose, map, review, done }
 /// many rows are ready, how many are duplicates, and exactly which ones are
 /// broken and why (master spec sections 7.3, 98).
 class ImportsScreen extends ConsumerStatefulWidget {
-  const ImportsScreen({super.key});
+  const ImportsScreen({super.key, this.pickFile = pickImportFile});
+
+  /// How a file is chosen. Overridden in tests.
+  final Future<PickedImportFile?> Function() pickFile;
 
   @override
   ConsumerState<ImportsScreen> createState() => _ImportsScreenState();
@@ -71,14 +100,8 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
   };
 
   Future<void> _chooseFile() async {
-    final picked = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: <String>['csv', 'txt'],
-      withData: true,
-    );
-    final file = picked?.files.singleOrNull;
-    final bytes = file?.bytes;
-    if (file == null || bytes == null) {
+    final file = await widget.pickFile();
+    if (file == null) {
       return;
     }
 
@@ -90,7 +113,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
     try {
       final batch = await ref
           .read(importsRepositoryProvider)
-          .upload(bytes: bytes, filename: file.name, template: _template);
+          .upload(bytes: file.bytes, filename: file.name, template: _template);
       if (mounted) {
         setState(() {
           _busy = false;

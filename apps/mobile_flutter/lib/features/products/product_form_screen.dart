@@ -251,13 +251,17 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                     const SizedBox(height: EcomsbdSpacing.md),
                     Row(
                       children: <Widget>[
-                        Text(
-                          'Margin per unit',
-                          style: EcomsbdType.caption.copyWith(
-                            color: EcomsbdColors.muted,
+                        Expanded(
+                          child: Text(
+                            'Margin per unit',
+                            style: EcomsbdType.caption.copyWith(
+                              color: EcomsbdColors.muted,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: EcomsbdSpacing.xs),
                         MoneyText(
                           Money(margin),
                           style: EcomsbdType.bodyStrong,

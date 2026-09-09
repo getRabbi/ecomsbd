@@ -118,6 +118,18 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         int.parse((match.group(2) ?? '').padRight(2, '0'));
   }
 
+  /// What the seller will collect.
+  ///
+  /// A blank COD field means "the items total", which is exactly what the hint
+  /// under it shows. Reading blank as ৳0 would send a zero-COD order for a
+  /// parcel the courier is about to collect money for.
+  int get _codAmount {
+    if (_cod.text.trim().isEmpty) {
+      return _subtotal;
+    }
+    return _paisa(_cod.text) ?? _subtotal;
+  }
+
   int get _subtotal {
     var total = 0;
     for (final item in _items) {
@@ -254,7 +266,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
     try {
       final check = await repository.checkDuplicates(
         phone: _phone.text.trim(),
-        codAmountPaisa: _paisa(_cod.text) ?? _subtotal,
+        codAmountPaisa: _codAmount,
         itemNames: <String>[for (final item in items) item['name'] as String],
       );
       if (check.possibleDuplicate && mounted) {
@@ -279,7 +291,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         address: _address.text.trim(),
         district: _district.text.trim(),
         area: _area.text.trim(),
-        codAmountPaisa: _paisa(_cod.text) ?? _subtotal,
+        codAmountPaisa: _codAmount,
         deliveryFeePaisa: _paisa(_delivery.text) ?? 0,
         note: _note.text.trim(),
         sourceText: _sourceText,
@@ -558,13 +570,17 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                   const SizedBox(height: EcomsbdSpacing.md),
                   Row(
                     children: <Widget>[
-                      Text(
-                        'Items total',
-                        style: EcomsbdType.caption.copyWith(
-                          color: EcomsbdColors.muted,
+                      Expanded(
+                        child: Text(
+                          'Items total',
+                          style: EcomsbdType.caption.copyWith(
+                            color: EcomsbdColors.muted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: EcomsbdSpacing.xs),
                       MoneyText(
                         Money(_subtotal),
                         style: EcomsbdType.bodyStrong,

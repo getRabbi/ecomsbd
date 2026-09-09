@@ -229,13 +229,17 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
               if (_amount > 0)
                 Row(
                   children: <Widget>[
-                    Text(
-                      'After this change',
-                      style: EcomsbdType.caption.copyWith(
-                        color: EcomsbdColors.muted,
+                    Expanded(
+                      child: Text(
+                        'After this change',
+                        style: EcomsbdType.caption.copyWith(
+                          color: EcomsbdColors.muted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: EcomsbdSpacing.xs),
                     Text(
                       '$_projected in stock',
                       style: EcomsbdType.bodyStrong.copyWith(
