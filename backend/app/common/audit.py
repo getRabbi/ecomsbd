@@ -60,6 +60,24 @@ class AuditAction(StrEnum):
     ENTITLEMENT_DENIED = "billing.entitlement_denied"
     FEATURE_FLAG_CHANGED = "ops.feature_flag_changed"
 
+    # Commerce core (phase B)
+    PRODUCT_CREATED = "product.created"
+    PRODUCT_UPDATED = "product.updated"
+    STOCK_ADJUSTED = "inventory.stock_adjusted"
+    STOCK_RECALCULATED = "inventory.stock_recalculated"
+    CUSTOMER_CREATED = "customer.created"
+    CUSTOMER_UPDATED = "customer.updated"
+    CUSTOMER_BLOCKED = "customer.blocked"
+    ORDER_CREATED = "order.created"
+    ORDER_UPDATED = "order.updated"
+    ORDER_STATUS_CHANGED = "order.status_changed"
+    ORDER_CANCELLED = "order.cancelled"
+    ORDER_DUPLICATE_WARNED = "order.duplicate_warned"
+    IMPORT_CREATED = "import.created"
+    IMPORT_COMMITTED = "import.committed"
+    SYNC_MUTATION_APPLIED = "sync.mutation_applied"
+    SYNC_CONFLICT_DETECTED = "sync.conflict_detected"
+
     # Reserved for later phases (sections 103, 134)
     COURIER_CREDENTIAL_SAVED = "courier.credential_saved"
     COURIER_CREDENTIAL_REVOKED = "courier.credential_revoked"

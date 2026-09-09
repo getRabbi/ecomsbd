@@ -18,12 +18,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+import sqlalchemy as sa
 from pydantic import BaseModel, Field
 
 from app.core.clock import ensure_utc
 from app.core.errors import ValidationError
 
-__all__ = ["Cursor", "Page", "PageParams", "decode_cursor", "encode_cursor"]
+__all__ = [
+    "Cursor",
+    "Page",
+    "PageParams",
+    "apply_cursor",
+    "decode_cursor",
+    "encode_cursor",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +58,24 @@ def decode_cursor(value: str) -> Cursor:
         )
     except (KeyError, ValueError, TypeError, binascii.Error) as exc:
         raise ValidationError("Malformed pagination cursor", details={"cursor": value}) from exc
+
+
+def apply_cursor(stmt: Any, model: Any, cursor: Cursor | None) -> Any:
+    """Restrict a query to rows strictly after ``cursor``.
+
+    Written as an explicit OR rather than a row-value comparison
+    (``(created_at, id) < (…, …)``): row-value support differs between
+    PostgreSQL and SQLite, and this form uses the same
+    ``(created_at DESC, id DESC)`` index either way.
+    """
+    if cursor is None:
+        return stmt
+    return stmt.where(
+        sa.or_(
+            model.created_at < cursor.created_at,
+            sa.and_(model.created_at == cursor.created_at, model.id < cursor.id),
+        )
+    )
 
 
 class PageParams(BaseModel):

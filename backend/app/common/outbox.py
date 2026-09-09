@@ -70,6 +70,11 @@ class OutboxTopic(StrEnum):
     USER_SIGNED_IN = "user.signed_in"
     AUDIT_RECORDED = "audit.recorded"
 
+    # Commerce core (phase B)
+    ORDER_CREATED = "order.created"
+    ORDER_STATUS_CHANGED = "order.status_changed"
+    IMPORT_COMMITTED = "import.committed"
+
     # Later phases (master spec sections 41, 42)
     ORDER_BOOKED = "order.booked"
     BOOKING_UNKNOWN_DETECTED = "booking.unknown_detected"

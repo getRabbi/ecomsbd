@@ -15,8 +15,14 @@ from app.common.audit import AuditLog
 from app.common.feature_flags import FeatureFlag
 from app.common.idempotency import IdempotencyKey
 from app.common.outbox import OutboxEvent
+from app.consignments.models import Consignment, ConsignmentItem
+from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
+from app.imports.models import ImportBatch, ImportRow
+from app.orders.models import Order, OrderItem
+from app.products.models import Product, StockMovement
+from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
 from app.users.models import User
 
@@ -24,13 +30,24 @@ __all__ = [
     "AuditLog",
     "AuthSession",
     "Base",
+    "Consignment",
+    "ConsignmentItem",
+    "Customer",
+    "CustomerAddress",
     "Device",
     "FeatureFlag",
     "IdempotencyKey",
+    "ImportBatch",
+    "ImportRow",
+    "Order",
+    "OrderItem",
     "OtpChallenge",
     "OutboxEvent",
+    "Product",
     "RefreshToken",
+    "StockMovement",
     "Subscription",
+    "SyncMutation",
     "Tenant",
     "TenantUser",
     "User",
