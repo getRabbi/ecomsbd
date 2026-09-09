@@ -1,0 +1,41 @@
+# Manual courier mode — always available, never degraded.
+#
+# Master spec section 5 and 136: manual courier mode is a first-class V1 feature.
+# A seller with no courier API can still run the whole money loop: create the
+# order, record the parcel and tracking code, upload the courier's payout
+# statement, and reconcile against it.
+#
+# This manifest is `true` for exactly the things a human can do and `false` for
+# everything that would require a provider API.
+
+provider: manual
+display_name: Manual courier
+verified_at: 2026-09-09
+documentation_source: "Internal: no external provider involved"
+
+capabilities:
+  credential_validation: false
+  create_single: false
+  create_bulk: false
+  status_lookup: false
+  webhook: false
+  balance: false
+  payouts: false
+  returns: false
+  price_quote: false
+  customer_stats: false
+  auto_address: false
+  cancel: false
+  list_stores: false
+
+manual_fallback: >
+  The seller enters the courier, tracking code and charge by hand, updates
+  delivery outcome manually, and imports the payout statement for
+  reconciliation. Every money feature works; only automation is absent.
+
+notes:
+  - "Charge comes from the seller-configured rate card or a manually captured
+     value, and is snapshotted on the consignment like any provider charge
+     (master spec section 13)."
+  - "Because there is no provider event stream, stale-parcel alerts use the
+     seller's own last update rather than a provider timestamp."

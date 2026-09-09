@@ -1,0 +1,30 @@
+# Static analysis for the ecomsbd Flutter app.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # A financial app must not ship with silently ignored failures.
+    unawaited_futures: error
+    missing_required_param: error
+    missing_return: error
+    invalid_annotation_target: ignore
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "build/**"
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_print
+    - prefer_final_locals
+    - prefer_single_quotes
+    - require_trailing_commas
+    - sort_child_properties_last
+    - unawaited_futures
+    - use_super_parameters
+    # Every user-visible string is Bangla-first product copy; const constructors
+    # keep rebuild cost down on low-end devices (master spec section 53).
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_const_literals_to_create_immutables

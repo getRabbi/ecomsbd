@@ -1,0 +1,45 @@
+# Pathao courier — provider integration manifest
+#
+# STATUS: UNVERIFIED for implementation. Scheduled for V1.1 / phase 7.
+#
+# One design decision IS verified and is recorded in the master spec (section 12
+# and 61): as of Pathao's 2025 merchant API update, order creation accepts a
+# sufficiently complete free-text recipient address and detects the delivery
+# area automatically, so legacy city/zone/area fields can be omitted.
+#
+# Consequence, already reflected in the domain: a custom fuzzy city/zone/area
+# resolver is NOT a V1 dependency. Structured location lookup is a fallback for
+# accounts or API versions that still require it, not the primary path.
+#
+# Everything else — endpoints, auth flow, token lifetime, webhook signature,
+# status strings, payout fields — is unverified.
+
+provider: pathao
+display_name: Pathao
+verified_at: null
+documentation_source: "https://pathao.com/bn/blog/api-merchant-auto-address-feature/ (design decision only, re-check merchant docs before implementing)"
+
+capabilities:
+  credential_validation: unknown
+  create_single: unknown
+  create_bulk: unknown
+  status_lookup: unknown
+  webhook: unknown
+  balance: unknown
+  payouts: unknown
+  returns: unknown
+  price_quote: unknown
+  customer_stats: unknown
+  auto_address: unknown
+  cancel: unknown
+  list_stores: unknown
+
+manual_fallback: >
+  Manual courier mode, plus statement import for reconciliation of historical
+  Pathao parcels.
+
+notes:
+  - "Auto-address is the intended primary flow; keep the structured-area path as
+     a fallback for accounts that reject free-text addresses."
+  - "Re-check the current merchant API documentation at implementation time.
+     The 2025 update is a product decision input, not an API contract."

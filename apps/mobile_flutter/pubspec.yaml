@@ -1,0 +1,94 @@
+name: ecomsbd
+description: "ecomsbd — Bangladesh F-commerce seller financial operations."
+publish_to: "none"
+
+# version+build. The build number is what Play orders releases by.
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management (master spec section 29).
+  flutter_riverpod: ^2.6.1
+
+  # Local database and the offline mutation outbox (section 37).
+  drift: ^2.21.0
+  sqlite3: ^2.4.6
+  sqlite3_flutter_libs: ^0.5.26
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+  # HTTP. `dio` is used for its interceptor pipeline: token refresh, trace-id
+  # propagation and the idempotency-key header all belong in one place rather
+  # than at each call site.
+  dio: ^5.7.0
+
+  # Tokens are stored in the Android keystore, never in shared preferences.
+  flutter_secure_storage: ^9.2.2
+
+  # Routing.
+  go_router: ^14.6.1
+
+  # Client-generated ids for offline records (section 37: UUIDv7/UUID).
+  uuid: ^4.5.1
+
+  # Bangla/English numeral and date formatting.
+  intl: ^0.19.0
+
+  # @immutable on value classes. Transitively present via Flutter, declared
+  # explicitly because this package imports it directly.
+  meta: ^1.15.0
+
+  # Device metadata reported at sign-in, and the low-end tier heuristic that
+  # decides whether expensive blur is affordable (section 53).
+  device_info_plus: ^11.1.1
+  package_info_plus: ^8.1.1
+
+  # Deliberately NOT included:
+  #   - a chart package: every chart in the prototype is a CustomPainter, which
+  #     keeps the glass styling exact and adds no dependency (docs/ADR/0002).
+  #   - a WebView: the UI is native Flutter.
+  #   - google_fonts: Reddit Sans is bundled, so first paint needs no network.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  drift_dev: ^2.21.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fonts/
+
+  fonts:
+    # Reddit Sans is the product typeface (locked UI direction).
+    - family: RedditSans
+      fonts:
+        - asset: assets/fonts/RedditSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/RedditSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/RedditSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/RedditSans-700.ttf
+          weight: 700
+        - asset: assets/fonts/RedditSans-800.ttf
+          weight: 800
+
+    # Bangla is the primary seller-facing language (master spec section 52).
+    # Reddit Sans has no Bengali coverage, so this is the fallback family.
+    - family: NotoSansBengali
+      fonts:
+        - asset: assets/fonts/NotoSansBengali-400.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansBengali-600.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansBengali-700.ttf
+          weight: 700

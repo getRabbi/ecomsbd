@@ -1,0 +1,58 @@
+# Steadfast courier — provider integration manifest
+#
+# Master spec sections 61, 74, 140.
+#
+# STATUS: UNVERIFIED. No capability below has been confirmed against Steadfast's
+# current official merchant API documentation or a live merchant account, so
+# every capability is `unknown` and no HTTP call is implemented.
+#
+# `unknown` MUST NOT be promoted to `true` because a community SDK or a blog
+# post implements it. Promotion requires, and must be recorded here:
+#   1. the merchant documentation URL or PDF the operator supplied, and its date;
+#   2. a non-destructive live or sandbox call proving the shape of the response;
+#   3. the exact provider status strings, so raw status can be preserved and
+#      mapped rather than guessed.
+#
+# Until then the seller uses Manual courier mode, which is a fully supported
+# path, not a degraded one: order, tracking entry, statement upload and
+# reconciliation all work without any courier API.
+
+provider: steadfast
+display_name: Steadfast
+verified_at: null
+documentation_source: null
+
+capabilities:
+  credential_validation: unknown
+  create_single: unknown
+  create_bulk: unknown
+  status_lookup: unknown
+  webhook: unknown
+  balance: unknown
+  payouts: unknown
+  returns: unknown
+  price_quote: unknown
+  customer_stats: unknown
+  auto_address: unknown
+  cancel: unknown
+  list_stores: unknown
+
+manual_fallback: >
+  Manual courier mode. The seller records the parcel and tracking code by hand,
+  uploads the courier payout statement as CSV or XLSX, and reconciliation runs
+  on the imported lines exactly as it would on API-sourced payouts.
+
+notes:
+  - "Community SDKs describe API key + secret auth, single and bulk create,
+     status lookup, balance, return requests, payments and webhooks. Treated as
+     a lead for what to verify, never as a specification."
+  - "The public site confirms COD, real-time tracking, merchant operations and
+     API-created parcels. It does not document endpoint paths, payload shapes,
+     webhook signatures or rate limits."
+  - "Steadfast is the first real V1 integration (master spec section 56,
+     phase 3). Implementation is blocked on operator-supplied documentation and
+     a merchant account, not on engineering time."
+  - "Before any create call ships: confirm the idempotency story. The domain
+     sends a stable merchant reference and treats a timeout as BOOKING_UNKNOWN,
+     so the provider must offer some way to look a parcel up by that reference,
+     or duplicate-booking recovery has to be manual."

@@ -1,0 +1,61 @@
+# gitleaks configuration for ecomsbd.
+#
+# Extends the default rule set rather than replacing it, so every upstream rule
+# stays active. The allowlist below is deliberately narrow: each entry is scoped
+# to a specific path and a specific value, with the reason it is safe.
+#
+# Do not add a broad path here. If a scan flags something, triage the finding —
+# an allowlist entry that silences a whole directory silences a future real leak
+# in that directory too.
+
+title = "ecomsbd"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Redaction-test fixtures. These values are deliberately shaped like credentials
+because the tests assert that the redaction layer scrubs exactly this shape
+(app/core/redaction.py). Replacing them with innocuous strings would make the
+tests stop proving anything. None is a real credential.
+"""
+paths = ['''backend/tests/test_platform_primitives\.py''']
+regexes = [
+  '''sk_live_abcdef123456''',
+  '''sk_live_secret_value''',
+  '''hunter2''',
+]
+
+[[allowlists]]
+description = """
+Synthetic connection string in the configuration test. User `u`, password `p`,
+host `db` — a placeholder used to construct a valid production Settings object
+so the fail-fast validators can be exercised.
+"""
+paths = ['''backend/tests/test_config\.py''']
+regexes = ['''postgresql\+asyncpg://u:p@db:5432/ecomsbd''']
+
+[[allowlists]]
+description = """
+Local development credentials for the docker-compose PostgreSQL service. The
+same pair appears in docker-compose.yml, .env.example and the README; it grants
+access to nothing outside a developer's own machine.
+"""
+regexes = ['''ecomsbd:ecomsbd@localhost''', '''POSTGRES_PASSWORD: ecomsbd''']
+
+[[allowlists]]
+description = """
+The project's own tagged development placeholders. Every value carrying the
+INSECURE_DEV_ prefix is rejected at startup in staging and production by
+app/core/config.py, so one reaching a deployed environment fails the boot rather
+than becoming a weak secret.
+"""
+regexes = ['''INSECURE_DEV_[A-Za-z0-9_]+''']
+
+[[allowlists]]
+description = "Bundled font binaries and the UI prototype's masked input placeholders."
+paths = [
+  '''apps/mobile_flutter/assets/fonts/.*\.ttf''',
+  '''docs/CODPILOT_PREMIUM_REDDIT_GLASS_FINAL\.html''',
+]

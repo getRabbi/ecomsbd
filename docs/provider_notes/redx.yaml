@@ -1,0 +1,32 @@
+# RedX courier — provider integration manifest
+#
+# STATUS: UNVERIFIED. Scheduled for phase 8.
+# No documentation has been supplied, so every capability is unknown and no
+# implementation exists.
+
+provider: redx
+display_name: RedX
+verified_at: null
+documentation_source: null
+
+capabilities:
+  credential_validation: unknown
+  create_single: unknown
+  create_bulk: unknown
+  status_lookup: unknown
+  webhook: unknown
+  balance: unknown
+  payouts: unknown
+  returns: unknown
+  price_quote: unknown
+  customer_stats: unknown
+  auto_address: unknown
+  cancel: unknown
+  list_stores: unknown
+
+manual_fallback: >
+  Manual courier mode with statement import.
+
+notes:
+  - "Capability manifest must be created from real merchant documentation before
+     any adapter code is written (master spec section 74)."

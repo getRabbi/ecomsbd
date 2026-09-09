@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#eef2f6"/>
+<title>CODPilot — Premium Reddit Glass Seller OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Reddit+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f6;--bg2:#f8fafc;--ink:#11161d;--muted:#697481;--muted2:#99a3ad;
+  --glass:rgba(255,255,255,.67);--glass-strong:rgba(255,255,255,.88);
+  --glass-dark:rgba(14,24,39,.54);--stroke:rgba(21,31,43,.075);--whiteStroke:rgba(255,255,255,.96);
+  --orange:#ff4500;--orange2:#ff7d52;--orangeSoft:rgba(255,69,0,.11);
+  --green:#11814a;--greenSoft:rgba(17,129,74,.11);
+  --red:#c73a40;--redSoft:rgba(199,58,64,.11);
+  --amber:#9d6400;--amberSoft:rgba(255,184,53,.18);
+  --blue:#2c64d8;--blueSoft:rgba(44,100,216,.11);
+  --navy:#07111e;--navy2:#0c2744;--navy3:#285781;
+  --shadow:0 18px 54px rgba(15,24,35,.11),0 3px 12px rgba(15,24,35,.04);
+  --shadow-soft:0 8px 28px rgba(15,24,35,.07);
+  --r-xl:30px;--r-lg:24px;--r-md:18px;--r-sm:13px
+}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{
+  font-family:"Reddit Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--ink);
+  background:
+  radial-gradient(circle at 9% -5%,rgba(255,69,0,.095),transparent 25%),
+  radial-gradient(circle at 93% 1%,rgba(44,100,216,.10),transparent 24%),
+  linear-gradient(180deg,#fbfcfd 0%,#edf1f5 62%,#e9eef3 100%);
+  overflow-x:hidden
+}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;color:inherit}
+button:active{transform:scale(.98)}
+.app{width:min(100%,780px);min-height:100vh;margin:auto;position:relative;padding-bottom:112px}
+.screen{display:none;min-height:100vh;padding-bottom:28px}
+.screen.active{display:block}
+.statusbar{height:36px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 5px;font-size:13px;font-weight:800}
+.status-icons{font-size:11px}
+.top-floating{
+  position:sticky;top:0;z-index:70;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 14px 12px;background:linear-gradient(180deg,rgba(239,243,247,.96),rgba(239,243,247,.69),transparent);
+  pointer-events:none
+}
+.top-floating>*{pointer-events:auto}
+.glass-pill{
+  min-height:48px;display:flex;align-items:center;border:1px solid var(--whiteStroke);border-radius:999px;
+  background:rgba(250,252,253,.72);backdrop-filter:blur(22px) saturate(170%);
+  box-shadow:0 10px 30px rgba(20,29,40,.10)
+}
+.brand-pill{padding:0 15px;gap:9px;font-weight:800;font-size:14px}
+.brand-mark{
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:900;
+  background:linear-gradient(145deg,var(--orange),var(--orange2));box-shadow:0 6px 16px rgba(255,69,0,.28)
+}
+.action-pill{padding:0 5px}
+.icon-btn{width:39px;height:39px;border:0;background:transparent;border-radius:50%;display:grid;place-items:center;font-size:18px}
+.icon-btn:hover{background:rgba(21,31,43,.05)}
+.back-pill{width:49px;justify-content:center;padding:0;font-size:21px;border:0}
+.page-header{padding:0 17px 13px}
+.eyebrow{font-size:8.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.page-header h1{font-size:26px;letter-spacing:-.8px;margin:3px 0 4px}
+.page-header p{font-size:10.5px;line-height:1.5;color:var(--muted);margin:0}
+.page-body{padding:0 13px 22px}
+.glass-card{
+  border:1px solid var(--whiteStroke);border-radius:var(--r-lg);background:var(--glass);
+  backdrop-filter:blur(20px) saturate(155%);box-shadow:var(--shadow-soft)
+}
+.glass-strong{background:var(--glass-strong);box-shadow:var(--shadow)}
+.section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 3px 7px}
+.section-title h3{font-size:14px;margin:0;letter-spacing:-.2px}
+.section-title .sub{font-size:9px;color:var(--muted)}
+.link-btn{border:0;background:transparent;color:var(--orange);font-size:9.5px;font-weight:800;padding:5px}
+.state{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:7px 10px;font-size:9px;font-weight:800;white-space:nowrap}
+.state.good{background:var(--greenSoft);color:var(--green)}
+.state.bad{background:var(--redSoft);color:var(--red)}
+.state.wait{background:var(--amberSoft);color:var(--amber)}
+.state.info{background:var(--blueSoft);color:var(--blue)}
+.state.neutral{background:rgba(90,102,114,.10);color:#59636c}
+.money-pos{color:var(--green)}.money-neg{color:var(--red)}.money-warn{color:var(--amber)}
+.mono{font-variant-numeric:tabular-nums}
+.hero-banner{
+  margin-top:-58px;min-height:286px;padding:82px 17px 30px;color:#fff;position:relative;overflow:hidden;
+  background:
+  radial-gradient(circle at 77% 13%,rgba(104,171,255,.44),transparent 26%),
+  radial-gradient(circle at 18% 95%,rgba(255,69,0,.20),transparent 30%),
+  linear-gradient(180deg,#2c5e8d 0%,#12385f 42%,#091d34 72%,#06111f 100%)
+}
+.hero-banner:after{
+  content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-110px;bottom:-120px;
+  border:1px solid rgba(255,255,255,.08);box-shadow:0 0 0 36px rgba(255,255,255,.025),0 0 0 72px rgba(255,255,255,.015)
+}
+.hero-banner h1{font-size:30px;letter-spacing:-1px;margin:24px 0 5px;position:relative;z-index:2}
+.hero-banner p{font-size:11px;color:rgba(255,255,255,.72);margin:0;position:relative;z-index:2}
+.dark-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;position:relative;z-index:2}
+.dark-chip{padding:6px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.08);font-size:8.5px;font-weight:700;color:rgba(255,255,255,.84)}
+.hero-content{margin-top:-31px;padding:0 13px 20px;position:relative;z-index:5}
+.money-hero{
+  position:relative;overflow:hidden;padding:18px;background:
+  radial-gradient(circle at 94% 0%,rgba(255,69,0,.15),transparent 32%),
+  radial-gradient(circle at 0% 100%,rgba(44,100,216,.08),transparent 38%),
+  linear-gradient(145deg,rgba(255,255,255,.96),rgba(255,255,255,.73))
+}
+.money-hero:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.27) 52%,transparent 63%);transform:translateX(-70%);pointer-events:none}
+.hero-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.money-hero h2{font-size:37px;line-height:1;margin:5px 0 4px;letter-spacing:-1.5px}
+.hero-sub{font-size:9.7px;line-height:1.5;color:var(--muted)}
+.hero-topline{display:flex;align-items:center;gap:7px;color:var(--muted2);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+.quality-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.hero-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.kpi{background:rgba(245,248,250,.74);border-radius:16px;padding:10px}
+.kpi small{display:block;font-size:7.6px;font-weight:800;color:var(--muted2);text-transform:uppercase}
+.kpi strong{display:block;font-size:15px;margin-top:4px}.kpi span{display:block;font-size:8px;color:var(--muted);margin-top:2px}
+.quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 12px}
+.quick{min-height:94px;padding:11px 10px;border:1px solid var(--whiteStroke);background:var(--glass);box-shadow:var(--shadow-soft);border-radius:20px;text-align:left}
+.quick-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:var(--orangeSoft);color:var(--orange);font-size:12px;font-weight:900;margin-bottom:8px}
+.quick b{display:block;font-size:10.5px}.quick span{display:block;font-size:8.3px;color:var(--muted);margin-top:3px}
+.premium-panel{padding:14px}
+.attention-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:9px}
+.attention-main{display:grid;gap:8px}
+.attention-item{padding:11px;border-radius:16px;background:rgba(246,248,250,.74);display:flex;gap:10px;align-items:flex-start}
+.attention-icon{width:31px;height:31px;flex:none;border-radius:11px;display:grid;place-items:center;font-size:11px;font-weight:900}
+.attention-item b{display:block;font-size:10.2px}.attention-item p{font-size:8.7px;line-height:1.42;color:var(--muted);margin:3px 0 0}
+.attention-side{padding:12px;border-radius:20px;background:linear-gradient(165deg,#101b2a,#07111d);color:#fff;position:relative;overflow:hidden}
+.attention-side:after{content:"";position:absolute;width:120px;height:120px;border-radius:50%;right:-55px;top:-55px;background:rgba(255,69,0,.17)}
+.attention-side small{font-size:7.5px;color:rgba(255,255,255,.55);text-transform:uppercase;font-weight:800}
+.attention-side strong{font-size:26px;display:block;margin-top:7px}.attention-side span{font-size:8.3px;color:rgba(255,255,255,.67);line-height:1.45;display:block}
+.attention-side .mini-action{position:absolute;left:11px;bottom:11px;right:11px;height:32px;border:1px solid rgba(255,255,255,.13);border-radius:999px;background:rgba(255,255,255,.07);color:#fff;font-size:8.5px;font-weight:800}
+.dashboard-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:10px}
+.chart-card{padding:14px;min-height:238px}
+.chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.chart-head h3{font-size:13px;margin:0}.chart-head p{font-size:8.4px;color:var(--muted);margin:3px 0 0}
+.chart-stat{font-size:18px;font-weight:800;text-align:right}
+.chart-stat small{display:block;font-size:7.5px;color:var(--green);font-weight:800}
+.svg-chart{width:100%;height:142px;margin-top:7px;overflow:visible}
+.chart-gridline{stroke:#dfe5ea;stroke-width:1}.chart-line{fill:none;stroke:url(#profitGradient);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.chart-area{fill:url(#areaGradient)}
+.chart-dot{fill:#fff;stroke:#ff4500;stroke-width:3}
+.chart-label{font-size:8px;fill:#8d98a2}
+.donut-wrap{display:flex;align-items:center;justify-content:center;position:relative;height:135px}
+.donut{width:120px;height:120px;border-radius:50%;background:conic-gradient(var(--green) 0 56%,var(--amber) 56% 77%,var(--red) 77% 88%,#dce2e7 88% 100%);display:grid;place-items:center}
+.donut:before{content:"";width:79px;height:79px;border-radius:50%;background:rgba(250,252,253,.95);box-shadow:inset 0 0 0 1px rgba(20,28,37,.04)}
+.donut-center{position:absolute;text-align:center}.donut-center strong{display:block;font-size:21px}.donut-center span{font-size:7.5px;color:var(--muted)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}.legend div{font-size:8px;color:var(--muted);display:flex;align-items:center;gap:5px}.legend i{width:7px;height:7px;border-radius:50%}
+.funnel{display:grid;gap:8px;margin-top:13px}.funnel-row{display:grid;grid-template-columns:70px 1fr 44px;gap:7px;align-items:center}
+.funnel-row b{font-size:8.5px}.funnel-row span{font-size:8px;color:var(--muted);text-align:right}
+.funnel-bar{height:9px;background:#e7ecf0;border-radius:999px;overflow:hidden}.funnel-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#285781,#2c64d8)}
+.list{display:grid;gap:8px}
+.row{display:flex;align-items:center;gap:10px;padding:11px;border:1px solid rgba(255,255,255,.94);background:rgba(255,255,255,.58);border-radius:16px}
+.row-icon{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:#eaf0f4;color:#53616e;font-size:10px;font-weight:900;flex:none}
+.row-main{min-width:0;flex:1}.row-main b{display:block;font-size:10.2px}.row-main span{display:block;font-size:8.3px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-end{text-align:right}.row-end b{font-size:10px;display:block}.row-end span{font-size:7.5px;color:var(--muted)}
+.feed{display:grid;gap:9px}.feed-card{padding:12px;border-radius:20px;border:1px solid var(--whiteStroke);background:var(--glass-strong);box-shadow:var(--shadow-soft)}
+.feed-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.feed-user{display:flex;align-items:center;gap:8px}
+.avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,var(--orange),var(--orange2));color:#fff;font-size:9px;font-weight:900}
+.feed-meta b{display:block;font-size:9.8px}.feed-meta span{font-size:7.7px;color:var(--muted)}
+.feed-card h4{font-size:12.5px;margin:9px 0 4px}.feed-card p{font-size:8.8px;line-height:1.45;color:var(--muted);margin:0}
+.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.metric-box{padding:12px;border-radius:17px;background:rgba(255,255,255,.67);border:1px solid var(--whiteStroke)}
+.metric-box small{font-size:7.5px;color:var(--muted2);font-weight:800;text-transform:uppercase}.metric-box strong{display:block;font-size:18px;margin-top:4px}.metric-box span{font-size:8px;color:var(--muted)}
+.search{display:flex;align-items:center;gap:8px;padding:11px 13px;border-radius:17px;border:1px solid var(--whiteStroke);background:rgba(255,255,255,.67);box-shadow:var(--shadow-soft)}
+.search input{border:0;background:transparent;outline:0;width:100%;font-size:10px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--whiteStroke);background:rgba(255,255,255,.68);border-radius:999px;padding:7px 10px;font-size:8.5px;font-weight:800;white-space:nowrap}
+.chip.active{background:#111821;color:#fff;border-color:#111821}
+.order-card{padding:12px;border-radius:20px;border:1px solid var(--whiteStroke);background:var(--glass-strong);box-shadow:var(--shadow-soft)}
+.order-head{display:flex;justify-content:space-between;gap:8px}.order-ref{font-size:7.5px;color:var(--muted2);font-weight:700}.order-name{font-size:12px;font-weight:800;margin-top:2px}
+.order-data{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.mini{padding:8px;border-radius:12px;background:#f3f6f8}
+.mini small{display:block;font-size:6.8px;color:var(--muted2);text-transform:uppercase;font-weight:800}.mini b{font-size:9.3px;display:block;margin-top:2px}
+.order-foot{display:flex;justify-content:space-between;gap:8px;margin-top:9px;font-size:8px;color:var(--muted)}
+.compare-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.compare-card{padding:12px;border-radius:16px;background:rgba(255,255,255,.68);border:1px solid var(--whiteStroke)}
+.compare-card small{display:block;font-size:7px;text-transform:uppercase;color:var(--muted2);font-weight:800}.compare-card strong{display:block;font-size:17px;margin:4px 0 2px}.compare-card span{font-size:7.7px;color:var(--muted)}
+.finding{padding:12px;border-radius:18px;background:var(--glass-strong);border:1px solid var(--whiteStroke);box-shadow:var(--shadow-soft)}
+.finding-top{display:flex;justify-content:space-between;gap:8px}.finding h4{font-size:10.5px;margin:0}.finding p{font-size:8.5px;line-height:1.5;color:var(--muted);margin:5px 0}
+.tags{display:flex;gap:5px;flex-wrap:wrap}.tag{padding:5px 7px;border-radius:999px;background:#edf1f4;color:#596570;font-size:7.4px;font-weight:700}
+.money-aging{display:grid;gap:9px}.aging-row{display:grid;grid-template-columns:68px 1fr 61px;gap:8px;align-items:center}
+.aging-row b{font-size:8.5px}.aging-row span{font-size:8px;text-align:right;color:var(--muted)}
+.bar{height:9px;border-radius:999px;background:#e5ebef;overflow:hidden}.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#284f75,#2c64d8)}
+.hbar{display:grid;grid-template-columns:80px 1fr 52px;gap:8px;align-items:center;margin-top:9px}.hbar b{font-size:8.2px}.hbar span{font-size:8px;text-align:right;color:var(--muted)}
+.hbar .bar i.orange{background:linear-gradient(90deg,var(--orange2),var(--orange))}
+.hbar .bar i.green{background:linear-gradient(90deg,#57b37d,var(--green))}
+.hbar .bar i.red{background:linear-gradient(90deg,#e46f74,var(--red))}
+.table{display:grid;gap:7px}.table-row{display:grid;grid-template-columns:1.3fr .8fr .8fr .8fr;gap:6px;align-items:center;padding:9px 10px;border-radius:14px;background:rgba(255,255,255,.57);font-size:8.4px}
+.table-row.head{background:transparent;color:var(--muted2);font-size:7px;font-weight:800;text-transform:uppercase}.table-row strong{font-size:9px}
+.timeline{display:grid}.trow{display:grid;grid-template-columns:28px 1fr;gap:8px;position:relative;padding-bottom:13px}
+.trow:not(:last-child):after{content:"";position:absolute;left:13px;top:27px;bottom:0;width:2px;background:#e2e8ed}
+.tdot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#e9eef2;font-size:8px;font-weight:900;z-index:1}
+.trow.done .tdot{background:var(--greenSoft);color:var(--green)}.trow.now .tdot{background:var(--amberSoft);color:var(--amber)}.trow.bad .tdot{background:var(--redSoft);color:var(--red)}
+.trow b{font-size:9.7px;display:block;margin-top:2px}.trow p{font-size:8px;color:var(--muted);margin:2px 0 0}
+.primary,.soft,.danger{min-height:40px;border-radius:999px;padding:0 14px;font-size:9.5px;font-weight:800}
+.primary{border:1px solid var(--orange);background:var(--orange);color:#fff;box-shadow:0 8px 18px rgba(255,69,0,.20)}
+.soft{border:1px solid var(--whiteStroke);background:rgba(255,255,255,.75);box-shadow:var(--shadow-soft)}
+.danger{border:1px solid rgba(199,58,64,.20);background:var(--redSoft);color:var(--red)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field label{display:block;font-size:7.8px;color:var(--muted);font-weight:700;margin:0 0 4px 2px}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--stroke);background:rgba(255,255,255,.81);border-radius:12px;padding:10px;min-height:40px;font-size:9.5px;outline:0}
+.field textarea{min-height:90px;resize:vertical}
+.dropzone{padding:25px 15px;text-align:center;border-radius:21px;border:1.5px dashed rgba(87,100,114,.28);background:rgba(248,250,252,.50)}
+.dropzone .dropicon{width:50px;height:50px;margin:auto;border-radius:16px;display:grid;place-items:center;background:var(--orangeSoft);color:var(--orange);font-weight:900}
+.dropzone b{display:block;font-size:10px;margin-top:8px}.dropzone p{font-size:8.2px;color:var(--muted);margin:4px 0 10px}
+.modal-bg{display:none;position:fixed;inset:0;z-index:140;background:rgba(6,11,18,.28);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center;padding:12px}
+.modal-bg.open{display:flex}.modal{width:min(100%,740px);max-height:89vh;overflow:auto;border-radius:30px 30px 24px 24px;padding:17px;background:rgba(255,255,255,.95);box-shadow:0 30px 90px rgba(13,22,32,.25)}
+.modal-head{display:flex;align-items:center;justify-content:space-between}.modal-head h2{font-size:17px;margin:0}.modal p{font-size:8.8px;line-height:1.45;color:var(--muted)}
+.modal-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:13px}
+.menu-screen{display:none;position:fixed;inset:0;z-index:120;background:rgba(238,242,246,.81);backdrop-filter:blur(24px) saturate(170%);overflow:auto}
+.menu-screen.open{display:block}.menu-inner{width:min(100%,780px);margin:auto;padding:calc(17px + env(safe-area-inset-top)) 14px 110px}
+.menu-top{display:flex;align-items:center;justify-content:space-between}.menu-top h2{font-size:24px;margin:0}.menu-close{width:48px;height:48px;border-radius:50%;border:1px solid var(--whiteStroke);background:rgba(255,255,255,.83);box-shadow:var(--shadow-soft);font-size:20px}
+.menu-profile{padding:15px;margin-top:15px}.menu-profile-row{display:flex;align-items:center;gap:11px}.shop-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#2c5e8d,#07111e);color:#fff;font-size:13px;font-weight:900}
+.menu-profile b{display:block;font-size:13px}.menu-profile span{display:block;font-size:8.5px;color:var(--muted);margin-top:2px}
+.menu-section{font-size:10.5px;color:var(--muted);font-weight:800;margin:16px 2px 7px}
+.menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.menu-card{min-height:95px;text-align:left;padding:13px;border-radius:21px;border:1px solid var(--whiteStroke);background:rgba(255,255,255,.70);box-shadow:var(--shadow-soft)}
+.menu-card i{font-style:normal;width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:var(--orangeSoft);color:var(--orange);font-size:10px;font-weight:900;margin-bottom:7px}
+.menu-card b{display:block;font-size:10.5px}.menu-card span{display:block;font-size:8px;color:var(--muted);margin-top:3px}
+.bottom-wrap{position:fixed;z-index:90;left:50%;transform:translateX(-50%);bottom:calc(8px + env(safe-area-inset-bottom));width:min(calc(100% - 22px),710px);pointer-events:none}
+.bottom-nav{height:74px;padding:7px 9px;border-radius:999px;background:rgba(255,255,255,.69);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.98);box-shadow:0 18px 52px rgba(18,26,36,.17);display:grid;grid-template-columns:repeat(5,1fr);gap:3px;pointer-events:auto}
+.nav{border:0;background:transparent;border-radius:999px;color:var(--muted);display:grid;place-items:center;align-content:center;gap:3px;font-size:8px;font-weight:700;position:relative;transition:.18s}
+.nav b{font-size:17px}.nav.active{color:#111820;transform:translateY(-13px)}
+.nav.active:before{content:"";position:absolute;width:61px;height:61px;border-radius:50%;background:rgba(255,255,255,.93);border:1px solid rgba(255,255,255,.99);box-shadow:0 10px 28px rgba(18,26,36,.16);z-index:-1}
+.nav.active:after{content:"";position:absolute;right:calc(50% - 19px);top:8px;width:7px;height:7px;border-radius:50%;background:var(--orange)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:95px;z-index:180;opacity:0;pointer-events:none;background:#111820;color:#fff;border-radius:13px;padding:10px 13px;font-size:9px;box-shadow:var(--shadow)}
+.toast.show{opacity:1}
+@media(max-width:620px){
+  .dashboard-grid,.attention-grid{grid-template-columns:1fr}
+  .metric-strip{grid-template-columns:1fr 1fr}
+  .hero-kpis{grid-template-columns:1fr 1fr}.hero-kpis .kpi:last-child{grid-column:1/-1}
+  .quick-grid{grid-template-columns:1fr 1fr}
+  .order-data{grid-template-columns:1fr 1fr}
+  .form-grid{grid-template-columns:1fr}
+  .table-row{grid-template-columns:1.2fr .8fr .8fr}.table-row>*:nth-child(4){display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HOME -->
+<section class="screen active" id="screen-home">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating">
+  <button class="glass-pill brand-pill" onclick="openMenu()"><span class="brand-mark">C</span> CODPilot <span>⌄</span></button>
+  <div class="glass-pill action-pill">
+    <button class="icon-btn" onclick="openModal('orderModal')" title="New order">＋</button>
+    <button class="icon-btn" onclick="go('globalSearch')" title="Search">⌕</button>
+    <button class="icon-btn" onclick="go('notifications')" title="Notifications">♢</button>
+    <button class="icon-btn" onclick="openMenu()">☰</button>
+  </div>
+</div>
+
+<div class="hero-banner">
+  <span class="dark-chip">TODAY · MONEY CONTROL</span>
+  <h1>Noor Fashion</h1>
+  <p>Facebook seller · Dhaka · 46 orders today · live operations synced</p>
+  <div class="dark-chip-row">
+    <span class="dark-chip">Steadfast healthy</span>
+    <span class="dark-chip">৳2.84L settled this month</span>
+    <span class="dark-chip">Starter plan</span>
+    <span class="dark-chip">Last sync 1m ago</span>
+  </div>
+</div>
+
+<div class="hero-content">
+  <div class="glass-card glass-strong money-hero">
+    <div class="hero-head">
+      <div>
+        <div class="hero-topline"><span class="quality-dot"></span> COD OUTSTANDING · ACTUAL + VERIFIED ESTIMATES</div>
+        <h2 class="mono">৳87,450</h2>
+        <div class="hero-sub">61 delivered/eligible parcels · across 3 courier sources</div>
+      </div>
+      <span class="state bad">৳8,750 overdue</span>
+    </div>
+    <div class="hero-kpis">
+      <div class="kpi"><small>Expected today</small><strong class="mono">৳21,300</strong><span>18 parcels</span></div>
+      <div class="kpi"><small>Settled this month</small><strong class="mono">৳2.84L</strong><span>96 exact matches</span></div>
+      <div class="kpi"><small>Mismatch / unresolved</small><strong class="mono money-neg">৳4,240</strong><span>5 cases need review</span></div>
+    </div>
+  </div>
+
+  <div class="quick-grid">
+    <button class="quick" onclick="openModal('orderModal')"><span class="quick-icon">＋</span><b>New order</b><span>Paste or manual</span></button>
+    <button class="quick" onclick="go('risk')"><span class="quick-icon">R</span><b>Risk check</b><span>Phone history</span></button>
+    <button class="quick" onclick="openModal('payoutModal')"><span class="quick-icon">৳</span><b>Add payout</b><span>API · CSV · manual</span></button>
+    <button class="quick" onclick="go('products')"><span class="quick-icon">▦</span><b>Products</b><span>Cost · stock · margin</span></button>
+  </div>
+
+  <div class="glass-card premium-panel">
+    <div class="section-title"><div><h3>Needs attention</h3><div class="sub">Only issues that can cost money or require action</div></div><button class="link-btn" onclick="go('reconciliation')">Review all</button></div>
+    <div class="attention-grid">
+      <div class="attention-main">
+        <div class="attention-item"><div class="attention-icon" style="background:var(--redSoft);color:var(--red)">৳</div><div><b>3 delivered orders still unpaid</b><p>Expected COD ৳3,940 · oldest parcel is 9 days since delivery.</p></div></div>
+        <div class="attention-item"><div class="attention-icon" style="background:var(--redSoft);color:var(--red)">!</div><div><b>2 payout lines are short by ৳270</b><p>Exact parcel references matched; deductions remain unexplained.</p></div></div>
+        <div class="attention-item"><div class="attention-icon" style="background:var(--amberSoft);color:var(--amber)">↺</div><div><b>4 parcels are stalled 10+ days</b><p>COD exposure ৳5,200 · provider refresh queued.</p></div></div>
+      </div>
+      <div class="attention-side">
+        <small>Today’s protected profit</small>
+        <strong class="mono">৳11,870</strong>
+        <span>31 delivered orders. Profit excludes 2 orders with missing ad cost.</span>
+        <button class="mini-action" onclick="go('insights')">Open profit breakdown →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title"><div><h3>Business pulse</h3><div class="sub">7-day profit, COD and delivery quality</div></div><button class="link-btn" onclick="go('insights')">Full analytics</button></div>
+  <div class="dashboard-grid">
+    <div class="glass-card chart-card">
+      <div class="chart-head">
+        <div><h3>Contribution profit</h3><p>Last 7 days · actual/estimated inputs separated</p></div>
+        <div class="chart-stat mono">৳61.4k<small>↑ 12.8% vs previous 7d</small></div>
+      </div>
+      <svg class="svg-chart" viewBox="0 0 360 150" role="img" aria-label="Seven day contribution profit trend">
+        <defs>
+          <linearGradient id="profitGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#2c64d8"/><stop offset="100%" stop-color="#ff4500"/></linearGradient>
+          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4500" stop-opacity=".18"/><stop offset="100%" stop-color="#ff4500" stop-opacity="0"/></linearGradient>
+        </defs>
+        <line class="chart-gridline" x1="22" y1="24" x2="346" y2="24"/><line class="chart-gridline" x1="22" y1="61" x2="346" y2="61"/><line class="chart-gridline" x1="22" y1="98" x2="346" y2="98"/><line class="chart-gridline" x1="22" y1="132" x2="346" y2="132"/>
+        <path class="chart-area" d="M28,111 C65,97 78,104 106,82 S156,50 184,69 S229,78 258,46 S303,28 336,37 L336,132 L28,132 Z"/>
+        <path class="chart-line" d="M28,111 C65,97 78,104 106,82 S156,50 184,69 S229,78 258,46 S303,28 336,37"/>
+        <circle class="chart-dot" cx="28" cy="111" r="4"/><circle class="chart-dot" cx="106" cy="82" r="4"/><circle class="chart-dot" cx="184" cy="69" r="4"/><circle class="chart-dot" cx="258" cy="46" r="4"/><circle class="chart-dot" cx="336" cy="37" r="4"/>
+        <text class="chart-label" x="25" y="146">Thu</text><text class="chart-label" x="77" y="146">Fri</text><text class="chart-label" x="128" y="146">Sat</text><text class="chart-label" x="180" y="146">Sun</text><text class="chart-label" x="232" y="146">Mon</text><text class="chart-label" x="282" y="146">Tue</text><text class="chart-label" x="326" y="146">Wed</text>
+      </svg>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>COD position</h3><p>Current collectible pipeline</p></div><span class="state info">61 parcels</span></div>
+      <div class="donut-wrap"><div class="donut"></div><div class="donut-center"><strong class="mono">৳87.5k</strong><span>outstanding</span></div></div>
+      <div class="legend">
+        <div><i style="background:var(--green)"></i>Due normally · 56%</div>
+        <div><i style="background:var(--amber)"></i>Watch · 21%</div>
+        <div><i style="background:var(--red)"></i>Overdue · 11%</div>
+        <div><i style="background:#dce2e7"></i>Unmatched · 12%</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Delivery funnel</h3><p>This month · 284 booked</p></div><span class="state good">86.8% success</span></div>
+      <div class="funnel">
+        <div class="funnel-row"><b>Booked</b><div class="funnel-bar"><i style="width:100%"></i></div><span>284</span></div>
+        <div class="funnel-row"><b>Picked up</b><div class="funnel-bar"><i style="width:96%"></i></div><span>273</span></div>
+        <div class="funnel-row"><b>Delivered</b><div class="funnel-bar"><i style="width:83%"></i></div><span>236</span></div>
+        <div class="funnel-row"><b>Returned</b><div class="funnel-bar"><i style="width:13%;background:linear-gradient(90deg,#e06f73,#c73a40)"></i></div><span>37</span></div>
+        <div class="funnel-row"><b>Unresolved</b><div class="funnel-bar"><i style="width:4%;background:#9aa4ae"></i></div><span>11</span></div>
+      </div>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Courier health</h3><p>Own history only · sample-aware</p></div><button class="link-btn" onclick="go('couriers')">Manage</button></div>
+      <div class="list" style="margin-top:10px">
+        <div class="row"><div class="row-icon">S</div><div class="row-main"><b>Steadfast</b><span>90.5% success · 1.9d median · 2.1d settlement</span></div><div class="row-end"><b>৳86</b><span>/delivered</span></div></div>
+        <div class="row"><div class="row-icon">P</div><div class="row-main"><b>Pathao</b><span>Imported history · not connected</span></div><div class="row-end"><b>42</b><span>samples</span></div></div>
+        <div class="row"><div class="row-icon">R</div><div class="row-main"><b>RedX</b><span>Insufficient reliable sample</span></div><div class="row-end"><span class="state info">No rank</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Top products by profit</h3><p>Not revenue · contribution profit</p></div><button class="link-btn" onclick="go('products')">Products</button></div>
+      <div class="hbar"><b>Red Abaya</b><div class="bar"><i class="orange" style="width:91%"></i></div><span>৳18.2k</span></div>
+      <div class="hbar"><b>Black Abaya</b><div class="bar"><i class="orange" style="width:69%"></i></div><span>৳13.7k</span></div>
+      <div class="hbar"><b>Watch X1</b><div class="bar"><i class="orange" style="width:49%"></i></div><span>৳9.6k</span></div>
+      <div class="hbar"><b>Bag A2</b><div class="bar"><i class="orange" style="width:26%"></i></div><span>৳5.1k</span></div>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Return pressure</h3><p>Actionable loss signals</p></div><span class="state bad">-৳8,450</span></div>
+      <div class="hbar"><b>Black Abaya</b><div class="bar"><i class="red" style="width:82%"></i></div><span>22%</span></div>
+      <div class="hbar"><b>Savar</b><div class="bar"><i class="red" style="width:70%"></i></div><span>19%</span></div>
+      <div class="hbar"><b>Refused</b><div class="bar"><i class="red" style="width:52%"></i></div><span>9</span></div>
+      <div class="hbar"><b>Wrong size</b><div class="bar"><i class="red" style="width:35%"></i></div><span>6</span></div>
+    </div>
+  </div>
+
+  <div class="section-title"><div><h3>Live activity</h3><div class="sub">Money and operational events only</div></div><button class="link-btn" onclick="go('notifications')">All activity</button></div>
+  <div class="feed">
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar">৳</div><div class="feed-meta"><b>Steadfast settlement</b><span>10:14 AM</span></div></div><span class="state good">Matched</span></div><h4>৳12,340 reconciled</h4><p>11 exact consignment references matched. No unexplained deduction.</p></div>
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar" style="background:#2c64d8">P</div><div class="feed-meta"><b>Product insight</b><span>Last 7 days</span></div></div><span class="state wait">Watch</span></div><h4>Black Abaya return rate increased</h4><p>22% across 18 completed shipments. Review size expectation before scaling ads.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- ORDERS -->
+<section class="screen" id="screen-orders">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill brand-pill" onclick="openMenu()"><span class="brand-mark">O</span> Orders <span>⌄</span></button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('orderModal')">＋</button><button class="icon-btn" onclick="go('globalSearch')">⌕</button><button class="icon-btn" onclick="openMenu()">☰</button></div></div>
+<div class="page-header"><div class="eyebrow">Order → courier → COD → profit</div><h1>Orders</h1><p>Fast seller workflow, not an ERP table.</p></div>
+<div class="page-body">
+  <div class="metric-strip">
+    <div class="metric-box"><small>Today</small><strong>46</strong><span>৳54.2k order value</span></div>
+    <div class="metric-box"><small>Delivered</small><strong>31</strong><span>today</span></div>
+    <div class="metric-box"><small>COD pending</small><strong>61</strong><span>৳87.5k</span></div>
+    <div class="metric-box"><small>Returns</small><strong class="money-neg">5</strong><span>today</span></div>
+  </div>
+  <div style="height:9px"></div>
+  <div class="search">⌕ <input placeholder="Phone, order no, tracking, customer, SKU"/></div>
+  <div class="chips"><button class="chip active">All 214</button><button class="chip">Confirmed 23</button><button class="chip">Packed 12</button><button class="chip">Booked 41</button><button class="chip">Transit 57</button><button class="chip">Delivered 79</button><button class="chip">Returned 14</button><button class="chip">COD pending 61</button></div>
+  <div class="feed">
+    <div class="order-card" onclick="go('orderDetail')"><div class="order-head"><div><div class="order-ref">CP-20260909-0042</div><div class="order-name">Nusrat Jahan</div></div><span class="state wait">In transit</span></div><div class="order-data"><div class="mini"><small>COD</small><b>৳1,250</b></div><div class="mini"><small>Courier</small><b>Steadfast</b></div><div class="mini"><small>Risk</small><b class="money-pos">Low</b></div><div class="mini"><small>Profit</small><b>~৳485</b></div></div><div class="order-foot"><span>01712****78 · Mirpur 10</span><span>Black Abaya XL ›</span></div></div>
+    <div class="order-card" onclick="go('orderDetail')"><div class="order-head"><div><div class="order-ref">CP-20260909-0041</div><div class="order-name">Rafi Hasan</div></div><span class="state good">Delivered</span></div><div class="order-data"><div class="mini"><small>COD</small><b>৳1,850</b></div><div class="mini"><small>Courier</small><b>Steadfast</b></div><div class="mini"><small>Money</small><b class="money-neg">Pending</b></div><div class="mini"><small>Profit</small><b>৳638</b></div></div><div class="order-foot"><span>01819****22 · Uttara</span><span>Watch X1 ›</span></div></div>
+    <div class="order-card"><div class="order-head"><div><div class="order-ref">CP-20260909-0038</div><div class="order-name">Mim Akter</div></div><span class="state bad">Returned</span></div><div class="order-data"><div class="mini"><small>Loss</small><b class="money-neg">-৳175</b></div><div class="mini"><small>Courier</small><b>Manual</b></div><div class="mini"><small>Reason</small><b>Refused</b></div><div class="mini"><small>Stock</small><b>Review</b></div></div><div class="order-foot"><span>01612****04 · Savar</span><span>Bag A2 ›</span></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ORDER DETAIL -->
+<section class="screen" id="screen-orderDetail">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('orders')">←</button><div class="glass-pill action-pill"><button class="icon-btn">☎</button><button class="icon-btn">✉</button><button class="icon-btn">⋯</button></div></div>
+<div class="page-header"><div class="eyebrow">CP-20260909-0042</div><h1>Nusrat Jahan</h1><p>01712****78 · Mirpur 10, Dhaka · Facebook Messenger</p></div>
+<div class="page-body">
+  <div class="glass-card glass-strong money-hero">
+    <div class="hero-head"><div><div class="hero-topline"><span class="quality-dot"></span> ORDER COD</div><h2>৳1,250</h2><div class="hero-sub">Black Abaya · XL · Qty 1 · expected margin 38.8%</div></div><span class="state wait">In transit</span></div>
+    <div class="hero-kpis"><div class="kpi"><small>Product cost</small><strong>৳650</strong><span>snapshot</span></div><div class="kpi"><small>Courier</small><strong>৳80</strong><span>actual booking snapshot</span></div><div class="kpi"><small>Profit</small><strong>~৳485</strong><span>ad cost missing</span></div></div>
+  </div>
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card premium-panel"><div class="section-title"><h3>Customer risk</h3><button class="link-btn" onclick="go('risk')">View</button></div><div class="row"><div class="row-icon">R</div><div class="row-main"><b>Low order risk</b><span>11 known deliveries · 9 successful · 2 returned/cancelled</span></div><span class="state good">Low</span></div></div>
+    <div class="glass-card premium-panel"><div class="section-title"><h3>Courier</h3><button class="link-btn" onclick="openModal('bookModal')">Change</button></div><div class="row"><div class="row-icon">S</div><div class="row-main"><b>Steadfast</b><span>SF-83AX19 · charge ৳80 · healthy</span></div><span class="state good">Healthy</span></div></div>
+  </div>
+  <div class="glass-card premium-panel" style="margin-top:10px">
+    <div class="section-title"><div><h3>Tracking timeline</h3><div class="sub">Courier status and financial state stay separate</div></div></div>
+    <div class="timeline">
+      <div class="trow done"><div class="tdot">✓</div><div><b>Order confirmed</b><p>9 Sep · 8:32 AM · owner</p></div></div>
+      <div class="trow done"><div class="tdot">✓</div><div><b>Courier booked</b><p>Steadfast · 8:41 AM · charge snapshot ৳80</p></div></div>
+      <div class="trow done"><div class="tdot">✓</div><div><b>Picked up</b><p>9:20 AM · provider event</p></div></div>
+      <div class="trow now"><div class="tdot">↺</div><div><b>In transit</b><p>Last provider update 10:11 AM</p></div></div>
+      <div class="trow"><div class="tdot">৳</div><div><b>COD receivable</b><p>Will become eligible only after verified delivery outcome.</p></div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- MONEY -->
+<section class="screen" id="screen-money">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill brand-pill" onclick="openMenu()"><span class="brand-mark">৳</span> Money <span>⌄</span></button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('payoutModal')">＋</button><button class="icon-btn" onclick="go('reconciliation')">!</button><button class="icon-btn" onclick="openMenu()">☰</button></div></div>
+<div class="page-header"><div class="eyebrow">The paid core</div><h1>COD money control</h1><p>Receivables, settlements, aging, mismatch and ledger-backed truth.</p></div>
+<div class="page-body">
+  <div class="glass-card glass-strong money-hero">
+    <div class="hero-head"><div><div class="hero-topline"><span class="quality-dot"></span> OUTSTANDING COD</div><h2>৳87,450</h2><div class="hero-sub">61 eligible/unsettled parcels · 3 data sources</div></div><span class="state bad">৳8,750 overdue</span></div>
+    <div class="hero-kpis"><div class="kpi"><small>Expected today</small><strong>৳21,300</strong><span>18 parcels</span></div><div class="kpi"><small>Settled month</small><strong>৳2.84L</strong><span>96 exact matches</span></div><div class="kpi"><small>Mismatch</small><strong class="money-neg">৳4,240</strong><span>5 open cases</span></div></div>
+  </div>
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>COD aging</h3><p>How long money has been collectible</p></div><button class="link-btn" onclick="go('reconciliation')">Cases</button></div>
+      <div class="money-aging" style="margin-top:13px">
+        <div class="aging-row"><b>0–2 days</b><div class="bar"><i style="width:86%"></i></div><span>৳45,200</span></div>
+        <div class="aging-row"><b>3–5 days</b><div class="bar"><i style="width:47%"></i></div><span>৳18,700</span></div>
+        <div class="aging-row"><b>6–10 days</b><div class="bar"><i style="width:28%;background:linear-gradient(90deg,#d99c31,#9d6400)"></i></div><span>৳8,900</span></div>
+        <div class="aging-row"><b>10+ days</b><div class="bar"><i style="width:16%;background:linear-gradient(90deg,#e36a70,#c73a40)"></i></div><span>৳4,650</span></div>
+      </div>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Settled vs due</h3><p>Last 6 settlement days</p></div><span class="state good">92.4% matched</span></div>
+      <svg class="svg-chart" viewBox="0 0 360 150">
+        <line class="chart-gridline" x1="22" y1="24" x2="346" y2="24"/><line class="chart-gridline" x1="22" y1="61" x2="346" y2="61"/><line class="chart-gridline" x1="22" y1="98" x2="346" y2="98"/><line class="chart-gridline" x1="22" y1="132" x2="346" y2="132"/>
+        <g fill="#d7e1ea"><rect x="38" y="71" width="22" height="61" rx="5"/><rect x="91" y="60" width="22" height="72" rx="5"/><rect x="144" y="48" width="22" height="84" rx="5"/><rect x="197" y="75" width="22" height="57" rx="5"/><rect x="250" y="41" width="22" height="91" rx="5"/><rect x="303" y="51" width="22" height="81" rx="5"/></g>
+        <g fill="#ff4500"><rect x="38" y="79" width="22" height="53" rx="5"/><rect x="91" y="68" width="22" height="64" rx="5"/><rect x="144" y="54" width="22" height="78" rx="5"/><rect x="197" y="82" width="22" height="50" rx="5"/><rect x="250" y="45" width="22" height="87" rx="5"/><rect x="303" y="58" width="22" height="74" rx="5"/></g>
+        <text class="chart-label" x="37" y="146">4 Sep</text><text class="chart-label" x="90" y="146">5 Sep</text><text class="chart-label" x="143" y="146">6 Sep</text><text class="chart-label" x="196" y="146">7 Sep</text><text class="chart-label" x="249" y="146">8 Sep</text><text class="chart-label" x="302" y="146">9 Sep</text>
+      </svg>
+    </div>
+  </div>
+  <div class="section-title"><div><h3>Courier receivables</h3><div class="sub">Actual where available; imported/estimated clearly marked</div></div><button class="link-btn" onclick="go('couriers')">Manage</button></div>
+  <div class="table">
+    <div class="table-row head"><div>Courier</div><div>Outstanding</div><div>Overdue</div><div>Settled lag</div></div>
+    <div class="table-row"><div><strong>Steadfast</strong><br><span style="color:var(--muted)">35 unsettled</span></div><div>৳41,200</div><div class="money-neg">৳2,320</div><div>2.1d</div></div>
+    <div class="table-row"><div><strong>Pathao</strong><br><span style="color:var(--muted)">imported history</span></div><div>~৳22,500</div><div>~৳3,900</div><div>3.0d</div></div>
+    <div class="table-row"><div><strong>RedX</strong><br><span style="color:var(--muted)">statement only</span></div><div>~৳18,750</div><div>~৳1,810</div><div>—</div></div>
+  </div>
+  <div class="section-title"><h3>Recent payouts</h3><button class="link-btn" onclick="go('payouts')">All payouts</button></div>
+  <div class="feed">
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar">৳</div><div class="feed-meta"><b>Steadfast · ST-P-10928</b><span>9 Sep · API</span></div></div><span class="state good">Matched</span></div><h4>৳12,340</h4><p>11 exact matches. No unexplained adjustment.</p></div>
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar" style="background:#c73a40">!</div><div class="feed-meta"><b>Statement import</b><span>7 Sep · XLSX</span></div></div><span class="state bad">Review</span></div><h4>৳42,300 · difference ৳220</h4><p>38 exact · 2 suggested · 1 unresolved deduction.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- RECONCILIATION -->
+<section class="screen" id="screen-reconciliation">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('money')">←</button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('payoutModal')">＋</button><button class="icon-btn">⌕</button></div></div>
+<div class="page-header"><div class="eyebrow">Precision before recall</div><h1>Reconciliation</h1><p>Wrong auto-match is worse than an unresolved item.</p></div>
+<div class="page-body">
+  <div class="compare-grid"><div class="compare-card"><small>Expected</small><strong>৳42,520</strong><span>eligible net</span></div><div class="compare-card"><small>Received</small><strong>৳42,300</strong><span>payout</span></div><div class="compare-card"><small>Difference</small><strong class="money-neg">-৳220</strong><span>needs explanation</span></div></div>
+  <div style="height:8px"></div>
+  <div class="metric-strip"><div class="metric-box"><small>Exact</small><strong>38</strong><span>auto-applied</span></div><div class="metric-box"><small>Suggested</small><strong>2</strong><span>manual confirm</span></div><div class="metric-box"><small>Unresolved</small><strong>1</strong><span>unknown deduction</span></div><div class="metric-box"><small>Disputed</small><strong>1</strong><span>tracked</span></div></div>
+  <div style="height:10px"></div>
+  <div class="feed">
+    <div class="finding"><div class="finding-top"><h4>INV-302 · exact consignment reference</h4><span class="state bad">-৳80</span></div><p>Expected net ৳1,405 · payout line ৳1,325. Provider deduction not mapped to a known charge type.</p><div class="tags"><span class="tag">exact ref</span><span class="tag">underpaid</span><span class="tag">unknown deduction</span></div><div style="margin-top:8px"><button class="soft">Classify adjustment</button> <button class="danger">Open dispute</button></div></div>
+    <div class="finding"><div class="finding-top"><h4>INV-309 · exact reference</h4><span class="state bad">-৳140</span></div><p>Statement label says “adjustment”. Keep separate until a charge type is confirmed.</p><div class="tags"><span class="tag">exact ref</span><span class="tag">manual review</span></div></div>
+    <div class="finding"><div class="finding-top"><h4>INV-321 · amount-only candidate</h4><span class="state wait">Suggested</span></div><p>Two parcels have the same amount. CODPilot will never auto-match amount-only ambiguity.</p><button class="soft">Review candidates</button></div>
+  </div>
+</div>
+</section>
+
+<!-- PAYOUTS -->
+<section class="screen" id="screen-payouts">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('money')">←</button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('payoutModal')">＋</button><button class="icon-btn">⌕</button></div></div>
+<div class="page-header"><div class="eyebrow">API · CSV · manual</div><h1>Payouts</h1><p>Original source is preserved for every reconciliation.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>This month</small><strong>৳2.84L</strong><span>settled</span></div><div class="metric-box"><small>Imported</small><strong>11</strong><span>payouts</span></div><div class="metric-box"><small>Exact match</small><strong>92.4%</strong><span>lines</span></div><div class="metric-box"><small>Open issues</small><strong class="money-neg">5</strong><span>৳4,240</span></div></div>
+  <div class="section-title"><h3>Payout history</h3><button class="link-btn" onclick="openModal('payoutModal')">Add payout</button></div>
+  <div class="feed">
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar">S</div><div class="feed-meta"><b>Steadfast</b><span>9 Sep · API · ST-P-10928</span></div></div><span class="state good">Matched</span></div><h4>৳12,340</h4><p>11 lines · 11 exact · original provider reference preserved.</p></div>
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar" style="background:#2c64d8">X</div><div class="feed-meta"><b>steadfast_07_sep.xlsx</b><span>7 Sep · statement import</span></div></div><span class="state bad">Review</span></div><h4>৳42,300</h4><p>41 lines · 38 exact · 2 suggested · 1 unresolved.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- INSIGHTS -->
+<section class="screen" id="screen-insights">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill brand-pill" onclick="openMenu()"><span class="brand-mark">I</span> Insights <span>⌄</span></button><div class="glass-pill action-pill"><button class="icon-btn">↗</button><button class="icon-btn" onclick="openMenu()">☰</button></div></div>
+<div class="page-header"><div class="eyebrow">Accumulated-history advantage</div><h1>Profit & business intelligence</h1><p>Only insights that your own data can support.</p></div>
+<div class="page-body">
+  <div class="glass-card glass-strong money-hero">
+    <div class="hero-head"><div><div class="hero-topline"><span class="quality-dot"></span> CONTRIBUTION PROFIT · THIS MONTH</div><h2>৳61,450</h2><div class="hero-sub">Actual and estimated inputs separated · 82% of delivered orders have ad cost</div></div><span class="state good">28.4% margin</span></div>
+    <div class="hero-kpis"><div class="kpi"><small>Delivered sales</small><strong>৳2.16L</strong><span>realized</span></div><div class="kpi"><small>Return loss</small><strong class="money-neg">-৳8,450</strong><span>27 returns</span></div><div class="kpi"><small>Delivery success</small><strong>86.8%</strong><span>214 terminal attempts</span></div></div>
+  </div>
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Revenue → profit bridge</h3><p>Where the money goes</p></div><span class="state info">This month</span></div>
+      <div class="hbar"><b>Revenue</b><div class="bar"><i class="green" style="width:100%"></i></div><span>৳216k</span></div>
+      <div class="hbar"><b>COGS</b><div class="bar"><i class="red" style="width:47%"></i></div><span>-৳101k</span></div>
+      <div class="hbar"><b>Courier</b><div class="bar"><i class="red" style="width:13%"></i></div><span>-৳27k</span></div>
+      <div class="hbar"><b>Ads</b><div class="bar"><i class="red" style="width:9%"></i></div><span>-৳19k</span></div>
+      <div class="hbar"><b>Return loss</b><div class="bar"><i class="red" style="width:4%"></i></div><span>-৳8.5k</span></div>
+      <div class="hbar"><b>Profit</b><div class="bar"><i class="orange" style="width:28%"></i></div><span>৳61.4k</span></div>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Profit by product</h3><p>Contribution profit · ranked</p></div><button class="link-btn" onclick="go('products')">Open</button></div>
+      <div class="hbar"><b>Red Abaya</b><div class="bar"><i class="orange" style="width:91%"></i></div><span>৳18.2k</span></div>
+      <div class="hbar"><b>Black Abaya</b><div class="bar"><i class="orange" style="width:69%"></i></div><span>৳13.7k</span></div>
+      <div class="hbar"><b>Watch X1</b><div class="bar"><i class="orange" style="width:49%"></i></div><span>৳9.6k</span></div>
+      <div class="hbar"><b>Bag A2</b><div class="bar"><i class="orange" style="width:26%"></i></div><span>৳5.1k</span></div>
+    </div>
+  </div>
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Courier scorecard</h3><p>Own history · visible sample size</p></div><button class="link-btn" onclick="go('couriers')">Details</button></div>
+      <div class="table">
+        <div class="table-row head"><div>Courier</div><div>Success</div><div>Median</div><div>Cost/del.</div></div>
+        <div class="table-row"><div><strong>Steadfast</strong><br><span style="color:var(--muted)">42 completed</span></div><div>90.5%</div><div>1.9d</div><div>৳86</div></div>
+        <div class="table-row"><div><strong>Pathao</strong><br><span style="color:var(--muted)">31 imported</span></div><div>87.1%</div><div>2.2d</div><div>~৳89</div></div>
+        <div class="table-row"><div><strong>RedX</strong><br><span style="color:var(--muted)">9 samples</span></div><div>—</div><div>—</div><div>No rank</div></div>
+      </div>
+    </div>
+    <div class="glass-card chart-card">
+      <div class="chart-head"><div><h3>Return loss map</h3><p>By product / area / reason</p></div><button class="link-btn" onclick="go('returns')">Return center</button></div>
+      <div class="hbar"><b>Black Abaya</b><div class="bar"><i class="red" style="width:82%"></i></div><span>22%</span></div>
+      <div class="hbar"><b>Savar</b><div class="bar"><i class="red" style="width:70%"></i></div><span>19%</span></div>
+      <div class="hbar"><b>Refused</b><div class="bar"><i class="red" style="width:52%"></i></div><span>9</span></div>
+      <div class="hbar"><b>Wrong size</b><div class="bar"><i class="red" style="width:35%"></i></div><span>6</span></div>
+    </div>
+  </div>
+  <div class="glass-card chart-card" style="margin-top:10px">
+    <div class="chart-head"><div><h3>Cashflow preview</h3><p>V2 forecast concept · clearly labeled estimate</p></div><span class="state info">Forecast</span></div>
+    <div class="compare-grid" style="margin-top:10px"><div class="compare-card"><small>Expected COD 7d</small><strong>~৳1.84L</strong><span>forecast</span></div><div class="compare-card"><small>Known outflows</small><strong>-৳1.22L</strong><span>suppliers + ads</span></div><div class="compare-card"><small>Free cash</small><strong>~৳62k</strong><span>estimate</span></div></div>
+  </div>
+</div>
+</section>
+
+<!-- RETURNS -->
+<section class="screen" id="screen-returns">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn">⌕</button></div></div>
+<div class="page-header"><div class="eyebrow">Return economics</div><h1>Return loss center</h1><p>See the direct cost of failed deliveries, not just a return count.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>Returns</small><strong>27</strong><span>this month</span></div><div class="metric-box"><small>Return rate</small><strong>13.2%</strong><span>terminal attempts</span></div><div class="metric-box"><small>Direct loss</small><strong class="money-neg">-৳8,450</strong><span>verified/estimated mix</span></div><div class="metric-box"><small>Stock review</small><strong>6</strong><span>not restored</span></div></div>
+  <div class="dashboard-grid" style="margin-top:10px">
+    <div class="glass-card chart-card"><div class="chart-head"><div><h3>By product</h3><p>Highest return pressure</p></div></div><div class="hbar"><b>Black Abaya</b><div class="bar"><i class="red" style="width:82%"></i></div><span>22%</span></div><div class="hbar"><b>Bag A2</b><div class="bar"><i class="red" style="width:61%"></i></div><span>17%</span></div><div class="hbar"><b>Watch X1</b><div class="bar"><i class="red" style="width:28%"></i></div><span>8%</span></div></div>
+    <div class="glass-card chart-card"><div class="chart-head"><div><h3>By reason</h3><p>27 return outcomes</p></div></div><div class="hbar"><b>Refused</b><div class="bar"><i class="red" style="width:72%"></i></div><span>9</span></div><div class="hbar"><b>Wrong size</b><div class="bar"><i class="red" style="width:48%"></i></div><span>6</span></div><div class="hbar"><b>Unreachable</b><div class="bar"><i class="red" style="width:32%"></i></div><span>4</span></div></div>
+  </div>
+</div>
+</section>
+
+<!-- PRODUCTS -->
+<section class="screen" id="screen-products">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('productModal')">＋</button><button class="icon-btn">⌕</button></div></div>
+<div class="page-header"><div class="eyebrow">Product economics</div><h1>Products & inventory</h1><p>Light inventory, cost snapshots and profit signals.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>Active</small><strong>18</strong><span>products</span></div><div class="metric-box"><small>Inventory cost</small><strong>৳1.32L</strong><span>entered basis</span></div><div class="metric-box"><small>Low stock</small><strong class="money-warn">4</strong><span>needs action</span></div><div class="metric-box"><small>Return review</small><strong class="money-neg">2</strong><span>products</span></div></div>
+  <div class="section-title"><h3>Product list</h3><button class="link-btn" onclick="openModal('productModal')">Add product</button></div>
+  <div class="list">
+    <div class="row"><div class="row-icon">A</div><div class="row-main"><b>Black Abaya</b><span>Cost ৳650 · Sell ৳1,250 · SKU ABA-BLK</span></div><div class="row-end"><b>12 stock</b><span class="money-neg">22% return</span></div></div>
+    <div class="row"><div class="row-icon">R</div><div class="row-main"><b>Red Abaya</b><span>Cost ৳630 · Sell ৳1,250 · highest profit</span></div><div class="row-end"><b>18 stock</b><span class="money-pos">৳18.2k profit</span></div></div>
+    <div class="row"><div class="row-icon">W</div><div class="row-main"><b>Watch X1</b><span>Cost ৳890 · Sell ৳1,850</span></div><div class="row-end"><b class="money-neg">3 stock</b><span>low stock</span></div></div>
+    <div class="row"><div class="row-icon">B</div><div class="row-main"><b>Bag A2</b><span>Cost ৳540 · Sell ৳990</span></div><div class="row-end"><b>21 stock</b><span>17% return</span></div></div>
+  </div>
+</div>
+</section>
+
+<!-- CUSTOMERS -->
+<section class="screen" id="screen-customers">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn">⌕</button></div></div>
+<div class="page-header"><div class="eyebrow">Private seller CRM</div><h1>Customers</h1><p>Auto-built from your own orders. No cross-seller browsing.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>Customers</small><strong>614</strong><span>private</span></div><div class="metric-box"><small>Repeat buyers</small><strong>84</strong><span>13.7%</span></div><div class="metric-box"><small>High LTV</small><strong>39</strong><span>৳5k+</span></div><div class="metric-box"><small>Private blocks</small><strong>8</strong><span>seller only</span></div></div>
+  <div style="height:9px"></div><div class="search">⌕ <input placeholder="Phone or customer name"/></div><div style="height:9px"></div>
+  <div class="list">
+    <div class="row"><div class="row-icon">N</div><div class="row-main"><b>Nusrat Jahan · Repeat buyer</b><span>6 orders · 5 delivered · LTV ৳8,400</span></div><span class="state good">83%</span></div>
+    <div class="row"><div class="row-icon">R</div><div class="row-main"><b>Rafi Hasan</b><span>3 orders · 3 delivered · LTV ৳5,550</span></div><span class="state good">100%</span></div>
+    <div class="row"><div class="row-icon">M</div><div class="row-main"><b>Mim Akter</b><span>2 orders · 1 return · seller-private note</span></div><span class="state wait">50%</span></div>
+  </div>
+</div>
+</section>
+
+<!-- RISK -->
+<section class="screen" id="screen-risk">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('home')">←</button></div>
+<div class="page-header"><div class="eyebrow">Delivery history signal</div><h1>Order risk check</h1><p>Risk belongs to the order decision, not a public label on a person.</p></div>
+<div class="page-body">
+  <div class="glass-card glass-strong premium-panel">
+    <div class="field"><label>Customer phone</label><input value="01712345678"></div>
+    <button class="primary" style="width:100%;margin-top:9px">Check delivery pattern</button>
+  </div>
+  <div class="glass-card glass-strong money-hero" style="margin-top:10px">
+    <div class="hero-head"><div><div class="hero-topline">01712****78</div><h2 style="font-size:29px">Low risk</h2><div class="hero-sub">Known pattern from available linked/approved sources.</div></div><span class="state good">LOW</span></div>
+    <div class="hero-kpis"><div class="kpi"><small>Total known</small><strong>27</strong><span>parcels</span></div><div class="kpi"><small>Successful</small><strong>19</strong><span>70%</span></div><div class="kpi"><small>Return/cancel</small><strong>8</strong><span>30%</span></div></div>
+  </div>
+  <div class="section-title"><h3>Provider breakdown</h3></div>
+  <div class="list">
+    <div class="row"><div class="row-icon">S</div><div class="row-main"><b>Steadfast</b><span>12 success · 5 return/cancel</span></div><span class="state good">Available</span></div>
+    <div class="row"><div class="row-icon">P</div><div class="row-main"><b>Pathao</b><span>Provider not linked / no approved data path</span></div><span class="state info">No data</span></div>
+  </div>
+  <div class="finding" style="margin-top:9px"><div class="finding-top"><h4>Suggested action</h4><span class="state info">Neutral</span></div><p>Use this as one signal. For medium/high-risk orders, confirm by phone or request delivery-charge advance according to your shop policy.</p></div>
+</div>
+</section>
+
+<!-- COURIERS -->
+<section class="screen" id="screen-couriers">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('courierModal')">＋</button></div></div>
+<div class="page-header"><div class="eyebrow">Bring your own courier account</div><h1>Courier accounts</h1><p>Capabilities are verified per provider; unsupported features degrade safely.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>Connected</small><strong>1</strong><span>provider</span></div><div class="metric-box"><small>Healthy</small><strong class="money-pos">1</strong><span>Steadfast</span></div><div class="metric-box"><small>Manual mode</small><strong>On</strong><span>fallback</span></div><div class="metric-box"><small>Unknown bookings</small><strong>0</strong><span>safe</span></div></div>
+  <div class="section-title"><h3>Accounts</h3><button class="link-btn" onclick="openModal('courierModal')">Connect</button></div>
+  <div class="list">
+    <div class="row"><div class="row-icon">S</div><div class="row-main"><b>Steadfast · Main account</b><span>Booking · status · webhook · verified capabilities</span></div><span class="state good">Healthy</span></div>
+    <div class="row"><div class="row-icon">P</div><div class="row-main"><b>Pathao</b><span>Not connected · current API verification required at build</span></div><button class="soft">Connect</button></div>
+    <div class="row"><div class="row-icon">R</div><div class="row-main"><b>RedX</b><span>Not connected · capability manifest required</span></div><button class="soft">Connect</button></div>
+    <div class="row"><div class="row-icon">M</div><div class="row-main"><b>Manual mode</b><span>Order + tracking + payout statement reconciliation</span></div><span class="state good">Enabled</span></div>
+  </div>
+</div>
+</section>
+
+<!-- EXPENSES -->
+<section class="screen" id="screen-expenses">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn" onclick="openModal('expenseModal')">＋</button></div></div>
+<div class="page-header"><div class="eyebrow">Profit inputs</div><h1>Expenses & ad spend</h1><p>Only the costs needed for seller profitability — not full accounting.</p></div>
+<div class="page-body">
+  <div class="metric-strip"><div class="metric-box"><small>Ads month</small><strong>৳19.4k</strong><span>manual input</span></div><div class="metric-box"><small>Packaging</small><strong>৳4.8k</strong><span>variable</span></div><div class="metric-box"><small>Other variable</small><strong>৳3.1k</strong><span>fees</span></div><div class="metric-box"><small>Fixed entered</small><strong>৳28k</strong><span>optional</span></div></div>
+  <div class="section-title"><h3>Recent entries</h3><button class="link-btn" onclick="openModal('expenseModal')">Add expense</button></div>
+  <div class="list">
+    <div class="row"><div class="row-icon">F</div><div class="row-main"><b>Eid Abaya campaign</b><span>Meta ads · tagged to Abaya · proportional allocation</span></div><div class="row-end"><b>৳5,000</b><span>3–5 Sep</span></div></div>
+    <div class="row"><div class="row-icon">P</div><div class="row-main"><b>Packaging purchase</b><span>Variable expense</span></div><div class="row-end"><b>৳1,250</b><span>8 Sep</span></div></div>
+  </div>
+</div>
+</section>
+
+<!-- IMPORTS -->
+<section class="screen" id="screen-imports">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button></div>
+<div class="page-header"><div class="eyebrow">Migration + payout intake</div><h1>Imports & exports</h1><p>Google Sheet and courier statement migration path.</p></div>
+<div class="page-body">
+  <div class="quick-grid">
+    <button class="quick"><span class="quick-icon">O</span><b>Orders CSV</b><span>Map · preview · dry run</span></button>
+    <button class="quick"><span class="quick-icon">৳</span><b>Payout statement</b><span>CSV / XLSX</span></button>
+    <button class="quick"><span class="quick-icon">▦</span><b>Products</b><span>SKU · cost · stock</span></button>
+    <button class="quick"><span class="quick-icon">⇩</span><b>Export</b><span>Your own data</span></button>
+  </div>
+  <div class="glass-card premium-panel">
+    <div class="section-title"><h3>Recent imports</h3></div>
+    <div class="list">
+      <div class="row"><div class="row-icon">✓</div><div class="row-main"><b>steadfast_09_sep.xlsx</b><span>42 rows · 38 exact · 3 review · 1 unresolved</span></div><span class="state good">Processed</span></div>
+      <div class="row"><div class="row-icon">O</div><div class="row-main"><b>orders_google_sheet.csv</b><span>128 rows · 4 duplicate warnings</span></div><span class="state good">Imported</span></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- NOTIFICATIONS -->
+<section class="screen" id="screen-notifications">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('home')">←</button></div>
+<div class="page-header"><div class="eyebrow">Actionable, not noisy</div><h1>Notifications</h1><p>Money, mismatch, stalled parcel, booking ambiguity and weekly summary.</p></div>
+<div class="page-body">
+  <div class="chips"><button class="chip active">All</button><button class="chip">Action</button><button class="chip">Money</button><button class="chip">Courier</button><button class="chip">Weekly</button></div>
+  <div class="feed">
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar" style="background:#c73a40">!</div><div class="feed-meta"><b>COD overdue</b><span>10:20 AM</span></div></div><span class="state bad">Action</span></div><h4>৳8,750 is overdue</h4><p>7 delivered parcels exceeded their expected settlement window.</p></div>
+    <div class="feed-card"><div class="feed-head"><div class="feed-user"><div class="avatar">F</div><div class="feed-meta"><b>Friday summary</b><span>Last Friday</span></div></div><span class="state info">Weekly</span></div><h4>214 orders · ৳61,450 contribution profit</h4><p>COD pending ৳74,200 · mismatch ৳1,120 · 27 returns.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- TEAM -->
+<section class="screen" id="screen-team">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button><div class="glass-pill action-pill"><button class="icon-btn">＋</button></div></div>
+<div class="page-header"><div class="eyebrow">V2 collaboration</div><h1>Team & activity</h1><p>Owner, manager, packer, accountant and viewer permissions.</p></div>
+<div class="page-body">
+  <div class="list">
+    <div class="row"><div class="row-icon">O</div><div class="row-main"><b>Owner</b><span>Full access · credentials · billing · corrections</span></div><span class="state good">You</span></div>
+    <div class="row"><div class="row-icon">M</div><div class="row-main"><b>Manager · Rahim</b><span>Orders · booking · reports</span></div><span class="state info">Active</span></div>
+    <div class="row"><div class="row-icon">P</div><div class="row-main"><b>Packer · Mim</b><span>Orders · pack · limited booking</span></div><span class="state info">Active</span></div>
+  </div>
+</div>
+</section>
+
+<!-- SUBSCRIPTION -->
+<section class="screen" id="screen-subscription">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button></div>
+<div class="page-header"><div class="eyebrow">Pay for automation, not your own data</div><h1>Plans</h1><p>History stays readable after downgrade.</p></div>
+<div class="page-body">
+  <div class="dashboard-grid">
+    <div class="glass-card glass-strong money-hero"><div class="hero-head"><div><div class="hero-topline">STARTER</div><h2>৳199</h2><div class="hero-sub">per month · hypothesis to validate</div></div><span class="state good">Best fit</span></div><div class="list" style="margin-top:12px"><div class="row"><div class="row-icon">✓</div><div class="row-main"><b>Full COD reconciliation</b><span>Aging · mismatch · alerts</span></div></div><div class="row"><div class="row-icon">✓</div><div class="row-main"><b>Multiple courier accounts</b><span>within entitlement</span></div></div><div class="row"><div class="row-icon">✓</div><div class="row-main"><b>Full profit history</b><span>your own data remains readable</span></div></div></div><button class="primary" style="width:100%;margin-top:11px">Upgrade via policy-compliant billing</button></div>
+    <div class="glass-card premium-panel"><div class="hero-topline">PRO</div><h2 style="font-size:31px;margin:7px 0 4px">৳399</h2><div class="hero-sub">Team + advanced analysis + web dashboard</div><div class="list" style="margin-top:12px"><div class="row"><div class="row-icon">5</div><div class="row-main"><b>5 team members</b><span>RBAC + activity</span></div></div><div class="row"><div class="row-icon">↗</div><div class="row-main"><b>Advanced analytics</b><span>product · area · courier</span></div></div><div class="row"><div class="row-icon">W</div><div class="row-main"><b>Web dashboard</b><span>V2</span></div></div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- SETTINGS -->
+<section class="screen" id="screen-settings">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="openMenu()">☰</button></div>
+<div class="page-header"><div class="eyebrow">Shop controls</div><h1>Settings</h1></div>
+<div class="page-body">
+  <div class="list">
+    <div class="row"><div class="row-icon">⌂</div><div class="row-main"><b>Shop profile</b><span>Noor Fashion · Clothing · Dhaka</span></div><b>›</b></div>
+    <div class="row"><div class="row-icon">♢</div><div class="row-main"><b>Notification preferences</b><span>Money/action alerts enabled</span></div><b>›</b></div>
+    <div class="row"><div class="row-icon">SMS</div><div class="row-main"><b>SMS templates & quota</b><span>Banglish transactional template</span></div><b>›</b></div>
+    <div class="row"><div class="row-icon">⇩</div><div class="row-main"><b>Export my data</b><span>Orders · customers · payouts · profit</span></div><b>›</b></div>
+    <div class="row"><div class="row-icon">◉</div><div class="row-main"><b>Privacy & security</b><span>Sessions · data · delete account</span></div><b>›</b></div>
+    <div class="row"><div class="row-icon">?</div><div class="row-main"><b>Support</b><span>WhatsApp / support case</span></div><b>›</b></div>
+  </div>
+</div>
+</section>
+
+<!-- GLOBAL SEARCH -->
+<section class="screen" id="screen-globalSearch">
+<div class="statusbar"><span>10:42</span><span class="status-icons">▂▅▇ 4G 71%</span></div>
+<div class="top-floating"><button class="glass-pill back-pill" onclick="go('home')">←</button></div>
+<div class="page-header"><div class="eyebrow">Global seller search</div><h1>Search CODPilot</h1><p>Order, phone, tracking, customer, SKU, payout reference.</p></div>
+<div class="page-body">
+  <div class="search" style="min-height:60px">⌕ <input autofocus placeholder="Search anything in your shop"/></div>
+  <div class="section-title"><h3>Quick destinations</h3></div>
+  <div class="list"><div class="row" onclick="go('reconciliation')"><div class="row-icon">৳</div><div class="row-main"><b>Open reconciliation issues</b><span>5 cases · ৳4,240</span></div><b>›</b></div><div class="row" onclick="go('returns')"><div class="row-icon">↺</div><div class="row-main"><b>Return loss center</b><span>27 returns · -৳8,450</span></div><b>›</b></div></div>
+</div>
+</section>
+
+<!-- MENU -->
+<div class="menu-screen" id="menuScreen"><div class="menu-inner">
+  <div class="menu-top"><h2>CODPilot</h2><button class="menu-close" onclick="closeMenu()">×</button></div>
+  <div class="glass-card glass-strong menu-profile"><div class="menu-profile-row"><div class="shop-avatar">NF</div><div><b>Noor Fashion</b><span>Starter · Steadfast healthy · Dhaka</span></div></div></div>
+
+  <div class="menu-section">Operations</div>
+  <div class="menu-grid">
+    <button class="menu-card" onclick="menuGo('products')"><i>▦</i><b>Products & stock</b><span>Cost · margin · inventory</span></button>
+    <button class="menu-card" onclick="menuGo('customers')"><i>☺</i><b>Customers</b><span>Private CRM · repeat buyers</span></button>
+    <button class="menu-card" onclick="menuGo('risk')"><i>R</i><b>Risk check</b><span>Delivery history signal</span></button>
+    <button class="menu-card" onclick="menuGo('couriers')"><i>↗</i><b>Courier accounts</b><span>BYOC · provider health</span></button>
+    <button class="menu-card" onclick="menuGo('returns')"><i>↺</i><b>Return center</b><span>Loss · reasons · stock</span></button>
+    <button class="menu-card" onclick="menuGo('expenses')"><i>৳</i><b>Expenses & ads</b><span>Profit inputs · allocation</span></button>
+  </div>
+
+  <div class="menu-section">Money & data</div>
+  <div class="menu-grid">
+    <button class="menu-card" onclick="menuGo('reconciliation')"><i>≋</i><b>Reconciliation</b><span>Match · mismatch · dispute</span></button>
+    <button class="menu-card" onclick="menuGo('payouts')"><i>৳</i><b>Payouts</b><span>API · CSV · manual</span></button>
+    <button class="menu-card" onclick="menuGo('imports')"><i>⇩</i><b>Imports / exports</b><span>Sheets · statements · own data</span></button>
+    <button class="menu-card" onclick="menuGo('notifications')"><i>♢</i><b>Notifications</b><span>Actionable alerts</span></button>
+  </div>
+
+  <div class="menu-section">Account & growth</div>
+  <div class="menu-grid">
+    <button class="menu-card" onclick="menuGo('team')"><i>👥</i><b>Team</b><span>Roles · activity · V2</span></button>
+    <button class="menu-card" onclick="menuGo('subscription')"><i>★</i><b>Subscription</b><span>Plan · entitlements</span></button>
+    <button class="menu-card" onclick="menuGo('settings')"><i>⚙</i><b>Settings</b><span>Shop · SMS · privacy</span></button>
+    <button class="menu-card"><i>?</i><b>Support</b><span>Case + WhatsApp</span></button>
+  </div>
+</div></div>
+
+<!-- MODALS -->
+<div class="modal-bg" id="orderModal"><div class="modal">
+  <div class="modal-head"><h2>New order</h2><button class="glass-pill back-pill" onclick="closeModal('orderModal')">×</button></div>
+  <p>Paste Messenger/WhatsApp text first. CODPilot parses; seller always confirms before booking.</p>
+  <div class="field"><label>Paste order text</label><textarea>Nusrat
+01712345678
+Mirpur 10, Dhaka
+Black Abaya XL
+1250 taka</textarea></div>
+  <button class="soft" style="width:100%;margin-top:7px">✦ Parse order</button>
+  <div class="form-grid" style="margin-top:10px"><div class="field"><label>Phone</label><input value="01712345678"/></div><div class="field"><label>Name</label><input value="Nusrat"/></div><div class="field"><label>Address</label><input value="Mirpur 10, Dhaka"/></div><div class="field"><label>COD</label><input value="1250"/></div><div class="field"><label>Product</label><input value="Black Abaya XL"/></div><div class="field"><label>Source</label><select><option>Facebook Messenger</option><option>WhatsApp</option><option>Manual</option></select></div></div>
+  <div class="finding" style="margin-top:9px"><div class="finding-top"><h4>Order risk</h4><span class="state good">Low</span></div><p>11 known deliveries · 9 successful. Delivery-history signal only.</p></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('orderModal')">Cancel</button><button class="primary" onclick="closeModal('orderModal');toast('Order saved · ready to confirm')">Save order</button></div>
+</div></div>
+
+<div class="modal-bg" id="payoutModal"><div class="modal">
+  <div class="modal-head"><h2>Add payout</h2><button class="glass-pill back-pill" onclick="closeModal('payoutModal')">×</button></div>
+  <p>API/statement preferred. Manual lump payout creates proposals, not unsafe irreversible matches.</p>
+  <div class="form-grid"><div class="field"><label>Courier</label><select><option>Steadfast</option><option>Pathao</option><option>RedX</option><option>Manual</option></select></div><div class="field"><label>Amount</label><input value="42300"/></div><div class="field"><label>Date</label><input type="date" value="2026-09-09"/></div><div class="field"><label>Reference</label><input placeholder="Provider reference"/></div></div>
+  <div class="dropzone" style="margin-top:10px"><div class="dropicon">XLS</div><b>Upload courier statement</b><p>CSV / XLSX · original source preserved</p><button class="soft">Choose file</button></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('payoutModal')">Cancel</button><button class="primary" onclick="closeModal('payoutModal');go('reconciliation');toast('Payout saved · reconciliation ready')">Save & reconcile</button></div>
+</div></div>
+
+<div class="modal-bg" id="bookModal"><div class="modal">
+  <div class="modal-head"><h2>Choose courier</h2><button class="glass-pill back-pill" onclick="closeModal('bookModal')">×</button></div>
+  <p>Recommendation only appears when your own history has enough completed shipments.</p>
+  <div class="list"><div class="row"><div class="row-icon">S</div><div class="row-main"><b>Steadfast · ৳80</b><span>90.5% success · 42 completed · healthy</span></div><span class="state good">Recommended</span></div><div class="row"><div class="row-icon">P</div><div class="row-main"><b>Pathao</b><span>Not connected · live quote unavailable</span></div><span class="state info">Connect</span></div></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('bookModal')">Cancel</button><button class="primary" onclick="closeModal('bookModal');toast('Booking started · duplicate-safe')">Book Steadfast</button></div>
+</div></div>
+
+<div class="modal-bg" id="productModal"><div class="modal">
+  <div class="modal-head"><h2>Add product</h2><button class="glass-pill back-pill" onclick="closeModal('productModal')">×</button></div>
+  <div class="form-grid"><div class="field"><label>Product name</label><input placeholder="Black Abaya"/></div><div class="field"><label>SKU</label><input placeholder="ABA-BLK"/></div><div class="field"><label>Cost</label><input placeholder="650"/></div><div class="field"><label>Selling price</label><input placeholder="1250"/></div><div class="field"><label>Opening stock</label><input placeholder="20"/></div></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('productModal')">Cancel</button><button class="primary" onclick="closeModal('productModal');toast('Product saved')">Save product</button></div>
+</div></div>
+
+<div class="modal-bg" id="courierModal"><div class="modal">
+  <div class="modal-head"><h2>Connect courier</h2><button class="glass-pill back-pill" onclick="closeModal('courierModal')">×</button></div>
+  <p>Credentials are validated server-side and never returned after save.</p>
+  <div class="form-grid"><div class="field"><label>Provider</label><select><option>Steadfast</option><option>Pathao</option><option>RedX</option></select></div><div class="field"><label>Account label</label><input placeholder="Main account"/></div><div class="field"><label>API key / client id</label><input placeholder="••••••••"/></div><div class="field"><label>Secret</label><input type="password" placeholder="••••••••"/></div></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('courierModal')">Cancel</button><button class="primary" onclick="toast('Validating credentials…')">Validate & connect</button></div>
+</div></div>
+
+<div class="modal-bg" id="expenseModal"><div class="modal">
+  <div class="modal-head"><h2>Add expense</h2><button class="glass-pill back-pill" onclick="closeModal('expenseModal')">×</button></div>
+  <div class="form-grid"><div class="field"><label>Type</label><select><option>Ad spend</option><option>Packaging</option><option>Payment fee</option><option>Other variable</option><option>Fixed</option></select></div><div class="field"><label>Amount</label><input placeholder="5000"/></div><div class="field"><label>Date</label><input type="date" value="2026-09-09"/></div><div class="field"><label>Product tag</label><select><option>Black Abaya</option><option>Red Abaya</option><option>None</option></select></div></div>
+  <div class="modal-actions"><button class="soft" onclick="closeModal('expenseModal')">Cancel</button><button class="primary" onclick="closeModal('expenseModal');toast('Expense saved')">Save expense</button></div>
+</div></div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-wrap"><nav class="bottom-nav">
+  <button class="nav active" data-mainnav="home" onclick="go('home')"><b>⌂</b><span>Home</span></button>
+  <button class="nav" data-mainnav="orders" onclick="go('orders')"><b>▤</b><span>Orders</span></button>
+  <button class="nav" data-mainnav="money" onclick="go('money')"><b>৳</b><span>Money</span></button>
+  <button class="nav" data-mainnav="insights" onclick="go('insights')"><b>◫</b><span>Insights</span></button>
+  <button class="nav" data-mainnav="menu" onclick="openMenu()"><b>☰</b><span>Menu</span></button>
+</nav></div>
+
+<div class="toast" id="toast">Saved</div>
+</div>
+<script>
+const screens=[...document.querySelectorAll('.screen')];
+const navs=[...document.querySelectorAll('[data-mainnav]')];
+function go(name){
+  screens.forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));
+  const main=['home','orders','money','insights'];
+  const active=main.includes(name)?name:'menu';
+  navs.forEach(n=>n.classList.toggle('active',n.dataset.mainnav===active));
+  closeMenu();window.scrollTo({top:0,behavior:'smooth'});
+}
+function openMenu(){document.getElementById('menuScreen').classList.add('open');navs.forEach(n=>n.classList.toggle('active',n.dataset.mainnav==='menu'))}
+function closeMenu(){document.getElementById('menuScreen').classList.remove('open')}
+function menuGo(name){closeMenu();go(name)}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}));
+let toastTimer;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800)}
+</script>
+</body>
+</html>

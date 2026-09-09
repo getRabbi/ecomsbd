@@ -1,0 +1,192 @@
+"""Shop onboarding and the tenant-scoped API surface.
+
+Master spec sections 4 and 55: a new seller can create an account and a shop,
+and can skip courier linking entirely.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from httpx import AsyncClient
+from tests.test_auth_flow import auth_header, sign_in
+
+
+async def create_shop(
+    client: AsyncClient, session: dict[str, Any], **overrides: Any
+) -> dict[str, Any]:
+    payload = {
+        "name": "Noor Fashion",
+        "business_category": "CLOTHING",
+        "pickup_contact_name": "Noor",
+        "pickup_phone": "01712345678",
+        "pickup_address": "House 12, Road 3, Mirpur 10, Dhaka",
+        "pickup_district": "Dhaka",
+        "pickup_area": "Mirpur",
+    }
+    payload.update(overrides)
+    response = await client.post("/v1/tenants", json=payload, headers=auth_header(session))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+class TestShopCreation:
+    async def test_creating_a_shop_binds_the_session_to_it(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await sign_in(client, unique_phone)
+        assert session["tenant_id"] is None
+
+        after = await create_shop(client, session)
+        assert after["tenant_id"] is not None
+        assert after["role"] == "OWNER"
+        # New tokens are issued so the tenant claim applies immediately.
+        assert after["access_token"] != session["access_token"]
+
+    async def test_the_new_shop_is_readable(self, client: AsyncClient, unique_phone: str) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.get("/v1/tenant", headers=auth_header(session))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "Noor Fashion"
+        assert body["timezone"] == "Asia/Dhaka"
+        assert body["currency"] == "BDT"
+
+    async def test_pickup_phone_is_not_returned_to_the_client(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.get("/v1/tenant", headers=auth_header(session))
+        assert "01712345678" not in response.text
+
+    async def test_raw_address_is_preserved_verbatim(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        # Master spec section 71: the seller's own text is evidence and is
+        # never overwritten by a normalized or courier-transformed version.
+        address = "  House 12, Road 3, Mirpur 10, Dhaka  "
+        session = await create_shop(
+            client, await sign_in(client, unique_phone), pickup_address=address
+        )
+        response = await client.get("/v1/tenant", headers=auth_header(session))
+        assert response.json()["pickup_address_raw"] == address
+
+    async def test_a_shop_can_be_created_without_courier_details(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await sign_in(client, unique_phone)
+        response = await client.post(
+            "/v1/tenants", json={"name": "Small Shop"}, headers=auth_header(session)
+        )
+        assert response.status_code == 201
+
+    async def test_shop_name_is_validated(self, client: AsyncClient, unique_phone: str) -> None:
+        session = await sign_in(client, unique_phone)
+        response = await client.post(
+            "/v1/tenants", json={"name": "x"}, headers=auth_header(session)
+        )
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+class TestOnboardingProgress:
+    async def test_progress_is_stored_server_side(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        # Kept on the server so a reinstall resumes rather than restarting.
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.patch(
+            "/v1/tenant",
+            json={"onboarding_step": "COMPLETE"},
+            headers=auth_header(session),
+        )
+        assert response.status_code == 200
+        assert response.json()["onboarding_step"] == "COMPLETE"
+        assert response.json()["onboarding_completed_at"] is not None
+
+    async def test_me_reflects_completed_onboarding(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        assert (await client.get("/v1/me", headers=auth_header(session))).json()[
+            "needs_onboarding"
+        ] is True
+
+        await client.patch(
+            "/v1/tenant", json={"onboarding_step": "COMPLETE"}, headers=auth_header(session)
+        )
+        me = await client.get("/v1/me", headers=auth_header(session))
+        assert me.json()["needs_onboarding"] is False
+
+
+class TestTenantScopedEndpoints:
+    async def test_tenant_endpoints_require_a_shop(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await sign_in(client, unique_phone)
+        response = await client.get("/v1/tenant", headers=auth_header(session))
+        assert response.status_code == 403
+        assert response.json()["code"] == "FORBIDDEN"
+
+    async def test_one_seller_cannot_read_anothers_shop(self, client: AsyncClient) -> None:
+        # The section 47 requirement, exercised over HTTP rather than the ORM.
+        first = await create_shop(client, await sign_in(client, "01711111111"), name="Shop One")
+        second = await create_shop(client, await sign_in(client, "01822222222"), name="Shop Two")
+
+        response = await client.get("/v1/tenant", headers=auth_header(second))
+        assert response.json()["name"] == "Shop Two"
+        assert response.json()["id"] != first["tenant_id"]
+
+    async def test_selecting_an_unowned_shop_is_refused(self, client: AsyncClient) -> None:
+        first = await create_shop(client, await sign_in(client, "01733333333"), name="Shop Three")
+        outsider = await sign_in(client, "01844444444")
+
+        response = await client.post(
+            "/v1/auth/select-tenant",
+            json={"tenant_id": first["tenant_id"]},
+            headers=auth_header(outsider),
+        )
+        assert response.status_code == 403
+
+
+class TestEntitlements:
+    async def test_a_new_shop_starts_on_the_free_plan(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.get("/v1/billing/entitlements", headers=auth_header(session))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["plan"] == "free"
+        assert body["entitlements"]["orders_monthly_limit"] == 20
+        assert body["entitlements"]["reconciliation"] is False
+
+    async def test_plan_catalogue_prices_are_paisa(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.get("/v1/billing/plans", headers=auth_header(session))
+        plans = {plan["code"]: plan for plan in response.json()}
+        assert plans["starter"]["price"]["amount_paisa"] == 19_900  # ৳199
+        assert plans["pro"]["price"]["amount_paisa"] == 39_900  # ৳399
+        assert plans["free"]["price"]["currency"] == "BDT"
+
+
+class TestProviderCapabilities:
+    async def test_providers_report_verified_capabilities_only(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await create_shop(client, await sign_in(client, unique_phone))
+        response = await client.get("/v1/couriers/providers", headers=auth_header(session))
+        assert response.status_code == 200
+        providers = {p["provider"]: p for p in response.json()}
+
+        # Steadfast has no verified documentation yet, so nothing is claimed.
+        steadfast = providers["steadfast"]
+        assert steadfast["fully_unverified"] is True
+        assert set(steadfast["capabilities"].values()) == {"unknown"}
+        assert steadfast["enabled"] is False, "unverified providers stay behind a flag"
+        assert steadfast["manual_fallback"]
+
+        # Manual mode always works and is never gated.
+        assert providers["manual"]["enabled"] is True

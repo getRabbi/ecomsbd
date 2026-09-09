@@ -1,0 +1,19 @@
+Alembic migrations for the ecomsbd backend.
+
+Rules (master spec section 109):
+
+  1. Every schema change ships as a migration; no ad-hoc DDL, ever.
+  2. Deploys are backward compatible where possible: expand -> migrate -> contract.
+  3. Data backfills are separate from the blocking DDL transaction.
+  4. Never drop a column the previous running server version still reads.
+  5. Every migration is tested against a production-like copy before release.
+
+Commands (from backend/):
+
+  alembic upgrade head          apply
+  alembic downgrade -1          roll back one revision
+  alembic revision --autogenerate -m "..."   draft from model changes
+  alembic history --verbose     inspect
+
+Autogenerate drafts a migration; it does not review one. Always read the
+generated file, especially for anything touching a money column.
