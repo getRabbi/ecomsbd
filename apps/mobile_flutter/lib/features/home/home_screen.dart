@@ -12,6 +12,8 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/demo_data_notice.dart';
+import '../orders/order_compose_screen.dart';
+import '../products/products_screen.dart';
 import '../shared/responsive.dart';
 import 'widgets/seller_hero.dart';
 
@@ -136,7 +138,9 @@ class _QuickActions extends StatelessWidget {
           icon: Icons.add_rounded,
           title: 'New order',
           subtitle: 'Paste or manual',
-          onTap: () => onNavigate?.call('orders'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const OrderComposeScreen()),
+          ),
         ),
         const QuickActionTile(
           icon: Icons.shield_outlined,
@@ -152,11 +156,13 @@ class _QuickActions extends StatelessWidget {
           subtitle: 'API · CSV · manual',
           onTap: () => onNavigate?.call('money'),
         ),
-        const QuickActionTile(
+        QuickActionTile(
           icon: Icons.inventory_2_outlined,
           title: 'Products',
           subtitle: 'Cost · stock · margin',
-          enabled: false,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ProductsScreen()),
+          ),
         ),
       ],
     );

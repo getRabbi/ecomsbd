@@ -32,7 +32,18 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
     : super(executor ?? _openConnection());
 
   /// In-memory instance for tests.
-  EcomsbdDatabase.memory() : super(NativeDatabase.memory());
+  ///
+  /// `closeStreamsSynchronously` matters here: by default drift keeps a watched
+  /// query cached for one event-loop turn after its last listener leaves, and
+  /// that pending timer makes `testWidgets` fail the widget tree it just
+  /// disposed. Production keeps the default, where the cache is worth having.
+  EcomsbdDatabase.memory()
+    : super(
+        DatabaseConnection(
+          NativeDatabase.memory(),
+          closeStreamsSynchronously: true,
+        ),
+      );
 
   @override
   int get schemaVersion => 2;

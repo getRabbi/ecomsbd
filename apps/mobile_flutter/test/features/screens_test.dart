@@ -5,7 +5,6 @@ import 'package:ecomsbd/design/components/navigation.dart';
 import 'package:ecomsbd/features/home/home_screen.dart';
 import 'package:ecomsbd/features/insights/insights_screen.dart';
 import 'package:ecomsbd/features/money/money_screen.dart';
-import 'package:ecomsbd/features/orders/orders_screen.dart';
 import 'package:ecomsbd/features/shared/demo_data_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,30 +72,8 @@ void main() {
     });
   });
 
-  group('Orders', () {
-    testWidgets('renders the metric strip, search and filters', (tester) async {
-      await pumpAtSize(tester, const Scaffold(body: OrdersScreen()));
-      await tester.pump();
-
-      expect(find.text('Orders'), findsWidgets);
-      expect(find.text('CP-20260909-0042'), findsOneWidget);
-      expect(
-        find.text('Phone, order no, tracking, customer, SKU'),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('shows delivered-but-unpaid as two separate facts', (
-      tester,
-    ) async {
-      await pumpAtSize(tester, const Scaffold(body: OrdersScreen()));
-      await tester.pump();
-      // The second card is delivered; its money state is still Pending.
-      expect(find.text('Delivered'), findsWidgets);
-      expect(find.text('Pending'), findsOneWidget);
-    });
-  });
+  // The Orders screen moved to real data in Phase B; its tests live in
+  // commerce_screens_test.dart, where a fake server supplies the rows.
 
   group('Money', () {
     testWidgets('renders COD aging and the settlement comparison', (

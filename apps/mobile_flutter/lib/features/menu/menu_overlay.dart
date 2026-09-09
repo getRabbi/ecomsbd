@@ -6,6 +6,9 @@ import '../../design/glass.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../customers/customers_screen.dart';
+import '../imports/imports_screen.dart';
+import '../products/products_screen.dart';
 import '../shared/responsive.dart';
 
 /// One tile in the menu grid.
@@ -15,6 +18,7 @@ class _MenuItem {
     required this.title,
     required this.subtitle,
     this.phase,
+    this.destination,
   });
 
   final IconData icon;
@@ -25,7 +29,10 @@ class _MenuItem {
   /// and the tile says so rather than opening an empty screen.
   final String? phase;
 
-  bool get isAvailable => phase == null;
+  /// Where the tile goes. Absent for a destination that has not shipped.
+  final Widget Function()? destination;
+
+  bool get isAvailable => phase == null && destination != null;
 }
 
 /// The full-screen menu overlay (`.menu-screen`).
@@ -55,13 +62,13 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.inventory_2_outlined,
       title: 'Products & stock',
       subtitle: 'Cost · margin · inventory',
-      phase: 'Phase B',
+      destination: ProductsScreen.new,
     ),
     _MenuItem(
       icon: Icons.people_outline,
       title: 'Customers',
       subtitle: 'Private CRM · repeat buyers',
-      phase: 'Phase B',
+      destination: CustomersScreen.new,
     ),
     _MenuItem(
       icon: Icons.shield_outlined,
@@ -106,7 +113,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.file_download_outlined,
       title: 'Imports / exports',
       subtitle: 'Sheets · statements · own data',
-      phase: 'Phase B',
+      destination: ImportsScreen.new,
     ),
     _MenuItem(
       icon: Icons.notifications_none_rounded,
@@ -133,7 +140,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.settings_outlined,
       title: 'Settings',
       subtitle: 'Shop · SMS · privacy',
-      phase: 'Phase B',
+      phase: 'Phase C',
     ),
     _MenuItem(
       icon: Icons.help_outline_rounded,
@@ -313,7 +320,17 @@ class _MenuTile extends StatelessWidget {
     return Opacity(
       opacity: item.isAvailable ? 1 : 0.62,
       child: GlassCard(
-        onTap: item.isAvailable ? () {} : null,
+        onTap: item.isAvailable
+            ? () {
+                // Close the overlay first, so the back button from the
+                // destination returns to the screen behind it rather than to
+                // a menu the seller has finished with.
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => item.destination!()),
+                );
+              }
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
