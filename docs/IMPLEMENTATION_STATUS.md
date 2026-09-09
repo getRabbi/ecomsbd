@@ -1,6 +1,18 @@
 # Implementation status
 
-**Phase A (foundation) — complete.** Last updated 2026-09-09.
+**Phase A (foundation) — COMPLETE.** Last updated 2026-09-09.
+
+| | |
+|---|---|
+| **Phase A** | COMPLETE |
+| **GitHub baseline** | PUSHED |
+| **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
+| **Baseline commit** | `d70856f66ba206d1f1885235110680fbfc577eaf` |
+| **Branch** | `main` |
+| **Verified at baseline** | 187 backend tests, 74 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean |
+
+All Phase B–F work is committed to this repository. Workflow: implement a
+vertical slice, test it, commit it, push it — not one commit at the end.
 
 This file is the honest inventory. A feature is listed under **Implemented**
 only when it works end to end and is covered by tests. An interface, a model or
