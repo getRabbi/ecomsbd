@@ -165,29 +165,37 @@ async def detect_duplicates(
     candidates: list[DuplicateCandidate] = []
 
     for order in recent:
-        reasons: list[DuplicateReason] = [DuplicateReason.SAME_PHONE]
-
+        # Identity signals say *who* this is. They are informational: every row
+        # in `recent` already shares the phone, and the customer is identified
+        # *by* that phone, so neither can corroborate the other.
+        identity: list[DuplicateReason] = [DuplicateReason.SAME_PHONE]
         if customer_id is not None and order.customer_id == customer_id:
-            reasons.append(DuplicateReason.SAME_CUSTOMER)
+            identity.append(DuplicateReason.SAME_CUSTOMER)
+
+        # Corroborating signals say this looks like the *same order*. At least
+        # one is required. Without this split, every repeat customer trips the
+        # warning, and a warning that fires constantly is one sellers learn to
+        # dismiss — which is worse than no warning at all.
+        corroborating: list[DuplicateReason] = []
 
         difference = abs(order.cod_amount_paisa - cod_amount_paisa)
         if difference == 0:
-            reasons.append(DuplicateReason.IDENTICAL_AMOUNT)
+            corroborating.append(DuplicateReason.IDENTICAL_AMOUNT)
         elif difference <= tolerance:
-            reasons.append(DuplicateReason.SIMILAR_AMOUNT)
+            corroborating.append(DuplicateReason.SIMILAR_AMOUNT)
 
         overlap: tuple[str, ...] = ()
         if wanted_items:
             existing_items = {_normalize_item_name(item.product_name) for item in order.items}
             shared = wanted_items & existing_items
             if shared:
-                reasons.append(DuplicateReason.SIMILAR_ITEMS)
+                corroborating.append(DuplicateReason.SIMILAR_ITEMS)
                 overlap = tuple(sorted(shared))
 
-        # Same phone alone is not a duplicate — a repeat customer is the whole
-        # point of the CRM. Something else has to match too.
-        if len(reasons) == 1:
+        if not corroborating:
             continue
+
+        reasons = identity + corroborating
 
         elapsed = (now - order.created_at).total_seconds() / 3600
         candidates.append(

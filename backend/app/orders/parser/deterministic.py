@@ -163,6 +163,12 @@ _SIZE_RE = re.compile(
 
 _LABEL_SPLIT_RE = re.compile(r"^\s*([^:：]{1,24})\s*[:：]\s*(.*)$")
 
+#: Numbers that describe a measurement or a place, never an amount of money.
+_MEASUREMENT_RE = re.compile(
+    r"(?i)(?<![A-Za-z])(?:size|house|road|flat|block|sector|floor|apt|apartment|"
+    r"সাইজ|বাসা|রোড|ব্লক|সেক্টর)\s*[:=#-]?\s*\d+\w*"
+)
+
 #: A line that is only digits and separators is a phone or an amount, never a
 #: product name.
 _NUMERIC_ONLY_RE = re.compile(r"^[\d\s\-+(),.৳]+$")
@@ -200,8 +206,9 @@ class DeterministicOrderParser:
         self._extract_phones(normalized, labelled, result)
         self._extract_amount(labelled, unlabelled, result)
         self._extract_address(labelled, unlabelled, result)
-        self._extract_name(labelled, unlabelled, result)
-        self._extract_items(labelled, unlabelled, result)
+        # Name and items are decided together: the same bare line could be
+        # either, and resolving them independently lets one steal the other's.
+        self._extract_name_and_items(labelled, unlabelled, result)
         self._extract_notes(labelled, result)
 
         if result.is_empty:
@@ -291,7 +298,14 @@ class DeterministicOrderParser:
         for line in unlabelled:
             if self._looks_like_phone_line(line, phone_digits):
                 continue
-            has_currency = any(token in line.lower() for token in _CURRENCY_TOKENS)
+            lowered_line = line.lower()
+            # An address line is full of numbers that are not money: house
+            # numbers, road numbers, sector numbers.
+            if any(hint in lowered_line for hint in _ADDRESS_HINTS):
+                continue
+            # "size 40" is a measurement, not forty taka.
+            line = _MEASUREMENT_RE.sub(" ", line)
+            has_currency = any(token in lowered_line for token in _CURRENCY_TOKENS)
             for raw in _AMOUNT_RE.findall(line):
                 value = self._to_paisa(raw)
                 if value is None:
@@ -378,20 +392,45 @@ class DeterministicOrderParser:
         result.confidence["address"] = FieldConfidence.NONE
         result.warnings.append("No delivery address recognised")
 
-    # ----------------------------------------------------------------- name --
+    # ------------------------------------------------------- name / items --
 
-    def _extract_name(
+    def _looks_like_product(self, line: str) -> bool:
+        """Whether a line carries an unmistakable product signal.
+
+        A size, a colour or a quantity is something a person's name never has,
+        so these lines are products and are never offered as name candidates.
+        """
+        if _SIZE_RE.search(line) or _QUANTITY_RE.search(line):
+            return True
+        lowered = line.lower()
+        return any(re.search(rf"(?:^|\s){re.escape(color)}(?=$|\s)", lowered) for color in _COLORS)
+
+    def _extract_name_and_items(
         self,
         labelled: dict[str, list[str]],
         unlabelled: list[str],
         result: ParsedOrder,
     ) -> None:
-        if labelled.get("name"):
-            result.customer_name = labelled["name"][0]
-            result.confidence["name"] = FieldConfidence.EXACT
-            return
+        """Decide which bare lines are the customer's name and which are items.
 
+        Resolved in one place because the two compete for the same lines. A
+        message like ``Red Abaya XL`` on its own is a product, not a person, and
+        letting name detection run first would swallow it and leave the order
+        with no items at all.
+
+        The order of preference:
+
+        1. a labelled ``Name:`` or ``Product:`` line is taken at its word;
+        2. any line with a size, colour or quantity is a product;
+        3. a ``qty:`` label anywhere means the remaining line is the product it
+           counts;
+        4. otherwise the first remaining candidate is the name and the rest are
+           products, because these messages almost always open with the name.
+        """
         phone_digits = {phone.lstrip("+")[-10:] for phone in result.phones}
+
+        candidates: list[str] = []
+        product_lines: list[str] = []
 
         for line in unlabelled:
             if line == result.address:
@@ -401,40 +440,38 @@ class DeterministicOrderParser:
             lowered = line.lower()
             if any(hint in lowered for hint in _ADDRESS_HINTS):
                 continue
-            words = line.split()
-            # A name is short, has no digits and no currency. Anything longer is
-            # more likely a product line or a note.
-            if 1 <= len(words) <= 4 and not any(char.isdigit() for char in line):
-                if any(token in lowered for token in _CURRENCY_TOKENS):
-                    continue
-                result.customer_name = line
-                # Positional heuristic: the first short wordy line is usually the
-                # name, but "usually" is exactly MEDIUM.
+            if self._looks_like_product(line):
+                product_lines.append(line)
+            else:
+                candidates.append(line)
+
+        # --- name ---
+        if labelled.get("name"):
+            result.customer_name = labelled["name"][0]
+            result.confidence["name"] = FieldConfidence.EXACT
+        elif candidates and not (
+            # A quantity label implies the remaining line is what it counts.
+            labelled.get("quantity")
+            and not labelled.get("product")
+            and len(candidates) == 1
+            and not product_lines
+        ):
+            first = candidates[0]
+            words = first.split()
+            if 1 <= len(words) <= 4 and not any(char.isdigit() for char in first):
+                result.customer_name = first
+                # Positional heuristic: usually right, which is exactly MEDIUM.
                 result.confidence["name"] = FieldConfidence.MEDIUM
-                return
+                candidates = candidates[1:]
+            else:
+                result.confidence["name"] = FieldConfidence.NONE
+        else:
+            result.confidence["name"] = FieldConfidence.NONE
 
-        result.confidence["name"] = FieldConfidence.NONE
-
-    # ---------------------------------------------------------------- items --
-
-    def _extract_items(
-        self,
-        labelled: dict[str, list[str]],
-        unlabelled: list[str],
-        result: ParsedOrder,
-    ) -> None:
+        # --- items ---
         sources: list[tuple[str, bool]] = [(value, True) for value in labelled.get("product", [])]
-
-        phone_digits = {phone.lstrip("+")[-10:] for phone in result.phones}
-        for line in unlabelled:
-            if line in (result.address, result.customer_name):
-                continue
-            if _NUMERIC_ONLY_RE.match(line) or self._looks_like_phone_line(line, phone_digits):
-                continue
-            lowered = line.lower()
-            if any(hint in lowered for hint in _ADDRESS_HINTS):
-                continue
-            sources.append((line, False))
+        sources.extend((line, False) for line in product_lines)
+        sources.extend((line, False) for line in candidates)
 
         shared_quantity: int | None = None
         if labelled.get("quantity"):
@@ -443,6 +480,7 @@ class DeterministicOrderParser:
                 shared_quantity = int(match.group())
 
         items: list[ParsedItem] = []
+        saw_labelled = False
         for raw_line, was_labelled in sources:
             item = self._parse_item_line(raw_line)
             if item is None:
@@ -450,8 +488,7 @@ class DeterministicOrderParser:
             if item.quantity == 1 and shared_quantity:
                 item.quantity = shared_quantity
             items.append(item)
-            if was_labelled:
-                result.confidence["items"] = FieldConfidence.EXACT
+            saw_labelled = saw_labelled or was_labelled
 
         if not items:
             result.confidence["items"] = FieldConfidence.NONE
@@ -459,14 +496,22 @@ class DeterministicOrderParser:
             return
 
         result.items = items
-        if result.confidence["items"] != FieldConfidence.EXACT:
-            # Detected by elimination rather than by a label, so it is a guess
-            # about which line was the product.
+        if saw_labelled:
+            result.confidence["items"] = FieldConfidence.EXACT
+        else:
+            # Identified by elimination rather than by a label, so it remains a
+            # judgement about which line was the product.
             result.confidence["items"] = (
                 FieldConfidence.MEDIUM if len(items) == 1 else FieldConfidence.LOW
             )
 
     def _parse_item_line(self, line: str) -> ParsedItem | None:
+        """Pull quantity, size and colour out of a product line.
+
+        Each recognised attribute is removed from the working string as it is
+        consumed, so the product name is what remains rather than the whole line
+        with the price still glued to the end.
+        """
         working = line.strip(" ,.-")
         if not working:
             return None
@@ -497,14 +542,13 @@ class DeterministicOrderParser:
                 color = candidate.title() if candidate.isascii() else candidate
                 break
 
-        # Strip a trailing price so the product name does not absorb it.
+        # Strip a trailing price so it does not become part of the name.
         working = _AMOUNT_RE.sub(" ", working)
         name = " ".join(working.split()).strip(" ,.-")
 
         if not name or len(name) < 2:
             return None
-        # A line that became only a size or colour after stripping is not a
-        # product name.
+        # A line that reduced to nothing but a size or a colour is not a product.
         if name.lower() in _SIZES or name.lower() in _COLORS:
             return None
 

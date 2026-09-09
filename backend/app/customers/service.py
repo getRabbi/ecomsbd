@@ -124,6 +124,11 @@ class CustomerService:
             phone_enc=self._vault.encrypt(number.e164, context=CUSTOMER_PHONE_CONTEXT),
             phone_last4=number.last4,
             phone_masked=number.masked,
+            # Initialised explicitly rather than left unset. `lazy="selectin"`
+            # only applies to objects loaded by a query; on a freshly inserted
+            # one the collection is unloaded, and touching it emits a blocking
+            # lazy SELECT that fails outright under asyncio.
+            addresses=[],
         )
         self._db.add(customer)
         await self._db.flush()
