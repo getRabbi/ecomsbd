@@ -83,6 +83,8 @@ ignore = [
 "app/common/audit.py" = ["S105"]
 "app/common/pagination.py" = ["S105"]
 "app/api/v1/schemas.py" = ["S105"]
+# ADMIN_TOKEN_HEADER is an HTTP header *name*, not a credential.
+"app/admin/auth.py" = ["S105"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

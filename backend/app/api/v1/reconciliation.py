@@ -18,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal
+from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal, require_permission
 from app.api.v1.money_schemas import (
     CaseResponse,
     CaseUpdatePayload,
@@ -31,6 +31,7 @@ from app.common.pagination import Page, decode_cursor
 from app.entitlements.catalog import Entitlement
 from app.reconciliation.models import CaseKind, CaseStatus
 from app.reconciliation.service import ReconciliationService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/reconciliation", tags=["reconciliation"])
 
@@ -46,6 +47,7 @@ EngineDep = Annotated[ReconciliationService, Depends(_engine)]
     "/payouts/{payout_id}/reconcile",
     response_model=ReconcileResponse,
     summary="Match a payout against outstanding parcels",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def reconcile_payout(
     payout_id: uuid.UUID,
@@ -82,6 +84,7 @@ async def reconcile_payout(
     "/lines/{line_id}/match",
     response_model=PayoutLineResponse,
     summary="Apply a payout line by hand",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def match_line(
     line_id: uuid.UUID,
@@ -110,6 +113,7 @@ async def match_line(
     "/lines/{line_id}/unmatch",
     response_model=PayoutLineResponse,
     summary="Undo a match",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def unmatch_line(
     line_id: uuid.UUID,
@@ -129,7 +133,12 @@ async def unmatch_line(
     return PayoutLineResponse.model_validate(line)
 
 
-@router.post("/scan", response_model=dict, summary="Look for problems")
+@router.post(
+    "/scan",
+    response_model=dict,
+    summary="Look for problems",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
+)
 async def scan(
     principal: TenantPrincipal, engine: EngineDep, entitlements: EntitlementsDep
 ) -> dict:
@@ -144,7 +153,12 @@ async def scan(
     return {"cases_opened": await engine.scan_for_cases()}
 
 
-@router.get("/cases", response_model=Page[CaseResponse], summary="Open cases")
+@router.get(
+    "/cases",
+    response_model=Page[CaseResponse],
+    summary="Open cases",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def list_cases(
     principal: TenantPrincipal,
     engine: EngineDep,
@@ -162,7 +176,12 @@ async def list_cases(
     return Page[CaseResponse].build(rows, limit=limit, serializer=CaseResponse.model_validate)
 
 
-@router.patch("/cases/{case_id}", response_model=CaseResponse, summary="Move a case on")
+@router.patch(
+    "/cases/{case_id}",
+    response_model=CaseResponse,
+    summary="Move a case on",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
+)
 async def update_case(
     case_id: uuid.UUID,
     payload: CaseUpdatePayload,

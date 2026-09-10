@@ -14,7 +14,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import DbSession, SettingsDep, TenantPrincipal, get_hasher, get_vault
+from app.api.deps import (
+    DbSession,
+    SettingsDep,
+    TenantPrincipal,
+    get_hasher,
+    get_vault,
+    require_permission,
+)
 from app.api.v1.commerce_schemas import (
     ImportCommitResponse,
     ImportResponse,
@@ -25,6 +32,7 @@ from app.imports.models import ImportBatch, ImportRowStatus, ImportTemplate
 from app.imports.service import ImportService
 from app.orders.service import OrderService
 from app.products.service import ProductService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -73,6 +81,7 @@ def _to_response(batch: ImportBatch) -> ImportResponse:
     response_model=ImportResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload a file to import",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def create_import(
     principal: TenantPrincipal,
@@ -114,6 +123,7 @@ class DryRunPayload(BaseModel):
     "/{import_id}/dry-run",
     response_model=ImportResponse,
     summary="Validate every row without writing",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def dry_run_import(
     import_id: uuid.UUID,
@@ -134,6 +144,7 @@ async def dry_run_import(
     "/{import_id}/commit",
     response_model=ImportCommitResponse,
     summary="Create the records",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def commit_import(
     import_id: uuid.UUID,
@@ -154,7 +165,12 @@ async def commit_import(
     )
 
 
-@router.get("/{import_id}", response_model=ImportResponse, summary="Read an import")
+@router.get(
+    "/{import_id}",
+    response_model=ImportResponse,
+    summary="Read an import",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
+)
 async def get_import(
     import_id: uuid.UUID,
     principal: TenantPrincipal,
@@ -167,6 +183,7 @@ async def get_import(
     "/{import_id}/rows",
     response_model=list[ImportRowResponse],
     summary="Row-by-row report",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
 )
 async def list_import_rows(
     import_id: uuid.UUID,

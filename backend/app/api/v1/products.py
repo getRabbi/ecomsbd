@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, TenantPrincipal, require_permission
 from app.api.v1.commerce_schemas import (
     ProductCreatePayload,
     ProductResponse,
@@ -24,6 +24,7 @@ from app.api.v1.commerce_schemas import (
 from app.common.pagination import Page, decode_cursor
 from app.products.models import Product, StockMovement, StockMovementSource
 from app.products.service import ProductService, StockAdjustment, StockService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -59,7 +60,12 @@ def _to_response(product: Product) -> ProductResponse:
     )
 
 
-@router.get("", response_model=Page[ProductResponse], summary="List products")
+@router.get(
+    "",
+    response_model=Page[ProductResponse],
+    summary="List products",
+    dependencies=[Depends(require_permission(Permission.PRODUCT_VIEW))],
+)
 async def list_products(
     principal: TenantPrincipal,
     products: ProductServiceDep,
@@ -84,6 +90,7 @@ async def list_products(
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a product",
+    dependencies=[Depends(require_permission(Permission.PRODUCT_WRITE))],
 )
 async def create_product(
     payload: ProductCreatePayload,
@@ -103,7 +110,12 @@ async def create_product(
     return _to_response(product)
 
 
-@router.get("/{product_id}", response_model=ProductResponse, summary="Read a product")
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    summary="Read a product",
+    dependencies=[Depends(require_permission(Permission.PRODUCT_VIEW))],
+)
 async def get_product(
     product_id: uuid.UUID,
     principal: TenantPrincipal,
@@ -112,7 +124,12 @@ async def get_product(
     return _to_response(await products.get(product_id))
 
 
-@router.patch("/{product_id}", response_model=ProductResponse, summary="Update a product")
+@router.patch(
+    "/{product_id}",
+    response_model=ProductResponse,
+    summary="Update a product",
+    dependencies=[Depends(require_permission(Permission.PRODUCT_WRITE))],
+)
 async def update_product(
     product_id: uuid.UUID,
     payload: ProductUpdatePayload,
@@ -137,6 +154,7 @@ async def update_product(
     "/{product_id}/stock-movements",
     response_model=Page[StockMovementResponse],
     summary="Stock movement history",
+    dependencies=[Depends(require_permission(Permission.PRODUCT_VIEW))],
 )
 async def list_stock_movements(
     product_id: uuid.UUID,
@@ -169,6 +187,7 @@ async def list_stock_movements(
     response_model=StockMovementResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Adjust stock by hand",
+    dependencies=[Depends(require_permission(Permission.INVENTORY_ADJUST))],
 )
 async def adjust_stock(
     product_id: uuid.UUID,

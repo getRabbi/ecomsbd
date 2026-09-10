@@ -15,7 +15,7 @@ from typing import Annotated
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, TenantPrincipal, require_permission
 from app.api.v1.money_schemas import (
     AgingBandResponse,
     DisputePayload,
@@ -34,6 +34,7 @@ from app.money.service import ReceivableService
 from app.orders.models import Order
 from app.payouts.models import Payout
 from app.reconciliation.models import CaseStatus, ReconciliationCase
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/money", tags=["money"])
 
@@ -74,7 +75,12 @@ def _to_response(
     )
 
 
-@router.get("/summary", response_model=MoneySummaryResponse, summary="Money headline")
+@router.get(
+    "/summary",
+    response_model=MoneySummaryResponse,
+    summary="Money headline",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def money_summary(
     principal: TenantPrincipal,
     db: DbSession,
@@ -137,6 +143,7 @@ async def money_summary(
     "/receivables",
     response_model=Page[ReceivableResponse],
     summary="COD receivables",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def list_receivables(
     principal: TenantPrincipal,
@@ -179,7 +186,12 @@ async def list_receivables(
     )
 
 
-@router.get("/aging", response_model=list[AgingBandResponse], summary="COD aging")
+@router.get(
+    "/aging",
+    response_model=list[AgingBandResponse],
+    summary="COD aging",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def cod_aging(
     principal: TenantPrincipal,
     receivables: ReceivablesDep,
@@ -207,6 +219,7 @@ async def cod_aging(
     "/receivables/{receivable_id}/ledger",
     response_model=list[LedgerEntryResponse],
     summary="Explain a receivable",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def receivable_ledger(
     receivable_id: uuid.UUID,
@@ -232,6 +245,7 @@ async def receivable_ledger(
     "/receivables/{receivable_id}/correction",
     response_model=ReceivableResponse,
     summary="Correct a balance by hand",
+    dependencies=[Depends(require_permission(Permission.MONEY_CORRECT))],
 )
 async def correct_receivable(
     receivable_id: uuid.UUID,
@@ -269,6 +283,7 @@ async def correct_receivable(
     "/receivables/{receivable_id}/write-off",
     response_model=ReceivableResponse,
     summary="Give up on collecting",
+    dependencies=[Depends(require_permission(Permission.MONEY_CORRECT))],
 )
 async def write_off_receivable(
     receivable_id: uuid.UUID,
@@ -291,6 +306,7 @@ async def write_off_receivable(
     "/receivables/{receivable_id}/dispute",
     response_model=ReceivableResponse,
     summary="Mark a receivable disputed",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def dispute_receivable(
     receivable_id: uuid.UUID,

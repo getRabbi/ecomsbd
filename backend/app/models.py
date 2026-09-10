@@ -10,6 +10,7 @@ and the test suite all import this module rather than individual model files.
 
 from __future__ import annotations
 
+from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken
 from app.billing.models import (
     BillingAttempt,
@@ -23,6 +24,7 @@ from app.common.audit import AuditLog
 from app.common.feature_flags import FeatureFlag
 from app.common.idempotency import IdempotencyKey
 from app.common.outbox import OutboxEvent
+from app.common.provider_health import ProviderHealth
 from app.consignments.models import Consignment, ConsignmentItem
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
@@ -78,14 +80,18 @@ __all__ = [
     "PayoutAdjustment",
     "PayoutLine",
     "PayoutSourceFile",
+    "PlatformAdmin",
     "PlayPurchaseToken",
     "Product",
     "ProfitSnapshot",
+    "ProviderHealth",
     "ReconciliationCase",
     "RefreshToken",
+    "RepairActionRecord",
     "StockMovement",
     "Subscription",
     "SubscriptionEvent",
+    "SupportCase",
     "SyncMutation",
     "Tenant",
     "TenantUser",

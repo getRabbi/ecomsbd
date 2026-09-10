@@ -17,7 +17,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, TenantPrincipal, require_permission
 from app.api.v1.analytics_schemas import ChargeCreatePayload, ChargeResponse
 from app.api.v1.money_schemas import (
     ConsignmentItemResponse,
@@ -29,6 +29,7 @@ from app.consignments.models import Consignment
 from app.consignments.service import ConsignmentService, DeliveryOutcome, ItemOutcome
 from app.money.service import ReceivableService
 from app.profit.service import ProfitService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/consignments", tags=["consignments"])
 
@@ -63,6 +64,7 @@ def _to_response(consignment: Consignment) -> ConsignmentResponse:
     response_model=ConsignmentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record that a parcel has gone out",
+    dependencies=[Depends(require_permission(Permission.ORDER_BOOK))],
 )
 async def dispatch(
     order_id: uuid.UUID,
@@ -90,6 +92,7 @@ async def dispatch(
     "/{consignment_id}/outcome",
     response_model=ConsignmentResponse,
     summary="Record what happened to a parcel",
+    dependencies=[Depends(require_permission(Permission.ORDER_BOOK))],
 )
 async def record_outcome(
     consignment_id: uuid.UUID,
@@ -128,7 +131,12 @@ async def record_outcome(
     return _to_response(consignment)
 
 
-@router.get("/{consignment_id}", response_model=ConsignmentResponse, summary="Read a parcel")
+@router.get(
+    "/{consignment_id}",
+    response_model=ConsignmentResponse,
+    summary="Read a parcel",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
+)
 async def get_consignment(
     consignment_id: uuid.UUID,
     principal: TenantPrincipal,
@@ -145,6 +153,7 @@ __all__ = ["router"]
     response_model=ChargeResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record what a parcel cost",
+    dependencies=[Depends(require_permission(Permission.ORDER_BOOK))],
 )
 async def record_charge(
     consignment_id: uuid.UUID,
@@ -183,6 +192,7 @@ async def record_charge(
     "/{consignment_id}/charges",
     response_model=list[ChargeResponse],
     summary="What a parcel cost",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def list_charges(
     consignment_id: uuid.UUID,

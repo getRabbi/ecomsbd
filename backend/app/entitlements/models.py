@@ -93,7 +93,11 @@ class Subscription(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     #: Set when the seller cancels but has already paid for the rest of the
     #: period. Access continues to ``current_period_end`` — taking it away at
     #: the moment of cancellation would be charging for time not given.
-    cancel_at_period_end: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    #: ``server_default`` matches the migration, so the two cannot drift and
+    #: autogenerate stays quiet about a column that is deliberately defaulted.
+    cancel_at_period_end: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false()
+    )
 
     #: Dunning window (master spec section 91). Access continues while a failed
     #: payment is retried; ``NULL`` outside a dunning cycle.
@@ -109,7 +113,10 @@ class Subscription(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     #: Which build sold this. Decides whether an external payment CTA is legal
     #: to show (master spec section 27.1).
     distribution_channel: Mapped[str] = mapped_column(
-        sa.String(20), nullable=False, default=DistributionChannel.DIRECT
+        sa.String(20),
+        nullable=False,
+        default=DistributionChannel.DIRECT,
+        server_default=str(DistributionChannel.DIRECT),
     )
 
     #: When the provider state was last confirmed by us, not claimed by a client.

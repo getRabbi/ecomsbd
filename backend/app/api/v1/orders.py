@@ -14,7 +14,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import DbSession, SettingsDep, TenantPrincipal, get_hasher, get_vault
+from app.api.deps import (
+    DbSession,
+    SettingsDep,
+    TenantPrincipal,
+    get_hasher,
+    get_vault,
+    require_permission,
+)
 from app.api.v1.commerce_schemas import (
     DuplicateCandidateResponse,
     DuplicateCheckResponse,
@@ -34,6 +41,7 @@ from app.orders.duplicates import DuplicateCheck
 from app.orders.models import Order, OrderStatus
 from app.orders.parser import DeterministicOrderParser
 from app.orders.service import OrderDraft, OrderItemDraft, OrderService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -112,7 +120,12 @@ def _to_item_drafts(payload_items: list) -> list[OrderItemDraft]:
     ]
 
 
-@router.get("", response_model=Page[OrderResponse], summary="List orders")
+@router.get(
+    "",
+    response_model=Page[OrderResponse],
+    summary="List orders",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
+)
 async def list_orders(
     principal: TenantPrincipal,
     orders: OrderServiceDep,
@@ -142,6 +155,7 @@ async def list_orders(
     response_model=OrderCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create an order",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def create_order(
     payload: OrderCreatePayload,
@@ -183,6 +197,7 @@ async def create_order(
     "/parse",
     response_model=ParseResponse,
     summary="Parse pasted order text",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def parse_order_text(
     payload: ParseRequest,
@@ -234,6 +249,7 @@ class DuplicateProbeRequest(BaseModel):
     "/check-duplicates",
     response_model=DuplicateCheckResponse,
     summary="Check for a similar recent order",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
 )
 async def check_duplicates(
     payload: DuplicateProbeRequest,
@@ -254,7 +270,12 @@ async def check_duplicates(
     return _to_duplicate_response(check)
 
 
-@router.get("/{order_id}", response_model=OrderDetailResponse, summary="Read an order")
+@router.get(
+    "/{order_id}",
+    response_model=OrderDetailResponse,
+    summary="Read an order",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
+)
 async def get_order(
     order_id: uuid.UUID,
     principal: TenantPrincipal,
@@ -263,7 +284,12 @@ async def get_order(
     return _to_detail(await orders.get(order_id))
 
 
-@router.patch("/{order_id}", response_model=OrderDetailResponse, summary="Update an order")
+@router.patch(
+    "/{order_id}",
+    response_model=OrderDetailResponse,
+    summary="Update an order",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
+)
 async def update_order(
     order_id: uuid.UUID,
     payload: OrderUpdatePayload,

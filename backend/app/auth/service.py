@@ -63,7 +63,10 @@ __all__ = ["AuthService", "ChallengeResult", "DeviceInfo", "SignInResult"]
 log = get_logger(__name__)
 
 #: Context string binding a user's phone ciphertext to its row.
-_PHONE_CONTEXT = "user.phone"
+#: AEAD context for a user's phone. Public so the team-invite path, which
+#: also creates users, binds the ciphertext the same way.
+USER_PHONE_CONTEXT = "user.phone"
+_PHONE_CONTEXT = USER_PHONE_CONTEXT
 _OTP_PHONE_CONTEXT = "otp.phone"
 
 

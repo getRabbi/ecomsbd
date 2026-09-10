@@ -23,6 +23,7 @@ from app.api.deps import (
     SettingsDep,
     TenantPrincipal,
     get_vault,
+    require_permission,
 )
 from app.api.v1.auth import _to_session_response
 from app.api.v1.schemas import (
@@ -35,7 +36,7 @@ from app.api.v1.schemas import (
 )
 from app.core.errors import ConflictError
 from app.tenants.models import Tenant
-from app.tenants.roles import permissions_for
+from app.tenants.roles import Permission, permissions_for
 from app.tenants.service import TenantService
 
 router = APIRouter(tags=["tenant"])
@@ -109,7 +110,12 @@ async def get_tenant(principal: TenantPrincipal, tenants: TenantServiceDep) -> T
     return await tenants.get(principal.require_tenant())
 
 
-@router.patch("/tenant", response_model=TenantResponse, summary="Update the active shop")
+@router.patch(
+    "/tenant",
+    response_model=TenantResponse,
+    summary="Update the active shop",
+    dependencies=[Depends(require_permission(Permission.SETTINGS_MANAGE))],
+)
 async def update_tenant(
     payload: ShopUpdatePayload,
     principal: TenantPrincipal,

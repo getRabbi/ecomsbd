@@ -26,7 +26,7 @@ from app.analytics.service import (
     RateLine,
     default_window,
 )
-from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal
+from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal, require_permission
 from app.api.v1.analytics_schemas import (
     AlertResponse,
     AllocationRequest,
@@ -54,6 +54,7 @@ from app.expenses.service import ExpenseService
 from app.notifications.alerts import AlertService, AlertSummary
 from app.notifications.models import Severity
 from app.notifications.service import NotificationService
+from app.tenants.roles import Permission
 
 router = APIRouter(tags=["analytics"])
 
@@ -169,6 +170,7 @@ def _expense(expense: Expense) -> ExpenseResponse:
     "/analytics/home",
     response_model=HomeResponse,
     summary="The daily money control screen",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def home(
     principal: TenantPrincipal,
@@ -203,7 +205,12 @@ async def home(
     )
 
 
-@router.get("/analytics/profit", response_model=ProfitResponse, summary="P&L for a period")
+@router.get(
+    "/analytics/profit",
+    response_model=ProfitResponse,
+    summary="P&L for a period",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def profit(
     principal: TenantPrincipal,
     analytics: AnalyticsDep,
@@ -254,7 +261,12 @@ async def profit(
     )
 
 
-@router.get("/analytics/returns", response_model=ReturnsResponse, summary="Return economics")
+@router.get(
+    "/analytics/returns",
+    response_model=ReturnsResponse,
+    summary="Return economics",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def returns(
     principal: TenantPrincipal,
     analytics: AnalyticsDep,
@@ -293,6 +305,7 @@ async def returns(
     "/analytics/products",
     response_model=list[ProductLineResponse],
     summary="Contribution profit by product",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def products(
     principal: TenantPrincipal,
@@ -324,6 +337,7 @@ async def products(
     response_model=ExpenseResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record money spent",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def create_expense(
     payload: ExpenseCreatePayload,
@@ -350,7 +364,12 @@ async def create_expense(
     return _expense(expense)
 
 
-@router.get("/expenses", response_model=Page[ExpenseResponse], summary="List expenses")
+@router.get(
+    "/expenses",
+    response_model=Page[ExpenseResponse],
+    summary="List expenses",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def list_expenses(
     principal: TenantPrincipal,
     expenses: ExpensesDep,
@@ -370,7 +389,12 @@ async def list_expenses(
     return Page[ExpenseResponse].build(rows, limit=limit, serializer=_expense)
 
 
-@router.get("/expenses/{expense_id}", response_model=ExpenseResponse, summary="One expense")
+@router.get(
+    "/expenses/{expense_id}",
+    response_model=ExpenseResponse,
+    summary="One expense",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def get_expense(
     expense_id: uuid.UUID,
     principal: TenantPrincipal,
@@ -383,6 +407,7 @@ async def get_expense(
     "/expenses/{expense_id}/allocate",
     response_model=AllocationResponse,
     summary="Spread an expense over its parcels",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def allocate_expense(
     expense_id: uuid.UUID,
@@ -491,6 +516,7 @@ async def mark_all_read(
     "/analytics/weekly-summary",
     response_model=WeeklySummaryResponse,
     summary="The Friday figures",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
 )
 async def weekly_summary(
     principal: TenantPrincipal,

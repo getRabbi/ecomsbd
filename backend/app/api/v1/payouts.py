@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, TenantPrincipal, require_permission
 from app.api.v1.money_schemas import (
     ManualPayoutPayload,
     PayoutAdjustmentResponse,
@@ -28,6 +28,7 @@ from app.common.pagination import Page, decode_cursor
 from app.core.errors import ValidationError
 from app.payouts.models import Payout, PayoutStatus
 from app.payouts.service import MAX_STATEMENT_BYTES, PayoutService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
 
@@ -57,7 +58,12 @@ def _to_response(payout: Payout) -> PayoutResponse:
     )
 
 
-@router.get("", response_model=Page[PayoutResponse], summary="List payouts")
+@router.get(
+    "",
+    response_model=Page[PayoutResponse],
+    summary="List payouts",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def list_payouts(
     principal: TenantPrincipal,
     payouts: PayoutsDep,
@@ -80,6 +86,7 @@ async def list_payouts(
     response_model=PayoutDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record a payout by hand",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def record_manual_payout(
     payload: ManualPayoutPayload,
@@ -106,6 +113,7 @@ async def record_manual_payout(
     "/preview",
     response_model=StatementPreviewResponse,
     summary="Read a statement without saving it",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def preview_statement(
     principal: TenantPrincipal,
@@ -151,6 +159,7 @@ async def preview_statement(
     response_model=PayoutDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Import a courier statement",
+    dependencies=[Depends(require_permission(Permission.MONEY_RECONCILE))],
 )
 async def import_statement(
     principal: TenantPrincipal,
@@ -182,7 +191,12 @@ async def import_statement(
     return await _detail(payouts, payout)
 
 
-@router.get("/{payout_id}", response_model=PayoutDetailResponse, summary="Read a payout")
+@router.get(
+    "/{payout_id}",
+    response_model=PayoutDetailResponse,
+    summary="Read a payout",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
 async def get_payout(
     payout_id: uuid.UUID,
     principal: TenantPrincipal,

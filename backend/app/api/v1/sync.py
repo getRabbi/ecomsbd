@@ -11,7 +11,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, SettingsDep, TenantPrincipal, get_hasher, get_vault
+from app.api.deps import (
+    DbSession,
+    SettingsDep,
+    TenantPrincipal,
+    get_hasher,
+    get_vault,
+    require_permission,
+)
 from app.api.v1.commerce_schemas import (
     SyncChangeEntry,
     SyncChangesResponse,
@@ -25,6 +32,7 @@ from app.orders.service import OrderService
 from app.products.service import ProductService
 from app.sync.models import MutationStatus
 from app.sync.service import SYNC_PAGE_SIZE, SyncService
+from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -46,6 +54,7 @@ SyncServiceDep = Annotated[SyncService, Depends(_sync)]
     "/mutations",
     response_model=SyncPushResponse,
     summary="Push queued offline mutations",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
 )
 async def push_mutations(
     payload: SyncPushRequest,
@@ -101,6 +110,7 @@ async def push_mutations(
     "/changes",
     response_model=SyncChangesResponse,
     summary="Pull records changed since a cursor",
+    dependencies=[Depends(require_permission(Permission.ORDER_VIEW))],
 )
 async def get_changes(
     principal: TenantPrincipal,
