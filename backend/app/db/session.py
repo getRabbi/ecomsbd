@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from app.core.config import Settings, get_settings
+from app.core.config import AppEnv, Settings, get_settings
 from app.core.logging import get_logger
 from app.db.tenancy import install_tenancy_guards, mark_session_system
 
@@ -50,9 +50,17 @@ def _engine_kwargs(settings: Settings) -> dict[str, Any]:
         "pool_pre_ping": True,
         "future": True,
     }
-    if settings.is_sqlite:
+    if settings.is_sqlite or settings.app_env is AppEnv.TEST:
         # SQLite has no meaningful server-side pool; NullPool keeps the
         # file-locking behaviour predictable across the test suite.
+        #
+        # The test environment gets NullPool on *any* backend, and that is not
+        # cosmetic. pytest-asyncio runs each test in its own event loop, while
+        # the engine is a process-wide singleton — so a pooled asyncpg
+        # connection created in one test is handed to the next one on a loop
+        # that has since closed, and fails with "Event loop is closed" a long
+        # way from the cause. NullPool opens and closes per session, so no
+        # connection ever outlives the loop that created it.
         kwargs["poolclass"] = NullPool
     else:
         kwargs.update(

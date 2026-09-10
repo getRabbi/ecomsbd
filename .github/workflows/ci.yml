@@ -80,6 +80,16 @@ jobs:
           alembic upgrade head
           alembic downgrade base
 
+      - name: Dependency vulnerabilities
+        # Advisory rather than blocking: a new advisory against a transitive
+        # dependency should be seen the morning it lands, not silently turn
+        # every build red until someone upstream ships a fix. The release gate
+        # in docs/RELEASE_READINESS.md is where it has to be clean.
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --strict --progress-spinner=off
+
   flutter:
     name: Flutter
     runs-on: ubuntu-latest
@@ -136,6 +146,60 @@ jobs:
             echo "::error::backend/.env is tracked. Secrets must never be committed."
             exit 1
           fi
+
+  restore-drill:
+    name: Backup restore drill
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ecomsbd
+          POSTGRES_PASSWORD: ecomsbd
+          POSTGRES_DB: ecomsbd_source
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ecomsbd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Build a database to back up
+        working-directory: backend
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_source
+        run: alembic upgrade head
+
+      # Master spec section 48: "do not claim backup safety unless restore has
+      # been tested." Running the drill on every build is the only way that
+      # claim stays true as the schema changes.
+      - name: Dump
+        run: |
+          pg_dump --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_source             --format=custom --compress=9 --no-owner --no-acl             --file=/tmp/ecomsbd-ci.dump
+          test "$(wc -c < /tmp/ecomsbd-ci.dump)" -gt 4096
+
+      - name: Restore into a separate database
+        run: |
+          psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres             -c "CREATE DATABASE ecomsbd_restore_ci"
+          pg_restore --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_restore_ci             --no-owner --no-acl /tmp/ecomsbd-ci.dump
+
+      - name: Verify the restored database
+        env:
+          DATABASE_URL: postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_restore_ci
+        run: python infra/backup/verify_restore.py
 
   docker:
     name: Backend image
