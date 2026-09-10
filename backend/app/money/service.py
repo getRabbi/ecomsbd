@@ -372,6 +372,17 @@ class ReceivableService:
 
         receivable.deduction_paisa += amount_paisa
         receivable.version += 1
+
+        # A deduction can close the gap on its own: ৳1,325 paid against ৳1,405
+        # owed is fully settled once the ৳80 COD fee is recognised. Leaving it
+        # PARTIALLY_SETTLED would keep a fully-explained parcel sitting in the
+        # seller's "waiting" list forever showing nothing outstanding.
+        if (
+            receivable.is_fully_settled
+            and receivable.receivable_status is not ReceivableStatus.SETTLED
+        ):
+            self._transition(receivable, ReceivableStatus.SETTLED)
+            receivable.settled_at = occurred_at or utc_now()
         await self._db.flush()
 
         await self._ledger.record(

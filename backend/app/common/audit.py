@@ -89,6 +89,13 @@ class AuditAction(StrEnum):
     RECONCILIATION_CASE_OPENED = "money.case_opened"
     RECONCILIATION_CASE_RESOLVED = "money.case_resolved"
 
+    # Profit and alerts (phase E)
+    CHARGE_SUPERSEDED = "profit.charge_superseded"
+    PROFIT_SNAPSHOT_REVISED = "profit.snapshot_revised"
+    EXPENSE_RECORDED = "profit.expense_recorded"
+    EXPENSE_ALLOCATED = "profit.expense_allocated"
+    NOTIFICATION_SENT = "alerts.notification_sent"
+
     # Reserved for later phases (sections 103, 134)
     COURIER_CREDENTIAL_SAVED = "courier.credential_saved"
     COURIER_CREDENTIAL_REVOKED = "courier.credential_revoked"

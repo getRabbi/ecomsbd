@@ -30,6 +30,7 @@ from app.payouts.models import (
     PayoutSourceFile,
 )
 from app.products.models import Product, StockMovement
+from app.profit.models import ConsignmentCharge, ProfitSnapshot
 from app.reconciliation.models import ReconciliationCase
 from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
@@ -41,6 +42,7 @@ __all__ = [
     "Base",
     "CodReceivable",
     "Consignment",
+    "ConsignmentCharge",
     "ConsignmentItem",
     "Customer",
     "CustomerAddress",
@@ -59,6 +61,7 @@ __all__ = [
     "PayoutLine",
     "PayoutSourceFile",
     "Product",
+    "ProfitSnapshot",
     "ReconciliationCase",
     "RefreshToken",
     "StockMovement",
