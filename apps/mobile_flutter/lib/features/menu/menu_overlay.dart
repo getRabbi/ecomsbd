@@ -6,7 +6,14 @@ import '../../design/glass.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../billing/plans_screen.dart';
 import '../customers/customers_screen.dart';
+import '../expenses/expenses_screen.dart';
+import '../insights/insights_screen.dart';
+import '../money/cases_screen.dart';
+import '../money/payouts_screen.dart';
+import '../notifications/notification_centre_screen.dart';
+import '../settings/settings_screen.dart';
 import '../imports/imports_screen.dart';
 import '../products/products_screen.dart';
 import '../shared/responsive.dart';
@@ -86,13 +93,13 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.assignment_return_outlined,
       title: 'Return center',
       subtitle: 'Loss · reasons · stock',
-      phase: 'Phase E',
+      destination: InsightsScreen.new,
     ),
     _MenuItem(
       icon: Icons.payments_outlined,
       title: 'Expenses & ads',
       subtitle: 'Profit inputs · allocation',
-      phase: 'Phase E',
+      destination: ExpensesScreen.new,
     ),
   ];
 
@@ -101,13 +108,13 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.rule_folder_outlined,
       title: 'Reconciliation',
       subtitle: 'Match · mismatch · dispute',
-      phase: 'Phase D',
+      destination: CasesScreen.new,
     ),
     _MenuItem(
       icon: Icons.receipt_long_outlined,
       title: 'Payouts',
       subtitle: 'API · CSV · manual',
-      phase: 'Phase D',
+      destination: PayoutsScreen.new,
     ),
     _MenuItem(
       icon: Icons.file_download_outlined,
@@ -119,7 +126,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.notifications_none_rounded,
       title: 'Notifications',
       subtitle: 'Actionable alerts',
-      phase: 'Phase E',
+      destination: NotificationCentreScreen.new,
     ),
   ];
 
@@ -133,20 +140,20 @@ class MenuOverlay extends ConsumerWidget {
     _MenuItem(
       icon: Icons.star_outline_rounded,
       title: 'Subscription',
-      subtitle: 'Plan · entitlements',
-      phase: 'Phase F',
+      subtitle: 'Plan · usage · billing',
+      destination: PlansScreen.new,
     ),
     _MenuItem(
       icon: Icons.settings_outlined,
       title: 'Settings',
-      subtitle: 'Shop · SMS · privacy',
-      phase: 'Phase C',
+      subtitle: 'Devices · notifications · privacy',
+      destination: SettingsScreen.new,
     ),
     _MenuItem(
       icon: Icons.help_outline_rounded,
       title: 'Support',
       subtitle: 'Case + WhatsApp',
-      phase: 'Phase F',
+      phase: 'V1.1',
     ),
   ];
 

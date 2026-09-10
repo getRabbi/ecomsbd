@@ -686,19 +686,28 @@ class AnalyticsService:
         return _rate_lines(rows)
 
     async def _returns_by_area(self, since: date, until: date) -> list[RateLine]:
+        # The fallback is a SQL literal, not a bound parameter. PostgreSQL
+        # matches a GROUP BY expression to the select list textually, and a
+        # bind renders as $1 in one place and $6 in the other — so the same
+        # Python expression becomes two different SQL expressions and the
+        # server rejects it with "must appear in the GROUP BY clause". SQLite
+        # accepts it, which is exactly why this only showed up against a real
+        # PostgreSQL (ADR 0004).
+        area = sa.func.coalesce(
+            Order.delivery_area,
+            Order.delivery_district,
+            sa.literal_column("'Unknown'"),
+        )
         rows = await self._db.execute(
             sa.select(
-                sa.func.coalesce(Order.delivery_area, Order.delivery_district, "Unknown"),
+                area,
                 ProfitSnapshot.outcome,
                 sa.func.count(sa.distinct(ProfitSnapshot.id)),
                 sa.func.coalesce(sa.func.sum(ProfitSnapshot.contribution_profit_paisa), 0),
             )
             .join(Order, Order.id == ProfitSnapshot.order_id)
             .where(*self._window(since, until))
-            .group_by(
-                sa.func.coalesce(Order.delivery_area, Order.delivery_district, "Unknown"),
-                ProfitSnapshot.outcome,
-            )
+            .group_by(area, ProfitSnapshot.outcome)
         )
         return _rate_lines(rows)
 

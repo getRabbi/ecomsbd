@@ -587,14 +587,39 @@ class TestProfitAndAlertsIsolation:
     async def test_profit_snapshots_are_not_visible_across_shops(
         self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
     ) -> None:
+        from app.consignments.models import Consignment
         from app.core.clock import business_date
+        from app.orders.models import Order
         from app.profit.models import ProfitSnapshot
 
         _use_tenant(two_tenants["tenant_a"])
+
+        # A real order and consignment, not two random UUIDs. PostgreSQL
+        # enforces the foreign keys that SQLite does not, so a snapshot
+        # pointing at a parcel that does not exist is rejected there — and a
+        # fixture that only works on the permissive backend is a test that
+        # proves less than it looks like it does.
+        order = Order(
+            order_number="CP-20260910-9001",
+            client_id=uuid.uuid4(),
+            business_date=business_date(at=utc_now()),
+            cod_amount_paisa=140_500,
+        )
+        db.add(order)
+        await db.flush()
+
+        consignment = Consignment(
+            order_id=order.id,
+            merchant_reference=order.order_number,
+            cod_amount_paisa=140_500,
+        )
+        db.add(consignment)
+        await db.flush()
+
         db.add(
             ProfitSnapshot(
-                consignment_id=uuid.uuid4(),
-                order_id=uuid.uuid4(),
+                consignment_id=consignment.id,
+                order_id=order.id,
                 revision=1,
                 is_current=True,
                 realized_revenue_paisa=140_500,
