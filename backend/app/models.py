@@ -31,6 +31,7 @@ from app.db.base import Base
 from app.entitlements.models import Subscription
 from app.entitlements.usage import UsageCounter
 from app.expenses.models import Expense, ExpenseAllocation
+from app.exports.models import ExportJob
 from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
 from app.money.models import CodReceivable
@@ -42,6 +43,7 @@ from app.payouts.models import (
     PayoutLine,
     PayoutSourceFile,
 )
+from app.privacy.models import DeletionRequest
 from app.products.models import Product, StockMovement
 from app.profit.models import ConsignmentCharge, ProfitSnapshot
 from app.reconciliation.models import ReconciliationCase
@@ -63,9 +65,11 @@ __all__ = [
     "ConsignmentItem",
     "Customer",
     "CustomerAddress",
+    "DeletionRequest",
     "Device",
     "Expense",
     "ExpenseAllocation",
+    "ExportJob",
     "FeatureFlag",
     "IdempotencyKey",
     "ImportBatch",

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.pagination import Cursor, apply_cursor
+from app.common.uploads import UploadCheck, validate_upload
 from app.core.clock import utc_now
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -152,7 +153,7 @@ class PayoutService:
         and carrying the text the file contained. Dropping them would hide
         money that genuinely arrived.
         """
-        self._guard_size(content)
+        checked = self._guard_size(content, filename=filename)
         digest = sha256_of(content)
 
         existing = await self._db.execute(
@@ -176,12 +177,14 @@ class PayoutService:
         context = current_context()
         source_file = PayoutSourceFile(
             provider=provider,
-            original_filename=filename,
+            # The sanitised name, never the client's. It reaches storage
+            # keys and log lines.
+            original_filename=checked.safe_name,
             sha256=digest,
             size_bytes=len(content),
             # R2 is not provisioned; the content lives here until it is.
             storage_key=None,
-            raw_content=content.decode("utf-8", errors="replace"),
+            raw_content=checked.text,
             uploaded_by=context.user_id if context else None,
             imported_at=now,
             created_at=now,
@@ -389,8 +392,17 @@ class PayoutService:
         await self._db.flush()
         return payout
 
-    def _guard_size(self, content: bytes) -> None:
-        if len(content) > MAX_STATEMENT_BYTES:
-            raise ValidationError(
-                f"That file is larger than {MAX_STATEMENT_BYTES // (1024 * 1024)}MB"
-            )
+    def _guard_size(self, content: bytes, *, filename: str | None = None) -> UploadCheck:
+        """Validate a statement upload before it is parsed.
+
+        Phase F section 29: size, extension, **content sniffing**, encoding and
+        row count. An XLSX renamed to ``.csv`` is caught by its ZIP magic
+        number, not by its name — and refused with a sentence the seller can
+        act on rather than parsed into a payout full of nonsense amounts.
+        """
+        return validate_upload(
+            content,
+            filename=filename,
+            max_bytes=MAX_STATEMENT_BYTES,
+            max_rows=MAX_STATEMENT_ROWS,
+        )

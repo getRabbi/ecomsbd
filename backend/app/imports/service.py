@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.outbox import OutboxTopic, enqueue
+from app.common.uploads import validate_upload
 from app.core.clock import utc_now
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -78,8 +79,15 @@ class ImportService:
                 f"{template} imports are not supported yet",
                 details={"template": str(template)},
             )
-        if not content:
-            raise ValidationError("The uploaded file is empty")
+        # Section 98 / Phase F section 29. Size, extension, content sniffing,
+        # encoding and row count, in that order, before anything is parsed.
+        # The declared content type is recorded and never believed.
+        checked = validate_upload(
+            content,
+            filename=filename,
+            content_type=content_type,
+            max_rows=MAX_IMPORT_ROWS,
+        )
 
         digest = hashlib.sha256(content).hexdigest()
 
@@ -118,7 +126,7 @@ class ImportService:
         batch = ImportBatch(
             template=template,
             status=ImportStatus.UPLOADED,
-            original_filename=filename,
+            original_filename=checked.safe_name,
             source_sha256=digest,
             content_type=content_type,
             byte_size=len(content),
