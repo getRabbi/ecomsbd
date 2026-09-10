@@ -23,6 +23,12 @@ from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
 from app.money.models import CodReceivable
 from app.orders.models import Order, OrderItem
+from app.payouts.models import (
+    Payout,
+    PayoutAdjustment,
+    PayoutLine,
+    PayoutSourceFile,
+)
 from app.products.models import Product, StockMovement
 from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
@@ -47,6 +53,10 @@ __all__ = [
     "OrderItem",
     "OtpChallenge",
     "OutboxEvent",
+    "Payout",
+    "PayoutAdjustment",
+    "PayoutLine",
+    "PayoutSourceFile",
     "Product",
     "RefreshToken",
     "StockMovement",
