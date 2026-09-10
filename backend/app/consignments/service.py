@@ -44,6 +44,8 @@ from app.money.service import ReceivableService
 from app.orders.models import Order, OrderItem, OrderStatus
 from app.products.models import StockMovementReason, StockMovementSource
 from app.products.service import StockAdjustment, StockService
+from app.profit.models import ReturnReason
+from app.profit.service import ProfitService
 
 __all__ = ["ConsignmentService", "DeliveryOutcome", "ItemOutcome"]
 
@@ -70,6 +72,10 @@ class DeliveryOutcome:
     occurred_at: datetime | None = None
     items: list[ItemOutcome] = field(default_factory=list)
     note: str | None = None
+    #: Why it came back (master spec section 19). Recorded on the profit
+    #: snapshot, which is what makes the return report able to say *why* a
+    #: product's returns cost the seller money rather than only that they did.
+    return_reason: ReturnReason | None = None
 
 
 class ConsignmentService:
@@ -81,9 +87,11 @@ class ConsignmentService:
         *,
         receivables: ReceivableService,
         stock: StockService | None = None,
+        profit: ProfitService | None = None,
     ) -> None:
         self._db = session
         self._receivables = receivables
+        self._profit = profit or ProfitService(session)
         self._stock = stock or StockService(session)
 
     async def get(self, consignment_id: uuid.UUID) -> Consignment:
@@ -274,6 +282,14 @@ class ConsignmentService:
                 reason=outcome.note or f"Parcel {target}",
                 occurred_at=moment,
             )
+
+        if target.is_terminal:
+            # The parcel is finished, so its profit is knowable — freeze it
+            # now rather than waiting for someone to ask. A snapshot written
+            # only when the Insights screen is opened would mean the figure
+            # depended on when the seller looked at it, and a parcel nobody
+            # looked at would never appear in a total at all.
+            await self._profit.snapshot(consignment.id, return_reason=outcome.return_reason)
 
         await record_audit(
             self._db,

@@ -53,8 +53,7 @@ async def delivered(
         ),
     )
     await db.commit()
-    await ProfitService(db).snapshot(parcel["consignment"].id)
-    await db.commit()
+    # No explicit snapshot: recording the outcome writes revision 1 itself.
     return parcel
 
 

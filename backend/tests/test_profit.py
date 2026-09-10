@@ -342,6 +342,21 @@ class TestProfitSnapshots:
         self, client: AsyncClient, shop: dict, db: AsyncSession
     ) -> None:
         parcel = await self._delivered(client, shop, db, cod=140_500)
+
+        # Recording the outcome wrote it. Nobody had to ask: a figure that
+        # only existed once the Insights screen was opened would mean a parcel
+        # nobody looked at never reached a total.
+        first = await parcel["profit"].current_snapshot(parcel["consignment"].id)
+        assert first is not None
+        assert first.revision == 1
+        assert first.is_current
+        assert first.calculation_version == CALCULATION_VERSION
+        assert first.realized_revenue_paisa == 140_500
+        # The product cost came from the order line's snapshot, not from the
+        # product's current cost.
+        assert first.item_cost_paisa == 65_000
+        assert first.contribution_profit_paisa == 75_500
+
         await parcel["profit"].record_charge(
             parcel["consignment"].id,
             kind=ChargeKind.DELIVERY,
@@ -351,13 +366,8 @@ class TestProfitSnapshots:
         snapshot = await parcel["profit"].snapshot(parcel["consignment"].id)
         await db.commit()
 
-        assert snapshot.revision == 1
-        assert snapshot.is_current
-        assert snapshot.calculation_version == CALCULATION_VERSION
-        assert snapshot.realized_revenue_paisa == 140_500
-        # The product cost came from the order line's snapshot, not from the
-        # product's current cost.
-        assert snapshot.item_cost_paisa == 65_000
+        # The courier's charge arriving is a revision, not an edit.
+        assert snapshot.revision == 2
         assert snapshot.delivery_charge_paisa == 8_000
         assert snapshot.contribution_profit_paisa == 67_500
 
@@ -394,8 +404,10 @@ class TestProfitSnapshots:
         second = await profit.snapshot(parcel["consignment"].id, reason="Statement arrived")
         await db.commit()
 
-        # Section 17.4: a new revision, never an edit.
-        assert second.revision == 2
+        # Section 17.4: a new revision, never an edit. Revision 1 was written
+        # by the delivery itself, so these are the second and third.
+        assert first.revision == 2
+        assert second.revision == 3
         assert second.contribution_profit_paisa == first_profit - 2_000
 
         await db.refresh(first)
@@ -404,7 +416,7 @@ class TestProfitSnapshots:
         assert first.superseded_by == second.id
 
         revisions = await profit.revisions(parcel["consignment"].id)
-        assert [row.revision for row in revisions] == [1, 2]
+        assert [row.revision for row in revisions] == [1, 2, 3]
 
     async def test_an_estimated_charge_marks_the_whole_figure_estimated(
         self, client: AsyncClient, shop: dict, db: AsyncSession

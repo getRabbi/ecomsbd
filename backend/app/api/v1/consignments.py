@@ -18,6 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import DbSession, TenantPrincipal
+from app.api.v1.analytics_schemas import ChargeCreatePayload, ChargeResponse
 from app.api.v1.money_schemas import (
     ConsignmentItemResponse,
     ConsignmentResponse,
@@ -27,6 +28,7 @@ from app.api.v1.money_schemas import (
 from app.consignments.models import Consignment
 from app.consignments.service import ConsignmentService, DeliveryOutcome, ItemOutcome
 from app.money.service import ReceivableService
+from app.profit.service import ProfitService
 
 router = APIRouter(prefix="/consignments", tags=["consignments"])
 
@@ -120,6 +122,7 @@ async def record_outcome(
                 for item in payload.items
             ],
             note=payload.note,
+            return_reason=payload.return_reason,
         ),
     )
     return _to_response(consignment)
@@ -135,3 +138,62 @@ async def get_consignment(
 
 
 __all__ = ["router"]
+
+
+@router.post(
+    "/{consignment_id}/charges",
+    response_model=ChargeResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record what a parcel cost",
+)
+async def record_charge(
+    consignment_id: uuid.UUID,
+    payload: ChargeCreatePayload,
+    principal: TenantPrincipal,
+    db: DbSession,
+) -> ChargeResponse:
+    """Enter a courier charge, COD fee, packaging cost or return charge.
+
+    This is how profit becomes real in manual courier mode: without it every
+    parcel's figure is revenue minus goods, which flatters every margin in the
+    shop by whatever the courier actually charged.
+
+    Recording a charge writes a new profit revision for the parcel, so the
+    Insights screen moves the moment the seller enters the figure and the
+    number they read before it is still there.
+    """
+    profit = ProfitService(db)
+    charge = await profit.record_charge(
+        consignment_id,
+        kind=payload.kind,
+        amount_paisa=payload.amount_paisa,
+        source=payload.source,
+        provider_label=payload.provider_label,
+        source_ref=payload.source_ref,
+        reason=payload.reason,
+        occurred_at=payload.occurred_at,
+    )
+    if await profit.current_snapshot(consignment_id) is not None:
+        await profit.snapshot(consignment_id, reason=payload.reason or f"{payload.kind} recorded")
+    await db.commit()
+    return ChargeResponse.model_validate(charge)
+
+
+@router.get(
+    "/{consignment_id}/charges",
+    response_model=list[ChargeResponse],
+    summary="What a parcel cost",
+)
+async def list_charges(
+    consignment_id: uuid.UUID,
+    principal: TenantPrincipal,
+    db: DbSession,
+) -> list[ChargeResponse]:
+    """Only the charges still in force.
+
+    A superseded estimate is kept in the table but not listed here: the
+    seller asking what a parcel cost wants the current answer, and the history
+    belongs in the parcel's own audit view.
+    """
+    charges = await ProfitService(db).charges_for(consignment_id)
+    return [ChargeResponse.model_validate(charge) for charge in charges]

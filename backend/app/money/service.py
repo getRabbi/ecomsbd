@@ -34,6 +34,7 @@ from app.ledger.models import (
 from app.ledger.service import LedgerService
 from app.money.models import CodReceivable, ReceivableStatus, can_transition
 from app.orders.models import Order
+from app.profit.service import ProfitService
 
 __all__ = ["AGING_BUCKETS", "AgingBucket", "ReceivableService"]
 
@@ -67,9 +68,16 @@ AGING_BUCKETS: tuple[AgingBucket, ...] = (
 class ReceivableService:
     """The only writer of COD receivables."""
 
-    def __init__(self, session: AsyncSession, *, ledger: LedgerService | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        ledger: LedgerService | None = None,
+        profit: ProfitService | None = None,
+    ) -> None:
         self._db = session
         self._ledger = ledger or LedgerService(session)
+        self._profit = profit or ProfitService(session)
 
     # ----------------------------------------------------------- lifecycle --
 
@@ -274,7 +282,27 @@ class ReceivableService:
             source_ref=source_ref,
             metadata={"payout_line_id": str(payout_line_id) if payout_line_id else None},
         )
+
+        # Money arriving changes what the parcel earned *and* how sure we are
+        # of it: revenue moves from BOOKED to SETTLED (section 85), and any
+        # deduction the payout carried is now a known charge rather than an
+        # estimate. Without this the Insights screen would keep showing the
+        # figure it computed on the day of delivery, and the quality indicator
+        # would never reach "actual" for anything.
+        await self._resnapshot(receivable, reason="Payout applied")
         return receivable
+
+    async def _resnapshot(self, receivable: CodReceivable, *, reason: str) -> None:
+        """Write a new profit revision for the parcel behind a receivable.
+
+        Silent when the parcel has no snapshot yet — a receivable can be
+        settled for a parcel whose outcome predates profit snapshots, and
+        refusing the settlement over that would block the money for a
+        bookkeeping reason.
+        """
+        if await self._profit.current_snapshot(receivable.consignment_id) is None:
+            return
+        await self._profit.snapshot(receivable.consignment_id, reason=reason)
 
     async def reverse_settlement(
         self,

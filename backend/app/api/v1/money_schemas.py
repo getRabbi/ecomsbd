@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.consignments.models import ConsignmentStatus
 from app.payouts.models import AdjustmentType, PayoutLineStatus, PayoutStatus
+from app.profit.models import ReturnReason
 from app.reconciliation.models import CaseKind, CaseStatus
 
 __all__ = [
@@ -71,6 +72,10 @@ class DeliveryOutcomePayload(BaseModel):
     #: actually collected (master spec section 17.8).
     items: list[ItemOutcomePayload] = Field(default_factory=list)
     note: str | None = Field(default=None, max_length=400)
+    #: Why it came back (master spec section 19). Optional, because a seller
+    #: who does not know should not be forced to guess — an invented reason
+    #: is worse for the return report than a missing one.
+    return_reason: ReturnReason | None = None
 
 
 class ConsignmentItemResponse(BaseModel):

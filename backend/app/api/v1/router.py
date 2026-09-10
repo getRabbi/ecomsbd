@@ -12,6 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    analytics,
     auth,
     billing,
     consignments,
@@ -41,5 +42,6 @@ api_router.include_router(payouts.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(providers.router)
 api_router.include_router(billing.router)
+api_router.include_router(analytics.router)
 
 __all__ = ["api_router"]
