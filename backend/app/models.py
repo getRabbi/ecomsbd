@@ -20,6 +20,8 @@ from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
 from app.imports.models import ImportBatch, ImportRow
+from app.ledger.models import LedgerEntry
+from app.money.models import CodReceivable
 from app.orders.models import Order, OrderItem
 from app.products.models import Product, StockMovement
 from app.sync.models import SyncMutation
@@ -30,6 +32,7 @@ __all__ = [
     "AuditLog",
     "AuthSession",
     "Base",
+    "CodReceivable",
     "Consignment",
     "ConsignmentItem",
     "Customer",
@@ -39,6 +42,7 @@ __all__ = [
     "IdempotencyKey",
     "ImportBatch",
     "ImportRow",
+    "LedgerEntry",
     "Order",
     "OrderItem",
     "OtpChallenge",

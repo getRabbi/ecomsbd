@@ -69,3 +69,57 @@ async def create_order(
     response = await client.post("/v1/orders", json=payload, headers=auth_header(session))
     assert response.status_code == 201, response.text
     return response.json()
+
+
+async def dispatched_parcel(
+    client: AsyncClient,
+    session: dict[str, Any],
+    db: Any,
+    *,
+    cod_paisa: int = 125_000,
+    quantity: int = 1,
+    opening_stock: int = 10,
+) -> dict[str, Any]:
+    """An order with a product, dispatched with a courier.
+
+    Built over HTTP so the order goes through the real create path, then handed
+    to the domain services for the money half. Returns the ids the money tests
+    need plus the live service objects.
+    """
+    from app.consignments.service import ConsignmentService
+    from app.ledger.service import LedgerService
+    from app.money.service import ReceivableService
+
+    product = await create_product(
+        client, session, name="Cotton Abaya", opening_stock=opening_stock
+    )
+    order = await create_order(
+        client,
+        session,
+        items=[
+            {
+                "product_id": product["id"],
+                "quantity": quantity,
+                "unit_price_paisa": cod_paisa // quantity,
+            }
+        ],
+        cod_amount_paisa=cod_paisa,
+    )
+
+    ledger = LedgerService(db)
+    receivables = ReceivableService(db, ledger=ledger)
+    consignments = ConsignmentService(db, receivables=receivables)
+
+    import uuid as _uuid
+
+    consignment = await consignments.dispatch_manual(_uuid.UUID(order["order"]["id"]))
+    await db.commit()
+
+    return {
+        "product": product,
+        "order": order["order"],
+        "consignment": consignment,
+        "consignments": consignments,
+        "receivables": receivables,
+        "ledger": ledger,
+    }

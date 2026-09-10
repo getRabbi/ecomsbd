@@ -78,6 +78,17 @@ class AuditAction(StrEnum):
     SYNC_MUTATION_APPLIED = "sync.mutation_applied"
     SYNC_CONFLICT_DETECTED = "sync.conflict_detected"
 
+    # Money core (phase D)
+    CONSIGNMENT_DISPATCHED = "consignment.dispatched"
+    CONSIGNMENT_STATUS_CHANGED = "consignment.status_changed"
+    RECEIVABLE_WRITTEN_OFF = "money.receivable_written_off"
+    RECEIVABLE_DISPUTED = "money.receivable_disputed"
+    PAYOUT_RECORDED = "money.payout_recorded"
+    PAYOUT_IMPORTED = "money.payout_imported"
+    PAYOUT_RECONCILED = "money.payout_reconciled"
+    RECONCILIATION_CASE_OPENED = "money.case_opened"
+    RECONCILIATION_CASE_RESOLVED = "money.case_resolved"
+
     # Reserved for later phases (sections 103, 134)
     COURIER_CREDENTIAL_SAVED = "courier.credential_saved"
     COURIER_CREDENTIAL_REVOKED = "courier.credential_revoked"
