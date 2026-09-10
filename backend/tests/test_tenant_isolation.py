@@ -421,3 +421,146 @@ class TestCommerceCoreIsolation:
         _use_tenant(two_tenants["tenant_b"])
         rows = (await db.execute(sa.select(SyncMutation))).scalars().all()
         assert rows == []
+
+
+class TestMoneyCoreIsolation:
+    """The Phase D tables.
+
+    The stakes are higher here than anywhere else in the schema: a leak in the
+    ledger or the receivables would not just expose data, it would let one
+    shop's money appear in another's balance. Each table gets its own
+    cross-tenant read attempt.
+    """
+
+    async def test_every_phase_d_table_is_tenant_owned(self) -> None:
+        names = tenant_owned_table_names()
+        assert {
+            "financial_ledger_entries",
+            "cod_receivables",
+            "payouts",
+            "payout_lines",
+            "payout_source_files",
+            "payout_adjustments",
+            "reconciliation_cases",
+        } <= names
+
+    async def test_ledger_entries_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.ledger.models import LedgerEntry
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            LedgerEntry(
+                occurred_at=utc_now(),
+                business_date=utc_now().date(),
+                entity_type="consignment",
+                entity_id=uuid.uuid4(),
+                event_type="DELIVERY_CONFIRMED",
+                amount_paisa=140_500,
+                direction="CREDIT",
+                bucket="COD_RECEIVABLE",
+                source="PROVIDER_EVENT",
+                created_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(LedgerEntry))).scalars().all()
+        assert rows == []
+
+    async def test_a_ledger_entry_cannot_be_written_for_another_shop(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.ledger.models import LedgerEntry
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            LedgerEntry(
+                tenant_id=two_tenants["tenant_b"],
+                occurred_at=utc_now(),
+                business_date=utc_now().date(),
+                entity_type="consignment",
+                entity_id=uuid.uuid4(),
+                event_type="DELIVERY_CONFIRMED",
+                amount_paisa=140_500,
+                direction="CREDIT",
+                bucket="COD_RECEIVABLE",
+                source="PROVIDER_EVENT",
+                created_at=utc_now(),
+            )
+        )
+        with pytest.raises(TenantIsolationError):
+            await db.flush()
+        await db.rollback()
+
+    async def test_payouts_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.payouts.models import Payout
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Payout(
+                provider="manual",
+                source="MANUAL",
+                status="RECEIVED",
+                total_paisa=480_500,
+                received_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Payout))).scalars().all()
+        assert rows == []
+
+    async def test_payout_source_files_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.payouts.models import PayoutSourceFile
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            PayoutSourceFile(
+                provider="manual",
+                original_filename="sept.csv",
+                sha256="a" * 64,
+                size_bytes=120,
+                raw_content="Invoice,Amount\nCP-1,1405\n",
+                imported_at=utc_now(),
+                created_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        # The statement holds another shop's customers and amounts; it is the
+        # single most sensitive row in the money core.
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(PayoutSourceFile))).scalars().all()
+        assert rows == []
+
+    async def test_reconciliation_cases_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.reconciliation.models import ReconciliationCase
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            ReconciliationCase(
+                kind="DELIVERED_BUT_UNPAID",
+                status="OPEN",
+                priority="HIGH",
+                subject_type="cod_receivable",
+                subject_id=uuid.uuid4(),
+                amount_paisa=140_500,
+                summary="CP-1 was delivered and has not been paid",
+                opened_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(ReconciliationCase))).scalars().all()
+        assert rows == []

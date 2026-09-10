@@ -16,11 +16,16 @@ Order → Courier → Delivery / Return / Partial delivery → COD receivable
 
 **Canonical repository:** <https://github.com/getRabbi/ecomsbd.git>
 
-**Current phase: B (commerce core) — complete.** See
+**Current phase: D (money core) — complete.** See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for exactly what
-works today. Products, stock, customers, orders, the paste parser, imports and
-offline sync are in. No courier, payment or SMS provider is integrated yet, and
-saving an order books nothing.
+works today. Products, stock, customers, orders, the paste parser, imports,
+offline sync, COD receivables, the financial ledger, payouts and the
+reconciliation engine are in.
+
+Phase C (the Steadfast adapter) is **blocked** on merchant API documentation, so
+parcels move through **manual courier mode**: the seller records that a parcel
+went out and later what happened to it. No courier, payment or SMS provider is
+integrated, and nothing in this codebase makes a provider HTTP call.
 
 ---
 
@@ -41,6 +46,10 @@ backend/                 FastAPI modular monolith — SQLAlchemy 2 async, Alembi
   app/consignments/      consignment + consignment_item schema (no provider yet)
   app/imports/           CSV templates, dry-run validation, commit
   app/sync/              offline mutation intake + the change feed
+  app/ledger/            the append-only financial ledger
+  app/money/             COD receivables and aging
+  app/payouts/           payouts, statement parsing, source preservation
+  app/reconciliation/    candidate scoring, matching, cases
   app/couriers/          adapter Protocol + provider capability manifests
   app/api/               middleware, dependencies, error handlers, /v1 routers
   app/worker/            ARQ bootstrap + outbox dispatcher
@@ -70,6 +79,12 @@ infra/docker/            backend image
 | A duplicate order warns; it never blocks | `app/orders/duplicates.py` |
 | An import never coerces a bad value into an importable one | `app/imports/templates.py` |
 | A queued offline mutation replays to the same record | `app/sync/service.py` — idempotent by mutation id |
+| A ledger entry is never edited; a correction is a reversal | `app/ledger/service.py` — four public methods, no update path, asserted by a test |
+| One payout line cannot settle more than its own amount | `payout_lines` check constraint |
+| Settled can never exceed collectible plus adjustments | `cod_receivables` check constraint |
+| Delivered is not paid | separate state machines for the consignment and the receivable |
+| A soft-signal match is never applied automatically | `app/reconciliation/scoring.py` — the threshold equals one exact reference |
+| An unknown deduction stays visible as unknown | `AdjustmentType.UNKNOWN_DEDUCTION`, never reclassified |
 
 ---
 
@@ -169,7 +184,7 @@ migration cannot target a different database than the app reads.
 ```bash
 # Backend — no services required
 cd backend
-python -m pytest -q                  # 325 tests
+python -m pytest -q                  # 466 tests
 python -m ruff check app tests migrations
 python -m ruff format --check app tests migrations
 python -m mypy                       # strict
@@ -180,7 +195,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_te
 # Flutter
 cd apps/mobile_flutter
 flutter analyze
-flutter test                         # 133 tests
+flutter test                         # 147 tests
 ```
 
 Widget tests render at **360×800** — the reference low-end Android screen — and
@@ -236,6 +251,52 @@ says "No connection" rather than showing an empty list.
 risk and profit as three separate facts, and until the engines that produce them
 exist they read *Not booked*, *Not checked* and *Pending*. A customer with no
 terminal history shows "No history yet", not 0%.
+
+---
+
+## How the money core behaves
+
+**Delivered is not paid.** A parcel and the money it owes are separate objects
+with separate state machines. A delivery creates a *receivable*; only a payment
+matched against it settles anything. Every system that collapses those two ends
+up telling a seller their money has arrived when it has not.
+
+**The ledger is append-only.** Every money event is a row, and there is no
+update path to it anywhere in the application. A correction is a reversal row
+pointing at the original, so both the mistake and its fix survive — which is
+what lets anyone answer "why is my outstanding ৳4,200?" three months later. The
+Money screen's totals are summed from those rows rather than from maintained
+counters, so the dashboard cannot drift from what is behind it.
+
+**A partial delivery collects only what was delivered.** Recording one requires
+the per-item quantities; assuming the original COD is refused.
+
+**Statements are evidence, not instructions.** Importing one creates a payout
+with a line per row and settles nothing. Re-importing the same file is refused
+by content hash. A row whose amount cannot be read is imported carrying the text
+the file contained rather than dropped or turned into ৳0, and the source file is
+kept so a reconciliation result can be explained later.
+
+**Matching prefers precision over recall.** Only an exact provider reference —
+consignment id, tracking code, or order number — settles a parcel on its own.
+A matching amount, a plausible delivery date and a matching phone put together
+still fall short of the threshold, so an amount-only match can never happen
+automatically. A tie between two candidates, or two parcels claiming the same
+reference, goes to a person. Every manual match records who made it and why, and
+unmatching is a reversal rather than a deletion.
+
+**Shadow mode** runs the whole engine and writes nothing, so a matching rule can
+be measured before it is allowed to move money.
+
+**Nothing is folded away.** An unrecognised deduction stays labelled as
+unrecognised with the courier's own words attached. An overpayment settles only
+what was owed and raises a case for the rest. A write-off is recorded as a loss
+rather than quietly leaving the outstanding total.
+
+**Cases, not colours.** The eight problems master spec section 16 names —
+delivered but unpaid, underpaid, overpaid, unknown deduction, duplicate line,
+unmappable payment, stale in transit, returned but not restocked — are separate
+records with an owner and an outcome. Closing one requires a note.
 
 ---
 
