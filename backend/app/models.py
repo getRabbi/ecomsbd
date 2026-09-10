@@ -19,6 +19,7 @@ from app.consignments.models import Consignment, ConsignmentItem
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
+from app.expenses.models import Expense, ExpenseAllocation
 from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
 from app.money.models import CodReceivable
@@ -47,6 +48,8 @@ __all__ = [
     "Customer",
     "CustomerAddress",
     "Device",
+    "Expense",
+    "ExpenseAllocation",
     "FeatureFlag",
     "IdempotencyKey",
     "ImportBatch",
