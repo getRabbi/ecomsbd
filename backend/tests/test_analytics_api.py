@@ -663,3 +663,52 @@ class TestNotificationCentre:
             f"/v1/notifications/{uuid.uuid4()}/read", headers=auth_header(shop)
         )
         assert response.status_code == 404
+
+
+class TestTrendAndFunnel:
+    async def test_the_series_keeps_the_empty_days(
+        self, client: AsyncClient, shop: dict[str, Any]
+    ) -> None:
+        await _parcel(client, shop, cod_paisa=140_500)
+        body = (await client.get("/v1/analytics/profit", headers=auth_header(shop))).json()
+
+        # Thirty days requested, thirty points returned. Skipping quiet days
+        # would compress the chart's x-axis and make the week look busier
+        # than it was.
+        assert len(body["series"]) == 30
+        assert body["series"][0]["business_date"] == body["since"]
+        assert body["series"][-1]["business_date"] == body["until"]
+        assert body["series"][-1]["contribution_profit_paisa"] == 75_500
+        assert body["series"][0]["parcel_count"] == 0
+
+    async def test_the_funnel_counts_parcels_that_have_not_finished(
+        self, client: AsyncClient, shop: dict[str, Any]
+    ) -> None:
+        await _parcel(client, shop, cod_paisa=100_000)
+        await _parcel(client, shop, cod_paisa=60_000, outcome="RETURNED", product_name="Silk Hijab")
+
+        # One more dispatched and left in transit.
+        product = await create_product(client, shop, name="Kurti", sku="kurti", opening_stock=5)
+        created = await create_order(
+            client,
+            shop,
+            items=[{"product_id": product["id"], "quantity": 1, "unit_price_paisa": 50_000}],
+            cod_amount_paisa=50_000,
+        )
+        dispatch = await client.post(
+            f"/v1/consignments/orders/{created['order']['id']}/dispatch",
+            json={},
+            headers=auth_header(shop),
+        )
+        assert dispatch.status_code == 201
+
+        body = (await client.get("/v1/analytics/profit", headers=auth_header(shop))).json()
+        stages = {stage["label"]: stage["count"] for stage in body["funnel"]}
+
+        # Counted from consignments, not snapshots: a funnel built only from
+        # finished parcels would always claim a 100% success rate.
+        assert stages["Dispatched"] == 3
+        assert stages["In transit"] == 1
+        assert stages["Delivered"] == 1
+        assert stages["Returned"] == 1
+        assert stages["Lost or damaged"] == 0

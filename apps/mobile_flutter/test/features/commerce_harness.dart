@@ -212,3 +212,66 @@ Map<String, dynamic> orderJson({
 
 Map<String, dynamic> page(List<Map<String, dynamic>> items) =>
     <String, dynamic>{'items': items, 'next_cursor': null, 'has_more': false};
+
+Map<String, dynamic> moneySummaryJson({
+  int outstanding = 480_500,
+  int settled = 140_500,
+  int unpaidCount = 3,
+  int unknownDeduction = 0,
+  int openCases = 0,
+  List<Map<String, dynamic>>? aging,
+}) => <String, dynamic>{
+  'outstanding_paisa': outstanding,
+  'settled_paisa': settled,
+  'unpaid_parcel_count': unpaidCount,
+  'courier_charge_paisa': 24_000,
+  'cod_fee_paisa': 8_000,
+  'return_charge_paisa': 0,
+  'unknown_deduction_paisa': unknownDeduction,
+  'write_off_paisa': 0,
+  'unexplained_payout_paisa': 0,
+  'open_case_count': openCases,
+  'aging':
+      aging ??
+      <Map<String, dynamic>>[
+        agingBandJson('0-3 days', 0, 3, 3, outstanding),
+        agingBandJson('4-7 days', 4, 7, 0, 0),
+        agingBandJson('8-14 days', 8, 14, 0, 0),
+        agingBandJson('15+ days', 15, null, 0, 0),
+      ],
+  'since': null,
+  'until': null,
+};
+
+Map<String, dynamic> agingBandJson(
+  String label,
+  int minDays,
+  int? maxDays,
+  int count,
+  int outstanding,
+) => <String, dynamic>{
+  'label': label,
+  'min_days': minDays,
+  'max_days': maxDays,
+  'parcel_count': count,
+  'outstanding_paisa': outstanding,
+};
+
+/// Drag the outermost scrollable until [finder] appears.
+///
+/// `scrollUntilVisible` needs the item to exist in the tree already, which is
+/// not true of a lazily built list, and a single fixed drag is a guess that
+/// breaks the moment a card grows a line. This walks instead.
+Future<void> scrollTo(
+  WidgetTester tester,
+  Finder finder, {
+  double step = -400,
+  int maxDrags = 12,
+}) async {
+  for (var i = 0; i < maxDrags; i++) {
+    if (finder.evaluate().isNotEmpty) return;
+    final scrollable = find.byType(Scrollable).first;
+    await tester.drag(scrollable, Offset(0, step));
+    await settle(tester, frames: 3);
+  }
+}

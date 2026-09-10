@@ -31,8 +31,10 @@ from app.api.v1.analytics_schemas import (
     AlertResponse,
     AllocationRequest,
     AllocationResponse,
+    DayPointResponse,
     ExpenseCreatePayload,
     ExpenseResponse,
+    FunnelStageResponse,
     HomeResponse,
     NotificationResponse,
     ProductLineResponse,
@@ -207,6 +209,18 @@ async def profit(
         operating_profit_paisa=report.operating_profit_paisa,
         margin_basis_points=report.margin_basis_points,
         quality={str(quality): count for quality, count in report.quality.items()},
+        series=[
+            DayPointResponse(
+                business_date=point.business_date,
+                parcel_count=point.parcel_count,
+                realized_revenue_paisa=point.realized_revenue_paisa,
+                contribution_profit_paisa=point.contribution_profit_paisa,
+            )
+            for point in report.series
+        ],
+        funnel=[
+            FunnelStageResponse(label=stage.label, count=stage.count) for stage in report.funnel
+        ],
     )
 
 

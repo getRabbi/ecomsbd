@@ -28,8 +28,10 @@ __all__ = [
     "AllocationResponse",
     "ChargeCreatePayload",
     "ChargeResponse",
+    "DayPointResponse",
     "ExpenseCreatePayload",
     "ExpenseResponse",
+    "FunnelStageResponse",
     "HomeResponse",
     "NotificationResponse",
     "ProductLineResponse",
@@ -78,6 +80,18 @@ class HomeResponse(BaseModel):
     alerts: list[AlertResponse]
 
 
+class DayPointResponse(BaseModel):
+    business_date: date
+    parcel_count: int
+    realized_revenue_paisa: int
+    contribution_profit_paisa: int
+
+
+class FunnelStageResponse(BaseModel):
+    label: str
+    count: int
+
+
 class ProfitResponse(BaseModel):
     since: date
     until: date
@@ -99,6 +113,10 @@ class ProfitResponse(BaseModel):
     margin_basis_points: int | None
     #: ``{"ACTUAL": 12, "ESTIMATED": 3, "MISSING": 0}`` — section 135.
     quality: dict[str, int]
+    #: Daily profit across the window, oldest first, empty days included.
+    series: list[DayPointResponse]
+    #: Dispatched → in transit → delivered → returned → lost.
+    funnel: list[FunnelStageResponse]
 
 
 class RateLineResponse(BaseModel):

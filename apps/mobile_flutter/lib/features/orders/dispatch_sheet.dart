@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../data/analytics/analytics_providers.dart';
+import '../../data/analytics/models.dart';
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
@@ -181,6 +183,7 @@ class OutcomeSheet extends ConsumerStatefulWidget {
 class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
   final TextEditingController _note = TextEditingController();
   String _status = 'DELIVERED';
+  ReturnReason? _reason;
   bool _busy = false;
   ApiError? _error;
 
@@ -202,8 +205,14 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
             widget.consignmentId,
             status: _status,
             note: _note.text.trim(),
+            returnReason: _status == 'RETURNED' ? _reason?.wire : null,
           );
       ref.invalidate(moneySummaryProvider);
+      // A finished parcel changes today's profit, so the screens that show it
+      // are refetched rather than left showing the figure from before.
+      ref.invalidate(homeMetricsProvider);
+      ref.invalidate(profitReportProvider);
+      ref.invalidate(returnReportProvider);
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -268,6 +277,30 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
                   : 'Nothing is owed, and the items go back on your shelf.',
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
+            if (_status == 'RETURNED') ...<Widget>[
+              const SizedBox(height: EcomsbdSpacing.md),
+              const Text('Why did it come back?', style: EcomsbdType.label),
+              const SizedBox(height: 3),
+              Text(
+                'Optional. Skip it rather than guess — the return report is '
+                'only worth acting on if the reasons in it are real.',
+                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+              ),
+              const SizedBox(height: EcomsbdSpacing.xs),
+              Wrap(
+                spacing: EcomsbdSpacing.xs,
+                runSpacing: EcomsbdSpacing.xs,
+                children: <Widget>[
+                  for (final reason in ReturnReason.values)
+                    FilterToggle(
+                      label: reason.label,
+                      selected: _reason == reason,
+                      onChanged: (selected) =>
+                          setState(() => _reason = selected ? reason : null),
+                    ),
+                ],
+              ),
+            ],
             if (widget.itemCount > 1) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.sm),
               const StatusChip(

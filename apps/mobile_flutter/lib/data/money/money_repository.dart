@@ -347,6 +347,7 @@ class MoneyRepository extends CachingRepository {
     required String status,
     List<Map<String, dynamic>> items = const <Map<String, dynamic>>[],
     String? note,
+    String? returnReason,
   }) {
     return api.post(
       '/consignments/$consignmentId/outcome',
@@ -354,6 +355,10 @@ class MoneyRepository extends CachingRepository {
         'status': status,
         if (items.isNotEmpty) 'items': items,
         if (note != null && note.isNotEmpty) 'note': note,
+        // Master spec section 19 wants the reason. Left out entirely when the
+        // seller did not pick one: an invented reason is worse for the return
+        // report than a missing one, because it looks like evidence.
+        if (returnReason != null) 'return_reason': returnReason,
       },
     );
   }

@@ -39,6 +39,8 @@ from app.reconciliation.models import CaseKind, CaseStatus, ReconciliationCase
 
 __all__ = [
     "AnalyticsService",
+    "DayPoint",
+    "FunnelStage",
     "HomeMetrics",
     "ProductLine",
     "ProfitReport",
@@ -82,6 +84,24 @@ class HomeMetrics:
     alerts: list[AlertSummary] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class DayPoint:
+    """One day of the profit trend."""
+
+    business_date: date
+    parcel_count: int
+    realized_revenue_paisa: int
+    contribution_profit_paisa: int
+
+
+@dataclass(frozen=True, slots=True)
+class FunnelStage:
+    """One step of the delivery funnel."""
+
+    label: str
+    count: int
+
+
 @dataclass(slots=True)
 class ProfitReport:
     """The Insights headline, with its own confidence attached."""
@@ -104,6 +124,13 @@ class ProfitReport:
     unallocated_ad_spend_paisa: int = 0
     fixed_cost_paisa: int = 0
     quality: dict[ProfitQuality, int] = field(default_factory=dict)
+    #: Daily contribution profit across the window, oldest first. Days with
+    #: no settled parcel are present with zeroes rather than skipped, so a
+    #: quiet Tuesday reads as a quiet Tuesday instead of compressing the
+    #: chart's x-axis and making the week look busier than it was.
+    series: list[DayPoint] = field(default_factory=list)
+    #: Where this window's parcels are: dispatched, moving, delivered, back.
+    funnel: list[FunnelStage] = field(default_factory=list)
 
     @property
     def margin_basis_points(self) -> int | None:
@@ -277,6 +304,8 @@ class AnalyticsService:
             unallocated_ad_spend_paisa=spend["unallocated_paisa"],
             fixed_cost_paisa=spend["fixed_paisa"] + spend["other_paisa"],
             quality=await self._profit.quality_breakdown(since=since, until=until),
+            series=await self._series(since, until),
+            funnel=await self._funnel(since, until),
         )
 
     # ---------------------------------------------------------- returns --
@@ -395,6 +424,91 @@ class AnalyticsService:
         # Name breaks ties so the list is stable between identical requests.
         lines_out.sort(key=lambda line: (-line.profit_paisa, line.product_name))
         return lines_out[:limit]
+
+    async def _series(self, since: date, until: date) -> list[DayPoint]:
+        """Daily contribution profit, with the empty days kept."""
+        rows = await self._db.execute(
+            sa.select(
+                ProfitSnapshot.business_date,
+                sa.func.count(),
+                sa.func.coalesce(sa.func.sum(ProfitSnapshot.realized_revenue_paisa), 0),
+                sa.func.coalesce(sa.func.sum(ProfitSnapshot.contribution_profit_paisa), 0),
+            )
+            .where(*self._window(since, until))
+            .group_by(ProfitSnapshot.business_date)
+        )
+        by_day = {
+            day: (int(count), int(revenue or 0), int(profit or 0))
+            for day, count, revenue, profit in rows
+        }
+
+        points: list[DayPoint] = []
+        day = since
+        while day <= until:
+            count, revenue, profit = by_day.get(day, (0, 0, 0))
+            points.append(
+                DayPoint(
+                    business_date=day,
+                    parcel_count=count,
+                    realized_revenue_paisa=revenue,
+                    contribution_profit_paisa=profit,
+                )
+            )
+            day += timedelta(days=1)
+        return points
+
+    async def _funnel(self, since: date, until: date) -> list[FunnelStage]:
+        """Where the window's parcels got to.
+
+        Counted from consignments by the day they were booked, not from
+        profit snapshots: a parcel still in transit has no snapshot, and a
+        funnel that only showed finished parcels would always claim a 100%
+        success rate.
+        """
+        rows = await self._db.execute(
+            sa.select(Consignment.status, sa.func.count())
+            .join(Order, Order.id == Consignment.order_id)
+            .where(Order.business_date >= since, Order.business_date <= until)
+            .group_by(Consignment.status)
+        )
+        counts = {status: int(count) for status, count in rows}
+
+        moving = sum(
+            counts.get(str(status), 0)
+            for status in (
+                ConsignmentStatus.BOOKED,
+                ConsignmentStatus.PICKED_UP,
+                ConsignmentStatus.IN_TRANSIT,
+                ConsignmentStatus.OUT_FOR_DELIVERY,
+            )
+        )
+        delivered = counts.get(str(ConsignmentStatus.DELIVERED), 0) + counts.get(
+            str(ConsignmentStatus.PARTIAL_DELIVERED), 0
+        )
+        returned = sum(
+            counts.get(str(status), 0)
+            for status in (
+                ConsignmentStatus.RETURNED,
+                ConsignmentStatus.RETURNING,
+                ConsignmentStatus.RETURN_REQUESTED,
+            )
+        )
+        lost = sum(
+            counts.get(str(status), 0)
+            for status in (
+                ConsignmentStatus.LOST,
+                ConsignmentStatus.DAMAGED,
+                ConsignmentStatus.FAILED,
+            )
+        )
+
+        return [
+            FunnelStage(label="Dispatched", count=sum(counts.values())),
+            FunnelStage(label="In transit", count=moving),
+            FunnelStage(label="Delivered", count=delivered),
+            FunnelStage(label="Returned", count=returned),
+            FunnelStage(label="Lost or damaged", count=lost),
+        ]
 
     # -------------------------------------------------------- internals --
 

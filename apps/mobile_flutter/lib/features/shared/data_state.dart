@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
 import '../../data/commerce/paged_list_controller.dart';
+import '../../data/commerce/repository_support.dart';
 import '../../data/local/tables.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
@@ -349,6 +351,79 @@ class DetailScaffold extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A chart body that never renders a fixture.
+///
+/// Owns the four states a chart actually has: loading, failed, genuinely
+/// empty, and populated. The empty case is a sentence explaining *why* there
+/// is nothing rather than a blank frame — a seller with no returns should read
+/// "no returns in the last 30 days", not wonder whether the chart is broken.
+///
+/// [isEmpty] is asked of the loaded value because a successful response full
+/// of zeroes is still nothing to draw, and a zeroed chart looks like a chart.
+class ChartData<T> extends StatelessWidget {
+  const ChartData({
+    required this.value,
+    required this.builder,
+    required this.emptyMessage,
+    super.key,
+    this.isEmpty,
+    this.height = 150,
+  });
+
+  final AsyncValue<Sourced<T>> value;
+  final Widget Function(T value) builder;
+  final String emptyMessage;
+  final bool Function(T value)? isEmpty;
+
+  /// Reserved height for the loading and empty states, so the card does not
+  /// resize under the seller's thumb when the data arrives.
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return value.when(
+      loading: () => SizedBox(
+        height: height,
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => SizedBox(
+        height: height,
+        child: Center(
+          child: Text(
+            error is ApiError && error.isOffline
+                ? 'Not saved on this device yet.'
+                : 'Could not load this.',
+            textAlign: TextAlign.center,
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+        ),
+      ),
+      data: (sourced) {
+        if (isEmpty?.call(sourced.value) ?? false) {
+          return SizedBox(
+            height: height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EcomsbdSpacing.md,
+                ),
+                child: Text(
+                  emptyMessage,
+                  textAlign: TextAlign.center,
+                  style: EcomsbdType.caption.copyWith(
+                    color: EcomsbdColors.muted,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        return builder(sourced.value);
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../auth/auth_models.dart';
 import '../sync/outbox.dart';
 import '../sync/sync_engine.dart';
 import 'customers_repository.dart';
@@ -22,6 +23,21 @@ import 'products_repository.dart';
 /// The signed-in shop, or `null` before onboarding completes.
 final tenantIdProvider = Provider<String?>((ref) {
   return ref.watch(authControllerProvider).tenantId;
+});
+
+/// The shop's own name, for the Home hero.
+///
+/// Null before onboarding completes, and null rather than a placeholder if the
+/// profile has not loaded: a hero that says "Demo Shop" would be a lie on the
+/// most prominent line of the app.
+final shopNameProvider = Provider<String?>((ref) {
+  final auth = ref.watch(authControllerProvider);
+  final tenantId = auth.tenantId;
+  if (tenantId == null) return null;
+  for (final tenant in auth.profile?.tenants ?? const <TenantSummary>[]) {
+    if (tenant.id == tenantId) return tenant.name;
+  }
+  return null;
 });
 
 final outboxWriterProvider = Provider<OutboxWriter>((ref) {
