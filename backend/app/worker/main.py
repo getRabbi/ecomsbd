@@ -22,6 +22,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
+from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.worker.jobs import dispatch_outbox
 
 log = get_logger("app.worker.main")
@@ -77,12 +78,28 @@ class _Lazy:
 class WorkerSettings:
     """ARQ configuration."""
 
-    functions: ClassVar[list[Any]] = [dispatch_outbox]
+    functions: ClassVar[list[Any]] = [
+        dispatch_outbox,
+        scan_alerts,
+        send_weekly_summaries,
+    ]
 
     cron_jobs: ClassVar[list[Any]] = [
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),
+        # Once a day, early: alerts should be waiting when the seller opens
+        # the app, not arrive mid-afternoon. ARQ crons fire on host local
+        # time, so this is 09:30 Dhaka only when the worker runs with
+        # TZ=UTC, which the deployment sets. Getting that wrong shifts the
+        # hour; it cannot produce a duplicate, because the notifications
+        # deduplicate on the Dhaka business date.
+        cron(scan_alerts, hour=3, minute=30),
+        # Hourly, because the job decides for itself whether the *tenant's*
+        # clock has reached Friday 18:00 (master spec section 42). ARQ crons
+        # fire on host local time, and pinning the weekly summary to one UTC
+        # hour would make it depend on how the container was deployed.
+        cron(send_weekly_summaries, minute=5),
     ]
 
     on_startup = startup

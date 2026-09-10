@@ -67,6 +67,10 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://ecomsbd:ecomsbd@postgres:5432/ecomsbd
       REDIS_URL: redis://redis:6379/0
+      # ARQ schedules crons on host local time. Business dates and the Friday
+      # summary are computed in Asia/Dhaka from UTC instants, so the container
+      # clock must be UTC for the cron hours to mean what the code says.
+      TZ: UTC
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

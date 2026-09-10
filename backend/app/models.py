@@ -23,6 +23,7 @@ from app.expenses.models import Expense, ExpenseAllocation
 from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
 from app.money.models import CodReceivable
+from app.notifications.models import Notification
 from app.orders.models import Order, OrderItem
 from app.payouts.models import (
     Payout,
@@ -55,6 +56,7 @@ __all__ = [
     "ImportBatch",
     "ImportRow",
     "LedgerEntry",
+    "Notification",
     "Order",
     "OrderItem",
     "OtpChallenge",

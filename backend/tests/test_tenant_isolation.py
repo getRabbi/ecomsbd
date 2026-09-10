@@ -564,3 +564,101 @@ class TestMoneyCoreIsolation:
         _use_tenant(two_tenants["tenant_b"])
         rows = (await db.execute(sa.select(ReconciliationCase))).scalars().all()
         assert rows == []
+
+
+class TestProfitAndAlertsIsolation:
+    """The Phase E tables.
+
+    Profit is the number the seller trusts most, and the notification centre is
+    where the shop's worst news is written in plain language. A leak in either
+    is a section 117 P0 incident.
+    """
+
+    async def test_every_phase_e_table_is_tenant_owned(self) -> None:
+        names = tenant_owned_table_names()
+        assert {
+            "consignment_charges",
+            "profit_snapshots",
+            "expenses",
+            "expense_allocations",
+            "notifications",
+        } <= names
+
+    async def test_profit_snapshots_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.core.clock import business_date
+        from app.profit.models import ProfitSnapshot
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            ProfitSnapshot(
+                consignment_id=uuid.uuid4(),
+                order_id=uuid.uuid4(),
+                revision=1,
+                is_current=True,
+                realized_revenue_paisa=140_500,
+                contribution_profit_paisa=52_300,
+                quality="ACTUAL",
+                outcome="DELIVERED",
+                business_date=business_date(at=utc_now()),
+                calculated_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(ProfitSnapshot))).scalars().all()
+        assert rows == []
+
+    async def test_expenses_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.core.clock import business_date
+        from app.expenses.models import Expense
+
+        today = business_date(at=utc_now())
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Expense(
+                kind="AD_SPEND",
+                amount_paisa=500_000,
+                period_start=today,
+                period_end=today,
+                description="Facebook boost",
+                preferred_method="EQUAL_PER_DELIVERED_ORDER",
+            )
+        )
+        await db.commit()
+
+        # What a competitor spends on ads is exactly the kind of thing that
+        # must never cross shops.
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Expense))).scalars().all()
+        assert rows == []
+
+    async def test_notifications_are_not_visible_across_shops(
+        self, db: AsyncSession, two_tenants: dict[str, uuid.UUID]
+    ) -> None:
+        from app.core.clock import business_date
+        from app.notifications.models import Notification
+
+        _use_tenant(two_tenants["tenant_a"])
+        db.add(
+            Notification(
+                kind="DELIVERED_BUT_UNPAID",
+                severity="CRITICAL",
+                title="Delivered but not paid",
+                body="7 parcels reached the customer and the money has not arrived.",
+                dedupe_key="DELIVERED_BUT_UNPAID:2026-09-10",
+                amount_paisa=895_000,
+                item_count=7,
+                business_date=business_date(at=utc_now()),
+                created_at=utc_now(),
+            )
+        )
+        await db.commit()
+
+        _use_tenant(two_tenants["tenant_b"])
+        rows = (await db.execute(sa.select(Notification))).scalars().all()
+        assert rows == []
