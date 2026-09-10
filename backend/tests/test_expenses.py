@@ -123,6 +123,55 @@ class TestRecording:
 
 
 class TestAllocation:
+    async def test_a_parcel_delivered_late_in_the_dhaka_day_is_still_in_period(
+        self, client: AsyncClient, shop: dict, db: AsyncSession
+    ) -> None:
+        """Master spec section 69, at the boundary that actually breaks.
+
+        Dhaka is UTC+06:00, so between 18:00 and 24:00 UTC the seller's
+        business date is already tomorrow. A parcel delivered at 19:00 UTC
+        belongs to the Dhaka date the seller sees on their screen — and an
+        expense they record for "today" has to reach it.
+
+        This failed for six hours of every day: the eligibility filter
+        truncated the stored UTC timestamp, so an allocation for the seller's
+        today found zero parcels, the ad spend stayed unallocated and no
+        profit figure moved. Nothing said why.
+        """
+        from datetime import UTC, datetime
+
+        # 19:00 UTC on the 10th is 01:00 Dhaka on the 11th.
+        evening_utc = datetime(2026, 9, 10, 19, 0, tzinfo=UTC)
+        dhaka_day = business_date(at=evening_utc)
+        assert dhaka_day == evening_utc.date() + timedelta(days=1), (
+            "fixture assumes the UTC and Dhaka dates differ here"
+        )
+
+        parcel = await dispatched_parcel(client, shop, db, cod_paisa=140_500)
+        await parcel["consignments"].record_outcome(
+            parcel["consignment"].id,
+            DeliveryOutcome(status=ConsignmentStatus.DELIVERED, occurred_at=evening_utc),
+        )
+        await db.commit()
+
+        expenses = ExpenseService(db)
+        expense = await expenses.record(
+            kind=ExpenseKind.AD_SPEND,
+            amount_paisa=10_000,
+            description="Evening Facebook boost",
+            period_start=dhaka_day,
+            period_end=dhaka_day,
+        )
+        report = await expenses.allocate(
+            expense.id, method=AllocationMethod.EQUAL_PER_DELIVERED_ORDER
+        )
+
+        assert report.parcel_count == 1, (
+            "a parcel delivered in the seller's evening fell outside their own day"
+        )
+        assert report.allocated_paisa == 10_000
+        assert report.unallocated_paisa == 0
+
     async def test_equal_split_reaches_every_delivered_parcel(
         self, client: AsyncClient, shop: dict, db: AsyncSession
     ) -> None:

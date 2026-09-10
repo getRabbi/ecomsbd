@@ -16,13 +16,22 @@ Order → Courier → Delivery / Return / Partial delivery → COD receivable
 
 **Canonical repository:** <https://github.com/getRabbi/ecomsbd.git>
 
-**Current phase: E (profit and alerts) — complete.** See
+**Current phase: F (billing, entitlements and hardening) — complete.** See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for exactly what
 works today. Products, stock, customers, orders, the paste parser, imports,
 offline sync, COD receivables, the financial ledger, payouts, the
 reconciliation engine, profit snapshots, return economics, expenses, the
-alerts and the Friday summary are in. Every screen reads real data — there is
+alerts and the Friday summary are in — and now subscriptions, entitlements,
+usage metering, RBAC, the ops console, repair tooling, exports, account
+deletion and a verified backup restore. Every screen reads real data — there is
 no fixture left in the app to fall back to.
+
+**It cannot be released yet, and that is a configuration problem rather than a
+software one.** [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md) lists
+nine blockers, every one of them something an operator supplies: a package id,
+a signing key, a courier, a billing provider, an SMS gateway, push credentials,
+object storage, error tracking and a staging restore drill. Each is refused
+honestly in the meantime — nothing pretends to work.
 
 Phase C (the Steadfast adapter) is **blocked** on merchant API documentation, so
 parcels move through **manual courier mode**: the seller records that a parcel
@@ -198,7 +207,7 @@ migration cannot target a different database than the app reads.
 ```bash
 # Backend — no services required
 cd backend
-python -m pytest -q                  # 583 tests
+python -m pytest -q                  # 833 tests
 python -m ruff check app tests migrations
 python -m ruff format --check app tests migrations
 python -m mypy                       # strict
@@ -209,7 +218,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_te
 # Flutter
 cd apps/mobile_flutter
 flutter analyze
-flutter test                         # 160 tests
+flutter test                         # 179 tests
 ```
 
 Widget tests render at **360×800** — the reference low-end Android screen — and

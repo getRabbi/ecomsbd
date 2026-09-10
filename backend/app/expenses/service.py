@@ -23,7 +23,7 @@ from app.common.audit import AuditAction, record_audit
 from app.common.money import Money
 from app.common.pagination import Cursor, apply_cursor
 from app.consignments.models import Consignment, ConsignmentItem, ConsignmentStatus
-from app.core.clock import utc_now
+from app.core.clock import business_date, utc_now
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.expenses.models import (
     ALLOCATION_VERSION,
@@ -278,11 +278,19 @@ class ExpenseService:
         )
         rows = list((await self._db.execute(stmt)).scalars().all())
 
+        # `business_date`, not `.date()`. An expense period is a seller's
+        # business date in Asia/Dhaka (section 69), and Dhaka is UTC+06:00 — so
+        # for six hours of every day the UTC date is a day behind. Truncating
+        # the stored timestamp made an allocation for "today" reach zero
+        # parcels during those hours: the seller's ad spend stayed unallocated,
+        # no profit figure moved, and nothing said why.
         in_period = [
             consignment
             for consignment in rows
             if consignment.delivered_at is not None
-            and expense.period_start <= consignment.delivered_at.date() <= expense.period_end
+            and expense.period_start
+            <= business_date(at=consignment.delivered_at)
+            <= expense.period_end
         ]
 
         if method is not AllocationMethod.PRODUCT_TAGGED_PER_UNIT:

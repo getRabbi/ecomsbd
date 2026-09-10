@@ -593,3 +593,86 @@ class TestGrantHelper:
         await grant_plan(str(session["tenant_id"]), "starter")
         after = (await client.get("/v1/billing/entitlements", headers=auth_header(session))).json()
         assert after["plan"] == "starter"
+
+
+class TestEntitlementPerformance:
+    """Master spec section 105 and the Phase F brief's section 44.
+
+    The entitlement gate sits in front of paid operations, so a handler that
+    checks four things must not issue four subscription reads. These count real
+    SQL, not calls: an N+1 that a cache happens to hide today would come back
+    the moment the cache moved.
+    """
+
+    @staticmethod
+    def _counting(session: AsyncSession) -> list[str]:
+        """Record every SQL statement the session sends."""
+        from sqlalchemy import event
+
+        statements: list[str] = []
+        # `get_bind()` on an AsyncSession returns the *sync* Engine the
+        # greenlet runs against, which is already what the event hooks
+        # attach to — there is no `.sync_engine` to unwrap.
+        engine = session.get_bind()
+
+        def before(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", before)
+        return statements
+
+    async def test_many_checks_cost_one_subscription_read(self, system_db: AsyncSession) -> None:
+        tenant_id = await _tenant(system_db)
+        _scoped(tenant_id)
+        await system_db.flush()
+
+        service = EntitlementService(system_db)
+        statements = self._counting(system_db)
+
+        # What a request that gates several things actually does.
+        await service.is_allowed(tenant_id, Entitlement.BULK_BOOKING)
+        await service.is_allowed(tenant_id, Entitlement.RECONCILIATION)
+        await service.limit(tenant_id, Entitlement.ORDERS_MONTHLY_LIMIT)
+        await service.limit(tenant_id, Entitlement.TEAM_MEMBER_LIMIT)
+        await service.snapshot(tenant_id)
+
+        subscription_reads = [s for s in statements if "FROM subscriptions" in s]
+        assert len(subscription_reads) == 1, (
+            f"{len(subscription_reads)} subscription reads for five checks; "
+            "the per-request resolution cache is not doing its job"
+        )
+
+    async def test_two_tenants_do_not_share_a_cached_plan(self, system_db: AsyncSession) -> None:
+        """The cache is keyed by tenant, and a leak here is a billing bug."""
+        tenant_a = await _tenant(system_db, "Shop A")
+        tenant_b = await _tenant(system_db, "Shop B")
+        system_db.add(
+            Subscription(
+                tenant_id=tenant_a,
+                plan_code=str(PlanCode.PRO),
+                status=str(SubscriptionStatus.ACTIVE),
+                source=str(BillingProviderKind.MANUAL_ADMIN),
+                current_period_end=datetime.now(UTC) + timedelta(days=30),
+            )
+        )
+        await system_db.flush()
+
+        service = EntitlementService(system_db)
+        _scoped(tenant_a)
+        assert (await service.plan_for(tenant_a)).code is PlanCode.PRO
+        _scoped(tenant_b)
+        assert (await service.plan_for(tenant_b)).code is PlanCode.FREE
+
+    async def test_the_usage_endpoint_reads_counters_once(self, system_db: AsyncSession) -> None:
+        """Every metered key is reported, and it costs one query, not four."""
+        tenant_id = await _tenant(system_db)
+        _scoped(tenant_id)
+        service = EntitlementService(system_db)
+        await service.consume(tenant_id, Entitlement.ORDERS_MONTHLY_LIMIT)
+
+        statements = self._counting(system_db)
+        views = await service.usage(tenant_id)
+
+        assert len(views) == len(METERED_ENTITLEMENTS)
+        counter_reads = [s for s in statements if "FROM usage_counters" in s]
+        assert len(counter_reads) == 1
