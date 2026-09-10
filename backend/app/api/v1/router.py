@@ -14,11 +14,15 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     billing,
+    consignments,
     customers,
     imports,
+    money,
     orders,
+    payouts,
     products,
     providers,
+    reconciliation,
     sync,
     tenants,
 )
@@ -31,6 +35,10 @@ api_router.include_router(customers.router)
 api_router.include_router(orders.router)
 api_router.include_router(imports.router)
 api_router.include_router(sync.router)
+api_router.include_router(consignments.router)
+api_router.include_router(money.router)
+api_router.include_router(payouts.router)
+api_router.include_router(reconciliation.router)
 api_router.include_router(providers.router)
 api_router.include_router(billing.router)
 

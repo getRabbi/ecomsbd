@@ -439,6 +439,9 @@ class ReceivableService:
 
     # ------------------------------------------------------------- reading --
 
+    async def get(self, receivable_id: uuid.UUID) -> CodReceivable:
+        return await self._get(receivable_id)
+
     async def for_consignment(self, consignment_id: uuid.UUID) -> CodReceivable | None:
         result = await self._db.execute(
             sa.select(CodReceivable).where(CodReceivable.consignment_id == consignment_id)
