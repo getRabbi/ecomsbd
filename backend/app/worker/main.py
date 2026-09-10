@@ -24,6 +24,13 @@ from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.worker.jobs import dispatch_outbox
+from app.worker.maintenance import (
+    dispatch_notifications,
+    expire_exports,
+    expire_subscriptions,
+    reconcile_billing,
+    run_account_deletions,
+)
 
 log = get_logger("app.worker.main")
 
@@ -82,6 +89,11 @@ class WorkerSettings:
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
+        reconcile_billing,
+        expire_subscriptions,
+        dispatch_notifications,
+        expire_exports,
+        run_account_deletions,
     ]
 
     cron_jobs: ClassVar[list[Any]] = [
@@ -100,6 +112,20 @@ class WorkerSettings:
         # fire on host local time, and pinning the weekly summary to one UTC
         # hour would make it depend on how the container was deployed.
         cron(send_weekly_summaries, minute=5),
+        # Billing (master spec section 90). Reconciliation first, expiry
+        # second and an hour later: provider truth must have had its chance to
+        # arrive before local expiry acts on a period that looks lapsed.
+        cron(reconcile_billing, hour={2, 14}, minute=10),
+        cron(expire_subscriptions, hour={3, 15}, minute=10),
+        # Notification delivery. Every two minutes: a money alert that arrives
+        # an hour late is worse than useless, and the job is idle when there is
+        # nothing undelivered.
+        cron(dispatch_notifications, minute=set(range(0, 60, 2))),
+        # Housekeeping. Exports hold a copy of a shop's data behind a token, so
+        # expiry runs often; deletions run once a day because the cooling-off
+        # window is measured in days.
+        cron(expire_exports, minute={0, 30}),
+        cron(run_account_deletions, hour=4, minute=0),
     ]
 
     on_startup = startup

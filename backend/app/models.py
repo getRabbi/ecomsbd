@@ -35,6 +35,7 @@ from app.exports.models import ExportJob
 from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
 from app.money.models import CodReceivable
+from app.notifications.delivery import NotificationDelivery, NotificationPreference
 from app.notifications.models import Notification
 from app.orders.models import Order, OrderItem
 from app.payouts.models import (
@@ -76,6 +77,8 @@ __all__ = [
     "ImportRow",
     "LedgerEntry",
     "Notification",
+    "NotificationDelivery",
+    "NotificationPreference",
     "Order",
     "OrderItem",
     "OtpChallenge",

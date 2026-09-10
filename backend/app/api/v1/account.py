@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -46,6 +46,9 @@ from app.core.clock import utc_now
 from app.core.errors import ForbiddenError, NotFoundError
 from app.exports.models import ExportJob, ExportKind
 from app.exports.service import ExportService, permission_for
+from app.notifications.delivery import NotificationDispatcher, NotificationPreference
+from app.notifications.models import NotificationKind
+from app.notifications.transport import build_push_transport, build_sms_transport
 from app.privacy.models import DELETION_GRACE_DAYS
 from app.privacy.service import RETENTION_NOTE, PrivacyService
 from app.tenants.roles import Permission
@@ -239,6 +242,109 @@ async def logout_others(principal: CurrentPrincipal, db: DbSession) -> None:
         context={"revoked": len(sessions), "scope": "others"},
         tenant_id=principal.tenant_id,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Notification preferences (master spec section 95)
+# --------------------------------------------------------------------------- #
+
+
+class NotificationPreferenceResponse(BaseModel):
+    push_enabled: bool
+    sms_enabled: bool
+    muted_kinds: list[str]
+    routine_tracking_push: bool
+    quiet_hours_start: int | None
+    quiet_hours_end: int | None
+    #: Whether a transport exists at all in this deployment. The client shows
+    #: "not available yet" rather than a switch that changes nothing.
+    push_transport_available: bool
+    sms_transport_available: bool
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    push_enabled: bool | None = None
+    sms_enabled: bool | None = None
+    muted_kinds: list[str] | None = None
+    routine_tracking_push: bool | None = None
+    quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
+    quiet_hours_end: int | None = Field(default=None, ge=0, le=23)
+
+
+def _preference_response(
+    preference: NotificationPreference, settings: Any
+) -> NotificationPreferenceResponse:
+    return NotificationPreferenceResponse(
+        push_enabled=preference.push_enabled,
+        sms_enabled=preference.sms_enabled,
+        muted_kinds=list(preference.muted_kinds or []),
+        routine_tracking_push=preference.routine_tracking_push,
+        quiet_hours_start=preference.quiet_hours_start,
+        quiet_hours_end=preference.quiet_hours_end,
+        push_transport_available=build_push_transport(settings).is_configured,
+        sms_transport_available=build_sms_transport(settings).is_configured,
+    )
+
+
+async def _dispatcher(db: DbSession, settings: Any) -> NotificationDispatcher:
+    return NotificationDispatcher(
+        db,
+        settings=settings,
+        push=build_push_transport(settings),
+        sms=build_sms_transport(settings),
+    )
+
+
+@account_router.get(
+    "/notification-preferences",
+    response_model=NotificationPreferenceResponse,
+    summary="Notification preferences",
+)
+async def get_notification_preferences(
+    principal: TenantPrincipal, db: DbSession, settings: SettingsDep
+) -> NotificationPreferenceResponse:
+    dispatcher = await _dispatcher(db, settings)
+    preference = await dispatcher.preferences(principal.require_tenant())
+    return _preference_response(preference, settings)
+
+
+@account_router.patch(
+    "/notification-preferences",
+    response_model=NotificationPreferenceResponse,
+    summary="Change notification preferences",
+)
+async def update_notification_preferences(
+    payload: NotificationPreferenceUpdate,
+    principal: TenantPrincipal,
+    db: DbSession,
+    settings: SettingsDep,
+) -> NotificationPreferenceResponse:
+    """Section 95's opt-out, server-side.
+
+    A muted kind is refused delivery in the dispatcher, not hidden in the app —
+    a client that ignored the setting would otherwise still be pushed to.
+    """
+    dispatcher = await _dispatcher(db, settings)
+    preference = await dispatcher.preferences(principal.require_tenant())
+
+    if payload.push_enabled is not None:
+        preference.push_enabled = payload.push_enabled
+    if payload.sms_enabled is not None:
+        preference.sms_enabled = payload.sms_enabled
+    if payload.routine_tracking_push is not None:
+        preference.routine_tracking_push = payload.routine_tracking_push
+    if payload.muted_kinds is not None:
+        # Unknown kinds are dropped rather than stored: a typo would otherwise
+        # sit in the row forever muting nothing.
+        known = {str(kind) for kind in NotificationKind}
+        preference.muted_kinds = [k for k in payload.muted_kinds if k in known]
+    if payload.quiet_hours_start is not None:
+        preference.quiet_hours_start = payload.quiet_hours_start
+    if payload.quiet_hours_end is not None:
+        preference.quiet_hours_end = payload.quiet_hours_end
+
+    await db.flush()
+    return _preference_response(preference, settings)
 
 
 # --------------------------------------------------------------------------- #
