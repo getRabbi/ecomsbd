@@ -4,7 +4,6 @@ import 'package:ecomsbd/design/charts/line_chart.dart';
 import 'package:ecomsbd/design/components/navigation.dart';
 import 'package:ecomsbd/features/home/home_screen.dart';
 import 'package:ecomsbd/features/insights/insights_screen.dart';
-import 'package:ecomsbd/features/money/money_screen.dart';
 import 'package:ecomsbd/features/shared/demo_data_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,49 +74,8 @@ void main() {
   // The Orders screen moved to real data in Phase B; its tests live in
   // commerce_screens_test.dart, where a fake server supplies the rows.
 
-  group('Money', () {
-    testWidgets('renders COD aging and the settlement comparison', (
-      tester,
-    ) async {
-      await pumpAtSize(tester, const Scaffold(body: MoneyScreen()));
-      await tester.pump();
-
-      expect(find.text('COD money control'), findsOneWidget);
-      expect(find.text('COD aging'), findsOneWidget);
-      expect(find.byType(SettledVsDueChart), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('marks imported figures as estimates', (tester) async {
-      // Master spec section 85: an imported statement total is not the same
-      // fact as an API-confirmed settlement.
-      await pumpAtSize(tester, const Scaffold(body: MoneyScreen()));
-      await tester.pump();
-      await tester.scrollUntilVisible(
-        find.text('Courier receivables'),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.textContaining('~৳22,500'), findsOneWidget);
-      expect(find.textContaining('Estimated'), findsWidgets);
-    });
-
-    testWidgets('states that amount-only matches are never automatic', (
-      tester,
-    ) async {
-      await pumpAtSize(tester, const Scaffold(body: MoneyScreen()));
-      await tester.pump();
-      await tester.scrollUntilVisible(
-        find.textContaining('never auto-match amount-only ambiguity'),
-        320,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(
-        find.textContaining('never auto-match amount-only ambiguity'),
-        findsOneWidget,
-      );
-    });
-  });
+  // The Money screen moved to real data in Phase D; its tests live in
+  // money_screens_test.dart, where a fake server supplies the figures.
 
   group('Insights', () {
     testWidgets('renders the profit bridge and scorecard', (tester) async {

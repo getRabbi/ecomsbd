@@ -13,6 +13,7 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
+import 'dispatch_sheet.dart';
 import 'order_status.dart';
 
 /// One order in full.
@@ -318,6 +319,34 @@ class _OrderBody extends ConsumerWidget {
           Text(
             'None of these contacts a courier.',
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
+          ),
+        ],
+        if (order.status == 'PACKED' ||
+            order.status == 'CONFIRMED') ...<Widget>[
+          const SectionHeader(
+            title: 'Send it',
+            subtitle: 'Manual courier mode — nothing is sent to a provider',
+          ),
+          FilledButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final sent = await DispatchSheet.show(
+                      context,
+                      orderId: order.id,
+                    );
+                    if (sent) {
+                      ref.invalidate(orderProvider(order.id));
+                    }
+                  },
+            icon: const Icon(Icons.local_shipping_outlined, size: 18),
+            label: const Text('Hand to a courier'),
+            style: FilledButton.styleFrom(
+              backgroundColor: EcomsbdColors.orange,
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
           ),
         ],
       ],

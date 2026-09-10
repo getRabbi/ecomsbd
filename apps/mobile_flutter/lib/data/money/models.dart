@@ -1,0 +1,708 @@
+import 'package:meta/meta.dart';
+
+import '../../core/money.dart';
+
+/// Wire models for the money core.
+///
+/// Every amount arrives as integer paisa and stays that way. Nothing in this
+/// file computes a balance: the server owns the ledger, and a client that
+/// derived its own total would eventually disagree with it (master spec
+/// sections 64, 80).
+
+// --------------------------------------------------------------------------- //
+// Summary and aging
+// --------------------------------------------------------------------------- //
+
+@immutable
+class AgingBand {
+  const AgingBand({
+    required this.label,
+    required this.minDays,
+    required this.parcelCount,
+    required this.outstanding,
+    this.maxDays,
+  });
+
+  factory AgingBand.fromJson(Map<String, dynamic> json) => AgingBand(
+    label: json['label'] as String,
+    minDays: json['min_days'] as int,
+    maxDays: json['max_days'] as int?,
+    parcelCount: json['parcel_count'] as int,
+    outstanding: Money(json['outstanding_paisa'] as int),
+  );
+
+  final String label;
+  final int minDays;
+  final int? maxDays;
+  final int parcelCount;
+  final Money outstanding;
+
+  /// Money sitting with a courier for over a week is worth chasing.
+  bool get isOverdue => minDays >= 8;
+}
+
+@immutable
+class MoneySummary {
+  const MoneySummary({
+    required this.outstanding,
+    required this.settled,
+    required this.unpaidParcelCount,
+    required this.courierCharge,
+    required this.codFee,
+    required this.returnCharge,
+    required this.unknownDeduction,
+    required this.writeOff,
+    required this.unexplainedPayout,
+    required this.openCaseCount,
+    required this.aging,
+  });
+
+  factory MoneySummary.fromJson(Map<String, dynamic> json) => MoneySummary(
+    outstanding: Money(json['outstanding_paisa'] as int),
+    settled: Money(json['settled_paisa'] as int),
+    unpaidParcelCount: json['unpaid_parcel_count'] as int,
+    courierCharge: Money(json['courier_charge_paisa'] as int),
+    codFee: Money(json['cod_fee_paisa'] as int),
+    returnCharge: Money(json['return_charge_paisa'] as int),
+    unknownDeduction: Money(json['unknown_deduction_paisa'] as int),
+    writeOff: Money(json['write_off_paisa'] as int),
+    unexplainedPayout: Money(json['unexplained_payout_paisa'] as int),
+    openCaseCount: json['open_case_count'] as int,
+    aging: <AgingBand>[
+      for (final band in (json['aging'] as List<dynamic>? ?? const <dynamic>[]))
+        AgingBand.fromJson(band as Map<String, dynamic>),
+    ],
+  );
+
+  /// What couriers are holding right now.
+  final Money outstanding;
+
+  /// What has actually arrived.
+  final Money settled;
+
+  final int unpaidParcelCount;
+
+  final Money courierCharge;
+  final Money codFee;
+  final Money returnCharge;
+
+  /// Deductions the server could not classify. Shown in their own right —
+  /// folding them into "delivery fee" is what master spec section 84 forbids.
+  final Money unknownDeduction;
+
+  final Money writeOff;
+
+  /// Payout money that has not been tied to any parcel yet.
+  final Money unexplainedPayout;
+
+  final int openCaseCount;
+  final List<AgingBand> aging;
+
+  Money get totalDeductions => Money(
+    courierCharge.paisa +
+        codFee.paisa +
+        returnCharge.paisa +
+        unknownDeduction.paisa,
+  );
+
+  /// Money that has been waiting more than a week.
+  Money get overdue {
+    var total = 0;
+    for (final band in aging) {
+      if (band.isOverdue) {
+        total += band.outstanding.paisa;
+      }
+    }
+    return Money(total);
+  }
+
+  bool get hasUnknownDeductions => unknownDeduction.paisa > 0;
+}
+
+// --------------------------------------------------------------------------- //
+// Receivables
+// --------------------------------------------------------------------------- //
+
+@immutable
+class Receivable {
+  const Receivable({
+    required this.id,
+    required this.consignmentId,
+    required this.orderId,
+    required this.provider,
+    required this.status,
+    required this.collectible,
+    required this.settled,
+    required this.deduction,
+    required this.adjustment,
+    required this.outstanding,
+    required this.version,
+    required this.createdAt,
+    this.eligibleAt,
+    this.settledAt,
+    this.statusReason,
+    this.ageDays,
+    this.orderNumber,
+  });
+
+  factory Receivable.fromJson(Map<String, dynamic> json) => Receivable(
+    id: json['id'] as String,
+    consignmentId: json['consignment_id'] as String,
+    orderId: json['order_id'] as String,
+    provider: json['provider'] as String,
+    status: json['status'] as String,
+    collectible: Money(json['collectible_paisa'] as int),
+    settled: Money(json['settled_paisa'] as int),
+    deduction: Money(json['deduction_paisa'] as int),
+    adjustment: Money(json['adjustment_paisa'] as int),
+    outstanding: Money(json['outstanding_paisa'] as int),
+    version: json['version'] as int? ?? 1,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    eligibleAt: json['eligible_at'] == null
+        ? null
+        : DateTime.parse(json['eligible_at'] as String),
+    settledAt: json['settled_at'] == null
+        ? null
+        : DateTime.parse(json['settled_at'] as String),
+    statusReason: json['status_reason'] as String?,
+    ageDays: json['age_days'] as int?,
+    orderNumber: json['order_number'] as String?,
+  );
+
+  final String id;
+  final String consignmentId;
+  final String orderId;
+  final String provider;
+  final String status;
+
+  /// What the courier collected and therefore owes.
+  final Money collectible;
+  final Money settled;
+
+  /// What the provider took off.
+  final Money deduction;
+  final Money adjustment;
+
+  /// What is still owed.
+  final Money outstanding;
+
+  final int version;
+  final DateTime createdAt;
+  final DateTime? eligibleAt;
+  final DateTime? settledAt;
+  final String? statusReason;
+  final int? ageDays;
+  final String? orderNumber;
+
+  String get statusLabel => switch (status) {
+    'NOT_DUE' => 'Not due',
+    'EXPECTED' => 'On its way',
+    'ELIGIBLE' => 'Waiting for payment',
+    'PAYOUT_IDENTIFIED' => 'Payment identified',
+    'PARTIALLY_SETTLED' => 'Part paid',
+    'SETTLED' => 'Paid',
+    'MISMATCHED' => 'Amount does not match',
+    'DISPUTED' => 'Disputed',
+    'WRITTEN_OFF' => 'Written off',
+    _ => status,
+  };
+
+  bool get isOpen => outstanding.paisa > 0;
+  bool get isWaitingTooLong => (ageDays ?? 0) >= 8;
+}
+
+// --------------------------------------------------------------------------- //
+// Payouts
+// --------------------------------------------------------------------------- //
+
+@immutable
+class PayoutLine {
+  const PayoutLine({
+    required this.id,
+    required this.rowNumber,
+    required this.amount,
+    required this.applied,
+    required this.status,
+    required this.raw,
+    required this.candidates,
+    this.confidence,
+    this.providerConsignmentId,
+    this.trackingCode,
+    this.merchantReference,
+    this.deliveredOn,
+    this.receivableId,
+    this.matchReason,
+  });
+
+  factory PayoutLine.fromJson(Map<String, dynamic> json) => PayoutLine(
+    id: json['id'] as String,
+    rowNumber: json['row_number'] as int,
+    amount: Money(json['amount_paisa'] as int),
+    applied: Money(json['applied_paisa'] as int),
+    status: json['status'] as String,
+    confidence: json['confidence'] as String?,
+    providerConsignmentId: json['provider_consignment_id'] as String?,
+    trackingCode: json['tracking_code'] as String?,
+    merchantReference: json['merchant_reference'] as String?,
+    deliveredOn: json['delivered_on'] == null
+        ? null
+        : DateTime.parse(json['delivered_on'] as String),
+    receivableId: json['receivable_id'] as String?,
+    matchReason: json['match_reason'] as String?,
+    raw: Map<String, dynamic>.from(json['raw'] as Map? ?? const {}),
+    candidates: <MatchCandidate>[
+      for (final candidate
+          in (json['candidates'] as List<dynamic>? ?? const <dynamic>[]))
+        MatchCandidate.fromJson(candidate as Map<String, dynamic>),
+    ],
+  );
+
+  final String id;
+  final int rowNumber;
+  final Money amount;
+  final Money applied;
+  final String status;
+  final String? confidence;
+  final String? providerConsignmentId;
+  final String? trackingCode;
+  final String? merchantReference;
+  final DateTime? deliveredOn;
+  final String? receivableId;
+  final String? matchReason;
+
+  /// The row exactly as the file contained it.
+  final Map<String, dynamic> raw;
+
+  /// What the engine considered, kept so a refusal can be explained.
+  final List<MatchCandidate> candidates;
+
+  String get reference =>
+      providerConsignmentId ??
+      trackingCode ??
+      merchantReference ??
+      'Row $rowNumber';
+
+  String get statusLabel => switch (status) {
+    'UNMATCHED' => 'Not matched',
+    'SUGGESTED' => 'Check this',
+    'MATCHED' => 'Matched',
+    'MANUAL_MATCHED' => 'Matched by you',
+    'DUPLICATE' => 'Repeated line',
+    'UNMAPPABLE' => 'Could not read',
+    'REVERSED' => 'Undone',
+    _ => status,
+  };
+
+  bool get isApplied => status == 'MATCHED' || status == 'MANUAL_MATCHED';
+  bool get needsAttention =>
+      status == 'UNMATCHED' || status == 'SUGGESTED' || status == 'UNMAPPABLE';
+
+  /// The errors the parser recorded, when the row could not be read.
+  List<String> get errors => <String>[
+    for (final error in (raw['errors'] as List<dynamic>? ?? const <dynamic>[]))
+      error.toString(),
+  ];
+}
+
+/// A parcel the engine considered for a line.
+@immutable
+class MatchCandidate {
+  const MatchCandidate({
+    required this.receivableId,
+    required this.merchantReference,
+    required this.outstanding,
+    required this.score,
+    required this.signals,
+    this.rejectedBecause,
+  });
+
+  factory MatchCandidate.fromJson(Map<String, dynamic> json) => MatchCandidate(
+    receivableId: json['receivable_id'] as String,
+    merchantReference: json['merchant_reference'] as String? ?? '',
+    outstanding: Money(json['outstanding_paisa'] as int? ?? 0),
+    score: json['score'] as int? ?? 0,
+    signals: <String>[
+      for (final signal
+          in (json['signals'] as List<dynamic>? ?? const <dynamic>[]))
+        signal as String,
+    ],
+    rejectedBecause: json['rejected_because'] as String?,
+  );
+
+  final String receivableId;
+  final String merchantReference;
+  final Money outstanding;
+  final int score;
+  final List<String> signals;
+
+  /// Why it was disqualified, if it was. Kept rather than hidden so the seller
+  /// can see the engine looked at it.
+  final String? rejectedBecause;
+
+  bool get isEligible => rejectedBecause == null;
+
+  /// Seller-facing wording for the scoring signals.
+  List<String> get signalLabels => <String>[
+    for (final signal in signals)
+      switch (signal) {
+        'exact_consignment_id' => 'Same parcel ID',
+        'exact_tracking_code' => 'Same tracking code',
+        'exact_merchant_reference' => 'Same order number',
+        'exact_amount' => 'Same amount',
+        'amount_within_tolerance' => 'Close amount',
+        'delivery_date_in_window' => 'Delivery date fits',
+        'same_phone' => 'Same phone',
+        'order_number_fragment' => 'Similar order number',
+        _ => signal,
+      },
+  ];
+}
+
+@immutable
+class PayoutAdjustment {
+  const PayoutAdjustment({
+    required this.id,
+    required this.type,
+    required this.amount,
+    this.providerLabel,
+    this.rawText,
+    this.recognizedRule,
+  });
+
+  factory PayoutAdjustment.fromJson(Map<String, dynamic> json) =>
+      PayoutAdjustment(
+        id: json['id'] as String,
+        type: json['type'] as String,
+        amount: Money(json['amount_paisa'] as int),
+        providerLabel: json['provider_label'] as String?,
+        rawText: json['raw_text'] as String?,
+        recognizedRule: json['recognized_rule'] as String?,
+      );
+
+  final String id;
+  final String type;
+  final Money amount;
+  final String? providerLabel;
+  final String? rawText;
+  final String? recognizedRule;
+
+  /// True when the server could not name this deduction. Shown as such rather
+  /// than filed under a familiar heading (master spec section 84).
+  bool get isUnknown => type == 'UNKNOWN_DEDUCTION';
+
+  String get typeLabel => switch (type) {
+    'COD_FEE' => 'COD fee',
+    'DELIVERY_FEE' => 'Delivery charge',
+    'RETURN_FEE' => 'Return charge',
+    'TAX' => 'Tax',
+    'BONUS' => 'Bonus',
+    'PENALTY' => 'Penalty',
+    'MANUAL_ADJUSTMENT' => 'Adjustment',
+    'UNKNOWN_DEDUCTION' => 'Unexplained deduction',
+    _ => type,
+  };
+}
+
+@immutable
+class Payout {
+  const Payout({
+    required this.id,
+    required this.provider,
+    required this.source,
+    required this.status,
+    required this.total,
+    required this.applied,
+    required this.unexplained,
+    required this.receivedAt,
+    required this.createdAt,
+    this.providerReference,
+    this.paidOn,
+    this.note,
+    this.sourceFileId,
+    this.lines = const <PayoutLine>[],
+    this.adjustments = const <PayoutAdjustment>[],
+  });
+
+  factory Payout.fromJson(Map<String, dynamic> json) => Payout(
+    id: json['id'] as String,
+    provider: json['provider'] as String,
+    providerReference: json['provider_reference'] as String?,
+    source: json['source'] as String,
+    status: json['status'] as String,
+    total: Money(json['total_paisa'] as int),
+    applied: Money(json['applied_paisa'] as int),
+    unexplained: Money(json['unexplained_paisa'] as int),
+    paidOn: json['paid_on'] == null
+        ? null
+        : DateTime.parse(json['paid_on'] as String),
+    receivedAt: DateTime.parse(json['received_at'] as String),
+    note: json['note'] as String?,
+    sourceFileId: json['source_file_id'] as String?,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    lines: <PayoutLine>[
+      for (final line in (json['lines'] as List<dynamic>? ?? const <dynamic>[]))
+        PayoutLine.fromJson(line as Map<String, dynamic>),
+    ],
+    adjustments: <PayoutAdjustment>[
+      for (final adjustment
+          in (json['adjustments'] as List<dynamic>? ?? const <dynamic>[]))
+        PayoutAdjustment.fromJson(adjustment as Map<String, dynamic>),
+    ],
+  );
+
+  final String id;
+  final String provider;
+  final String? providerReference;
+  final String source;
+  final String status;
+
+  /// What the provider says it sent.
+  final Money total;
+
+  /// What has been tied to a parcel.
+  final Money applied;
+
+  /// What has not. Shown as-is: a payout that does not fully explain itself is
+  /// the normal state of a fresh import.
+  final Money unexplained;
+
+  final DateTime? paidOn;
+  final DateTime receivedAt;
+  final String? note;
+  final String? sourceFileId;
+  final DateTime createdAt;
+  final List<PayoutLine> lines;
+  final List<PayoutAdjustment> adjustments;
+
+  String get statusLabel => switch (status) {
+    'RECEIVED' => 'Not matched yet',
+    'PARTIALLY_RECONCILED' => 'Partly matched',
+    'RECONCILED' => 'Fully matched',
+    _ => status,
+  };
+
+  String get sourceLabel => switch (source) {
+    'API' => 'From the courier',
+    'STATEMENT' => 'From a statement',
+    'MANUAL' => 'Entered by hand',
+    _ => source,
+  };
+
+  int get linesNeedingAttention =>
+      lines.where((line) => line.needsAttention).length;
+
+  bool get isFullyExplained => unexplained.isZero;
+}
+
+/// What a reconciliation run did, or would have done.
+@immutable
+class ReconcileReport {
+  const ReconcileReport({
+    required this.payoutId,
+    required this.shadow,
+    required this.exactMatches,
+    required this.suggested,
+    required this.unresolved,
+    required this.applied,
+    required this.casesOpened,
+  });
+
+  factory ReconcileReport.fromJson(Map<String, dynamic> json) =>
+      ReconcileReport(
+        payoutId: json['payout_id'] as String,
+        shadow: json['shadow'] as bool? ?? false,
+        exactMatches: json['exact_matches'] as int? ?? 0,
+        suggested: json['suggested'] as int? ?? 0,
+        unresolved: json['unresolved'] as int? ?? 0,
+        applied: Money(json['applied_paisa'] as int? ?? 0),
+        casesOpened: json['cases_opened'] as int? ?? 0,
+      );
+
+  final String payoutId;
+
+  /// True when the run wrote nothing.
+  final bool shadow;
+
+  final int exactMatches;
+  final int suggested;
+  final int unresolved;
+  final Money applied;
+  final int casesOpened;
+
+  int get totalLines => exactMatches + suggested + unresolved;
+}
+
+/// A parsed statement, before anything is created.
+@immutable
+class StatementPreview {
+  const StatementPreview({
+    required this.detectedHeaders,
+    required this.columnMapping,
+    required this.rowCount,
+    required this.invalidRowCount,
+    required this.total,
+    required this.rows,
+  });
+
+  factory StatementPreview.fromJson(
+    Map<String, dynamic> json,
+  ) => StatementPreview(
+    detectedHeaders: <String>[
+      for (final header
+          in (json['detected_headers'] as List<dynamic>? ?? const <dynamic>[]))
+        header as String,
+    ],
+    columnMapping: <String, String>{
+      for (final entry
+          in (json['column_mapping'] as Map<String, dynamic>? ?? const {})
+              .entries)
+        entry.key: entry.value as String,
+    },
+    rowCount: json['row_count'] as int? ?? 0,
+    invalidRowCount: json['invalid_row_count'] as int? ?? 0,
+    total: Money(json['total_paisa'] as int? ?? 0),
+    rows: <StatementRow>[
+      for (final row in (json['rows'] as List<dynamic>? ?? const <dynamic>[]))
+        StatementRow.fromJson(row as Map<String, dynamic>),
+    ],
+  );
+
+  final List<String> detectedHeaders;
+  final Map<String, String> columnMapping;
+  final int rowCount;
+  final int invalidRowCount;
+  final Money total;
+  final List<StatementRow> rows;
+
+  bool get hasProblems => invalidRowCount > 0;
+}
+
+@immutable
+class StatementRow {
+  const StatementRow({
+    required this.rowNumber,
+    required this.errors,
+    this.amount,
+    this.merchantReference,
+    this.consignmentId,
+    this.trackingCode,
+    this.feeLabel,
+  });
+
+  factory StatementRow.fromJson(Map<String, dynamic> json) => StatementRow(
+    rowNumber: json['row_number'] as int,
+    amount: json['amount_paisa'] == null
+        ? null
+        : Money(json['amount_paisa'] as int),
+    merchantReference: json['merchant_reference'] as String?,
+    consignmentId: json['consignment_id'] as String?,
+    trackingCode: json['tracking_code'] as String?,
+    feeLabel: json['fee_label'] as String?,
+    errors: <String>[
+      for (final error
+          in (json['errors'] as List<dynamic>? ?? const <dynamic>[]))
+        error as String,
+    ],
+  );
+
+  final int rowNumber;
+
+  /// `null` when the file's amount could not be read. Never coerced to zero.
+  final Money? amount;
+
+  final String? merchantReference;
+  final String? consignmentId;
+  final String? trackingCode;
+  final String? feeLabel;
+  final List<String> errors;
+
+  bool get isValid => errors.isEmpty;
+  String get reference =>
+      consignmentId ?? trackingCode ?? merchantReference ?? 'Row $rowNumber';
+}
+
+// --------------------------------------------------------------------------- //
+// Cases
+// --------------------------------------------------------------------------- //
+
+@immutable
+class ReconciliationCase {
+  const ReconciliationCase({
+    required this.id,
+    required this.kind,
+    required this.status,
+    required this.priority,
+    required this.amount,
+    required this.summary,
+    required this.detail,
+    required this.openedAt,
+    this.receivableId,
+    this.payoutId,
+    this.payoutLineId,
+    this.consignmentId,
+    this.resolvedAt,
+    this.resolution,
+  });
+
+  factory ReconciliationCase.fromJson(Map<String, dynamic> json) =>
+      ReconciliationCase(
+        id: json['id'] as String,
+        kind: json['kind'] as String,
+        status: json['status'] as String,
+        priority: json['priority'] as String,
+        amount: Money(json['amount_paisa'] as int),
+        summary: json['summary'] as String,
+        detail: Map<String, dynamic>.from(json['detail'] as Map? ?? const {}),
+        receivableId: json['receivable_id'] as String?,
+        payoutId: json['payout_id'] as String?,
+        payoutLineId: json['payout_line_id'] as String?,
+        consignmentId: json['consignment_id'] as String?,
+        openedAt: DateTime.parse(json['opened_at'] as String),
+        resolvedAt: json['resolved_at'] == null
+            ? null
+            : DateTime.parse(json['resolved_at'] as String),
+        resolution: json['resolution'] as String?,
+      );
+
+  final String id;
+  final String kind;
+  final String status;
+  final String priority;
+  final Money amount;
+
+  /// Written by the server, in plain words. The UI shows it as-is so support
+  /// and the seller are reading the same sentence.
+  final String summary;
+
+  final Map<String, dynamic> detail;
+  final String? receivableId;
+  final String? payoutId;
+  final String? payoutLineId;
+  final String? consignmentId;
+  final DateTime openedAt;
+  final DateTime? resolvedAt;
+  final String? resolution;
+
+  bool get isOpen => status == 'OPEN' || status == 'IN_PROGRESS';
+  bool get isHighPriority => priority == 'HIGH';
+
+  String get kindLabel => switch (kind) {
+    'DELIVERED_BUT_UNPAID' => 'Delivered, not paid',
+    'UNDERPAID' => 'Paid short',
+    'OVERPAID' => 'Paid too much',
+    'UNKNOWN_DEDUCTION' => 'Unexplained deduction',
+    'DUPLICATE_PAYOUT_LINE' => 'Repeated payment line',
+    'UNMAPPABLE_PAYOUT' => 'Payment we could not place',
+    'STALE_IN_TRANSIT' => 'Stuck in transit',
+    'RETURNED_NOT_RESTOCKED' => 'Return not back in stock',
+    _ => kind,
+  };
+
+  String get statusLabel => switch (status) {
+    'OPEN' => 'Open',
+    'IN_PROGRESS' => 'With the courier',
+    'RESOLVED' => 'Sorted',
+    'DISMISSED' => 'Not a problem',
+    _ => status,
+  };
+}
