@@ -1,6 +1,6 @@
 # Implementation status
 
-**Phase D (money core) — COMPLETE.** Last updated 2026-09-10.
+**Phase E (profit and alerts) — COMPLETE.** Last updated 2026-09-10.
 
 | | |
 |---|---|
@@ -8,10 +8,11 @@
 | **Phase B** | COMPLETE |
 | **Phase C** | **BLOCKED** — needs Steadfast merchant API documentation and an account |
 | **Phase D** | COMPLETE |
+| **Phase E** | COMPLETE |
 | **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
 | **Branch** | `main` |
 | **Phase A baseline commit** | `d70856f66ba206d1f1885235110680fbfc577eaf` |
-| **Verified at Phase D** | 466 backend tests, 147 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean |
+| **Verified at Phase E** | 583 backend tests, 160 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean |
 
 Phase D was built ahead of Phase C because Phase C cannot start: there is no
 provider documentation to build against, and master spec section 140 forbids
@@ -43,7 +44,7 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Error taxonomy | Stable machine codes + Bangla message + `retryable` + `reference_id`; 30 codes declared, incl. later-phase ones |
 | Request context | contextvars for trace/tenant/actor, propagated through the pure-ASGI middleware |
 | Database | Async SQLAlchemy 2, portable column types (`GUID`, `JSONColumn`, `TZDateTime`, `Paisa`) |
-| **Tenant isolation** | Four central guards on the ORM session; 29 tests, incl. every Phase B and Phase D table |
+| **Tenant isolation** | Four central guards on the ORM session; 33 tests, incl. every Phase B, D and E table. A bulk `UPDATE` passes through none of the guards, so the one place that uses one filters by tenant explicitly and has its own regression test |
 | Alembic | Portable migrations, `render_item` hook, URL from settings; chain + drift + reversibility tested |
 | Money engine | Integer paisa, central half-up rounding, basis points, largest-remainder allocation, BD lakh formatting |
 | Phone normalization | Bangla + Eastern-Arabic + full-width numerals, all E.164 shapes, multi-number extraction that never guesses |
@@ -127,6 +128,23 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Manual correction | Section 134. States a change, never a new balance; requires a reason; writes a ledger entry with the actor attached. |
 | **Golden scenarios** | All ten of section 54 are tests asserting exact figures, including the section 81.10 check that the outstanding total and the ledger's receivable bucket — derived separately — agree. |
 
+### Profit and alerts (Phase E)
+
+| Area | Detail |
+|---|---|
+| **Charge snapshots** | `consignment_charges`. A new charge supersedes the previous one of its kind rather than editing it, so a booking estimate replaced by a settled figure leaves both readable and a seller can see the courier charged more than it quoted. A weaker source cannot silently replace a stronger one (section 85); doing so needs a reason, which makes it section 17.3's audited correction. |
+| **Profit snapshots** | `profit_snapshots`, one revision per change, never an edit (section 17.4). Written automatically when a parcel reaches a terminal outcome and again when a payout settles it — revenue moves BOOKED → SETTLED at that moment, which is the only way the quality indicator ever reaches "actual". A figure the seller read in March is still readable in December beside whatever replaced it. |
+| Profit engine | Pure function, integer paisa, versioned by `CALCULATION_VERSION`. Discount is a memo, not a second subtraction — the order's revenue is already net of it. |
+| **Data quality** | `ACTUAL` / `ESTIMATED` / `MISSING` derived from the worst source behind the figure, with essential inputs separated from peripheral ones: a missing ad cost makes a figure estimated, a missing delivery charge makes it incomplete. Section 135: an estimate never renders as exact. |
+| **Return economics** | Section 19's full list — count, direct loss, outward and return legs, packaging, write-offs, rates by product, area and courier, and the reason. A sellable return is stock, not a loss; booking the returned goods as a cost would make every return look twice as expensive as it was. |
+| Return reasons | Section 19's enum verbatim, in "risk" wording rather than defamatory person labels. Optional on the outcome sheet: an invented reason is worse for the report than a missing one, and the count with no reason is reported alongside the reasons. |
+| **Expenses** | `expenses` + `expense_allocations`. Recording is not allocating (section 86) — an expense changes no profit figure until a named, versioned allocation runs. Ad spend allocates three ways; rent does not allocate at all, because section 86 warns against pretending fixed-cost allocation is accounting-grade. |
+| Allocation arithmetic | Largest-remainder distribution, so the parts sum back to the exact expense. Spend that reached no parcel stays visible as unallocated rather than being smeared onto unrelated orders. Re-allocating requires a reason and writes new snapshot revisions. |
+| **Alerts** | Section 23's four lines, derived from the reconciliation cases Phase D already opens rather than recomputed — two places deciding what "delivered but unpaid" means is two places that will eventually disagree. An alert with a count of zero is never raised. |
+| **Notification centre** | `notifications`, deduplicated on `(tenant, kind, dedupe_key)`. Section 94: push is not enough, so everything lives in a table the seller can open. Without the constraint a daily scan would write a fresh "7 parcels unpaid" every morning until the seller stopped looking. |
+| **Friday summary** | Section 23's whole weekly list, with section 24's sample rule enforced on both rankings. Below five parcels a product or courier ranking is withheld and replaced by a sentence saying why. The scheduled job runs hourly and decides for itself whether the *tenant's* clock has reached Friday 18:00, because ARQ fires crons on host local time. |
+| COD arrival forecast | Dated from this shop's own observed median settlement lag per provider. Outstanding money with no such history is returned separately as unforecast rather than counted as due — section 140 forbids inventing provider payout timing, and a made-up date would send sellers chasing money that was never late. |
+
 ### API (`/v1`)
 
 **Auth and account:** `POST /auth/otp/request` · `POST /auth/otp/verify` ·
@@ -150,7 +168,8 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 **Sync:** `POST /sync/mutations` · `GET /sync/changes`
 
 **Consignments (manual mode):** `POST /consignments/orders/{id}/dispatch` ·
-`POST /consignments/{id}/outcome` · `GET /consignments/{id}`
+`POST /consignments/{id}/outcome` · `GET /consignments/{id}` ·
+`POST /consignments/{id}/charges` · `GET /consignments/{id}/charges`
 
 **Money:** `GET /money/summary` · `GET /money/receivables` · `GET /money/aging` ·
 `GET /money/receivables/{id}/ledger` ·
@@ -166,6 +185,16 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 `POST /reconciliation/lines/{id}/unmatch` · `POST /reconciliation/scan` ·
 `GET /reconciliation/cases` · `PATCH /reconciliation/cases/{id}`
 
+**Analytics:** `GET /analytics/home` · `GET /analytics/profit` ·
+`GET /analytics/returns` · `GET /analytics/products` ·
+`GET /analytics/weekly-summary`
+
+**Expenses:** `GET /expenses` · `POST /expenses` · `GET /expenses/{id}` ·
+`POST /expenses/{id}/allocate`
+
+**Notifications:** `GET /notifications` · `GET /notifications/unread-count` ·
+`POST /notifications/{id}/read` · `POST /notifications/read-all`
+
 **Other:** `GET /couriers/providers` · `GET /billing/entitlements` ·
 `GET /billing/plans` · `GET /health/live` · `GET /health/ready`
 
@@ -179,13 +208,16 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Components | 35 reusable components |
 | Charts | 6 chart types, all `CustomPainter`, zero dependencies |
 | Local database | Drift v2: offline outbox, per-tenant blob cache, sync cursors, and mirrors for products, customers and orders |
-| **Real repositories** | Products, customers, orders and imports read through the API and mirror locally. No production repository can reach `lib/demo` |
+| **Real repositories** | Products, customers, orders, imports, money and analytics all read through the API. `lib/demo` is **deleted** — no screen has a fixture to fall back to |
 | Cached reads | When the device is offline the mirror is served **labelled with when it was true**; when there is no mirror the screen says "No connection" rather than showing an empty list |
 | Sync engine | Drains the outbox before pulling changes, treats `DUPLICATE` as success, backs off exponentially without losing an entry, parks conflicts, applies tombstones, and re-keys a local row to the server's id |
 | Offline writes | Queued with the id the device minted, which is also the mutation id and the order's `client_id` — the same id on every retry |
 | API client | Dio with bearer injection, **single-flight** token refresh, trace propagation, idempotency-key support, multipart upload, typed errors |
 | Token storage | Android `EncryptedSharedPreferences`, never `SharedPreferences` or Drift |
-| Screens | Splash, phone login, OTP verify, shop setup, main shell, Home, Insights, Menu, Products (list/form/stock adjustment/history), Customers (list/detail), Orders (feed/compose/detail/dispatch), Imports, **Money (summary/receivables/payouts/reconcile/cases)** |
+| Screens | Splash, phone login, OTP verify, shop setup, main shell, Home, Insights, Menu, Products (list/form/stock adjustment/history), Customers (list/detail), Orders (feed/compose/detail/dispatch), Imports, **Money (summary/receivables/payouts/reconcile/cases)**, **Expenses**, **Notification centre** |
+| Home and Insights | Every figure is a server value, and the locked design is unchanged. A failed load says so rather than rendering plausible numbers — the seller could not tell the difference. Section 24's sample rule is visible on every ranking, and COD with no settlement history behind it is labelled as having no arrival date instead of shown as due. |
+| Expenses screen | Section 86's rule is the shape of the screen: every unallocated row says it has changed nothing yet, rent is not offered a per-parcel split at all, and re-allocating asks why before it moves a figure the seller has already read. |
+| Notification centre | Everything the server raised, read or not, with the unread count on the shell's bell as a number rather than a dot. The Friday summary opens the figures it was *sent* with, so an old summary is not silently rewritten by today's data. |
 | Money screens | Every figure is a server value. Outstanding and settled are kept visibly apart; an unexplained deduction is labelled as unexplained; a statement is previewed before import with unreadable rows shown as an em dash rather than a fabricated zero; reconcile is built around the engine's refusals, showing its reasoning in the seller's words. |
 
 ---
@@ -194,8 +226,7 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 
 | Area | What exists | What is missing |
 |---|---|---|
-| **Home / Insights screens** | Full layout, charts, components, responsive behaviour | Real data. They render fixtures from `lib/demo/` and each shows a visible **Demo data** marker. Home needs the profit engine (Phase E); Insights needs the analytics endpoints. |
-| Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | Risk needs a data source (blocked) and profit needs the Phase E engine. Courier state is now real for a parcel dispatched in manual mode, but the order card still reads from the order's own placeholder — wiring it to the consignment is a small follow-up. |
+| Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | Risk needs a data source (blocked). Profit and courier state are now real per parcel, but the order card still reads the order's own placeholder — wiring it to the consignment and its snapshot is a small follow-up. |
 | Courier adapter | `CourierAdapter` Protocol, `BookingOutcome` incl. `UNKNOWN`, capability manifests, `Unavailable` result type, the `consignments` / `consignment_items` schema, and a working **manual** dispatch/outcome path | No provider implementation. No HTTP call exists anywhere in the codebase. Manual mode is the working path and is what the money core runs on. |
 | Provider manifests | Loader, three-valued capability state, four manifests | Steadfast/Pathao/RedX are entirely `unknown` pending real documentation |
 | Entitlement metering | `require()` and limits work | `consume()` deliberately raises `NotImplementedError` — usage counters need per-action tables. A silent no-op would ship a quota that is not enforced. |
@@ -206,7 +237,8 @@ a screen backed by fixtures is **Partially implemented** — master spec section
 | Payout source storage | The statement is retained in full, with its SHA-256 | Cloudflare R2 is not provisioned, so `storage_key` is null and the content lives in the database row. Moving it is a migration, not a redesign. |
 | Provider payment API | `PayoutSource.API` exists in the model | No provider payment API is integrated. Statements and manual entry are the working paths. |
 | RBAC | Roles, permissions, matrix, `require_permission` dependency | Only Owner is reachable; no team-management endpoints |
-| Notifications | `Notification` severity model in the outbox topics | No FCM, no in-app notification centre |
+| Notifications | The in-app centre, severity model, deduplication, bundling, the four alerts and the Friday summary, all raised by scheduled jobs | No push transport. FCM is not provisioned, so `deserves_push` is computed and nothing sends. Section 94's rule that push is only ever a second copy means the product works without it. |
+| Courier scorecard | Delivery success and return rate per courier from the shop's own history, with the sample rule visible | Section 24's median delivery time, effective cost per delivered parcel and settlement lag need per-provider timing data that only accumulates once real bookings exist |
 
 ---
 
@@ -217,9 +249,8 @@ Everything below is in the V1 spec and is scheduled, not dropped.
 **Phase C — Steadfast:** credential vault UI, validation, real booking, status
 sync, webhooks, polling, `BOOKING_UNKNOWN` reconciliation, provider health.
 
-**Phase E — profit and alerts:** charge snapshots, profit snapshots, return
-economics, expenses and ad allocation, data-quality indicators, notification
-centre, Friday summary, SMS.
+**Remaining from Phase E:** SMS (a metered entitlement with no provider
+integrated) and push transport. Everything else in the phase is complete.
 
 **Phase F — billing and hardening:** Play Billing verification, bKash web
 provider, admin/ops console, repair tooling, exports, backup verification,
@@ -258,23 +289,26 @@ inventing any of it.
 
 | Suite | Count | Command |
 |---|---:|---|
-| Backend | 466 | `cd backend && pytest -q` |
-| Flutter | 147 | `cd apps/mobile_flutter && flutter test` |
+| Backend | 583 | `cd backend && pytest -q` |
+| Flutter | 160 | `cd apps/mobile_flutter && flutter test` |
 
-**Backend (466):** platform primitives — outbox, idempotency, crypto,
+**Backend (583):** platform primitives — outbox, idempotency, crypto,
 redaction, flags, rate limiting, time, audit (45), reconciliation and the ten
 golden financial scenarios (39), phone normalization (37), orders and duplicate
-detection (35), imports and sync (29), payouts and statement parsing (29),
-tenant isolation (29), money rules (26), COD receivables and delivery outcomes
-(26), products and the stock ledger (25), money endpoints over HTTP (24), auth
-flow over HTTP (23), parser (22), customers (19), the financial ledger (17),
-config and production guards (16), onboarding and entitlements (14), migrations
-and schema invariants (11).
+detection (35), analytics and expense endpoints over HTTP (34), tenant
+isolation (33), alerts and the Friday summary (33), profit snapshots and
+charges (29), payouts and statement parsing (29), imports and sync (29), COD
+receivables and delivery outcomes (26), money rules (26), products and the
+stock ledger (25), money endpoints over HTTP (24), auth flow over HTTP (23),
+parser (22), customers (19), the financial ledger (17), expenses and ad
+allocation (17), config and production guards (16), onboarding and
+entitlements (14), migrations and schema invariants (11).
 
-**Flutter (147):** commerce screens (18), auth models and error contract (17),
-components and accessibility (17), money screens (17), money formatting (16),
-commerce repositories (16), local database (12), sync engine (10), performance
-and large lists (9), commerce flows (8), Phase A screens at 360dp (7).
+**Flutter (160):** Home, Insights, expenses and notifications (19), commerce
+screens (18), auth models and error contract (17), components and
+accessibility (17), money screens (17), money formatting (16), commerce
+repositories (16), local database (12), sync engine (10), performance and
+large lists (9), commerce flows (8), navigation (1).
 
 ### Performance guards
 

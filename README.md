@@ -16,11 +16,13 @@ Order → Courier → Delivery / Return / Partial delivery → COD receivable
 
 **Canonical repository:** <https://github.com/getRabbi/ecomsbd.git>
 
-**Current phase: D (money core) — complete.** See
+**Current phase: E (profit and alerts) — complete.** See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) for exactly what
 works today. Products, stock, customers, orders, the paste parser, imports,
-offline sync, COD receivables, the financial ledger, payouts and the
-reconciliation engine are in.
+offline sync, COD receivables, the financial ledger, payouts, the
+reconciliation engine, profit snapshots, return economics, expenses, the
+alerts and the Friday summary are in. Every screen reads real data — there is
+no fixture left in the app to fall back to.
 
 Phase C (the Steadfast adapter) is **blocked** on merchant API documentation, so
 parcels move through **manual courier mode**: the seller records that a parcel
@@ -50,6 +52,10 @@ backend/                 FastAPI modular monolith — SQLAlchemy 2 async, Alembi
   app/money/             COD receivables and aging
   app/payouts/           payouts, statement parsing, source preservation
   app/reconciliation/    candidate scoring, matching, cases
+  app/profit/            charge snapshots, the profit engine, P&L revisions
+  app/expenses/          ad spend and its explicit allocation to parcels
+  app/notifications/     the alerts, the notification centre, the Friday summary
+  app/analytics/         the figures behind Home and Insights
   app/couriers/          adapter Protocol + provider capability manifests
   app/api/               middleware, dependencies, error handlers, /v1 routers
   app/worker/            ARQ bootstrap + outbox dispatcher
@@ -85,6 +91,14 @@ infra/docker/            backend image
 | Delivered is not paid | separate state machines for the consignment and the receivable |
 | A soft-signal match is never applied automatically | `app/reconciliation/scoring.py` — the threshold equals one exact reference |
 | An unknown deduction stays visible as unknown | `AdjustmentType.UNKNOWN_DEDUCTION`, never reclassified |
+| A profit figure changes by revision, never by edit | `app/profit/service.py` — the previous snapshot is kept and pointed at its successor |
+| A weaker source cannot silently replace a better one | `app/profit/service.py` — a downgrade without a reason is refused (section 85) |
+| An estimate never renders as exact | `ProfitQuality` on every snapshot, carried through the API to the badge on screen |
+| An expense reaches an order only through a named allocation | `app/expenses/service.py` — recording changes no figure |
+| Money split across parcels loses no paisa | `Money.allocate` — largest remainder, asserted against the expense total |
+| The same alert on the same day is one row | `notifications` unique `(tenant, kind, dedupe_key)` |
+| No ranking is shown before the sample supports it | `MIN_RANKING_SAMPLE` in `app/notifications/alerts.py`, and the rule is visible on screen |
+| A COD arrival date comes from this shop's own history or not at all | `app/analytics/service.py` — no provider settlement calendar is assumed |
 
 ---
 
@@ -184,7 +198,7 @@ migration cannot target a different database than the app reads.
 ```bash
 # Backend — no services required
 cd backend
-python -m pytest -q                  # 466 tests
+python -m pytest -q                  # 583 tests
 python -m ruff check app tests migrations
 python -m ruff format --check app tests migrations
 python -m mypy                       # strict
@@ -195,7 +209,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_te
 # Flutter
 cd apps/mobile_flutter
 flutter analyze
-flutter test                         # 147 tests
+flutter test                         # 160 tests
 ```
 
 Widget tests render at **360×800** — the reference low-end Android screen — and
@@ -297,6 +311,53 @@ rather than quietly leaving the outstanding total.
 delivered but unpaid, underpaid, overpaid, unknown deduction, duplicate line,
 unmappable payment, stale in transit, returned but not restocked — are separate
 records with an owner and an outcome. Closing one requires a note.
+
+---
+
+## How profit behaves
+
+**A profit figure is a snapshot with a revision, never a number that changes
+under you.** A parcel gets one the moment it finishes, and another whenever
+something behind it moves — a courier charge arriving, a payout settling, an
+expense being allocated. The old revision stays readable with the reason for
+the new one beside it, so a seller who read ৳4,200 in March can still see that
+৳4,200 in December next to whatever replaced it.
+
+**The app says how sure it is.** Every figure carries whether its inputs were
+settled, estimated or missing, and the screens render those differently. A
+৳40,000 profit built from twelve estimated parcels and one built from twelve
+settled parcels are different claims, and a product that printed them the same
+way would be teaching sellers to trust the wrong one.
+
+**A better source wins, and a worse one has to ask.** A settled charge off a
+statement replaces a booking estimate silently. A guess arriving after the
+statement is refused unless somebody gives a reason, which turns it into an
+audited correction rather than a quiet overwrite.
+
+**A sellable return is stock, not a loss.** What a return actually costs is the
+courier's fee on a parcel that collected nothing, plus anything genuinely
+written off. Booking the returned goods as a loss as well would make every
+return look twice as expensive as it was.
+
+**Recording an expense is not applying it.** Entering ৳5,000 of ad spend
+changes no profit figure until the seller says which parcels it paid for. The
+split loses no paisa, spend that reached nothing stays visible as unallocated
+rather than being smeared across unrelated orders, and rent is not pushed down
+onto parcels at all — spreading fixed costs per parcel is not accounting, it is
+a guess wearing a decimal point.
+
+**Alerts are about money, not activity.** Section 23's four lines — delivered
+but unpaid, underpaid, stuck in transit, returned but not restocked — each
+carry a count *and* an amount, because the amount is what decides the order a
+seller works through them. An alert with nothing in it is never raised, and the
+same warning on the same day is one row rather than one per scan.
+
+**A ranking waits for evidence.** Below five parcels, a "best product" or
+"worst courier" is noise, so the app says why it is staying quiet instead of
+sending a seller to delist something that was merely unlucky. The same rule
+governs the COD arrival forecast: a date comes from this shop's own settlement
+history with that courier, and money with no such history is labelled as having
+no arrival date rather than shown as due.
 
 ---
 
