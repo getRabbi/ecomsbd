@@ -27,11 +27,13 @@ from app.common.outbox import OutboxTopic, enqueue
 from app.common.pagination import Cursor, apply_cursor
 from app.common.phone import normalize_digits, try_normalize_bd_phone
 from app.core.clock import business_date as business_date_for
-from app.core.context import current_context
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.context import current_context, current_tenant_id
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.ids import new_id
 from app.customers.models import Customer
 from app.customers.service import CustomerService, normalize_address_text
+from app.entitlements.catalog import Entitlement
+from app.entitlements.service import EntitlementService
 from app.orders.duplicates import DuplicateCheck, detect_duplicates
 from app.orders.models import (
     Order,
@@ -96,10 +98,15 @@ class OrderService:
         session: AsyncSession,
         *,
         customers: CustomerService,
+        entitlements: EntitlementService | None = None,
     ) -> None:
         self._db = session
         self._customers = customers
         self._stock = StockService(session)
+        # Built here rather than required from every caller, so metering is the
+        # default and there is no "forgot to pass it" path that silently ships
+        # an unenforced quota. Master spec section 43.
+        self._entitlements = entitlements or EntitlementService(session)
 
     # ------------------------------------------------------------- create ---
 
@@ -114,6 +121,15 @@ class OrderService:
         """
         if not draft.items:
             raise ValidationError("An order needs at least one item")
+
+        # Section 26's orders/month cap, spent before the record exists. Every
+        # creation path — the API, offline sync and CSV import — goes through
+        # here, so there is one place the quota is enforced and one place it
+        # could be bypassed if this moved into a controller.
+        tenant_id = current_tenant_id()
+        if tenant_id is None:
+            raise ForbiddenError("An order can only be created inside a shop")
+        await self._entitlements.consume(tenant_id, Entitlement.ORDERS_MONTHLY_LIMIT)
 
         number = try_normalize_bd_phone(draft.phone)
         if number is None:

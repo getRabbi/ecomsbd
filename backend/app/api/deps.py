@@ -25,6 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.models import AuthSession
 from app.auth.otp_providers import OtpSender, build_otp_provider
 from app.auth.service import AuthService
+from app.billing.models import DistributionChannel
+from app.billing.providers.registry import BillingProviderRegistry, build_registry, resolve_channel
+from app.billing.service import BillingService
 from app.common.cache import RateLimiter, get_cache
 from app.common.feature_flags import FeatureFlagService
 from app.core.clock import utc_now
@@ -38,9 +41,12 @@ from app.tenants.roles import Permission, TenantRole, has_permission
 from app.users.models import User
 
 __all__ = [
+    "BillingServiceDep",
     "CurrentPrincipal",
     "DbSession",
+    "DistributionChannelDep",
     "Principal",
+    "ProviderRegistryDep",
     "SettingsDep",
     "get_auth_service",
     "get_db",
@@ -97,8 +103,9 @@ def get_otp_sender(settings: Settings | None = None) -> OtpSender:
 
 def reset_singletons() -> None:
     """Drop cached service instances. Used when settings change in tests."""
-    global _hasher, _vault, _tokens, _otp_sender
+    global _hasher, _vault, _tokens, _otp_sender, _registry
     _hasher = _vault = _tokens = _otp_sender = None
+    _registry = None
 
 
 # --------------------------------------------------------------------------- #
@@ -279,6 +286,44 @@ async def get_entitlements(db: DbSession) -> EntitlementService:
     return EntitlementService(db)
 
 
+_registry: BillingProviderRegistry | None = None
+
+
+def get_provider_registry(settings: Settings | None = None) -> BillingProviderRegistry:
+    """The billing provider registry.
+
+    Built once per process. Both transport ports are ``None`` in this build:
+    no Play service account and no bKash merchant contract exist, so each
+    provider reports itself unavailable with its blocker code rather than
+    failing at the point of use.
+    """
+    global _registry
+    if _registry is None:
+        _registry = build_registry(settings or get_settings())
+    return _registry
+
+
+async def get_billing_registry(settings: SettingsDep) -> BillingProviderRegistry:
+    return get_provider_registry(settings)
+
+
+async def get_distribution_channel(request: Request, settings: SettingsDep) -> DistributionChannel:
+    """Which build is calling (master spec section 27.1).
+
+    A client may narrow the channel — declaring itself a Play build — but never
+    widen it. See :func:`app.billing.providers.registry.resolve_channel`.
+    """
+    return resolve_channel(request.headers.get("x-distribution-channel"), settings)
+
+
+async def get_billing_service(
+    db: DbSession,
+    settings: SettingsDep,
+    registry: Annotated[BillingProviderRegistry, Depends(get_billing_registry)],
+) -> BillingService:
+    return BillingService(db, settings=settings, registry=registry)
+
+
 async def get_feature_flags(db: DbSession) -> FeatureFlagService:
     return FeatureFlagService(db)
 
@@ -286,6 +331,9 @@ async def get_feature_flags(db: DbSession) -> FeatureFlagService:
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 EntitlementsDep = Annotated[EntitlementService, Depends(get_entitlements)]
 FeatureFlagsDep = Annotated[FeatureFlagService, Depends(get_feature_flags)]
+BillingServiceDep = Annotated[BillingService, Depends(get_billing_service)]
+ProviderRegistryDep = Annotated[BillingProviderRegistry, Depends(get_billing_registry)]
+DistributionChannelDep = Annotated[DistributionChannel, Depends(get_distribution_channel)]
 
 
 def client_ip(request: Request) -> str | None:

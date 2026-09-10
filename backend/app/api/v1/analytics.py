@@ -15,7 +15,7 @@ on the wire — not a counter that silently drifts.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -26,7 +26,7 @@ from app.analytics.service import (
     RateLine,
     default_window,
 )
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal
 from app.api.v1.analytics_schemas import (
     AlertResponse,
     AllocationRequest,
@@ -45,6 +45,10 @@ from app.api.v1.analytics_schemas import (
     WeeklySummaryResponse,
 )
 from app.common.pagination import Page, decode_cursor
+from app.core.clock import business_date
+from app.core.errors import EntitlementRequiredError
+from app.entitlements.catalog import UNLIMITED, Entitlement
+from app.entitlements.service import EntitlementService
 from app.expenses.models import ALLOCATION_VERSION, Expense, ExpenseKind
 from app.expenses.service import ExpenseService
 from app.notifications.alerts import AlertService, AlertSummary
@@ -80,6 +84,30 @@ def _window(since: date | None, until: date | None) -> tuple[date, date]:
     """Resolve the requested period, defaulting to the last 30 days."""
     default_since, default_until = default_window()
     return since or default_since, until or default_until
+
+
+async def _require_history_window(
+    entitlements: EntitlementService, tenant_id: uuid.UUID, since: date
+) -> None:
+    """Section 26's profit-history window: today, full, or advanced.
+
+    Refuses rather than silently clamping. A screen that quietly narrowed the
+    range would show a smaller profit figure than the seller asked for, with
+    nothing on it saying so — which section 135 treats as the same failure as
+    rendering an estimate as exact. The allowed window is returned in the error
+    so the client can offer the range it *can* have.
+    """
+    days = await entitlements.limit(tenant_id, Entitlement.PROFIT_HISTORY_DAYS)
+    if days == UNLIMITED:
+        return
+    earliest = business_date() - timedelta(days=max(0, days - 1))
+    if since >= earliest:
+        return
+    raise EntitlementRequiredError(
+        str(Entitlement.PROFIT_HISTORY_DAYS),
+        f"Your plan includes {days} day(s) of profit history",
+        details={"max_days": str(days), "earliest_business_date": earliest.isoformat()},
+    )
 
 
 def _alert(summary: AlertSummary) -> AlertResponse:
@@ -179,6 +207,7 @@ async def home(
 async def profit(
     principal: TenantPrincipal,
     analytics: AnalyticsDep,
+    entitlements: EntitlementsDep,
     since: Annotated[date | None, Query()] = None,
     until: Annotated[date | None, Query()] = None,
 ) -> ProfitResponse:
@@ -190,6 +219,7 @@ async def profit(
     them apart.
     """
     start, end = _window(since, until)
+    await _require_history_window(entitlements, principal.require_tenant(), start)
     report = await analytics.profit(since=start, until=end)
     return ProfitResponse(
         since=report.since,
@@ -228,6 +258,7 @@ async def profit(
 async def returns(
     principal: TenantPrincipal,
     analytics: AnalyticsDep,
+    entitlements: EntitlementsDep,
     since: Annotated[date | None, Query()] = None,
     until: Annotated[date | None, Query()] = None,
 ) -> ReturnsResponse:
@@ -236,6 +267,7 @@ async def returns(
     The three breakdowns are ordered worst-rate first, because a return report
     is opened to find the problem rather than to browse.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.ADVANCED_PROFIT)
     start, end = _window(since, until)
     report = await analytics.returns(since=start, until=end)
     return ReturnsResponse(
@@ -265,6 +297,7 @@ async def returns(
 async def products(
     principal: TenantPrincipal,
     analytics: AnalyticsDep,
+    entitlements: EntitlementsDep,
     since: Annotated[date | None, Query()] = None,
     until: Annotated[date | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -275,6 +308,7 @@ async def products(
     false`` rather than dropped: a seller who sold two of something should see
     those two, greyed, instead of wondering why the product vanished.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.ADVANCED_PROFIT)
     start, end = _window(since, until)
     lines = await analytics.products(since=start, until=end, limit=limit)
     return [_product_line(line) for line in lines]

@@ -96,6 +96,40 @@ class AuditAction(StrEnum):
     EXPENSE_ALLOCATED = "profit.expense_allocated"
     NOTIFICATION_SENT = "alerts.notification_sent"
 
+    # Billing and subscriptions (phase F)
+    BILLING_PURCHASE_VERIFIED = "billing.purchase_verified"
+    BILLING_PURCHASE_REFUSED = "billing.purchase_refused"
+    BILLING_REPLAY_BLOCKED = "billing.replay_blocked"
+    BILLING_CHECKOUT_STARTED = "billing.checkout_started"
+    BILLING_WEBHOOK_RECEIVED = "billing.webhook_received"
+    BILLING_WEBHOOK_REJECTED = "billing.webhook_rejected"
+    BILLING_MANUAL_GRANT = "billing.manual_grant"
+    BILLING_RECONCILED = "billing.reconciled"
+    SUBSCRIPTION_STATE_CHANGED = "billing.subscription_state_changed"
+    SUBSCRIPTION_CANCELLED = "billing.subscription_cancelled"
+
+    # Platform admin and support (phase F, sections 44, 102, 103)
+    ADMIN_AUTHENTICATED = "admin.authenticated"
+    ADMIN_ACCESS_DENIED = "admin.access_denied"
+    ADMIN_TENANT_VIEWED = "admin.tenant_viewed"
+    ADMIN_PII_REVEALED = "admin.pii_revealed"
+    ADMIN_SUPPORT_BUNDLE_EXPORTED = "admin.support_bundle_exported"
+    SUPPORT_CASE_OPENED = "support.case_opened"
+    SUPPORT_CASE_UPDATED = "support.case_updated"
+
+    # Privacy, exports and sessions (phase F, sections 99, 100)
+    EXPORT_REQUESTED = "data.export_requested"
+    EXPORT_DOWNLOADED = "data.export_downloaded"
+    EXPORT_FAILED = "data.export_failed"
+    ACCOUNT_DELETION_REQUESTED = "privacy.account_deletion_requested"
+    ACCOUNT_DELETION_CANCELLED = "privacy.account_deletion_cancelled"
+    ACCOUNT_DELETION_EXECUTED = "privacy.account_deletion_executed"
+    DEVICE_REVOKED = "auth.device_revoked"
+
+    # Operations (phase F, sections 45, 49)
+    PROVIDER_HEALTH_CHANGED = "ops.provider_health_changed"
+    NOTIFICATION_DISPATCH_FAILED = "ops.notification_dispatch_failed"
+
     # Reserved for later phases (sections 103, 134)
     COURIER_CREDENTIAL_SAVED = "courier.credential_saved"
     COURIER_CREDENTIAL_REVOKED = "courier.credential_revoked"

@@ -11,6 +11,14 @@ and the test suite all import this module rather than individual model files.
 from __future__ import annotations
 
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken
+from app.billing.models import (
+    BillingAttempt,
+    BillingProviderCustomer,
+    BillingTransaction,
+    BillingWebhookEvent,
+    PlayPurchaseToken,
+    SubscriptionEvent,
+)
 from app.common.audit import AuditLog
 from app.common.feature_flags import FeatureFlag
 from app.common.idempotency import IdempotencyKey
@@ -19,6 +27,7 @@ from app.consignments.models import Consignment, ConsignmentItem
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
+from app.entitlements.usage import UsageCounter
 from app.expenses.models import Expense, ExpenseAllocation
 from app.imports.models import ImportBatch, ImportRow
 from app.ledger.models import LedgerEntry
@@ -42,6 +51,10 @@ __all__ = [
     "AuditLog",
     "AuthSession",
     "Base",
+    "BillingAttempt",
+    "BillingProviderCustomer",
+    "BillingTransaction",
+    "BillingWebhookEvent",
     "CodReceivable",
     "Consignment",
     "ConsignmentCharge",
@@ -65,14 +78,17 @@ __all__ = [
     "PayoutAdjustment",
     "PayoutLine",
     "PayoutSourceFile",
+    "PlayPurchaseToken",
     "Product",
     "ProfitSnapshot",
     "ReconciliationCase",
     "RefreshToken",
     "StockMovement",
     "Subscription",
+    "SubscriptionEvent",
     "SyncMutation",
     "Tenant",
     "TenantUser",
+    "UsageCounter",
     "User",
 ]

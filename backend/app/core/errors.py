@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 __all__ = [
     "AppError",
     "AuthenticationError",
+    "BillingVerificationError",
     "ConflictError",
     "EntitlementRequiredError",
     "ErrorCode",
@@ -41,6 +42,7 @@ __all__ = [
     "ServiceUnavailableError",
     "TenantIsolationError",
     "ValidationError",
+    "WebhookSignatureError",
 ]
 
 
@@ -83,6 +85,10 @@ class ErrorCode(StrEnum):
     # --- money / external safety -------------------------------------------
     IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT"
     ENTITLEMENT_REQUIRED = "ENTITLEMENT_REQUIRED"
+
+    # --- billing (phase F) -------------------------------------------------
+    BILLING_VERIFICATION_FAILED = "BILLING_VERIFICATION_FAILED"
+    WEBHOOK_SIGNATURE_INVALID = "WEBHOOK_SIGNATURE_INVALID"
 
     # --- reserved for later phases -----------------------------------------
     # Declared now so the client contract and Bangla copy are stable before the
@@ -238,6 +244,18 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         "Your current plan does not include this feature.",
         False,
     ),
+    ErrorCode.BILLING_VERIFICATION_FAILED: (
+        402,
+        "পেমেন্টটি যাচাই করা যায়নি। টাকা কেটে থাকলে চিন্তা করবেন না—সাপোর্টে জানান।",
+        "The purchase could not be verified with the billing provider.",
+        False,
+    ),
+    ErrorCode.WEBHOOK_SIGNATURE_INVALID: (
+        401,
+        "অনুরোধটি যাচাই করা যায়নি।",
+        "The webhook signature could not be verified.",
+        False,
+    ),
     # Reserved-for-later codes still get final copy so the client can ship it.
     ErrorCode.BOOKING_AMBIGUOUS: (
         409,
@@ -387,6 +405,26 @@ class EntitlementRequiredError(AppError):
 
 class IdempotencyConflictError(AppError):
     code = ErrorCode.IDEMPOTENCY_KEY_CONFLICT
+
+
+class BillingVerificationError(AppError):
+    """A purchase claim could not be turned into a verified entitlement.
+
+    ``retryable`` stays False: re-sending the same unverifiable token produces
+    the same answer, and a client that retries in a loop turns one confused
+    seller into a load problem.
+    """
+
+    code = ErrorCode.BILLING_VERIFICATION_FAILED
+
+    def __init__(self, result: str, message: str | None = None, **kwargs: Any) -> None:
+        details = dict(kwargs.pop("details", None) or {})
+        details["verification_result"] = result
+        super().__init__(message, details=details, **kwargs)
+
+
+class WebhookSignatureError(AppError):
+    code = ErrorCode.WEBHOOK_SIGNATURE_INVALID
 
 
 class ServiceUnavailableError(AppError):

@@ -19,7 +19,7 @@ STATEMENT_HEADER = "Invoice,Amount"
 
 @pytest.fixture
 async def shop(client: AsyncClient, unique_phone: str) -> dict[str, Any]:
-    return await signed_in_shop(client, unique_phone, shop_name="API Money Shop")
+    return await signed_in_shop(client, unique_phone, shop_name="API Money Shop", plan="pro")
 
 
 async def _delivered_parcel(

@@ -12,10 +12,46 @@ from httpx import AsyncClient
 from tests.test_auth_flow import auth_header, sign_in
 
 
+async def grant_plan(tenant_id: str, plan: str, *, days: int = 365) -> None:
+    """Put a shop on a paid plan, the way support would.
+
+    Written through a system session so it is committed and visible to the
+    application's own request sessions. Uses the manual-admin provider, which
+    is the only source that can grant without provider evidence — the same path
+    the admin console uses (master spec section 103).
+    """
+    import uuid as _uuid
+    from datetime import timedelta
+
+    from app.billing.models import BillingProviderKind
+    from app.core.clock import utc_now
+    from app.db.session import system_session
+    from app.entitlements.models import Subscription, SubscriptionStatus
+
+    async with system_session("test fixture: plan grant") as session:
+        session.add(
+            Subscription(
+                tenant_id=_uuid.UUID(tenant_id),
+                plan_code=plan,
+                status=str(SubscriptionStatus.ACTIVE),
+                source=str(BillingProviderKind.MANUAL_ADMIN),
+                current_period_start=utc_now(),
+                current_period_end=utc_now() + timedelta(days=days),
+                verified_at=utc_now(),
+                grant_reason="test fixture",
+            )
+        )
+
+
 async def signed_in_shop(
-    client: AsyncClient, phone: str, *, shop_name: str = "Test Shop"
+    client: AsyncClient, phone: str, *, shop_name: str = "Test Shop", plan: str | None = None
 ) -> dict[str, Any]:
-    """Sign in and create a shop, returning the tenant-bound session."""
+    """Sign in and create a shop, returning the tenant-bound session.
+
+    ``plan`` is explicit rather than defaulted to a paid tier: a suite that
+    exercises a gated feature has to say so, and a suite that says nothing gets
+    the Free plan a real new shop gets.
+    """
     session = await sign_in(client, phone)
     response = await client.post(
         "/v1/tenants",
@@ -23,7 +59,10 @@ async def signed_in_shop(
         headers=auth_header(session),
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    body = response.json()
+    if plan is not None:
+        await grant_plan(str(body["tenant_id"]), plan)
+    return body
 
 
 async def create_product(

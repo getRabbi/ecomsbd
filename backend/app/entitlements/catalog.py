@@ -9,15 +9,33 @@ locked**. Every plan grants read access to history. What plans gate is volume,
 automation, collaboration and advanced analysis.
 
 Prices here are the hypothesis from section 26, still to be validated with real
-sellers; they are not a commitment.
+sellers; they are not a commitment. Because they are product-validation data
+rather than a technical constant, both the displayed price and the entitlement
+values are **overridable from configuration** — see :func:`plan_catalog`. Plan
+*codes* are not overridable: they are written into subscriptions, usage counters
+and provider product mappings, so renaming one would orphan existing rows.
+
+A price is never copied into a business table. What a seller was actually
+charged is a snapshot on the billing transaction; this module only says what a
+plan costs today.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Any
 
-__all__ = ["PLANS", "UNLIMITED", "Entitlement", "PlanCode", "PlanDefinition", "get_plan"]
+__all__ = [
+    "PLANS",
+    "UNLIMITED",
+    "Entitlement",
+    "PlanCode",
+    "PlanDefinition",
+    "get_plan",
+    "plan_catalog",
+]
 
 #: Sentinel for "no cap". Chosen over ``None`` so comparisons stay numeric.
 UNLIMITED = -1
@@ -139,6 +157,73 @@ PLANS: dict[PlanCode, PlanDefinition] = {
 }
 
 
+def _apply_overrides(
+    plans: dict[PlanCode, PlanDefinition],
+    prices: Mapping[str, Any] | None,
+    entitlements: Mapping[str, Any] | None,
+) -> dict[PlanCode, PlanDefinition]:
+    """Apply configured price and entitlement overrides to a catalogue copy.
+
+    Unknown plan codes and unknown entitlement keys are ignored rather than
+    raising. A typo in an operator's environment variable must not take the API
+    down; it shows up as "the price did not change", which is visible and
+    harmless, instead of a boot failure at 2am.
+    """
+    result = dict(plans)
+
+    for code_str, price in (prices or {}).items():
+        try:
+            code = PlanCode(code_str)
+        except ValueError:
+            continue
+        if isinstance(price, int) and price >= 0:
+            result[code] = replace(result[code], price_paisa=price)
+
+    for code_str, values in (entitlements or {}).items():
+        try:
+            code = PlanCode(code_str)
+        except ValueError:
+            continue
+        if not isinstance(values, Mapping):
+            continue
+        merged = dict(result[code].entitlements)
+        for key_str, value in values.items():
+            try:
+                key = Entitlement(key_str)
+            except ValueError:
+                continue
+            current = merged[key]
+            # Refuse a type change: flipping a numeric cap to a boolean would
+            # make plan.limit() raise deep inside a request.
+            if (isinstance(current, bool) and isinstance(value, bool)) or (
+                not isinstance(current, bool) and isinstance(value, int)
+            ):
+                merged[key] = value
+        result[code] = replace(result[code], entitlements=merged)
+
+    return result
+
+
+def plan_catalog(
+    *,
+    price_overrides: Mapping[str, Any] | None = None,
+    entitlement_overrides: Mapping[str, Any] | None = None,
+) -> dict[PlanCode, PlanDefinition]:
+    """The plan catalogue with configuration applied.
+
+    Called with no arguments this reads the process settings, so ordinary code
+    can simply ask for the catalogue. Tests pass overrides explicitly.
+    """
+    if price_overrides is None and entitlement_overrides is None:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        price_overrides = settings.plan_price_overrides
+        entitlement_overrides = settings.plan_entitlement_overrides
+
+    return _apply_overrides(PLANS, price_overrides, entitlement_overrides)
+
+
 def get_plan(code: PlanCode | str) -> PlanDefinition:
     """Look up a plan, falling back to Free for an unknown code.
 
@@ -146,7 +231,8 @@ def get_plan(code: PlanCode | str) -> PlanDefinition:
     (a rolled-back release, a manual database edit) must degrade to the least
     privilege, never to an exception that blocks the seller's whole app.
     """
+    catalog = plan_catalog()
     try:
-        return PLANS[PlanCode(code)]
+        return catalog[PlanCode(code)]
     except ValueError:
-        return PLANS[PlanCode.FREE]
+        return catalog[PlanCode.FREE]

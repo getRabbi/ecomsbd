@@ -155,6 +155,67 @@ class Settings(BaseSettings):
     fcm_project_id: str | None = None
     fcm_credentials_json: SecretStr | None = None
 
+    # ----------------------------------------------------------- billing ---
+    # Plan pricing and entitlement values are product-validation data, not
+    # technical constants (master spec section 26), so both are overridable
+    # without a release. JSON objects keyed by plan code, e.g.
+    #   PLAN_PRICE_OVERRIDES='{"starter": 24900}'
+    #   PLAN_ENTITLEMENT_OVERRIDES='{"pro": {"sms_segments_monthly": 2000}}'
+    plan_price_overrides: dict[str, Any] = Field(default_factory=dict)
+    plan_entitlement_overrides: dict[str, Any] = Field(default_factory=dict)
+
+    #: Which build this deployment serves. Decides whether an out-of-app
+    #: payment CTA may be shown at all (master spec section 27.1).
+    distribution_channel: str = "DIRECT"
+
+    #: Dunning window after a failed renewal. Generic on purpose: neither Play's
+    #: nor bKash's real retry schedule has been verified against merchant
+    #: documentation, and hard-coding a guess would make the seller-facing
+    #: "we will try again" copy a fabrication (master spec section 91).
+    billing_grace_period_days: int = 3
+    billing_max_payment_retries: int = 3
+    billing_retry_interval_hours: int = 24
+    #: 0 disables the trial. No trial is offered until pricing is validated.
+    billing_trial_days: int = 0
+
+    # Google Play Billing. PLAY_BILLING_EXTERNAL_CONFIGURATION_REQUIRED: the
+    # provider stays disabled until all three are present *and* the feature
+    # flag is on, because a half-configured verifier that returns "looks fine"
+    # is worse than one that refuses.
+    play_package_name: str | None = None
+    play_service_account_json: SecretStr | None = None
+    play_rtdn_shared_secret: SecretStr | None = None
+    #: Play product id -> plan code. Empty until products exist in the console.
+    play_product_plan_map: dict[str, str] = Field(default_factory=dict)
+
+    # bKash web/direct. BKASH_MERCHANT_SETUP_REQUIRED.
+    bkash_base_url: str | None = None
+    bkash_app_key: SecretStr | None = None
+    bkash_app_secret: SecretStr | None = None
+    bkash_username: SecretStr | None = None
+    bkash_password: SecretStr | None = None
+    bkash_webhook_secret: SecretStr | None = None
+
+    # ------------------------------------------------------------- admin ---
+    # Platform admin is a separate identity from any seller account. Empty by
+    # default: no console access exists until an operator provisions it.
+    admin_api_tokens: list[str] = Field(default_factory=list)
+    #: How long a support "reveal PII" grant lasts before it must be re-asked.
+    admin_reveal_ttl_seconds: int = 300
+
+    # ------------------------------------------------------------ exports ---
+    export_max_sync_rows: int = 2_000
+    export_download_ttl_seconds: int = 900
+    export_max_active_per_tenant: int = 3
+
+    # ------------------------------------------------------- notifications ---
+    #: Transport selection. ``disabled`` records the attempt and sends nothing;
+    #: ``mock`` is the CI/test double. No real provider exists yet
+    #: (FCM_CREDENTIALS_REQUIRED, SMS_PROVIDER_REQUIRED).
+    push_transport: str = "disabled"
+    sms_transport: str = "disabled"
+    notification_max_attempts: int = 5
+
     # ----------------------------------------------------------- workers ---
     worker_queue_name: str = "ecomsbd:jobs"
     worker_max_jobs: int = 10
@@ -171,6 +232,24 @@ class Settings(BaseSettings):
         if upper not in allowed:
             raise ValueError(f"log_level must be one of {sorted(allowed)}")
         return upper
+
+    @field_validator("distribution_channel")
+    @classmethod
+    def _validate_distribution_channel(cls, value: str) -> str:
+        allowed = {"PLAY", "WEB", "DIRECT", "INTERNAL_TEST"}
+        upper = value.upper()
+        if upper not in allowed:
+            raise ValueError(f"DISTRIBUTION_CHANNEL must be one of {sorted(allowed)}")
+        return upper
+
+    @field_validator("push_transport", "sms_transport")
+    @classmethod
+    def _validate_transport(cls, value: str) -> str:
+        allowed = {"disabled", "mock", "fcm", "sms_gateway"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"transport must be one of {sorted(allowed)}")
+        return lowered
 
     @field_validator("credential_encryption_key")
     @classmethod
@@ -218,6 +297,33 @@ class Settings(BaseSettings):
         if self.otp_provider is OtpProvider.SMS_GATEWAY and self.otp_provider_secret is None:
             problems.append("OTP_PROVIDER_SECRET is required when OTP_PROVIDER=sms_gateway")
 
+        # A transport that names a real provider must actually be configured.
+        # "mock" outside local/test would silently mark every notification
+        # delivered without sending one.
+        if self.push_transport == "fcm" and self.fcm_credentials_json is None:
+            problems.append("FCM_CREDENTIALS_JSON is required when PUSH_TRANSPORT=fcm")
+        if self.sms_transport == "sms_gateway" and self.otp_provider_secret is None:
+            problems.append("a gateway secret is required when SMS_TRANSPORT=sms_gateway")
+        if self.app_env.is_deployed and "mock" in (self.push_transport, self.sms_transport):
+            problems.append("mock notification transports are forbidden outside local/test")
+
+        # Admin tokens are compared in constant time but are still bearer
+        # credentials: a short one is guessable, and a placeholder one is a
+        # published password.
+        weak_admin_tokens = [
+            token
+            for token in self.admin_api_tokens
+            if len(token) < 32 or token.startswith(INSECURE_DEV_PREFIX)
+        ]
+        if weak_admin_tokens and self.app_env.is_deployed:
+            problems.append(
+                f"{len(weak_admin_tokens)} ADMIN_API_TOKENS entries are shorter than 32 "
+                "characters or hold a development placeholder"
+            )
+
+        if self.billing_grace_period_days < 0:
+            problems.append("BILLING_GRACE_PERIOD_DAYS cannot be negative")
+
         if problems:
             joined = "\n  - ".join(problems)
             raise ValueError(f"Invalid configuration for APP_ENV={self.app_env}:\n  - {joined}")
@@ -260,6 +366,31 @@ class Settings(BaseSettings):
     def expose_otp_debug_code(self) -> bool:
         """Whether the OTP may be echoed back in the API response."""
         return self.dev_otp_enabled and self.otp_expose_debug_code
+
+    @property
+    def play_billing_configured(self) -> bool:
+        """Whether Play verification *could* run.
+
+        Deliberately strict: package name, service account and a product
+        mapping must all be present. A verifier missing any one of them cannot
+        distinguish a genuine purchase from a fabricated token, so the provider
+        reports itself unconfigured rather than approximating.
+        """
+        return bool(
+            self.play_package_name
+            and self.play_service_account_json is not None
+            and self.play_product_plan_map
+        )
+
+    @property
+    def bkash_billing_configured(self) -> bool:
+        return bool(
+            self.bkash_base_url
+            and self.bkash_app_key is not None
+            and self.bkash_app_secret is not None
+            and self.bkash_username is not None
+            and self.bkash_password is not None
+        )
 
     @property
     def is_sqlite(self) -> bool:

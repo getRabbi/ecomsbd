@@ -3,6 +3,12 @@
 The engine matches; people decide the rest. Every endpoint here that moves
 money requires either an exact reference the engine found on its own, or a
 stated reason from a person (section 81.7).
+
+Entitlements (section 26): reconciliation *actions* need the ``reconciliation``
+entitlement; **reading cases and results does not**. Section 51 is explicit that
+a seller's own money history is never locked behind a plan, so a downgraded shop
+can still open every case it has and see what happened — it simply cannot run
+the engine again or move a settlement.
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, TenantPrincipal
+from app.api.deps import DbSession, EntitlementsDep, TenantPrincipal
 from app.api.v1.money_schemas import (
     CaseResponse,
     CaseUpdatePayload,
@@ -22,6 +28,7 @@ from app.api.v1.money_schemas import (
     UnmatchPayload,
 )
 from app.common.pagination import Page, decode_cursor
+from app.entitlements.catalog import Entitlement
 from app.reconciliation.models import CaseKind, CaseStatus
 from app.reconciliation.service import ReconciliationService
 
@@ -44,6 +51,7 @@ async def reconcile_payout(
     payout_id: uuid.UUID,
     principal: TenantPrincipal,
     engine: EngineDep,
+    entitlements: EntitlementsDep,
     shadow: Annotated[bool, Query()] = False,
 ) -> ReconcileResponse:
     """Run the engine over a payout's lines.
@@ -57,6 +65,7 @@ async def reconcile_payout(
     ``shadow=true`` runs the whole thing and writes nothing. That is how a
     matching rule is measured before it is allowed to move money.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.RECONCILIATION)
     report = await engine.reconcile(payout_id, shadow=shadow)
     return ReconcileResponse(
         payout_id=report.payout_id,
@@ -79,6 +88,7 @@ async def match_line(
     payload: ManualMatchPayload,
     principal: TenantPrincipal,
     engine: EngineDep,
+    entitlements: EntitlementsDep,
 ) -> PayoutLineResponse:
     """Settle a parcel because a person decided this line pays for it.
 
@@ -86,6 +96,7 @@ async def match_line(
     the other half of the engine refusing to guess: the decision moves to
     somebody who can pick up a phone and ask.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.RECONCILIATION)
     line = await engine.match_manually(
         line_id,
         payload.receivable_id,
@@ -105,6 +116,7 @@ async def unmatch_line(
     payload: UnmatchPayload,
     principal: TenantPrincipal,
     engine: EngineDep,
+    entitlements: EntitlementsDep,
 ) -> PayoutLineResponse:
     """Reverse a settlement.
 
@@ -112,12 +124,15 @@ async def unmatch_line(
     entries stay and two more undo them, so the history of the mistake survives
     alongside its correction.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.RECONCILIATION)
     line = await engine.unmatch(line_id, reason=payload.reason)
     return PayoutLineResponse.model_validate(line)
 
 
 @router.post("/scan", response_model=dict, summary="Look for problems")
-async def scan(principal: TenantPrincipal, engine: EngineDep) -> dict:
+async def scan(
+    principal: TenantPrincipal, engine: EngineDep, entitlements: EntitlementsDep
+) -> dict:
     """Find the problems no statement would surface.
 
     Delivered parcels whose money never arrived, parcels stuck in transit, and
@@ -125,6 +140,7 @@ async def scan(principal: TenantPrincipal, engine: EngineDep) -> dict:
     data rather than from a payout, so they are looked for on demand and on a
     schedule rather than on import.
     """
+    await entitlements.require(principal.require_tenant(), Entitlement.RECONCILIATION)
     return {"cases_opened": await engine.scan_for_cases()}
 
 

@@ -27,7 +27,7 @@ from app.notifications.service import NotificationService
 
 @pytest.fixture
 async def shop(client: AsyncClient, unique_phone: str) -> dict[str, Any]:
-    return await signed_in_shop(client, unique_phone, shop_name="Insights Shop")
+    return await signed_in_shop(client, unique_phone, shop_name="Insights Shop", plan="pro")
 
 
 async def _parcel(
