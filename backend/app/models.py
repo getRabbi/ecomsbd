@@ -30,6 +30,7 @@ from app.payouts.models import (
     PayoutSourceFile,
 )
 from app.products.models import Product, StockMovement
+from app.reconciliation.models import ReconciliationCase
 from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
 from app.users.models import User
@@ -58,6 +59,7 @@ __all__ = [
     "PayoutLine",
     "PayoutSourceFile",
     "Product",
+    "ReconciliationCase",
     "RefreshToken",
     "StockMovement",
     "Subscription",
