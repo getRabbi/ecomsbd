@@ -162,6 +162,15 @@ class CourierAccountService:
         )
         return list(result.scalars().all())
 
+    def adapter_for(self, provider: str) -> CourierAdapter | None:
+        """The adapter for a provider, or ``None`` if there is no integration.
+
+        Public because booking, recovery, status sync and payment ingestion all
+        need one, and reaching into this service's registry attribute from four
+        modules would make the registry impossible to change.
+        """
+        return self._registry.get(provider)
+
     # ---------------------------------------------------------- connecting --
 
     async def connect(self, request: ConnectRequest) -> tuple[CourierAccount, ValidationOutcome]:

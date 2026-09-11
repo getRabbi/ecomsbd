@@ -130,9 +130,20 @@ class AuditAction(StrEnum):
     PROVIDER_HEALTH_CHANGED = "ops.provider_health_changed"
     NOTIFICATION_DISPATCH_FAILED = "ops.notification_dispatch_failed"
 
-    # Reserved for later phases (sections 103, 134)
+    # Courier integration (phase C)
     COURIER_CREDENTIAL_SAVED = "courier.credential_saved"
     COURIER_CREDENTIAL_REVOKED = "courier.credential_revoked"
+    ORDER_BOOKED = "courier.order_booked"
+    #: A create whose outcome is unknown. Audited separately from a booking
+    #: because it is the state an incident review starts from.
+    BOOKING_UNKNOWN_RECORDED = "courier.booking_unknown"
+    BOOKING_RECOVERED = "courier.booking_recovered"
+    #: A person decided what an unresolvable ambiguous booking meant. The only
+    #: way out of manual review, and it records who and why.
+    BOOKING_MANUAL_RESOLUTION = "courier.booking_manual_resolution"
+    COURIER_RETURN_REQUESTED = "courier.return_requested"
+    COURIER_PAYMENT_IMPORTED = "courier.payment_imported"
+    COURIER_WEBHOOK_RECEIVED = "courier.webhook_received"
     MANUAL_FINANCIAL_CORRECTION = "money.manual_correction"
     RECONCILIATION_MANUAL_MATCH = "money.manual_match"
     RECONCILIATION_UNMATCHED = "money.unmatched"

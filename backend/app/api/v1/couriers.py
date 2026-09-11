@@ -15,19 +15,29 @@ away from the keys that do the booking.
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import CourierAccountsDep, Principal, require_permission
+from app.api.deps import (
+    BookingRecoveryDep,
+    CourierAccountsDep,
+    CourierBookingDep,
+    DbSession,
+    Principal,
+    require_permission,
+)
 from app.core.errors import NotFoundError
 from app.couriers.accounts import ConnectRequest
 from app.couriers.capabilities import load_manifest
+from app.couriers.events import recent_events_for
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/couriers", tags=["couriers"])
 
+Booker = Annotated[Principal, Depends(require_permission(Permission.ORDER_BOOK))]
 CredentialManager = Annotated[
     Principal, Depends(require_permission(Permission.COURIER_CREDENTIAL_MANAGE))
 ]
@@ -222,6 +232,228 @@ async def provider_evidence(
         blockers=list(manifest.blockers),
         manual_fallback=manifest.manual_fallback,
     )
+
+
+# --------------------------------------------------------------- booking --
+
+
+class BookOrderPayload(BaseModel):
+    """Optional extras a seller may attach to one booking.
+
+    Only fields the provider's documentation actually defines. There is no
+    weight, no parcel size and no insurance value here, because Steadfast V1
+    documents none of them, and a field the courier ignores is a field that
+    misleads the seller who filled it in.
+    """
+
+    note: str | None = Field(default=None, max_length=400)
+    item_description: str | None = Field(default=None, max_length=400)
+    #: 0 = home delivery, 1 = point delivery / hub pick-up. The only two values
+    #: the documentation defines.
+    delivery_type: int | None = Field(default=None, ge=0, le=1)
+
+
+class BulkBookPayload(BaseModel):
+    order_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=400)
+
+
+class BookingItemResponse(BaseModel):
+    order_id: str
+    consignment_id: str | None
+    merchant_reference: str
+    outcome: str
+    tracking_code: str | None = None
+    error_code: str | None = None
+    message: str | None = None
+
+
+class BookingReportResponse(BaseModel):
+    """What a booking call did.
+
+    ``ambiguous`` is a first-class count, not an error. The client renders it
+    as "we are checking with the courier — do not book again", and offers no
+    retry affordance for those orders (brief section 32).
+    """
+
+    provider: str
+    batch_id: str | None
+    booked: int
+    ambiguous: int
+    failed: int
+    items: list[BookingItemResponse]
+
+
+@router.post(
+    "/orders/{order_id}/book",
+    response_model=BookingReportResponse,
+    summary="Book one order with a courier",
+)
+async def book_order(
+    order_id: uuid.UUID,
+    payload: BookOrderPayload,
+    principal: Booker,
+    booking: CourierBookingDep,
+    provider: str = "steadfast",
+) -> BookingReportResponse:
+    """Create one parcel at the provider.
+
+    Returns a report rather than raising for a provider-side outcome: a refusal
+    and an unconfirmed result are both things the seller must see, and an
+    exception would flatten them into "something went wrong".
+    """
+    report = await booking.book(
+        order_id,
+        provider=provider,
+        note=payload.note,
+        item_description=payload.item_description,
+        delivery_type=payload.delivery_type,
+    )
+    return BookingReportResponse(**report.as_dict())
+
+
+@router.post(
+    "/orders/book-bulk",
+    response_model=BookingReportResponse,
+    summary="Book several orders with a courier",
+)
+async def book_orders_bulk(
+    payload: BulkBookPayload,
+    principal: Booker,
+    booking: CourierBookingDep,
+    provider: str = "steadfast",
+) -> BookingReportResponse:
+    """Book a selection of orders.
+
+    Chunked below the provider's documented maximum, with one booking attempt
+    persisted per order before its chunk is sent. A chunk whose answer is lost
+    marks its own orders unconfirmed and is never resent.
+    """
+    report = await booking.book_bulk(payload.order_ids, provider=provider, note=payload.note)
+    return BookingReportResponse(**report.as_dict())
+
+
+class BookingAttemptResponse(BaseModel):
+    """One attempt at a parcel, and what became of it."""
+
+    id: str
+    attempt_number: int
+    state: str
+    merchant_reference: str
+    provider_consignment_id: str | None
+    tracking_code: str | None
+    error_code: str | None
+    recovery_attempts: int
+    recovery_note: str | None
+    started_at: str
+    completed_at: str | None
+
+
+class CourierEventResponse(BaseModel):
+    """One observation of what the provider said.
+
+    ``observed_at`` is when ecomsbd asked, not when the courier acted:
+    Steadfast's status response carries no timestamp, and presenting an
+    observation time as an event time would invent a history.
+    """
+
+    kind: str
+    source: str
+    raw_status: str | None
+    normalized_status: str | None
+    status_undocumented: bool
+    observed_at: str
+    last_seen_at: str
+    observation_count: int
+
+
+class ConsignmentTrackingResponse(BaseModel):
+    attempts: list[BookingAttemptResponse]
+    events: list[CourierEventResponse]
+
+
+@router.get(
+    "/consignments/{consignment_id}/tracking",
+    response_model=ConsignmentTrackingResponse,
+    summary="A parcel's booking attempts and provider observations",
+)
+async def consignment_tracking(
+    consignment_id: uuid.UUID,
+    principal: Booker,
+    recovery: BookingRecoveryDep,
+    db: DbSession,
+) -> ConsignmentTrackingResponse:
+    attempts = await recovery.attempts_for(consignment_id)
+    events = await recent_events_for(db, consignment_id)
+    return ConsignmentTrackingResponse(
+        attempts=[
+            BookingAttemptResponse(
+                id=str(attempt.id),
+                attempt_number=attempt.attempt_number,
+                state=attempt.state,
+                merchant_reference=attempt.merchant_reference,
+                provider_consignment_id=attempt.provider_consignment_id,
+                tracking_code=attempt.tracking_code,
+                error_code=attempt.error_code,
+                recovery_attempts=attempt.recovery_attempts,
+                recovery_note=attempt.recovery_note,
+                started_at=attempt.started_at.isoformat(),
+                completed_at=attempt.completed_at.isoformat() if attempt.completed_at else None,
+            )
+            for attempt in attempts
+        ],
+        events=[
+            CourierEventResponse(
+                kind=event.kind,
+                source=event.source,
+                raw_status=event.raw_status,
+                normalized_status=event.normalized_status,
+                status_undocumented=event.status_undocumented,
+                observed_at=event.observed_at.isoformat(),
+                last_seen_at=event.last_seen_at.isoformat(),
+                observation_count=event.observation_count,
+            )
+            for event in events
+        ],
+    )
+
+
+class ManualResolutionPayload(BaseModel):
+    """A person's decision about a booking the provider never confirmed.
+
+    ``parcel_exists=False`` is the only path in the whole system that makes an
+    order bookable again after an ambiguous create, so it requires a reason and
+    is audited with who said so.
+    """
+
+    parcel_exists: bool
+    reason: str = Field(min_length=3, max_length=400)
+    provider_consignment_id: str | None = Field(default=None, max_length=120)
+    tracking_code: str | None = Field(default=None, max_length=120)
+
+
+@router.post(
+    "/booking-attempts/{attempt_id}/resolve",
+    summary="Record a person's decision about an unconfirmed booking",
+)
+async def resolve_booking_attempt(
+    attempt_id: uuid.UUID,
+    payload: ManualResolutionPayload,
+    principal: CredentialManager,
+    recovery: BookingRecoveryDep,
+) -> dict[str, str]:
+    result = await recovery.resolve_manually(
+        attempt_id,
+        parcel_exists=payload.parcel_exists,
+        reason=payload.reason,
+        provider_consignment_id=payload.provider_consignment_id,
+        tracking_code=payload.tracking_code,
+    )
+    return {
+        "attempt_id": str(result.attempt_id),
+        "consignment_id": str(result.consignment_id),
+        "outcome": str(result.outcome),
+    }
 
 
 __all__ = ["router"]

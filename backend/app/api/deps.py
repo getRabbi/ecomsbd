@@ -30,12 +30,15 @@ from app.billing.providers.registry import BillingProviderRegistry, build_regist
 from app.billing.service import BillingService
 from app.common.cache import RateLimiter, get_cache
 from app.common.feature_flags import FeatureFlagService
+from app.consignments.service import ConsignmentService
 from app.core.clock import utc_now
 from app.core.config import Settings, get_settings
 from app.core.context import ActorType, RequestContext, clear_context, current_context, set_context
 from app.core.errors import AuthenticationError, ErrorCode, ForbiddenError
 from app.core.security import CredentialVault, SecretHasher, TokenService
 from app.couriers.accounts import CourierAccountService
+from app.couriers.booking import CourierBookingService
+from app.couriers.recovery import BookingRecoveryService
 from app.couriers.registry import (
     CourierAdapterRegistry,
     get_courier_registry,
@@ -43,12 +46,15 @@ from app.couriers.registry import (
 )
 from app.db.session import session_scope
 from app.entitlements.service import EntitlementService
+from app.money.service import ReceivableService
 from app.tenants.roles import Permission, TenantRole, has_permission
 from app.users.models import User
 
 __all__ = [
     "BillingServiceDep",
+    "BookingRecoveryDep",
     "CourierAccountsDep",
+    "CourierBookingDep",
     "CourierRegistryDep",
     "CurrentPrincipal",
     "DbSession",
@@ -365,7 +371,38 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 EntitlementsDep = Annotated[EntitlementService, Depends(get_entitlements)]
 FeatureFlagsDep = Annotated[FeatureFlagService, Depends(get_feature_flags)]
 BillingServiceDep = Annotated[BillingService, Depends(get_billing_service)]
+
+
+async def get_courier_booking(
+    db: DbSession,
+    settings: SettingsDep,
+    accounts: Annotated[CourierAccountService, Depends(get_courier_accounts)],
+) -> CourierBookingService:
+    return CourierBookingService(
+        db,
+        accounts=accounts,
+        consignments=ConsignmentService(db, receivables=ReceivableService(db)),
+        vault=get_vault(settings),
+        settings=settings,
+    )
+
+
+async def get_booking_recovery(
+    db: DbSession,
+    settings: SettingsDep,
+    accounts: Annotated[CourierAccountService, Depends(get_courier_accounts)],
+) -> BookingRecoveryService:
+    return BookingRecoveryService(
+        db,
+        accounts=accounts,
+        consignments=ConsignmentService(db, receivables=ReceivableService(db)),
+        settings=settings,
+    )
+
+
 CourierAccountsDep = Annotated[CourierAccountService, Depends(get_courier_accounts)]
+CourierBookingDep = Annotated[CourierBookingService, Depends(get_courier_booking)]
+BookingRecoveryDep = Annotated[BookingRecoveryService, Depends(get_booking_recovery)]
 CourierRegistryDep = Annotated[CourierAdapterRegistry, Depends(get_courier_registry_dep)]
 ProviderRegistryDep = Annotated[BillingProviderRegistry, Depends(get_billing_registry)]
 DistributionChannelDep = Annotated[DistributionChannel, Depends(get_distribution_channel)]

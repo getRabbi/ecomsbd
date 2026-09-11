@@ -156,7 +156,10 @@ class ConsignmentService:
             )
 
         moment = occurred_at or utc_now()
-        items = await self._load_order_items(order_id)
+        # Validated before the consignment row exists: an order with no items
+        # cannot be dispatched, and finding that out after creating the parcel
+        # would leave a consignment with nothing in it.
+        await self._load_order_items(order_id)
 
         consignment = Consignment(
             order_id=order_id,
@@ -175,6 +178,46 @@ class ConsignmentService:
         self._db.add(consignment)
         await self._db.flush()
 
+        await self.fulfil_dispatch(consignment, order=order, occurred_at=moment)
+        return consignment
+
+    async def fulfil_dispatch(
+        self,
+        consignment: Consignment,
+        *,
+        order: Order,
+        occurred_at: datetime | None = None,
+    ) -> Consignment:
+        """Everything that follows a parcel physically going out.
+
+        Lines, stock decrement, receivable, audit — one path, whether the
+        parcel was recorded by hand or booked through a provider API. Split out
+        of :meth:`dispatch_manual` when courier booking arrived, because a
+        provider booking has to do exactly this and **only after** the provider
+        confirms: a parcel whose create call timed out has not left the shelf,
+        and decrementing stock for it would make the shelf disagree with
+        reality in the one case where a person has to go and count.
+
+        Idempotent on the items: called twice for the same consignment — a
+        recovery that runs alongside a late provider answer — the second call
+        finds lines already there and does nothing rather than decrementing
+        stock twice.
+        """
+        moment = occurred_at or utc_now()
+
+        existing = await self._db.execute(
+            sa.select(sa.func.count())
+            .select_from(ConsignmentItem)
+            .where(ConsignmentItem.consignment_id == consignment.id)
+        )
+        if existing.scalar_one() > 0:
+            # Already fulfilled. The receivable call below is itself idempotent,
+            # so re-running it is safe and keeps a partially-applied dispatch
+            # from staying that way.
+            await self._receivables.open_for(consignment, order=order)
+            return consignment
+
+        items = await self._load_order_items(consignment.order_id)
         for order_item, unit_collectible in items:
             self._db.add(
                 ConsignmentItem(
@@ -192,7 +235,7 @@ class ConsignmentService:
                         quantity_delta=-order_item.quantity,
                         reason=StockMovementReason.BOOKED_DECREMENT,
                         source=StockMovementSource.SYSTEM,
-                        order_id=order_id,
+                        order_id=consignment.order_id,
                         order_item_id=order_item.id,
                         consignment_id=consignment.id,
                         occurred_at=moment,
@@ -215,7 +258,7 @@ class ConsignmentService:
             entity_id=consignment.id,
             context={
                 "order_number": order.order_number,
-                "provider": provider,
+                "provider": consignment.provider,
                 "cod_amount_paisa": consignment.cod_amount_paisa,
             },
         )
