@@ -26,6 +26,11 @@ _SENSITIVE_KEY_PARTS: tuple[str, ...] = (
     "token",
     "api_key",
     "apikey",
+    # Hyphenated HTTP header forms. Steadfast's auth headers are literally
+    # `Api-Key` and `Secret-Key`, and a dict of headers reaches a log line with
+    # those exact keys — `api_key` alone would not have matched either.
+    "api-key",
+    "secret-key",
     "authorization",
     "auth_header",
     "credential",
