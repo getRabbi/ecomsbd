@@ -98,6 +98,21 @@ class ErrorCode(StrEnum):
     INVALID_COURIER_CREDENTIALS = "INVALID_COURIER_CREDENTIALS"
     ADDRESS_REJECTED = "ADDRESS_REJECTED"
     ORDER_NOT_BOOKABLE = "ORDER_NOT_BOOKABLE"
+    #: The provider answered with something that is not its documented shape —
+    #: an HTML error page, a truncated body, JSON of the wrong type. Distinct
+    #: from "unavailable" because the request probably *did* arrive.
+    PROVIDER_PROTOCOL_ERROR = "PROVIDER_PROTOCOL_ERROR"
+    #: A provider failure that matched no other classification. Deliberately
+    #: not folded into INTERNAL_ERROR: the fault is theirs, and support needs
+    #: to be able to count these separately.
+    UNKNOWN_PROVIDER_ERROR = "UNKNOWN_PROVIDER_ERROR"
+    #: A return was already requested for this parcel. Blocking the second tap
+    #: is ecomsbd's own guarantee — Steadfast documents no idempotency.
+    RETURN_ALREADY_REQUESTED = "RETURN_ALREADY_REQUESTED"
+    #: The courier account's credentials were rejected repeatedly and the
+    #: account needs a person to reconnect it. Separate from
+    #: INVALID_COURIER_CREDENTIALS, which is one rejected attempt.
+    COURIER_ACCOUNT_NEEDS_RECONNECT = "COURIER_ACCOUNT_NEEDS_RECONNECT"
     RISK_PROVIDER_UNAVAILABLE = "RISK_PROVIDER_UNAVAILABLE"
     PAYOUT_IMPORT_INVALID = "PAYOUT_IMPORT_INVALID"
     RECONCILIATION_MISMATCH = "RECONCILIATION_MISMATCH"
@@ -285,6 +300,30 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         409,
         "এই অর্ডারটি এখন বুক করা যাবে না।",
         "This order cannot be booked in its current state.",
+        False,
+    ),
+    ErrorCode.PROVIDER_PROTOCOL_ERROR: (
+        502,
+        "কুরিয়ার সার্ভার অপ্রত্যাশিত উত্তর দিয়েছে। আবার বুক করবেন না—আমরা যাচাই করছি।",
+        "The provider returned a response that does not match its documented shape.",
+        False,
+    ),
+    ErrorCode.UNKNOWN_PROVIDER_ERROR: (
+        502,
+        "কুরিয়ার সার্ভারে অজানা সমস্যা হয়েছে। আবার বুক করবেন না—আমরা যাচাই করছি।",
+        "The provider failed in a way we could not classify.",
+        False,
+    ),
+    ErrorCode.RETURN_ALREADY_REQUESTED: (
+        409,
+        "এই পার্সেলের জন্য রিটার্ন রিকোয়েস্ট আগেই পাঠানো হয়েছে।",
+        "A return has already been requested for this parcel.",
+        False,
+    ),
+    ErrorCode.COURIER_ACCOUNT_NEEDS_RECONNECT: (
+        409,
+        "কুরিয়ার অ্যাকাউন্টটি আবার সংযুক্ত করতে হবে। সেটিংস থেকে API Key ও Secret Key দিন।",
+        "This courier account needs to be reconnected before it can be used.",
         False,
     ),
     ErrorCode.RISK_PROVIDER_UNAVAILABLE: (

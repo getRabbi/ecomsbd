@@ -14,6 +14,16 @@ htmlcov/
 *.db-journal
 *.sqlite3
 
+# Operator-supplied provider documentation, as delivered.
+#
+# These arrive unredacted — the Steadfast V1 export carries literal example
+# API key and secret values in its PHP snippet. The *sanitized, redacted* copy
+# is what gets committed, under docs/providers/<provider>/. Keeping the raw
+# original ignored means a future drop cannot be staged by reflex.
+/API Documentation.html
+/API Documentation_files/
+/provider-docs-inbox/
+
 # Secrets — never commit. .env.example carries the variable names.
 .env
 .env.*

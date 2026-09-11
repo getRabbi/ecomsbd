@@ -2,57 +2,223 @@
 #
 # Master spec sections 61, 74, 140.
 #
-# STATUS: UNVERIFIED. No capability below has been confirmed against Steadfast's
-# current official merchant API documentation or a live merchant account, so
-# every capability is `unknown` and no HTTP call is implemented.
+# STATUS: implemented against operator-supplied V1 documentation.
 #
-# `unknown` MUST NOT be promoted to `true` because a community SDK or a blog
-# post implements it. Promotion requires, and must be recorded here:
-#   1. the merchant documentation URL or PDF the operator supplied, and its date;
-#   2. a non-destructive live or sandbox call proving the shape of the response;
-#   3. the exact provider status strings, so raw status can be preserved and
-#      mapped rather than guessed.
+# Every `true` below names an endpoint the supplied document describes, and the
+# ecomsbd code path that calls it. Every `false` means the document contains no
+# such endpoint — not "we have not got to it", but "Steadfast V1 does not offer
+# it", which is why the UI shows the manual alternative rather than a disabled
+# button. Every `unknown` means the document is silent and no live evidence
+# exists yet.
 #
-# Until then the seller uses Manual courier mode, which is a fully supported
-# path, not a degraded one: order, tracking entry, statement upload and
-# reconciliation all work without any courier API.
+# Promoting an `unknown` to `true` requires, and must be recorded here:
+#   1. the documentation that describes it, and its date; or
+#   2. a non-destructive live call proving the shape of the response.
+#
+# The one capability that stays `unknown` on purpose is `webhook`. The supplied
+# document has no webhook section at all. All of the webhook infrastructure is
+# built and tested; the provider route refuses every request until a verified
+# contract exists. See STEADFAST_WEBHOOK_CONTRACT_REQUIRED below.
 
 provider: steadfast
 display_name: Steadfast
-verified_at: null
-documentation_source: null
+verified_at: 2026-09-11
+documentation_source: >
+  Steadfast Courier Limited — API Documentation V1 (operator-supplied Google Docs
+  export, 2026-09-11). Sanitized, redacted copy committed at
+  docs/providers/steadfast/API_Documentation_V1.sanitized.html; the normalized
+  reading is docs/providers/steadfast/CONTRACT.md.
+
+documentation_version: V1
+base_url: https://portal.packzy.com/api/v1
+auth_model: >
+  Static merchant headers on every request: Api-Key, Secret-Key,
+  Content-Type: application/json. The document describes no token, refresh,
+  expiry or rotation, so none is implemented.
 
 capabilities:
-  credential_validation: unknown
-  create_single: unknown
-  create_bulk: unknown
-  status_lookup: unknown
+  credential_validation: true
+  create_single: true
+  create_bulk: true
+  status_lookup: true
+  balance: true
+  returns: true
+  payments: true
+  payment_consignments: true
+  location_lookup: true
+
+  # No such endpoint exists in the supplied document. Not pending — absent.
+  price_quote: false
+  customer_stats: false
+  auto_address: false
+  cancel: false
+  list_stores: false
+  payouts: false
+
+  # No webhook section exists in the supplied document.
   webhook: unknown
-  balance: unknown
-  payouts: unknown
-  returns: unknown
-  price_quote: unknown
-  customer_stats: unknown
-  auto_address: unknown
-  cancel: unknown
-  list_stores: unknown
+
+# Per-capability evidence. `live_credentials_required` marks the ones whose
+# runtime behaviour cannot be confirmed from the document alone.
+endpoints:
+  credential_validation:
+    endpoint: /get_balance
+    method: GET
+    request_model: none
+    response_model: "{status: int, current_balance: numeric}"
+    live_credentials_required: false
+    notes: >
+      The safest documented read, so it is the credential check. A parcel is
+      never created to test a key.
+
+  create_single:
+    endpoint: /create_order
+    method: POST
+    request_model: >
+      invoice*, recipient_name*, recipient_phone*, recipient_address*,
+      cod_amount*, alternative_phone, recipient_email, note, item_description,
+      total_lot, delivery_type
+    response_model: >
+      {status, message, consignment: {consignment_id, invoice, tracking_code,
+      recipient_name, recipient_phone, recipient_address, cod_amount, status,
+      note, created_at, updated_at}}
+    live_credentials_required: true
+    notes: >
+      Failure body shape is undocumented. Duplicate-invoice behaviour is
+      undocumented; see create_idempotency below.
+
+  create_bulk:
+    endpoint: /create_order/bulk-order
+    method: POST
+    request_model: "data: JSON-encoded array of create_single items, max 500"
+    response_model: >
+      Array (or {data: [...]}) of {invoice, recipient_*, cod_amount, note,
+      consignment_id, tracking_code, status: success|error}
+    live_credentials_required: true
+    notes: >
+      ecomsbd chunks at 50, not 500, and matches results back by invoice rather
+      than by position — the document guarantees no ordering. Per-item error
+      reasons are undocumented.
+
+  status_lookup:
+    endpoint: /status_by_cid/{id}, /status_by_invoice/{invoice}, /status_by_trackingcode/{code}
+    method: GET
+    request_model: path parameter only
+    response_model: "{status: int, delivery_status: string}"
+    live_credentials_required: false
+    notes: >
+      All three forms implemented. The response for a reference that does not
+      exist is undocumented, which is why a status lookup can never prove a
+      parcel's absence.
+
+  balance:
+    endpoint: /get_balance
+    method: GET
+    request_model: none
+    response_model: "{status: int, current_balance: numeric}"
+    live_credentials_required: false
+    notes: >
+      Provider account balance only. Never merged with, or compared to, the
+      ecomsbd COD outstanding figure.
+
+  returns:
+    endpoint: /create_return_request, /get_return_request/{id}, /get_return_requests
+    method: POST, GET, GET
+    request_model: "one of consignment_id | invoice | tracking_code, plus optional reason"
+    response_model: >
+      create: {id, user_id, consignment_id, reason, status, created_at,
+      updated_at}. The two lookups are path-only — no schema documented.
+    live_credentials_required: true
+    notes: >
+      Statuses pending|approved|processing|completed|cancelled are documented.
+      No provider idempotency field exists, so ecomsbd blocks duplicates with a
+      row lock and a unique active-request constraint.
+
+  payments:
+    endpoint: /payments
+    method: GET
+    request_model: UNVERIFIED — no parameter documented
+    response_model: UNVERIFIED — no schema documented
+    live_credentials_required: true
+    notes: >
+      Path-only in the document. Integrated as a tolerant fetch that preserves
+      every key; typed fields are inferred and marked UNVERIFIED until a live
+      response confirms them.
+
+  payment_consignments:
+    endpoint: /payments/{payment_id}
+    method: GET
+    request_model: path parameter only
+    response_model: UNVERIFIED — no schema documented
+    live_credentials_required: true
+    notes: >
+      The section title states the response includes consignments; no field is
+      described. Reconciliation matches on provider identity only, so an
+      amount-only payload produces suggestions, never auto-matches.
+
+  location_lookup:
+    endpoint: /police_stations
+    method: GET
+    request_model: none documented
+    response_model: UNVERIFIED — no schema documented
+    live_credentials_required: true
+    notes: >
+      Fetched and cached for operator diagnostics. Not surfaced in the seller
+      UI: Steadfast takes a free-text address, so a station list would add a
+      field the booking does not use.
+
+# ---------------------------------------------------------------------------
+# Explicit unknowns. These are facts about the document, not a backlog.
+# ---------------------------------------------------------------------------
+unknowns:
+  PROVIDER_CREATE_IDEMPOTENCY: unknown
+  WEBHOOK_CONTRACT: unknown
+  RATE_LIMIT_CONTRACT: unknown
+  PAGINATION_CONTRACT: unknown
+  ERROR_BODY_CONTRACT: unknown
+  PAYMENT_RESPONSE_SCHEMA: unknown
+  DUPLICATE_INVOICE_BEHAVIOUR: unknown
+
+blockers:
+  - STEADFAST_WEBHOOK_CONTRACT_REQUIRED
+  - STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED
 
 manual_fallback: >
   Manual courier mode. The seller records the parcel and tracking code by hand,
   uploads the courier payout statement as CSV or XLSX, and reconciliation runs
-  on the imported lines exactly as it would on API-sourced payouts.
+  on the imported lines exactly as it would on API-sourced payments. Manual mode
+  stays available whether or not a Steadfast account is connected, degraded or
+  down — it is the path every provider failure falls back to, not a lesser one.
 
 notes:
-  - "Community SDKs describe API key + secret auth, single and bulk create,
-     status lookup, balance, return requests, payments and webhooks. Treated as
-     a lead for what to verify, never as a specification."
-  - "The public site confirms COD, real-time tracking, merchant operations and
-     API-created parcels. It does not document endpoint paths, payload shapes,
-     webhook signatures or rate limits."
-  - "Steadfast is the first real V1 integration (master spec section 56,
-     phase 3). Implementation is blocked on operator-supplied documentation and
-     a merchant account, not on engineering time."
-  - "Before any create call ships: confirm the idempotency story. The domain
-     sends a stable merchant reference and treats a timeout as BOOKING_UNKNOWN,
-     so the provider must offer some way to look a parcel up by that reference,
-     or duplicate-booking recovery has to be manual."
+  - "Implemented strictly from the supplied V1 document. Where an earlier
+     ecomsbd assumption disagreed with it, the document won — in particular
+     there are no transit states: Steadfast's entire pre-delivery vocabulary is
+     `in_review` and `pending`, so Steadfast parcels never enter ecomsbd's
+     IN_TRANSIT, PICKED_UP or OUT_FOR_DELIVERY except to represent the
+     documented approval-pending states."
+  - "PROVIDER_CREATE_IDEMPOTENCY = UNKNOWN. The document says `invoice` must be
+     unique but never says what happens when one is reused. ecomsbd therefore
+     provides its own safety: a stable invoice persisted before the call, a row
+     lock, BOOKING_UNKNOWN on ambiguity, and recovery via
+     /status_by_invoice/{invoice}. A create is never blindly retried."
+  - "WEBHOOK_CONTRACT = UNKNOWN. The supplied document has no webhook section.
+     The receiver, verifier port, parser port, raw-body store, dedupe and queue
+     processing are all implemented and tested; the Steadfast route answers
+     501-equivalent 'not configured' and the capability stays `unknown` until a
+     real contract is supplied. Polling is the fully functional V1 sync path."
+  - "The three `*_approval_pending` delivery statuses are treated as provisional
+     because the document's own descriptions say they are 'waiting for admin
+     approval', while `delivered`, `partial_delivered` and `cancelled` say
+     'balance added'/'balance updated'. No COD becomes collectible on an
+     approval-pending observation."
+  - "`partial_delivered` carries no quantities anywhere in the document. It is
+     mapped to the existing partial-delivery workflow as requiring quantity
+     resolution by a person. No quantity is ever inferred from a status string."
+  - "No courier charge is recorded from a create response. `cod_amount` is
+     documented as the amount to collect 'including all charges' with no
+     decomposition, so treating any part of it as a delivery fee would be an
+     invention. Actual charges come only from payment data, when it names them."
+  - "The two example credential literals in the document's PHP snippet were
+     redacted before the copy was committed and were never used to call the
+     provider."

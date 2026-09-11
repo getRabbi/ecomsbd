@@ -85,6 +85,10 @@ ignore = [
 "app/api/v1/schemas.py" = ["S105"]
 # ADMIN_TOKEN_HEADER is an HTTP header *name*, not a credential.
 "app/admin/auth.py" = ["S105"]
+# HEADER_API_KEY / HEADER_SECRET_KEY are HTTP header *names* from the Steadfast
+# documentation, not embedded credentials. The values they carry come from the
+# encrypted vault and never appear in source.
+"app/couriers/steadfast/contract.py" = ["S105"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

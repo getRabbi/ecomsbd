@@ -216,3 +216,11 @@ class ProviderResponse(BaseModel):
     manual_fallback: str | None
     fully_unverified: bool
     enabled: bool
+    #: Which revision of the provider's documentation the capabilities were
+    #: read from. Shown in settings so a seller filing a support ticket and the
+    #: engineer reading it are talking about the same document.
+    documentation_version: str | None = None
+    #: Named things the provider's documentation does not say, so the UI can be
+    #: honest about a gap rather than rendering an empty state that looks like
+    #: a bug (for example: no webhook contract, so status arrives by polling).
+    unknowns: dict[str, str] = Field(default_factory=dict)

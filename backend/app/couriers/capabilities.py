@@ -56,6 +56,16 @@ class Capability(StrEnum):
     AUTO_ADDRESS = "auto_address"
     CANCEL = "cancel"
     LIST_STORES = "list_stores"
+    #: A provider payments API listing settlements. Distinct from ``PAYOUTS``,
+    #: which is a downloadable statement: one is pulled, the other uploaded,
+    #: and a provider may offer either, both or neither.
+    PAYMENTS = "payments"
+    #: Whether a payment can be expanded into the parcels it covers. Without
+    #: it a payment is a lump sum, which reconciliation may only suggest
+    #: against — never auto-match (master spec section 82).
+    PAYMENT_CONSIGNMENTS = "payment_consignments"
+    #: Serviceable-area or location reference data (police stations, zones).
+    LOCATION_LOOKUP = "location_lookup"
 
 
 class CapabilityState(StrEnum):
@@ -99,11 +109,43 @@ class ProviderManifest:
     #: Free-text description of what a seller can still do without an API.
     manual_fallback: str | None = None
 
+    #: Which revision of the provider's documentation was read.
+    documentation_version: str | None = None
+    base_url: str | None = None
+    auth_model: str | None = None
+
+    #: Per-capability evidence: endpoint, method, request/response model, notes,
+    #: and whether live credentials are needed to confirm runtime behaviour.
+    #: Kept alongside the capability flags so a reviewer sees the claim and its
+    #: evidence in one place rather than in two files that can drift.
+    endpoints: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    #: Named facts about what the documentation does *not* say. These are
+    #: answers, not a backlog: "we asked and the document is silent".
+    unknowns: dict[str, str] = field(default_factory=dict)
+
+    #: Operator-facing blocker identifiers, verbatim, as they appear in
+    #: ``docs/RELEASE_READINESS.md`` and the admin console.
+    blockers: list[str] = field(default_factory=list)
+
     def state(self, capability: Capability) -> CapabilityState:
         return self.capabilities.get(capability, CapabilityState.UNKNOWN)
 
     def supports(self, capability: Capability) -> bool:
         return self.state(capability).is_usable
+
+    def evidence_for(self, capability: Capability) -> dict[str, Any]:
+        """The endpoint, method and models behind one capability claim."""
+        return dict(self.endpoints.get(str(capability), {}))
+
+    def requires_live_credentials(self, capability: Capability) -> bool:
+        """Whether runtime behaviour of this capability is still unproven.
+
+        A capability can be documented completely and still be unverified in
+        practice — a create is not exercised without creating a real parcel.
+        This is what separates "code complete" from "live verification done".
+        """
+        return bool(self.evidence_for(capability).get("live_credentials_required"))
 
     @property
     def has_any_verified_capability(self) -> bool:
@@ -123,6 +165,11 @@ class ProviderManifest:
             "capabilities": {str(k): str(v) for k, v in self.capabilities.items()},
             "manual_fallback": self.manual_fallback,
             "fully_unverified": self.is_fully_unverified,
+            "documentation_version": self.documentation_version,
+            # Deliberately *not* the endpoint table: the client reacts to
+            # capability, and shipping provider paths to every device would
+            # invite a client to call one directly.
+            "unknowns": dict(self.unknowns),
         }
 
 
@@ -157,6 +204,14 @@ def _parse_manifest(raw: dict[str, Any], *, source: Path) -> ProviderManifest:
     for capability in Capability:
         capabilities.setdefault(capability, CapabilityState.UNKNOWN)
 
+    endpoints_raw = raw.get("endpoints") or {}
+    endpoints: dict[str, dict[str, Any]] = {
+        str(key): dict(value) for key, value in endpoints_raw.items() if isinstance(value, dict)
+    }
+
+    unknowns_raw = raw.get("unknowns") or {}
+    unknowns = {str(key): str(value) for key, value in unknowns_raw.items()}
+
     return ProviderManifest(
         provider=provider,
         display_name=str(raw.get("display_name") or provider.title()),
@@ -165,7 +220,20 @@ def _parse_manifest(raw: dict[str, Any], *, source: Path) -> ProviderManifest:
         capabilities=capabilities,
         notes=[str(note) for note in (raw.get("notes") or [])],
         manual_fallback=raw.get("manual_fallback"),
+        documentation_version=_optional_str(raw.get("documentation_version")),
+        base_url=_optional_str(raw.get("base_url")),
+        auth_model=_optional_str(raw.get("auth_model")),
+        endpoints=endpoints,
+        unknowns=unknowns,
+        blockers=[str(blocker) for blocker in (raw.get("blockers") or [])],
     )
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def load_manifest(provider: str, *, directory: Path | None = None) -> ProviderManifest | None:

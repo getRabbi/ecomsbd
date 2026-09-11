@@ -60,6 +60,8 @@ async def list_providers(
                 manual_fallback=data["manual_fallback"],
                 fully_unverified=data["fully_unverified"],
                 enabled=enabled,
+                documentation_version=data["documentation_version"],
+                unknowns=data["unknowns"],
             )
         )
     return responses

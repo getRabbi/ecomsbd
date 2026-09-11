@@ -181,12 +181,47 @@ class TestProviderCapabilities:
         assert response.status_code == 200
         providers = {p["provider"]: p for p in response.json()}
 
-        # Steadfast has no verified documentation yet, so nothing is claimed.
+        # Steadfast's V1 documentation has been read, so its capabilities are
+        # now claims with evidence behind them rather than blanket unknowns.
         steadfast = providers["steadfast"]
-        assert steadfast["fully_unverified"] is True
-        assert set(steadfast["capabilities"].values()) == {"unknown"}
-        assert steadfast["enabled"] is False, "unverified providers stay behind a flag"
+        assert steadfast["fully_unverified"] is False
+        assert steadfast["documentation_version"] == "V1"
+        capabilities = steadfast["capabilities"]
+
+        # Exactly the endpoints the document describes.
+        for capability in (
+            "create_single",
+            "create_bulk",
+            "status_lookup",
+            "balance",
+            "returns",
+            "payments",
+            "payment_consignments",
+        ):
+            assert capabilities[capability] == "true", capability
+
+        # The document contains no webhook section at all. The infrastructure
+        # exists and is tested, but the capability must stay `unknown` until a
+        # real contract is supplied — never `false`, which would claim we know
+        # Steadfast has none, and never `true`.
+        assert capabilities["webhook"] == "unknown"
+        assert steadfast["unknowns"]["WEBHOOK_CONTRACT"] == "unknown"
+        assert steadfast["unknowns"]["PROVIDER_CREATE_IDEMPOTENCY"] == "unknown"
+
+        # Endpoints the document positively does not contain are `false`, so
+        # the UI shows the manual alternative rather than a broken button.
+        for capability in ("price_quote", "customer_stats", "cancel", "list_stores"):
+            assert capabilities[capability] == "false", capability
+
+        # Still behind its flag: documentation read is not the same as rolled
+        # out to sellers, and the kill switch must exist before the feature.
+        assert steadfast["enabled"] is False
         assert steadfast["manual_fallback"]
+
+        # Providers with no documentation still claim nothing at all.
+        for name in ("pathao", "redx"):
+            assert providers[name]["fully_unverified"] is True
+            assert set(providers[name]["capabilities"].values()) == {"unknown"}
 
         # Manual mode always works and is never gated.
         assert providers["manual"]["enabled"] is True
