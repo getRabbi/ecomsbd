@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app import __version__
 from app.core.config import Settings
 from app.core.context import current_context
 from app.core.logging import get_logger
@@ -60,6 +61,9 @@ def init_sentry(settings: Settings) -> bool:
     sentry_sdk.init(
         dsn=settings.sentry_dsn.get_secret_value(),
         environment=settings.sentry_environment or str(settings.app_env),
+        # Without a release every regression looks like it has always been
+        # there, and "did the deploy cause this?" stops being answerable.
+        release=settings.sentry_release or f"ecomsbd-backend@{__version__}",
         traces_sample_rate=settings.sentry_traces_sample_rate,
         # This application handles phone numbers and courier credentials.
         send_default_pii=False,

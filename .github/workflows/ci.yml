@@ -141,9 +141,26 @@ jobs:
           GITLEAKS_CONFIG: .gitleaks.toml
 
       - name: Refuse a committed .env
+        # Every tracked .env-shaped file, not just backend/.env. The *.example
+        # templates are the deliberate exceptions: they carry variable names and
+        # placeholders, which is the whole point of committing them.
         run: |
-          if git ls-files --error-unmatch backend/.env >/dev/null 2>&1; then
-            echo "::error::backend/.env is tracked. Secrets must never be committed."
+          tracked=$(git ls-files -- '.env' '.env.*' '**/.env' '**/.env.*' \
+            | grep -v '\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::these .env files are tracked; secrets must never be committed:"
+            echo "$tracked"
+            exit 1
+          fi
+
+      - name: Refuse a committed key or service account
+        run: |
+          tracked=$(git ls-files -- '*.p8' '*.jks' '*.keystore' '*.pem' \
+            'service-account*.json' 'firebase-admin*.json' \
+            '**/google-services.json' '**/GoogleService-Info.plist' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::these credential files are tracked:"
+            echo "$tracked"
             exit 1
           fi
 

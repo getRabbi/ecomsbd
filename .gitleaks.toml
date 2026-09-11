@@ -54,6 +54,20 @@ than becoming a weak secret.
 regexes = ['''INSECURE_DEV_[A-Za-z0-9_]+''']
 
 [[allowlists]]
+description = """
+The Apple sign-in key fixture in the configuration tests. Its base64 payload
+decodes to the ASCII string "not-a-real-key" — it is not a key, and it cannot
+become one.
+
+It has to carry a real PEM header because that header is precisely what the
+validator checks for: APPLE_PRIVATE_KEY must hold the contents of the .p8 file
+rather than a path to it, and a fixture without the header would make the test
+stop proving that. Scoped to the one file and the one literal.
+"""
+paths = ['''backend/tests/test_config\.py''']
+regexes = ['''bm90LWEtcmVhbC1rZXk=''']
+
+[[allowlists]]
 description = "Bundled font binaries and the UI prototype's masked input placeholders."
 paths = [
   '''apps/mobile_flutter/assets/fonts/.*\.ttf''',

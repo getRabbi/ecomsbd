@@ -1,0 +1,5 @@
+{
+  "_README": "NON-SECRET VALUES ONLY. Every key here is compiled into the APK/AAB and can be read back out of it. See README.md in this directory for what must never appear, and for the build command.",
+  "ECOMSBD_API_BASE_URL": "https://api.yourdomain.com",
+  "ECOMSBD_SENTRY_DSN": ""
+}

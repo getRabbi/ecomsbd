@@ -16,12 +16,13 @@ Design rules enforced here:
 from __future__ import annotations
 
 import base64
+import json
 from enum import StrEnum
 from functools import lru_cache
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
-from pydantic import Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Development placeholders. Any value carrying this prefix is rejected in production.
 INSECURE_DEV_PREFIX = "INSECURE_DEV_"
@@ -31,6 +32,15 @@ _DEV_OTP_HASH_SECRET = f"{INSECURE_DEV_PREFIX}otp_hash_secret_do_not_use_outside
 _DEV_PHONE_HMAC_KEY = f"{INSECURE_DEV_PREFIX}phone_search_hmac_do_not_use_outside_local"
 # 32 zero bytes, base64. Deliberately worthless as a key.
 _DEV_CREDENTIAL_KEY = base64.b64encode(b"\x00" * 32).decode()
+
+#: Where a blank value for each required secret lands. See
+#: :meth:`Settings._blank_secret_falls_back_to_the_placeholder`.
+_DEV_SECRET_DEFAULTS = {
+    "jwt_signing_key": _DEV_JWT_KEY,
+    "otp_hash_secret": _DEV_OTP_HASH_SECRET,
+    "phone_search_hmac_key": _DEV_PHONE_HMAC_KEY,
+    "credential_encryption_key": _DEV_CREDENTIAL_KEY,
+}
 
 
 class AppEnv(StrEnum):
@@ -63,6 +73,70 @@ class OtpProvider(StrEnum):
     SMS_GATEWAY = "sms_gateway"
 
 
+#: Sign-in methods that have a working server-side implementation in this build.
+#:
+#: Phone OTP is the only one. Email/password, Google and Apple have
+#: configuration here — so an operator can collect the credentials now and so
+#: the values have one validated home — but no verifier, no endpoint and no
+#: user record. Enabling one of those flags therefore does **not** make a login
+#: method available, and this set is what the "can anyone actually sign in?"
+#: boot check counts. See ``SELLER_AUTH_IMPLEMENTATION_REQUIRED`` in
+#: docs/RELEASE_READINESS.md.
+IMPLEMENTED_AUTH_METHODS = frozenset({"phone_otp"})
+
+#: Hosts that mean "this machine" and so must never appear in a production URL.
+#: ``10.0.2.2`` is the Android emulator's alias for its host and reaches a
+#: developer's laptop, nothing else. S104 is about *binding* to all interfaces;
+#: these are strings being matched against, not an address anything listens on.
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", "10.0.2.2")  # noqa: S104
+
+
+def _is_loopback(url: str) -> bool:
+    """Whether a URL or origin points at the machine running it.
+
+    Matched on the authority rather than anywhere in the string, so a perfectly
+    good ``https://localhost-shop.example.com`` is not mistaken for one.
+    """
+    authority = url.split("://", 1)[-1].split("/", 1)[0].rsplit("@", 1)[-1]
+    if authority.startswith("["):  # bracketed IPv6 literal, optionally with a port
+        host = authority[1:].split("]", 1)[0]
+    else:
+        host = authority.rsplit(":", 1)[0]
+    return host.lower() in _LOOPBACK_HOSTS
+
+
+def _parse_env_list(value: Any) -> Any:
+    """Read a list setting from an environment string.
+
+    pydantic-settings decodes a collection field as JSON, which makes
+    ``CORS_ALLOW_ORIGINS=`` — a line an operator leaves blank in a template they
+    are filling in — a parse error rather than an empty list. That error names
+    the field but not the cause, and the operator's reasonable next move is to
+    delete the line.
+
+    So: blank is empty, JSON is JSON, and anything else is a comma-separated
+    list, which is what a person writes when nobody has told them otherwise.
+    """
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        return json.loads(text)
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _parse_env_mapping(value: Any) -> Any:
+    """Read a mapping setting. Blank is empty; everything else must be JSON."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return {}
+    return json.loads(text)
+
+
 class Settings(BaseSettings):
     """Runtime configuration, loaded from environment and ``.env``."""
 
@@ -79,6 +153,13 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     api_v1_prefix: str = "/v1"
     debug: bool = False
+
+    #: Where a human-facing page lives, when one exists. Today it is the base a
+    #: transactional email builds its links from; there is no web client.
+    public_web_url: str | None = None
+    #: Reply-to on outbound mail, and the address shown when the product tells a
+    #: seller to contact support.
+    support_email: str | None = None
 
     # Business timezone. Stored per tenant later; this is the platform default.
     default_timezone: str = "Asia/Dhaka"
@@ -102,6 +183,44 @@ class Settings(BaseSettings):
     jwt_issuer: str = "ecomsbd"
     access_token_ttl_seconds: int = 900  # 15 minutes; short by design
     refresh_token_ttl_days: int = 60
+
+    # ------------------------------------------------- sign-in methods ---
+    # BOOT configuration, not runtime feature flags. These decide which
+    # credentials must be present for the process to be safe to start, so they
+    # cannot live in the database table that :mod:`app.common.feature_flags`
+    # serves — that table is read per request, after boot, by a connection this
+    # configuration is what establishes.
+    #
+    # Only ``phone_otp`` is implemented (see :data:`IMPLEMENTED_AUTH_METHODS`).
+    # The other three exist so their credentials have a validated home before
+    # the sign-in work lands; turning one on configures nothing into existence.
+
+    #: Deferred. The production decision is email/password + Google + Apple, and
+    #: no SMS gateway has been selected, so OTP sign-in is off in production and
+    #: its endpoints refuse with ``FEATURE_DISABLED``.
+    phone_otp_login_enabled: bool = True
+    email_password_auth_enabled: bool = False
+    google_auth_enabled: bool = False
+    apple_auth_enabled: bool = False
+
+    # Google Sign-In. The backend must verify the identity token itself:
+    # issuer, signature, expiry, and an ``aud`` that is one of these client ids.
+    # A client's claim to have signed in is never evidence. Each id is public —
+    # it ships inside the app — so none of these is a secret.
+    google_client_id_android: str | None = None
+    google_client_id_ios: str | None = None
+    google_client_id_web: str | None = None
+
+    # Sign in with Apple. The private key is a ``.p8`` from the Apple Developer
+    # portal, supplied as PEM *content* rather than a path: a file on a
+    # production host is one `docker cp` from being somewhere else, and the
+    # repository already carries the ``FCM_CREDENTIALS_JSON`` precedent.
+    apple_team_id: str | None = None
+    #: The Services ID (web/redirect flow) or the app's bundle id (native
+    #: flow). This is the ``aud`` an Apple identity token must carry.
+    apple_client_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: SecretStr | None = None
 
     # ------------------------------------------------------------ crypto ---
     # AES-GCM application-level vault for courier/billing credentials.
@@ -134,9 +253,17 @@ class Settings(BaseSettings):
     sentry_dsn: SecretStr | None = None
     sentry_traces_sample_rate: float = 0.0
     sentry_environment: str | None = None
+    #: Which build an event came from. Without it every regression looks like it
+    #: has always been there. Conventionally ``ecomsbd-backend@<version>`` or the
+    #: deployed commit sha.
+    sentry_release: str | None = None
 
     # --------------------------------------------------------------- api ---
-    cors_allow_origins: list[str] = Field(default_factory=list)
+    cors_allow_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    #: ``Host`` headers this deployment answers to. Empty disables the check,
+    #: which is right behind a proxy that already enforces one and wrong when
+    #: the app is reachable directly. ``*`` is refused in production.
+    trusted_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
     request_body_limit_bytes: int = 2 * 1024 * 1024
     default_page_size: int = 30  # master spec section 106
     max_page_size: int = 100
@@ -161,8 +288,8 @@ class Settings(BaseSettings):
     # without a release. JSON objects keyed by plan code, e.g.
     #   PLAN_PRICE_OVERRIDES='{"starter": 24900}'
     #   PLAN_ENTITLEMENT_OVERRIDES='{"pro": {"sms_segments_monthly": 2000}}'
-    plan_price_overrides: dict[str, Any] = Field(default_factory=dict)
-    plan_entitlement_overrides: dict[str, Any] = Field(default_factory=dict)
+    plan_price_overrides: Annotated[dict[str, Any], NoDecode] = Field(default_factory=dict)
+    plan_entitlement_overrides: Annotated[dict[str, Any], NoDecode] = Field(default_factory=dict)
 
     #: Which build this deployment serves. Decides whether an out-of-app
     #: payment CTA may be shown at all (master spec section 27.1).
@@ -186,7 +313,7 @@ class Settings(BaseSettings):
     play_service_account_json: SecretStr | None = None
     play_rtdn_shared_secret: SecretStr | None = None
     #: Play product id -> plan code. Empty until products exist in the console.
-    play_product_plan_map: dict[str, str] = Field(default_factory=dict)
+    play_product_plan_map: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
 
     # bKash web/direct. BKASH_MERCHANT_SETUP_REQUIRED.
     bkash_base_url: str | None = None
@@ -199,7 +326,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------- admin ---
     # Platform admin is a separate identity from any seller account. Empty by
     # default: no console access exists until an operator provisions it.
-    admin_api_tokens: list[str] = Field(default_factory=list)
+    admin_api_tokens: Annotated[list[str], NoDecode] = Field(default_factory=list)
     #: How long a support "reveal PII" grant lasts before it must be re-asked.
     admin_reveal_ttl_seconds: int = 300
 
@@ -215,6 +342,24 @@ class Settings(BaseSettings):
     push_transport: str = "disabled"
     sms_transport: str = "disabled"
     notification_max_attempts: int = 5
+
+    # -------------------------------------------------------------- email ---
+    #: TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED. Provider-neutral, like push and
+    #: SMS. ``console`` writes the message to the log and sends nothing — it is
+    #: the development transport, and it is refused in staging and production
+    #: so it cannot become the thing that "delivers" a password reset.
+    #: ``provider_api`` is the shape a real provider plugs into; no provider has
+    #: been selected, so it validates the payload and reports itself
+    #: unconfigured rather than reporting a send that did not happen.
+    email_transport: str = "disabled"
+    #: Envelope sender. Must be on a domain whose SPF/DKIM/DMARC you control,
+    #: or verification mail lands in spam and password resets stop arriving.
+    email_from_address: str | None = None
+    email_from_name: str = "ecomsbd"
+    #: Provider REST endpoint. Not guessed: it is whatever the selected
+    #: provider's current documentation says, supplied at configuration time.
+    email_api_base_url: str | None = None
+    email_api_key: SecretStr | None = None
 
     # ---------------------------------------------------------- couriers ---
     # Transport budgets. `connect` is short and separate on purpose: its expiry
@@ -280,6 +425,92 @@ class Settings(BaseSettings):
 
     # --------------------------------------------------------- validators ---
 
+    @field_validator(
+        "redis_url",
+        "public_web_url",
+        "support_email",
+        "otp_provider_secret",
+        "google_client_id_android",
+        "google_client_id_ios",
+        "google_client_id_web",
+        "apple_team_id",
+        "apple_client_id",
+        "apple_key_id",
+        "apple_private_key",
+        "email_from_address",
+        "email_api_base_url",
+        "email_api_key",
+        "sentry_dsn",
+        "sentry_environment",
+        "sentry_release",
+        "minimum_supported_app_version",
+        "r2_endpoint_url",
+        "r2_bucket",
+        "r2_access_key_id",
+        "r2_secret_access_key",
+        "fcm_project_id",
+        "fcm_credentials_json",
+        "play_package_name",
+        "play_service_account_json",
+        "play_rtdn_shared_secret",
+        "bkash_base_url",
+        "bkash_app_key",
+        "bkash_app_secret",
+        "bkash_username",
+        "bkash_password",
+        "bkash_webhook_secret",
+        mode="before",
+    )
+    @classmethod
+    def _blank_means_unset(cls, value: object) -> object:
+        """Treat an empty environment value as absent.
+
+        ``.env.production.local`` ships with every optional line present and
+        blank, so the operator fills them in place. Without this, ``REDIS_URL=``
+        would be the empty *string* — which is not ``None``, so a presence check
+        passes and the failure moves from startup to the first request.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator(
+        "jwt_signing_key",
+        "otp_hash_secret",
+        "phone_search_hmac_key",
+        "credential_encryption_key",
+        mode="before",
+    )
+    @classmethod
+    def _blank_secret_falls_back_to_the_placeholder(cls, value: Any, info: ValidationInfo) -> Any:
+        """A blank required secret becomes the development placeholder.
+
+        These four have no ``None`` to fall back to, and an empty string would
+        be an empty signing key — which is a working key that signs nothing.
+        Routing blank to the tagged ``INSECURE_DEV_`` value instead means local
+        keeps its zero-setup boot, and a deployed environment gets the existing
+        refusal, which names the variable, rather than a length complaint about
+        a value the operator never set.
+        """
+        if isinstance(value, str) and not value.strip():
+            return _DEV_SECRET_DEFAULTS[str(info.field_name)]
+        return value
+
+    @field_validator("cors_allow_origins", "trusted_hosts", "admin_api_tokens", mode="before")
+    @classmethod
+    def _decode_list(cls, value: Any) -> Any:
+        return _parse_env_list(value)
+
+    @field_validator(
+        "plan_price_overrides",
+        "plan_entitlement_overrides",
+        "play_product_plan_map",
+        mode="before",
+    )
+    @classmethod
+    def _decode_mapping(cls, value: Any) -> Any:
+        return _parse_env_mapping(value)
+
     @field_validator("log_level")
     @classmethod
     def _upper_log_level(cls, value: str) -> str:
@@ -307,6 +538,36 @@ class Settings(BaseSettings):
             raise ValueError(f"transport must be one of {sorted(allowed)}")
         return lowered
 
+    @field_validator("email_transport")
+    @classmethod
+    def _validate_email_transport(cls, value: str) -> str:
+        allowed = {"disabled", "console", "mock", "provider_api"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"EMAIL_TRANSPORT must be one of {sorted(allowed)}")
+        return lowered
+
+    @field_validator("apple_private_key")
+    @classmethod
+    def _validate_apple_key(cls, value: SecretStr | None) -> SecretStr | None:
+        """Catch the two ways this is supplied wrong before Apple rejects it.
+
+        A path instead of the contents, or a key whose newlines were eaten by a
+        shell, both fail at the first sign-in rather than at boot — which is the
+        worst time to find out.
+        """
+        if value is None:
+            return None
+        raw = value.get_secret_value().replace("\\n", "\n").strip()
+        if not raw:
+            return None
+        if "BEGIN PRIVATE KEY" not in raw:
+            raise ValueError(
+                "APPLE_PRIVATE_KEY must hold the PEM *contents* of the .p8 file "
+                "(a block starting '-----BEGIN PRIVATE KEY-----'), not a path to it"
+            )
+        return SecretStr(raw)
+
     @field_validator("credential_encryption_key")
     @classmethod
     def _validate_credential_key(cls, value: SecretStr) -> SecretStr:
@@ -329,29 +590,66 @@ class Settings(BaseSettings):
         if self.app_env.is_deployed:
             problems.extend(self._insecure_placeholder_problems())
 
-            if self.redis_url is None:
+            if not self.redis_url:
                 problems.append("REDIS_URL is required outside local/test")
             if self.debug:
                 problems.append("DEBUG must be false in staging/production")
+            if not self.database_url:
+                problems.append("DATABASE_URL is not set")
+            elif not self.database_url.startswith("postgresql"):
+                problems.append(
+                    "DATABASE_URL must be a PostgreSQL URL "
+                    "(postgresql+asyncpg://...) outside local/test"
+                )
 
         if self.app_env.is_production:
-            # The development OTP provider is blocked by two independent switches.
-            if self.otp_provider is OtpProvider.DEV_CONSOLE:
-                problems.append(
-                    "OTP_PROVIDER=dev_console is forbidden in production "
-                    "(it never delivers an SMS and would let anyone sign in)"
-                )
-            if self.allow_dev_otp:
-                problems.append("ALLOW_DEV_OTP must be false in production")
+            # The development OTP provider is blocked by two independent
+            # switches. Both are conditional on OTP sign-in being on at all:
+            # with PHONE_OTP_LOGIN_ENABLED=false nothing ever calls a provider,
+            # and demanding an SMS gateway for a disabled feature is exactly the
+            # "credentials for an integration nobody turned on" this refuses to
+            # do elsewhere.
+            if self.phone_otp_login_enabled:
+                if self.otp_provider is OtpProvider.DEV_CONSOLE:
+                    problems.append(
+                        "OTP_PROVIDER=dev_console is forbidden in production "
+                        "(it never delivers an SMS and would let anyone sign in)"
+                    )
+                if self.allow_dev_otp:
+                    problems.append("ALLOW_DEV_OTP must be false in production")
             if self.otp_expose_debug_code:
                 problems.append("OTP_EXPOSE_DEBUG_CODE must be false in production")
             if not self.public_base_url.startswith("https://"):
                 problems.append("PUBLIC_BASE_URL must use https in production")
+            if _is_loopback(self.public_base_url):
+                problems.append(
+                    "PUBLIC_BASE_URL still points at localhost. Production must not "
+                    "fall back to a development URL"
+                )
+            if self.public_web_url and not self.public_web_url.startswith("https://"):
+                problems.append("PUBLIC_WEB_URL must use https in production")
             if self.database_url.startswith("sqlite"):
                 problems.append("SQLite is not a supported production database")
+            if "*" in self.trusted_hosts:
+                problems.append("TRUSTED_HOSTS must not be '*' in production")
 
-        if self.otp_provider is OtpProvider.SMS_GATEWAY and self.otp_provider_secret is None:
+        # Only when OTP sign-in is actually on. A deployment with
+        # PHONE_OTP_LOGIN_ENABLED=false may still name a gateway it intends to
+        # use later, and demanding that gateway's key for a feature nobody can
+        # reach is how operators learn to fill in values they do not need.
+        if (
+            self.phone_otp_login_enabled
+            and self.otp_provider is OtpProvider.SMS_GATEWAY
+            and self.otp_provider_secret is None
+        ):
             problems.append("OTP_PROVIDER_SECRET is required when OTP_PROVIDER=sms_gateway")
+
+        problems.extend(self._auth_method_problems())
+        problems.extend(self._email_problems())
+        problems.extend(self._integration_credential_problems())
+
+        if self.app_env.is_deployed:
+            problems.extend(self._public_surface_problems())
 
         # A transport that names a real provider must actually be configured.
         # "mock" outside local/test would silently mark every notification
@@ -413,20 +711,174 @@ class Settings(BaseSettings):
             "OTP_HASH_SECRET": self.otp_hash_secret.get_secret_value(),
             "PHONE_SEARCH_HMAC_KEY": self.phone_search_hmac_key.get_secret_value(),
         }
+        unset = "is not set, or still holds the development placeholder value"
         problems = [
-            f"{name} still holds the development placeholder value"
+            f"{name} {unset}"
             for name, value in checks.items()
             if value.startswith(INSECURE_DEV_PREFIX)
         ]
         if self.credential_encryption_key.get_secret_value() == _DEV_CREDENTIAL_KEY:
-            problems.append(
-                "CREDENTIAL_ENCRYPTION_KEY still holds the development placeholder value"
-            )
+            problems.append(f"CREDENTIAL_ENCRYPTION_KEY {unset}")
         problems.extend(
             f"{name} must be at least 32 characters"
             for name, value in checks.items()
             if not value.startswith(INSECURE_DEV_PREFIX) and len(value) < 32
         )
+        return problems
+
+    def _auth_method_problems(self) -> list[str]:
+        """Sign-in must be both configured and reachable.
+
+        Two separate failures live here. One is an enabled method missing the
+        credentials it cannot work without. The other is subtler and is the one
+        that matters right now: a deployed environment where every method that
+        is switched on has no implementation behind it. That boots cleanly,
+        passes every health check, and nobody can sign in.
+        """
+        problems: list[str] = []
+
+        if self.google_auth_enabled and not self.google_client_ids:
+            problems.append(
+                "GOOGLE_AUTH_ENABLED is true but no Google client id is set. At "
+                "least one of GOOGLE_CLIENT_ID_ANDROID / _IOS / _WEB is required: "
+                "they are the audiences an identity token is checked against, and "
+                "a verifier with an empty audience set accepts tokens minted for "
+                "any other application"
+            )
+
+        if self.apple_auth_enabled:
+            missing = [
+                name
+                for name, value in (
+                    ("APPLE_TEAM_ID", self.apple_team_id),
+                    ("APPLE_CLIENT_ID", self.apple_client_id),
+                    ("APPLE_KEY_ID", self.apple_key_id),
+                    ("APPLE_PRIVATE_KEY", self.apple_private_key),
+                )
+                if not value
+            ]
+            if missing:
+                problems.append(
+                    f"APPLE_AUTH_ENABLED is true but {', '.join(missing)} "
+                    f"{'is' if len(missing) == 1 else 'are'} missing"
+                )
+
+        if self.email_password_auth_enabled and self.app_env.is_deployed:
+            if not self.email_transport_can_deliver:
+                problems.append(
+                    "EMAIL_PASSWORD_AUTH_ENABLED is true but EMAIL_TRANSPORT="
+                    f"{self.email_transport} cannot deliver mail. Verification and "
+                    "password reset would be unreachable, which locks sellers out "
+                    "of their own accounts (TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED)"
+                )
+            if not self.email_from_address:
+                problems.append(
+                    "EMAIL_FROM_ADDRESS is required when EMAIL_PASSWORD_AUTH_ENABLED is true"
+                )
+
+        if self.app_env.is_deployed and not self.available_auth_methods:
+            enabled = sorted(self.enabled_auth_methods)
+            detail = (
+                f"the enabled method(s) {enabled} have no implementation in this build"
+                if enabled
+                else "every sign-in method is disabled"
+            )
+            problems.append(
+                f"no seller can sign in: {detail}. Implemented methods are "
+                f"{sorted(IMPLEMENTED_AUTH_METHODS)} "
+                "(SELLER_AUTH_IMPLEMENTATION_REQUIRED - see docs/RELEASE_READINESS.md). "
+                "Refusing to start rather than serving an app nobody can log in to"
+            )
+
+        return problems
+
+    def _email_problems(self) -> list[str]:
+        problems: list[str] = []
+        if self.app_env.is_deployed and self.email_transport in ("console", "mock"):
+            problems.append(
+                f"EMAIL_TRANSPORT={self.email_transport} is forbidden outside local/test. "
+                "It writes the message to a log instead of sending it, so a password "
+                "reset would be 'delivered' to nobody - and printed where it can be read"
+            )
+        # Deployed only. Locally an incomplete provider_api simply reports
+        # NOT_CONFIGURED at send time, which is what that transport is for;
+        # refusing to boot over it would break the zero-setup local start.
+        if self.email_transport == "provider_api" and self.app_env.is_deployed:
+            missing = [
+                name
+                for name, value in (
+                    ("EMAIL_API_BASE_URL", self.email_api_base_url),
+                    ("EMAIL_API_KEY", self.email_api_key),
+                    ("EMAIL_FROM_ADDRESS", self.email_from_address),
+                )
+                if not value
+            ]
+            if missing:
+                problems.append(f"EMAIL_TRANSPORT=provider_api requires {', '.join(missing)}")
+        if self.email_from_address and "@" not in self.email_from_address:
+            problems.append("EMAIL_FROM_ADDRESS is not an email address")
+        if self.support_email and "@" not in self.support_email:
+            problems.append("SUPPORT_EMAIL is not an email address")
+        return problems
+
+    def _integration_credential_problems(self) -> list[str]:
+        """Partly-configured integrations, which are worse than absent ones.
+
+        An absent integration reports itself absent. A half-configured one
+        fails at the first real call, on the first seller who needed it.
+        """
+        problems: list[str] = []
+
+        r2_fields = {
+            "R2_ENDPOINT_URL": self.r2_endpoint_url,
+            "R2_BUCKET": self.r2_bucket,
+            "R2_ACCESS_KEY_ID": self.r2_access_key_id,
+            "R2_SECRET_ACCESS_KEY": self.r2_secret_access_key,
+        }
+        if any(r2_fields.values()) and not all(r2_fields.values()):
+            missing = [name for name, value in r2_fields.items() if not value]
+            problems.append(f"R2 is partly configured; missing {', '.join(missing)}")
+
+        bkash_fields = {
+            "BKASH_BASE_URL": self.bkash_base_url,
+            "BKASH_APP_KEY": self.bkash_app_key,
+            "BKASH_APP_SECRET": self.bkash_app_secret,
+            "BKASH_USERNAME": self.bkash_username,
+            "BKASH_PASSWORD": self.bkash_password,
+        }
+        if any(bkash_fields.values()) and not all(bkash_fields.values()):
+            missing = [name for name, value in bkash_fields.items() if not value]
+            problems.append(f"bKash is partly configured; missing {', '.join(missing)}")
+
+        if self.fcm_credentials_json is not None and not self.fcm_project_id:
+            problems.append("FCM_PROJECT_ID is required alongside FCM_CREDENTIALS_JSON")
+
+        return problems
+
+    def _public_surface_problems(self) -> list[str]:
+        """CORS and host rules for an environment reachable from the internet."""
+        problems: list[str] = []
+
+        if "*" in self.cors_allow_origins:
+            problems.append(
+                "CORS_ALLOW_ORIGINS must not contain '*' in a deployed environment. "
+                "The API is served with allow_credentials=True, so a wildcard origin "
+                "would let any site make authenticated requests on a seller's behalf"
+            )
+        local_origins = [origin for origin in self.cors_allow_origins if _is_loopback(origin)]
+        if local_origins:
+            problems.append(
+                f"CORS_ALLOW_ORIGINS contains development origins {local_origins}; "
+                "those belong in local configuration only"
+            )
+        insecure = [
+            origin
+            for origin in self.cors_allow_origins
+            if origin.startswith("http://") and not _is_loopback(origin)
+        ]
+        if insecure and self.app_env.is_production:
+            problems.append(f"CORS_ALLOW_ORIGINS must use https in production: {insecure}")
+
         return problems
 
     # ------------------------------------------------------------ helpers ---
@@ -435,9 +887,72 @@ class Settings(BaseSettings):
     def dev_otp_enabled(self) -> bool:
         """True only when *both* development OTP guards agree, outside production."""
         return (
-            self.otp_provider is OtpProvider.DEV_CONSOLE
+            self.phone_otp_login_enabled
+            and self.otp_provider is OtpProvider.DEV_CONSOLE
             and self.allow_dev_otp
             and not self.app_env.is_production
+        )
+
+    @property
+    def google_client_ids(self) -> tuple[str, ...]:
+        """Every audience a Google identity token may legitimately carry."""
+        return tuple(
+            value
+            for value in (
+                self.google_client_id_android,
+                self.google_client_id_ios,
+                self.google_client_id_web,
+            )
+            if value
+        )
+
+    @property
+    def google_auth_configured(self) -> bool:
+        return self.google_auth_enabled and bool(self.google_client_ids)
+
+    @property
+    def apple_auth_configured(self) -> bool:
+        return self.apple_auth_enabled and all(
+            (self.apple_team_id, self.apple_client_id, self.apple_key_id, self.apple_private_key)
+        )
+
+    @property
+    def email_transport_can_deliver(self) -> bool:
+        """Whether the selected transport actually puts mail on the wire.
+
+        ``console`` and ``mock`` are excluded on purpose: both report success
+        without sending, which is the failure mode this property exists to stop
+        anything from depending on.
+        """
+        return self.email_transport == "provider_api" and bool(
+            self.email_api_base_url and self.email_api_key and self.email_from_address
+        )
+
+    @property
+    def enabled_auth_methods(self) -> frozenset[str]:
+        """Sign-in methods this deployment has switched on."""
+        selected = {
+            "phone_otp": self.phone_otp_login_enabled,
+            "email_password": self.email_password_auth_enabled,
+            "google": self.google_auth_enabled,
+            "apple": self.apple_auth_enabled,
+        }
+        return frozenset(name for name, on in selected.items() if on)
+
+    @property
+    def available_auth_methods(self) -> frozenset[str]:
+        """Enabled methods a seller can actually use in this build."""
+        return self.enabled_auth_methods & IMPLEMENTED_AUTH_METHODS
+
+    @property
+    def r2_configured(self) -> bool:
+        return all(
+            (
+                self.r2_endpoint_url,
+                self.r2_bucket,
+                self.r2_access_key_id,
+                self.r2_secret_access_key,
+            )
         )
 
     @property

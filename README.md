@@ -177,8 +177,24 @@ device use your machine's LAN address.
 
 ## Environment variables
 
-Full list with comments in [`.env.example`](.env.example). The ones without
-which nothing works:
+Two templates, for two different jobs:
+
+| File | For |
+|---|---|
+| [`.env.example`](.env.example) | **development.** Local defaults boot the whole stack with nothing set. |
+| [`.env.production.example`](.env.production.example) | **production.** Every variable, grouped, each marked `# REQUIRED` / `# OPTIONAL` / `# REQUIRED WHEN ...`. Copy to `.env.production.local` (gitignored) and fill it in. |
+
+[`docs/PRODUCTION_ENV_SETUP.md`](docs/PRODUCTION_ENV_SETUP.md) is the operator's
+manual for the second one: where to obtain every credential, provider by
+provider, with a checklist at the top. Check a configuration without printing
+any value:
+
+```bash
+cd backend
+python -m app.check_production_config --env-file ../.env.production.local --env production
+```
+
+The ones without which nothing works:
 
 | Variable | Notes |
 |---|---|
@@ -189,10 +205,20 @@ which nothing works:
 | `CREDENTIAL_ENCRYPTION_KEY` | base64 of exactly 32 random bytes — the courier/billing vault |
 | `PHONE_SEARCH_HMAC_KEY` | **Separate** secret for the phone lookup HMAC (master spec §133) |
 | `OTP_HASH_SECRET` | Pepper for OTP hashing |
-| `OTP_PROVIDER` | `dev_console` \| `sms_gateway` |
+| `PHONE_OTP_LOGIN_ENABLED` | Boot gate on OTP sign-in. Deferred in production — see below. |
+| `OTP_PROVIDER` | `dev_console` \| `sms_gateway`. Only read when OTP sign-in is on. |
 
 Local and test environments boot with working placeholder secrets. **Startup
-fails fast** in staging and production if any of them is still a placeholder.
+fails fast** in staging and production if any of them is still a placeholder,
+if two of them hold the same value, or if no seller could sign in.
+
+**Sign-in, as of 2026-09-12.** The production auth model is email/password plus
+Google and Apple; phone OTP is deferred and Facebook/Meta login is not part of
+the product. None of those three has a server-side implementation yet, so
+`IMPLEMENTED_AUTH_METHODS` in `app/core/config.py` still lists only `phone_otp`
+and a deployed environment refuses to start with all methods disabled. See
+`SELLER_AUTH_IMPLEMENTATION_REQUIRED` in
+[`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
 
 ---
 

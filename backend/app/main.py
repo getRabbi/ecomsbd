@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import __version__
 
@@ -57,12 +58,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "version": __version__,
             "environment": str(settings.app_env),
             "dev_otp_enabled": settings.dev_otp_enabled,
+            # Which sign-in methods are on, and which of those a seller can
+            # actually use. The two differ whenever a method is configured
+            # ahead of its implementation, and that gap belongs in the first
+            # line of the log rather than in a support ticket.
+            "auth_methods_enabled": sorted(settings.enabled_auth_methods),
+            "auth_methods_available": sorted(settings.available_auth_methods),
         },
     )
     if settings.dev_otp_enabled:
         log.warning(
             "DEVELOPMENT OTP PROVIDER IS ACTIVE. No SMS is sent and codes are "
             "written to the log. This configuration cannot start in production."
+        )
+    if settings.enabled_auth_methods - settings.available_auth_methods:
+        log.warning(
+            "Sign-in methods are enabled that have no implementation in this "
+            "build and will not work: %s",
+            sorted(settings.enabled_auth_methods - settings.available_auth_methods),
         )
 
     try:
@@ -106,6 +119,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
             expose_headers=["x-trace-id", "x-request-id"],
         )
+    # Host header allow-list. Empty means "something in front of this already
+    # enforces one" — correct behind a proxy that terminates a known domain,
+    # and wrong the moment the app is reachable directly, which is why
+    # production refuses the wildcard rather than the empty list.
+    if settings.trusted_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.request_body_limit_bytes)
     app.add_middleware(RequestContextMiddleware, settings=settings)
 

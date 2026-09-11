@@ -1,6 +1,6 @@
 # Release readiness
 
-**Last updated 2026-09-11, end of Phase C.**
+**Last updated 2026-09-12, after the production environment configuration.**
 
 This is the gate. Nothing below is a "nice to have": each row is something that
 must be true before ecomsbd charges a real seller or handles a real parcel.
@@ -9,26 +9,51 @@ A blocker is listed with **what is missing, why it is required, where it is
 configured, and how to check it is done** — because a checklist that only says
 "needs credentials" gets ticked by someone who found *a* credential.
 
+Every environment variable named below is defined in `.env.production.example`
+and explained, with where to obtain it, in **`docs/PRODUCTION_ENV_SETUP.md`**.
+`python -m app.check_production_config` reports which of them are set without
+printing a value.
+
 ---
 
 ## Summary
 
 | | Count |
 |---|---:|
-| **Blockers — must be resolved before any public release** | 9 |
-| Blockers that are an operator decision (no engineering work) | 3 |
-| Blockers that need a third-party account | 6 |
-| Engineering work outstanding | 0. Phase C is code complete as of 2026-09-11; what remains for Steadfast is live verification, not engineering. |
+| **Blockers — must be resolved before any public release** | 14 |
+| Blockers that are an operator decision (no engineering work) | 3 — §1, §2, §10 |
+| Blockers that need a third-party account | 9 — §3, §4, §5, §6a, §6c (×2), §7, §8, §9 |
+| Blockers waiting on provider documentation | 1 — §5a |
+| **Blockers that need engineering work** | **1 — §6 `SELLER_AUTH_IMPLEMENTATION_REQUIRED`** |
+| Deferred, no longer a blocker | §6b `SMS_PROVIDER_REQUIRED` |
 
-**ecomsbd cannot be released today.** Not because the software is incomplete —
-Phases A, B, D, E and F are done and tested — but because it is not yet
-connected to the outside world it needs: no package id, no signing key, no
-courier, no billing provider, no SMS, no push, no object storage, no error
-tracking.
+**ecomsbd cannot be released today**, and as of the 2026-09-12 auth decision one
+of the reasons is engineering rather than configuration.
 
-Every one of those is configuration an operator supplies. None of them needs a
-line of code to be rewritten, and each is refused honestly today rather than
-faked.
+The production sign-in model is now **email/password + Google + Apple**, with
+phone OTP deferred and Facebook/Meta login excluded. **None of those three is
+implemented.** Phone OTP is the only sign-in method this build has, so a
+production deployment that honours the decision has no working login at all —
+and refuses to start rather than serving an app nobody can sign in to.
+
+Everything else remains configuration an operator supplies: no package id, no
+signing key, no courier account, no billing provider, no email provider, no
+push, no object storage, no error tracking. Each is refused honestly today
+rather than faked.
+
+**What changed on 2026-09-12**
+
+- `SMS_PROVIDER_REQUIRED` is **no longer a release blocker**. Phone OTP is
+  deferred, so an SMS gateway is not on the path to first release. It survives
+  below as a *deferred* item, because OTP remains the only implemented sign-in
+  and is therefore the fallback if the new auth work slips.
+- `SELLER_AUTH_IMPLEMENTATION_REQUIRED` is **new**, and is the one blocker that
+  needs code.
+- `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` is **new**: email/password auth needs
+  verification and password-reset mail, and no provider has been selected.
+- `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` and
+  `REDIS_CONFIGURATION_REQUIRED` are recorded explicitly. They were always
+  true; they were never written down.
 
 ---
 
@@ -100,16 +125,55 @@ faked.
 | **Why it stays off** | `SteadfastWebhookVerifier.is_configured` returns `False` unconditionally. A verifier that returned `True` because there is nothing to check would not be a disabled webhook — it would be an open endpoint letting anyone mark any parcel delivered and move a seller's money. `Settings` refuses to boot a deployed environment with `STEADFAST_WEBHOOK_ENABLED=true`. |
 | **Validation** | Steadfast supplies a webhook contract; the verifier implements it; the capability moves from `unknown` to `true` with a date. |
 
-## 6. `SMS_PROVIDER_REQUIRED`
+## 6. `SELLER_AUTH_IMPLEMENTATION_REQUIRED`
+
+| | |
+|---|---|
+| **Status** | **BLOCKED — engineering work. The only blocker on this page that is not configuration.** |
+| **What is missing** | Server-side email/password, Google Sign-In and Sign in with Apple. The production auth decision of 2026-09-12 is those three; the repository implements none of them. |
+| **Why it is required** | Phone OTP is the only sign-in this build has, and it is deferred. A production deployment that honours the decision therefore has no way for any seller to log in. |
+| **What exists already** | Everything sign-in sits on: sessions, refresh-token rotation with reuse detection, device records, tenant selection and binding, the audit trail, rate limiting, and the `users` table. What is missing is the front half — a password credential with a modern KDF, an email verification and reset flow, and a verifier for each provider's identity token. |
+| **What is configured already** | All of it. `GOOGLE_CLIENT_ID_ANDROID` / `_IOS` / `_WEB`, `APPLE_TEAM_ID` / `APPLE_CLIENT_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY`, `EMAIL_*`, and the four `*_AUTH_ENABLED` boot flags are defined, validated and documented. An operator can collect every credential now, before the code lands. |
+| **The rule the verifiers must obey** | The backend verifies the provider's identity token itself — signature, issuer, expiry, and an `aud` matching a configured client id. A client's claim that Google or Apple approved it is never evidence; anyone can post that claim. |
+| **How this is enforced today** | `Settings` refuses to start a deployed environment in which no *implemented* sign-in method is enabled, naming this blocker. Enabling `GOOGLE_AUTH_ENABLED` does not create a login; `IMPLEMENTED_AUTH_METHODS` in `app/core/config.py` is the single place that says which methods are real, and the config check reports configured-but-unimplemented as `PARTIAL`. |
+| **Validation** | A seller registers with an email and a password, receives a verification email, resets a forgotten password, and signs in with Google and with Apple — each producing an ecomsbd session. A token minted for a different `aud` is rejected. `python -m app.check_production_config` reports `SIGN-IN ... OK`. |
+| **Interim option** | Set `PHONE_OTP_LOGIN_ENABLED=true` and resolve `SMS_PROVIDER_REQUIRED` (below). That ships a working, if deferred, sign-in. |
+
+## 6a. `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`
 
 | | |
 |---|---|
 | **Status** | **BLOCKED — needs a provider choice and an account** |
+| **What is missing** | A transactional email provider: an account, a REST endpoint from its current documentation, a send-only API key, and a sending domain with SPF, DKIM and DMARC published. |
+| **Why it is required** | Email verification, forgot-password, reset confirmation and security notices all travel on it, and each is the *only* copy of what it carries. Email/password auth without deliverable mail locks sellers out of their own accounts. |
+| **Where it is configured** | `EMAIL_TRANSPORT`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `EMAIL_API_BASE_URL`, `EMAIL_API_KEY`. |
+| **What exists already** | The provider-neutral transport, address and header-injection validation, masked logging that never renders a body or a full address, and the `disabled` / `console` / `mock` / `provider_api` selection. No provider's request shape is encoded — every provider's REST API differs, and section 140 forbids guessing one. |
+| **Safety already enforced** | `EMAIL_TRANSPORT=console` writes the message to the log and is **refused at startup in staging and production**: a reset link is a credential, so a transport that prints it publishes account takeovers to everyone who can read the log. `mock` is refused for the same reason. `EMAIL_PASSWORD_AUTH_ENABLED=true` with no deliverable transport is refused. |
+| **Validation** | A verification email arrives at a real inbox from the production sender, and the delivery record says `SENT` rather than `NOT_CONFIGURED`. |
+
+## 6b. `SMS_PROVIDER_REQUIRED` — **deferred, no longer a release blocker**
+
+| | |
+|---|---|
+| **Status** | **DEFERRED.** Phone OTP sign-in is off in production (`PHONE_OTP_LOGIN_ENABLED=false`), so no SMS gateway is on the path to first release. |
+| **Why it is still listed** | OTP is the only *implemented* sign-in method. If the auth work above slips, this is the fallback that makes a pilot possible — and resolving it is then a release blocker again. |
 | **What is missing** | A Bangladeshi SMS gateway, a registered sender id, and that gateway's segment and cost rules. |
-| **Why it is required** | OTP sign-in currently uses the development provider, which writes codes to the log and **cannot start in production** — three independent guards refuse it. Without SMS there is no way for a real seller to sign in. This is the blocker that stops even a pilot. |
-| **Where it is configured** | `OTP_PROVIDER=sms_gateway`, `OTP_PROVIDER_SECRET`, `SMS_TRANSPORT=sms_gateway`. |
+| **Where it is configured** | `PHONE_OTP_LOGIN_ENABLED=true`, `OTP_PROVIDER=sms_gateway`, `OTP_PROVIDER_SECRET`, `SMS_TRANSPORT=sms_gateway`. |
 | **What exists already** | The provider-neutral transport, payload validation, GSM-03.38/UCS-2 segment estimation, per-segment quota metering, Banglish templates, and delivery records. Section 22's rule holds: the provider's own segment count wins over our estimate, and both are stored. |
-| **Validation** | `APP_ENV=production` boots (it refuses today); a real OTP arrives; `notification_deliveries` records the provider's segment count. |
+| **What changed** | The dev OTP provider guard and the `OTP_PROVIDER_SECRET` requirement are now conditional on `PHONE_OTP_LOGIN_ENABLED`. A deployment with OTP off is no longer asked for an SMS gateway key it will never use — requiring credentials for a disabled integration is how operators learn to fill in values blindly. With OTP **on**, all three production guards apply unchanged. |
+| **Not affected** | SMS *alerts* are a separate concern from OTP sign-in and remain `SMS_TRANSPORT=disabled`. |
+| **Validation** | With `PHONE_OTP_LOGIN_ENABLED=true`: a real OTP arrives and `notification_deliveries` records the provider's segment count. |
+
+## 6c. `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` / `REDIS_CONFIGURATION_REQUIRED`
+
+| | |
+|---|---|
+| **Status** | **BLOCKED — needs a Supabase project and a managed Redis** |
+| **What is missing** | A production PostgreSQL connection string and a production Redis URL. |
+| **Why they are required** | Nothing runs without the database. Without Redis the API refuses to start in a deployed environment, and the worker refuses outright — a worker that cannot see the queue would report itself healthy while courier polling, payment sync, outbox dispatch, alerts and the weekly summary all silently stopped. |
+| **Where they are configured** | `DATABASE_URL`, `REDIS_URL`, plus the `DATABASE_POOL_*` settings. Supabase pooler caveats — which port, why the scheme is rewritten to `postgresql+asyncpg`, why `sslmode` is stripped — are in `docs/PRODUCTION_ENV_SETUP.md` sections 2 and 3. |
+| **Architecture note** | Supabase is managed PostgreSQL and nothing else. No Supabase Auth, no PostgREST, no Supabase client in Flutter, and **no service-role key anywhere** — the app reaches its data only through the ecomsbd backend, where the tenancy guards are. |
+| **Validation** | `alembic upgrade head` applies cleanly and `/health/ready` reports both `database` and `redis` as `ok`. |
 
 ## 7. `FCM_CREDENTIALS_REQUIRED`
 
@@ -140,7 +204,8 @@ faked.
 | **Status** | **BLOCKED — needs a Sentry project** |
 | **What is missing** | A DSN for the backend and one for the mobile app. |
 | **Why it is required** | Without it a crash in a seller's hands is invisible. Section 49 requires error tracking on both. |
-| **Where it is configured** | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`. |
+| **Where it is configured** | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` on the backend; `ECOMSBD_SENTRY_DSN` as a `--dart-define` on the app. |
+| **Mobile caveat** | `sentry_flutter` is **not a dependency yet**, so `ECOMSBD_SENTRY_DSN` is compiled in and unused. Wiring the mobile SDK is part of this blocker, not just supplying a DSN. |
 | **Validation** | A deliberate test error appears in Sentry **with the phone number redacted** — the `before_send` hook and `send_default_pii=False` are already wired. |
 
 ---
@@ -171,7 +236,17 @@ faked.
   decides whether an external payment CTA may be shown at all (section 27.1).
 - **Set `MINIMUM_SUPPORTED_APP_VERSION`** once there is more than one build in
   the wild.
-- **Point `PUBLIC_BASE_URL` at https.** Production refuses to start otherwise.
+- **Point `PUBLIC_BASE_URL` at https.** Production refuses to start otherwise,
+  and also refuses a localhost host, so a development URL cannot survive a
+  deploy by accident.
+- **Set `TRUSTED_HOSTS`** unless the API sits behind a proxy that already
+  enforces the Host header. The config check reports an empty list rather than
+  refusing, because it cannot tell from inside the process which is true.
+- **Set `SENTRY_RELEASE`** per deploy, ideally to the commit sha. Without it
+  every regression looks like it has always been there.
+- **Keep `CORS_ALLOW_ORIGINS` empty** until a browser client exists. The mobile
+  app is not a browser and needs no entry; a wildcard, a localhost origin and
+  (in production) a plain-http origin are all refused at startup.
 
 ---
 
@@ -189,5 +264,20 @@ thing first.
 | Secret scan | `gitleaks` over the full history; CI also refuses a committed `backend/.env` |
 | Dependency audit | `pip-audit` on the backend lock; `flutter pub outdated` reviewed |
 | Restore drill | Passed within the last 30 days, logged in `DATABASE_RESTORE.md` |
-| Production config | `APP_ENV=production` boots. It fails fast on any placeholder secret, on the dev OTP provider, on non-https, and on SQLite. |
+| Production config | `cd backend && python -m app.check_production_config --env-file ../.env.production.local --env production` exits 0. It never prints a value, so it is safe to run on a shared screen. |
+| Production startup | `APP_ENV=production` boots. It fails fast on a missing or placeholder secret, a reused one, the dev OTP provider while OTP login is on, non-https or localhost URLs, SQLite, a wildcard or localhost CORS origin, a half-configured R2 or bKash, a `console`/`mock` email transport, an enabled provider missing its credentials, and a deployment nobody can sign in to. |
+| Committed secrets | `.env.production.example` holds placeholders only; `.env.production.local` is gitignored and untracked. |
 | Blockers | Every row above resolved or explicitly accepted, in writing, by the operator |
+
+---
+
+## Where configuration lives
+
+| File | Committed? | What it is |
+|---|---|---|
+| `.env.production.example` | yes | The authoritative production template. Every variable, with `# REQUIRED` / `# OPTIONAL` / `# REQUIRED WHEN ...` and the reason it exists. Placeholders only. |
+| `.env.production.local` | **no — gitignored** | The operator's working copy. Same variable names, real values. |
+| `docs/PRODUCTION_ENV_SETUP.md` | yes | Where to obtain every value, provider by provider, with the operator checklist at the top. |
+| `.env.example` | yes | Development only. Local defaults boot the stack with nothing set. |
+| `apps/mobile_flutter/env/production.example.json` | yes | Flutter `--dart-define-from-file` template. **Non-secret values only** — a dart-define is compiled into the APK and can be read out of it. |
+| `backend/app/check_production_config.py` | yes | The check command. Reports status per area; never prints a value. |

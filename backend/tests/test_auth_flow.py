@@ -7,10 +7,12 @@ the path.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 from app.core.errors import ErrorCode
 
@@ -254,3 +256,59 @@ class TestHealth:
     @pytest.mark.parametrize("path", ["/health/live", "/health/ready"])
     async def test_health_needs_no_authentication(self, client: AsyncClient, path: str) -> None:
         assert (await client.get(path)).status_code == 200
+
+
+class TestPhoneOtpLoginDisabled:
+    """``PHONE_OTP_LOGIN_ENABLED=false`` closes the SMS sign-in path.
+
+    The production auth decision is email/password plus Google and Apple, with
+    OTP deferred. The gate lives in :class:`~app.auth.service.AuthService`
+    rather than on the two routes, so a future endpoint that issues or verifies
+    a challenge cannot reopen the path by forgetting a dependency — which is
+    what these two tests are really checking.
+    """
+
+    @pytest_asyncio.fixture
+    async def otp_disabled_client(self, settings: Any) -> AsyncIterator[AsyncClient]:
+        # `get_app_settings` resolves the process-wide singleton, so handing a
+        # different Settings to `create_app` would not reach the dependency
+        # graph. Overriding the dependency is what actually swaps it.
+        from app.api.deps import get_app_settings
+        from app.main import create_app
+
+        disabled = settings.model_copy(update={"phone_otp_login_enabled": False})
+        app = create_app(disabled)
+        app.dependency_overrides[get_app_settings] = lambda: disabled
+        async with (
+            AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://testserver"
+            ) as http_client,
+            app.router.lifespan_context(app),
+        ):
+            yield http_client
+        app.dependency_overrides.clear()
+
+    async def test_requesting_a_code_is_refused(
+        self, otp_disabled_client: AsyncClient, unique_phone: str
+    ) -> None:
+        response = await otp_disabled_client.post(
+            "/v1/auth/otp/request", json={"phone": unique_phone}
+        )
+        assert response.status_code == 403
+        assert response.json()["code"] == ErrorCode.FEATURE_DISABLED
+
+    async def test_verifying_a_code_is_refused(self, otp_disabled_client: AsyncClient) -> None:
+        """Refused before the challenge is even looked up.
+
+        A disabled method must not leak whether a given challenge id exists.
+        """
+        response = await otp_disabled_client.post(
+            "/v1/auth/otp/verify",
+            json={
+                "challenge_id": "00000000-0000-0000-0000-000000000000",
+                "code": "123456",
+                "device": {"install_id": "install-x", "platform": "ANDROID"},
+            },
+        )
+        assert response.status_code == 403
+        assert response.json()["code"] == ErrorCode.FEATURE_DISABLED

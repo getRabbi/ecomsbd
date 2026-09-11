@@ -15,6 +15,9 @@ from app.core.config import AppEnv, OtpProvider, Settings
 
 REAL_SECRET = "x" * 48
 REAL_KEY = base64.b64encode(b"k" * 32).decode()
+#: Shaped like an Apple ``.p8`` and cryptographically worthless. The validator
+#: checks for the PEM header, so what matters here is the shape, not the bytes.
+APPLE_KEY = "-----BEGIN PRIVATE KEY-----\nbm90LWEtcmVhbC1rZXk=\n-----END PRIVATE KEY-----\n"
 
 
 def production_settings(**overrides: object) -> Settings:
@@ -100,6 +103,219 @@ class TestProductionGuards:
     def test_sms_gateway_requires_its_secret(self) -> None:
         with pytest.raises(ValueError, match="OTP_PROVIDER_SECRET is required"):
             Settings(app_env=AppEnv.LOCAL, otp_provider=OtpProvider.SMS_GATEWAY)
+
+
+class TestBlankValues:
+    """An operator filling in a template leaves lines blank. Blank means unset.
+
+    The failure this prevents is quiet: ``REDIS_URL=`` is the empty *string*,
+    which is not ``None``, so a presence check passes and the problem surfaces
+    on the first request instead of at startup.
+    """
+
+    def test_a_blank_required_secret_is_refused_in_production(self) -> None:
+        with pytest.raises(ValueError, match="JWT_SIGNING_KEY is not set"):
+            production_settings(jwt_signing_key="")
+
+    def test_a_blank_redis_url_is_refused_in_production(self) -> None:
+        with pytest.raises(ValueError, match="REDIS_URL is required"):
+            production_settings(redis_url="")
+
+    def test_a_blank_database_url_is_refused_in_production(self) -> None:
+        with pytest.raises(ValueError, match="DATABASE_URL is not set"):
+            production_settings(database_url="")
+
+    def test_a_blank_optional_value_is_simply_absent(self) -> None:
+        settings = production_settings(sentry_dsn="", support_email="", public_web_url="")
+        assert settings.sentry_dsn is None
+        assert settings.support_email is None
+        assert settings.public_web_url is None
+
+    def test_a_blank_list_is_empty_not_a_parse_error(self) -> None:
+        settings = production_settings(cors_allow_origins="", trusted_hosts="")
+        assert settings.cors_allow_origins == []
+        assert settings.trusted_hosts == []
+
+    def test_a_list_may_be_comma_separated_or_json(self) -> None:
+        comma = production_settings(
+            cors_allow_origins="https://a.example.com,https://b.example.com"
+        )
+        json_form = production_settings(
+            cors_allow_origins='["https://a.example.com", "https://b.example.com"]'
+        )
+        assert comma.cors_allow_origins == json_form.cors_allow_origins
+        assert len(comma.cors_allow_origins) == 2
+
+    def test_a_blank_mapping_is_empty(self) -> None:
+        assert production_settings(play_product_plan_map="").play_product_plan_map == {}
+
+
+class TestAuthMethods:
+    """Sign-in must be configured *and* reachable.
+
+    The second half is what matters in this build: only phone OTP has an
+    implementation, so a deployment that switches it off and turns on the three
+    intended production methods has nobody able to log in.
+    """
+
+    def test_the_intended_production_auth_model_cannot_boot_yet(self) -> None:
+        # Exactly the shipped .env.production.example posture. It is refused,
+        # and the refusal names the blocker rather than failing silently.
+        with pytest.raises(ValueError, match="SELLER_AUTH_IMPLEMENTATION_REQUIRED"):
+            production_settings(
+                phone_otp_login_enabled=False,
+                email_password_auth_enabled=True,
+                google_auth_enabled=True,
+                google_client_id_web="123.apps.googleusercontent.com",
+                apple_auth_enabled=True,
+                apple_team_id="ABCDE12345",
+                apple_client_id="com.example.app",
+                apple_key_id="FGHIJ67890",
+                apple_private_key=APPLE_KEY,
+                email_transport="provider_api",
+                email_api_base_url="https://api.email.example.com",
+                email_api_key="k" * 32,
+                email_from_address="no-reply@example.com",
+            )
+
+    def test_disabling_everything_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="no seller can sign in"):
+            production_settings(phone_otp_login_enabled=False)
+
+    def test_local_is_not_subject_to_the_sign_in_check(self) -> None:
+        # A developer working on something unrelated may turn every method off.
+        settings = Settings(app_env=AppEnv.LOCAL, phone_otp_login_enabled=False)
+        assert settings.available_auth_methods == frozenset()
+
+    def test_a_disabled_otp_login_does_not_demand_a_gateway(self) -> None:
+        """Credentials are required for what is switched on, and nothing else.
+
+        The configuration is still refused — nothing implemented is enabled —
+        but the reported problem must be the one that is true. Being told to
+        supply an SMS gateway key for a sign-in route that answers
+        FEATURE_DISABLED is how an operator learns to fill in values blindly.
+        """
+        with pytest.raises(ValueError) as excinfo:
+            production_settings(
+                phone_otp_login_enabled=False,
+                otp_provider=OtpProvider.SMS_GATEWAY,
+                otp_provider_secret=None,
+            )
+        message = str(excinfo.value)
+        assert "OTP_PROVIDER_SECRET" not in message
+        assert "SELLER_AUTH_IMPLEMENTATION_REQUIRED" in message
+
+    def test_google_enabled_without_an_audience_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="no Google client id is set"):
+            production_settings(google_auth_enabled=True)
+
+    def test_apple_enabled_without_its_key_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="APPLE_PRIVATE_KEY"):
+            production_settings(
+                apple_auth_enabled=True,
+                apple_team_id="ABCDE12345",
+                apple_client_id="com.example.app",
+                apple_key_id="FGHIJ67890",
+            )
+
+    def test_an_apple_key_path_is_rejected_in_favour_of_the_contents(self) -> None:
+        with pytest.raises(ValueError, match="PEM"):
+            production_settings(apple_private_key="/etc/secrets/AuthKey_ABC123.p8")
+
+    def test_an_apple_key_with_escaped_newlines_is_accepted(self) -> None:
+        settings = production_settings(apple_private_key=APPLE_KEY.replace("\n", "\\n"))
+        assert settings.apple_private_key is not None
+        assert "\n" in settings.apple_private_key.get_secret_value()
+
+    def test_the_google_audience_set_collects_every_configured_client(self) -> None:
+        settings = production_settings(
+            google_client_id_android="a.apps.googleusercontent.com",
+            google_client_id_web="w.apps.googleusercontent.com",
+        )
+        assert len(settings.google_client_ids) == 2
+
+
+class TestEmailTransport:
+    def test_the_console_transport_cannot_reach_production(self) -> None:
+        """A reset email body is a credential; the console transport prints it."""
+        with pytest.raises(ValueError, match="EMAIL_TRANSPORT=console is forbidden"):
+            production_settings(email_transport="console")
+
+    def test_the_mock_transport_cannot_reach_production(self) -> None:
+        with pytest.raises(ValueError, match="EMAIL_TRANSPORT=mock is forbidden"):
+            production_settings(email_transport="mock")
+
+    def test_a_provider_api_without_credentials_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="EMAIL_TRANSPORT=provider_api requires"):
+            production_settings(email_transport="provider_api")
+
+    def test_email_password_auth_requires_a_transport_that_delivers(self) -> None:
+        with pytest.raises(ValueError, match="cannot deliver mail"):
+            production_settings(email_password_auth_enabled=True)
+
+    def test_a_configured_provider_is_accepted(self) -> None:
+        settings = production_settings(
+            email_transport="provider_api",
+            email_api_base_url="https://api.email.example.com",
+            email_api_key="k" * 32,
+            email_from_address="no-reply@example.com",
+        )
+        assert settings.email_transport_can_deliver
+
+
+class TestPublicSurface:
+    def test_a_wildcard_cors_origin_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="must not contain"):
+            production_settings(cors_allow_origins=["*"])
+
+    def test_development_origins_are_refused(self) -> None:
+        with pytest.raises(ValueError, match="development origins"):
+            production_settings(cors_allow_origins=["http://localhost:3000"])
+
+    def test_a_plain_http_origin_is_refused_in_production(self) -> None:
+        with pytest.raises(ValueError, match="must use https"):
+            production_settings(cors_allow_origins=["http://app.example.com"])
+
+    def test_a_wildcard_trusted_host_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="TRUSTED_HOSTS must not be"):
+            production_settings(trusted_hosts=["*"])
+
+    def test_a_localhost_base_url_is_refused_even_over_https(self) -> None:
+        with pytest.raises(ValueError, match="still points at localhost"):
+            production_settings(public_base_url="https://localhost:8000")
+
+    def test_a_hostname_merely_containing_localhost_is_fine(self) -> None:
+        settings = production_settings(public_base_url="https://localhost-shop.example.com")
+        assert settings.public_base_url.endswith("example.com")
+
+
+class TestPartialIntegrations:
+    """A half-configured integration fails on the first seller who needs it."""
+
+    def test_partial_r2_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="R2 is partly configured"):
+            production_settings(r2_bucket="ecomsbd-prod")
+
+    def test_complete_r2_is_accepted(self) -> None:
+        settings = production_settings(
+            r2_endpoint_url="https://acct.r2.cloudflarestorage.com",
+            r2_bucket="ecomsbd-prod",
+            r2_access_key_id="id",
+            r2_secret_access_key="secret",
+        )
+        assert settings.r2_configured
+
+    def test_partial_bkash_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="bKash is partly configured"):
+            production_settings(bkash_base_url="https://bkash.example.com")
+
+    def test_no_bkash_configuration_is_fine(self) -> None:
+        """A disabled integration must never require its credentials."""
+        assert production_settings().bkash_billing_configured is False
+
+    def test_fcm_credentials_without_a_project_are_refused(self) -> None:
+        with pytest.raises(ValueError, match="FCM_PROJECT_ID is required"):
+            production_settings(fcm_credentials_json='{"type":"service_account"}')
 
 
 class TestCredentialKey:

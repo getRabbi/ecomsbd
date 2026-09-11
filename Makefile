@@ -1,7 +1,8 @@
 # ecomsbd developer commands.
 .DEFAULT_GOAL := help
 .PHONY: help setup services backend worker migrate revision test test-backend \
-        test-flutter lint format typecheck check flutter-app codegen clean
+        test-flutter lint format typecheck check flutter-app codegen clean \
+        config-check
 
 BACKEND := backend
 FLUTTER := apps/mobile_flutter
@@ -56,6 +57,10 @@ typecheck: ## Strict type check the backend
 	cd $(BACKEND) && .venv/Scripts/python.exe -m mypy
 
 check: lint typecheck test ## Everything CI runs
+
+config-check: ## Check a production env file:  make config-check f=.env.production.local
+	cd $(BACKEND) && .venv/Scripts/python.exe -m app.check_production_config \
+		--env-file ../$(or $(f),.env.production.local) --env production
 
 clean: ## Remove build and cache artefacts
 	cd $(BACKEND) && rm -rf .pytest_cache .mypy_cache .ruff_cache

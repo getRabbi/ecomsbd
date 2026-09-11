@@ -161,6 +161,22 @@ class AuthService:
 
     # ------------------------------------------------------------- request --
 
+    def _require_phone_otp_login(self) -> None:
+        """Refuse the OTP flow when this deployment has it switched off.
+
+        The gate is in the service rather than on the two routes, so a future
+        endpoint that issues or verifies a challenge cannot reintroduce the
+        path by forgetting a dependency. ``PHONE_OTP_LOGIN_ENABLED`` is boot
+        configuration: the production decision is email/password plus Google
+        and Apple, and OTP is deferred until an SMS gateway is selected.
+        """
+        if not self._settings.phone_otp_login_enabled:
+            raise AppError(
+                "Sign-in by SMS code is not available.",
+                code=ErrorCode.FEATURE_DISABLED,
+                message_bn="এসএমএস কোড দিয়ে লগইন এখন বন্ধ আছে।",
+            )
+
     async def request_otp(
         self,
         *,
@@ -171,6 +187,7 @@ class AuthService:
         purpose: OtpPurpose = OtpPurpose.LOGIN,
     ) -> ChallengeResult:
         """Issue an OTP challenge, subject to per-phone and per-IP limits."""
+        self._require_phone_otp_login()
         settings = self._settings
         phone_hmac = self._hasher.phone_search_hash(phone_e164)
         ip_hash = self._hasher.ip_hash(client_ip)
@@ -291,6 +308,7 @@ class AuthService:
         client_ip: str | None,
     ) -> SignInResult:
         """Verify a code and start a session."""
+        self._require_phone_otp_login()
         ip_hash = self._hasher.ip_hash(client_ip)
         challenge = await self._db.get(OtpChallenge, challenge_id)
         if challenge is None:

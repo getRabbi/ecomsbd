@@ -14,7 +14,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
-__all__ = ["REDACTED", "is_sensitive_key", "mask_phone", "redact_text", "redact_value"]
+__all__ = [
+    "REDACTED",
+    "is_sensitive_key",
+    "mask_email",
+    "mask_phone",
+    "redact_text",
+    "redact_value",
+]
 
 REDACTED = "[redacted]"
 
@@ -82,6 +89,22 @@ def mask_phone(value: str | None) -> str | None:
     if digits.startswith("880"):
         digits = "0" + digits[3:]
     return f"{digits[:5]}****{digits[-2:]}"
+
+
+def mask_email(value: str | None) -> str | None:
+    """``seller@example.com`` -> ``s****r@example.com``.
+
+    The domain is kept whole because it is the half that is useful when
+    diagnosing delivery — mail to one provider bouncing is a pattern only
+    visible if the domain survives. The local part is the identifying half and
+    is reduced to its first and last character.
+    """
+    if not value or "@" not in value:
+        return value
+    local, _, domain = value.rpartition("@")
+    if len(local) <= 2:
+        return f"{'*' * len(local)}@{domain}"
+    return f"{local[0]}{'*' * (len(local) - 2)}{local[-1]}@{domain}"
 
 
 def redact_text(value: str) -> str:
