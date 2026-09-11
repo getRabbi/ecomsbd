@@ -18,6 +18,7 @@ from app.api.v1 import (
     auth,
     billing,
     consignments,
+    couriers,
     customers,
     imports,
     money,
@@ -44,6 +45,7 @@ api_router.include_router(money.router)
 api_router.include_router(payouts.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(providers.router)
+api_router.include_router(couriers.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
 api_router.include_router(team.router)

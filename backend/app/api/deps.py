@@ -35,6 +35,12 @@ from app.core.config import Settings, get_settings
 from app.core.context import ActorType, RequestContext, clear_context, current_context, set_context
 from app.core.errors import AuthenticationError, ErrorCode, ForbiddenError
 from app.core.security import CredentialVault, SecretHasher, TokenService
+from app.couriers.accounts import CourierAccountService
+from app.couriers.registry import (
+    CourierAdapterRegistry,
+    get_courier_registry,
+    reset_courier_registry,
+)
 from app.db.session import session_scope
 from app.entitlements.service import EntitlementService
 from app.tenants.roles import Permission, TenantRole, has_permission
@@ -42,6 +48,8 @@ from app.users.models import User
 
 __all__ = [
     "BillingServiceDep",
+    "CourierAccountsDep",
+    "CourierRegistryDep",
     "CurrentPrincipal",
     "DbSession",
     "DistributionChannelDep",
@@ -106,6 +114,10 @@ def reset_singletons() -> None:
     global _hasher, _vault, _tokens, _otp_sender, _registry
     _hasher = _vault = _tokens = _otp_sender = None
     _registry = None
+    # The courier registry holds live HTTP connection pools, so a stale one
+    # between tests would keep a fake transport installed for the next test —
+    # or, worse, a real one.
+    reset_courier_registry()
 
 
 # --------------------------------------------------------------------------- #
@@ -328,10 +340,33 @@ async def get_feature_flags(db: DbSession) -> FeatureFlagService:
     return FeatureFlagService(db)
 
 
+def get_couriers(settings: Settings | None = None) -> CourierAdapterRegistry:
+    """The courier adapter registry.
+
+    Built once per process so the HTTP connection pool is shared: a new client
+    per booking would open a new TCP connection per parcel.
+    """
+    return get_courier_registry(settings or get_settings())
+
+
+async def get_courier_registry_dep(settings: SettingsDep) -> CourierAdapterRegistry:
+    return get_couriers(settings)
+
+
+async def get_courier_accounts(
+    db: DbSession,
+    settings: SettingsDep,
+    registry: Annotated[CourierAdapterRegistry, Depends(get_courier_registry_dep)],
+) -> CourierAccountService:
+    return CourierAccountService(db, vault=get_vault(settings), registry=registry)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 EntitlementsDep = Annotated[EntitlementService, Depends(get_entitlements)]
 FeatureFlagsDep = Annotated[FeatureFlagService, Depends(get_feature_flags)]
 BillingServiceDep = Annotated[BillingService, Depends(get_billing_service)]
+CourierAccountsDep = Annotated[CourierAccountService, Depends(get_courier_accounts)]
+CourierRegistryDep = Annotated[CourierAdapterRegistry, Depends(get_courier_registry_dep)]
 ProviderRegistryDep = Annotated[BillingProviderRegistry, Depends(get_billing_registry)]
 DistributionChannelDep = Annotated[DistributionChannel, Depends(get_distribution_channel)]
 

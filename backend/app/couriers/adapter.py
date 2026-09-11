@@ -85,13 +85,32 @@ class BookingOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Outcome of validating merchant credentials before saving them."""
+    """Outcome of validating merchant credentials before saving them.
+
+    ``valid`` and ``rejected`` are deliberately two fields rather than one
+    tri-state, because the third case is the one that matters and it is easy to
+    lose. ``valid=False, rejected=True`` means the provider said no. ``valid=
+    False, rejected=False`` means we never found out — a timeout, a 500, an
+    unreadable body — and **must not** count against the account. A seller
+    re-typing a working API key because the provider had a bad minute is the
+    failure this shape exists to prevent (master spec section 49; brief
+    section 5).
+    """
 
     valid: bool
     message: str | None = None
     #: Capabilities the provider confirmed for this specific account.
     detected_capabilities: frozenset[Capability] = field(default_factory=frozenset)
     account_label: str | None = None
+    #: Whether the provider positively refused these credentials. Only ever
+    #: ``True`` for a deterministic rejection the provider actually answered
+    #: with; never inferred from a transport failure.
+    rejected: bool = False
+
+    @property
+    def is_inconclusive(self) -> bool:
+        """We asked and did not get an answer about the credentials."""
+        return not self.valid and not self.rejected
 
 
 @dataclass(frozen=True, slots=True)

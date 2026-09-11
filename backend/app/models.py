@@ -26,6 +26,16 @@ from app.common.idempotency import IdempotencyKey
 from app.common.outbox import OutboxEvent
 from app.common.provider_health import ProviderHealth
 from app.consignments.models import Consignment, ConsignmentItem
+from app.couriers.models import (
+    CourierAccount,
+    CourierBookingAttempt,
+    CourierEvent,
+    CourierRawPayload,
+    CourierReturnRequest,
+    CourierSyncCursor,
+    CourierWebhookDelivery,
+    ProviderPayment,
+)
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
@@ -64,6 +74,13 @@ __all__ = [
     "Consignment",
     "ConsignmentCharge",
     "ConsignmentItem",
+    "CourierAccount",
+    "CourierBookingAttempt",
+    "CourierEvent",
+    "CourierRawPayload",
+    "CourierReturnRequest",
+    "CourierSyncCursor",
+    "CourierWebhookDelivery",
     "Customer",
     "CustomerAddress",
     "DeletionRequest",
@@ -92,6 +109,7 @@ __all__ = [
     "Product",
     "ProfitSnapshot",
     "ProviderHealth",
+    "ProviderPayment",
     "ReconciliationCase",
     "RefreshToken",
     "RepairActionRecord",

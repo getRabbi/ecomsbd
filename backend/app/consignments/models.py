@@ -161,9 +161,47 @@ class Consignment(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     returned_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     last_status_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 
-    #: Whole provider payloads live in courier_events (Phase C); this holds the
-    #: small amount of normalised metadata the domain itself needs.
+    #: Whole provider payloads live in courier_events; this holds the small
+    #: amount of normalised metadata the domain itself needs.
     metadata_json: Mapped[dict] = mapped_column(JSONColumn, nullable=False, default=dict)
+
+    # --- provider integration (phase C) ------------------------------------
+
+    #: Which credentials booked this parcel. Needed by every later provider
+    #: call about it: a shop that reconnects with a different key must still be
+    #: able to look up a parcel booked under the old one, and a status poll has
+    #: to know which account to authenticate as.
+    courier_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("courier_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    #: How many create attempts this parcel has had. Never resets, and never
+    #: causes a new merchant reference — the reference is stable across every
+    #: attempt, which is what makes an ambiguous create recoverable.
+    booking_attempt_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+    #: When the provider's status was last *observed*. Distinct from
+    #: ``last_status_at``, which is when the parcel's own state last changed:
+    #: a parcel polled hourly for a week has a fresh observation and a
+    #: week-old state, and confusing the two makes a stale sync invisible.
+    provider_status_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    last_polled_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+
+    #: When this parcel is next due a status poll. Null means "not on the
+    #: polling schedule" — a manual parcel, or one that has finished. Adaptive:
+    #: a fresh parcel is checked often, a settled one not at all.
+    next_poll_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    poll_failure_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+    #: True once a provider observation says the outcome needs a person to
+    #: supply quantities — ``partial_delivered`` carries none. The parcel's
+    #: status is not advanced to a final state until they do.
+    needs_quantity_resolution: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False
+    )
 
     items: Mapped[list[ConsignmentItem]] = relationship(
         back_populates="consignment",

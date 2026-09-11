@@ -145,3 +145,65 @@ def unique_phone() -> str:
     """A distinct valid Bangladeshi mobile number per call."""
     suffix = uuid.uuid4().int % 100_000_000
     return f"017{suffix:08d}"
+
+
+# --------------------------------------------------------------------------- #
+# Courier providers
+# --------------------------------------------------------------------------- #
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _no_live_courier() -> AsyncIterator[None]:
+    """Refuse a real courier HTTP call from anywhere in the suite.
+
+    Installed for *every* test, not only the courier ones. Brief section 43: CI
+    must never depend on Steadfast being up — and the way that rule usually
+    breaks is a test that does not think it touches a provider reaching one
+    through three layers of service wiring. A registry whose factory raises
+    turns that into an immediate, obvious failure rather than a flaky build and
+    a real parcel.
+    """
+    from app.couriers.metrics import reset_metrics
+    from app.couriers.registry import CourierAdapterRegistry, set_courier_registry
+
+    def _refuse():  # type: ignore[no-untyped-def]
+        raise AssertionError(
+            "A test tried to build a live courier adapter. Use the "
+            "`steadfast_transport` fixture, or install a registry explicitly."
+        )
+
+    set_courier_registry(CourierAdapterRegistry({"steadfast": _refuse}))
+    reset_metrics()
+    yield
+    set_courier_registry(None)
+
+
+@pytest.fixture
+def steadfast_transport():  # type: ignore[no-untyped-def]
+    """A scripted Steadfast transport, installed into the adapter registry.
+
+    Returns the transport so a test can enqueue responses and then assert what
+    was actually sent — which is how "a create is sent exactly once" and "a bulk
+    timeout resends nothing" are proved.
+    """
+    from app.couriers.registry import CourierAdapterRegistry, set_courier_registry
+    from app.couriers.steadfast.adapter import SteadfastAdapter
+    from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
+    from app.couriers.steadfast.transport import FakeSteadfastTransport
+
+    transport = FakeSteadfastTransport()
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    def _factory():  # type: ignore[no-untyped-def]
+        return SteadfastAdapter(
+            SteadfastClient(
+                transport,
+                config=SteadfastConfig(bulk_chunk_size=3, max_read_retries=0),
+                sleep=_no_sleep,
+            )
+        )
+
+    set_courier_registry(CourierAdapterRegistry({"steadfast": _factory}))
+    return transport

@@ -260,14 +260,18 @@ class SteadfastAdapter:
             if exc.is_auth_failure:
                 return ValidationResult(
                     valid=False,
+                    rejected=True,
                     message="Steadfast rejected this API key and secret key.",
                     account_label=credentials.masked_identifier,
                 )
             # Transient or unreadable. Explicitly *not* invalid: marking an
             # account bad because the provider had a bad minute would make a
             # seller re-enter working credentials.
+            # Transient or unreadable: `rejected` stays False, which is what
+            # stops the account being marked bad.
             return ValidationResult(
                 valid=False,
+                rejected=False,
                 message=_UNVERIFIABLE_MESSAGE,
                 account_label=credentials.masked_identifier,
                 detected_capabilities=frozenset(),

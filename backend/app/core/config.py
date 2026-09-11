@@ -216,6 +216,62 @@ class Settings(BaseSettings):
     sms_transport: str = "disabled"
     notification_max_attempts: int = 5
 
+    # ---------------------------------------------------------- couriers ---
+    # Transport budgets. `connect` is short and separate on purpose: its expiry
+    # is the only failure that *proves* a request never left, which is what
+    # lets an ambiguous booking be a clean failure instead of a parcel nobody
+    # can account for. A generous connect timeout would manufacture
+    # BOOKING_UNKNOWNs that never needed to exist.
+    courier_connect_timeout_seconds: float = 5.0
+    courier_read_timeout_seconds: float = 20.0
+    courier_write_timeout_seconds: float = 10.0
+    courier_pool_timeout_seconds: float = 5.0
+    courier_max_connections: int = 10
+    #: Reads only. A create is never retried whatever this says.
+    courier_read_retries: int = 2
+
+    # Steadfast. The base URL is the one its V1 documentation prints; it is
+    # overridable so a future sandbox does not need a release, not because we
+    # know of one (the document names none).
+    steadfast_base_url: str = "https://portal.packzy.com/api/v1"
+    #: ecomsbd's own batch size. The provider permits 500; a failed 500-item
+    #: request leaves 500 parcels in an unknown state, and permission to send
+    #: that many is not a reason to.
+    steadfast_bulk_chunk_size: int = 50
+    #: STEADFAST_WEBHOOK_CONTRACT_REQUIRED. The supplied V1 documentation has no
+    #: webhook section, so there is no signature scheme to verify against.
+    #: Turning this on without one would mean accepting unauthenticated requests
+    #: that move money, so it is refused in deployed environments below.
+    steadfast_webhook_enabled: bool = False
+
+    # Adaptive status polling, in minutes. A fresh parcel changes state within
+    # hours; a two-week-old one will not change in the next ten minutes.
+    courier_poll_interval_fresh_minutes: int = 20
+    courier_poll_interval_active_minutes: int = 60
+    courier_poll_interval_stale_minutes: int = 360
+    #: How long a parcel stays "fresh" after booking.
+    courier_poll_fresh_window_hours: int = 24
+    #: After this, a parcel is polled on the stale interval.
+    courier_poll_active_window_days: int = 7
+    #: Parcels per shop per poll run. Bounds the load a single big shop can put
+    #: on the provider and on this VPS.
+    courier_poll_batch_size: int = 100
+
+    # BOOKING_UNKNOWN recovery. Backoff between attempts to resolve one
+    # ambiguous booking by asking the provider about its invoice.
+    courier_recovery_initial_delay_seconds: int = 60
+    courier_recovery_max_delay_seconds: int = 3600
+    #: After this many inconclusive attempts the parcel goes to a person
+    #: rather than being asked about forever.
+    courier_recovery_max_attempts: int = 8
+
+    # Payment sync. The overlap re-reads a little of what was already seen;
+    # duplicates are free (the provider payment id is unique) and a gap is
+    # money that never reaches the seller's screen.
+    courier_payment_sync_interval_minutes: int = 60
+    courier_payment_sync_overlap_minutes: int = 120
+    courier_payment_sync_max_pages: int = 20
+
     # ----------------------------------------------------------- workers ---
     worker_queue_name: str = "ecomsbd:jobs"
     worker_max_jobs: int = 10
@@ -323,6 +379,28 @@ class Settings(BaseSettings):
 
         if self.billing_grace_period_days < 0:
             problems.append("BILLING_GRACE_PERIOD_DAYS cannot be negative")
+
+        # A webhook receiver with no verified signature contract cannot tell a
+        # provider's callback from anyone else's POST. Accepting one would mean
+        # letting an unauthenticated request change a parcel's status and,
+        # through it, a seller's money. The receiver exists and is tested; it
+        # stays disabled until a real contract is supplied, and this refuses to
+        # boot a deployed environment that turned it on without one.
+        if self.steadfast_webhook_enabled and self.app_env.is_deployed:
+            problems.append(
+                "STEADFAST_WEBHOOK_ENABLED is true but no verified Steadfast webhook "
+                "contract exists (STEADFAST_WEBHOOK_CONTRACT_REQUIRED). There is no "
+                "signature scheme to check, so every delivery would be accepted "
+                "unauthenticated."
+            )
+
+        if self.courier_connect_timeout_seconds <= 0:
+            problems.append("COURIER_CONNECT_TIMEOUT_SECONDS must be positive")
+        if not 1 <= self.steadfast_bulk_chunk_size <= 500:
+            problems.append(
+                "STEADFAST_BULK_CHUNK_SIZE must be between 1 and the provider's "
+                "documented maximum of 500"
+            )
 
         if problems:
             joined = "\n  - ".join(problems)
