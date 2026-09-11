@@ -117,12 +117,14 @@ class ApiClient {
   Future<Map<String, dynamic>> post(
     String path, {
     Object? body,
+    Map<String, dynamic>? query,
     bool authenticated = true,
     String? idempotencyKey,
   }) => _send(
     () => _dio.post<dynamic>(
       path,
       data: body,
+      queryParameters: query,
       options: Options(
         extra: <String, dynamic>{'skipAuth': !authenticated},
         headers: <String, dynamic>{
@@ -134,6 +136,17 @@ class ApiClient {
 
   Future<Map<String, dynamic>> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
+
+  /// Delete a resource.
+  ///
+  /// Used only where the server models removal as a DELETE — disconnecting a
+  /// courier account, revoking a device. It is deliberately not offered a
+  /// request body: a DELETE that carries one is a POST wearing a disguise, and
+  /// proxies are entitled to drop it.
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    Map<String, dynamic>? query,
+  }) => _send(() => _dio.delete<dynamic>(path, queryParameters: query));
 
   /// Upload a file as `multipart/form-data`.
   ///

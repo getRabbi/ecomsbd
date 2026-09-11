@@ -5,6 +5,8 @@ import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../core/env.dart';
 import '../../data/billing/billing_providers.dart';
+import '../../data/couriers/courier_providers.dart';
+import '../../data/couriers/models.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
@@ -12,6 +14,7 @@ import '../../design/tokens.dart';
 import '../billing/plans_screen.dart';
 import '../shared/responsive.dart';
 import 'account_security_screen.dart';
+import 'courier_accounts_screen.dart';
 import 'data_privacy_screen.dart';
 import 'notification_settings_screen.dart';
 
@@ -90,6 +93,39 @@ class SettingsScreen extends ConsumerWidget {
 
                 const SectionHeader(title: 'Plan'),
                 const _SubscriptionRow(),
+
+                const SectionHeader(title: 'Couriers'),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final account = ref.watch(
+                      courierAccountProvider(CourierAccountsScreen.steadfast),
+                    );
+                    return _SettingsRow(
+                      icon: Icons.local_shipping_outlined,
+                      title: 'Courier accounts',
+                      // The subtitle carries the state rather than a generic
+                      // label: "needs reconnect" is something a seller has to
+                      // act on, and burying it one tap deeper means booking
+                      // fails before they find out.
+                      subtitle: account.maybeWhen(
+                        data: (value) => switch (value?.status) {
+                          CourierAccountStatus.connected =>
+                            'Steadfast connected ${value?.maskedIdentifier ?? ''}'
+                                .trim(),
+                          CourierAccountStatus.needsReconnect =>
+                            'Steadfast needs reconnecting',
+                          _ => 'Connect Steadfast to book from ecomsbd',
+                        },
+                        orElse: () => 'Book, track and reconcile automatically',
+                      ),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CourierAccountsScreen(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
 
                 const SectionHeader(title: 'Account'),
                 _SettingsRow(

@@ -6,6 +6,7 @@ import '../../core/money.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
+import '../../data/couriers/courier_providers.dart';
 import '../../data/local/tables.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
@@ -13,6 +14,7 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
+import 'courier_booking_sheet.dart';
 import 'dispatch_sheet.dart';
 import 'order_status.dart';
 
@@ -323,31 +325,7 @@ class _OrderBody extends ConsumerWidget {
         ],
         if (order.status == 'PACKED' ||
             order.status == 'CONFIRMED') ...<Widget>[
-          const SectionHeader(
-            title: 'Send it',
-            subtitle: 'Manual courier mode — nothing is sent to a provider',
-          ),
-          FilledButton.icon(
-            onPressed: busy
-                ? null
-                : () async {
-                    final sent = await DispatchSheet.show(
-                      context,
-                      orderId: order.id,
-                    );
-                    if (sent) {
-                      ref.invalidate(orderProvider(order.id));
-                    }
-                  },
-            icon: const Icon(Icons.local_shipping_outlined, size: 18),
-            label: const Text('Hand to a courier'),
-            style: FilledButton.styleFrom(
-              backgroundColor: EcomsbdColors.orange,
-              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
-              shape: const StadiumBorder(),
-              textStyle: EcomsbdType.label,
-            ),
-          ),
+          _SendItSection(order: order, busy: busy),
         ],
       ],
     );
@@ -548,6 +526,105 @@ class _CancelDialogState extends State<_CancelDialog> {
           ),
           child: const Text('Cancel order'),
         ),
+      ],
+    );
+  }
+}
+
+/// How a parcel leaves the shop.
+///
+/// Two routes, and which one is offered depends on what the shop has connected
+/// rather than on which is "better". Manual mode is always present: it is the
+/// path every courier failure degrades to, and a seller who has not connected
+/// an account is not in a lesser state (brief section 46).
+class _SendItSection extends ConsumerWidget {
+  const _SendItSection({required this.order, required this.busy});
+
+  final SellerOrder order;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canBook = ref.watch(canBookWithCourierProvider);
+    final courierReady = canBook.maybeWhen(
+      data: (value) => value,
+      orElse: () => false,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SectionHeader(
+          title: 'Send it',
+          subtitle: courierReady
+              ? 'Book with Steadfast, or record a courier by hand'
+              : 'Manual courier mode — nothing is sent to a provider',
+        ),
+        if (courierReady) ...<Widget>[
+          FilledButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final result = await CourierBookingSheet.show(
+                      context,
+                      order: order,
+                    );
+                    if (result != null) {
+                      ref.invalidate(orderProvider(order.id));
+                    }
+                  },
+            icon: const Icon(Icons.local_shipping_outlined, size: 18),
+            label: const Text('Book with Steadfast'),
+            style: FilledButton.styleFrom(
+              backgroundColor: EcomsbdColors.orange,
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
+          ),
+          const SizedBox(height: EcomsbdSpacing.xs),
+          OutlinedButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final sent = await DispatchSheet.show(
+                      context,
+                      orderId: order.id,
+                    );
+                    if (sent) {
+                      ref.invalidate(orderProvider(order.id));
+                    }
+                  },
+            icon: const Icon(Icons.edit_note_rounded, size: 18),
+            label: const Text('Record a courier by hand'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
+          ),
+        ] else
+          FilledButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final sent = await DispatchSheet.show(
+                      context,
+                      orderId: order.id,
+                    );
+                    if (sent) {
+                      ref.invalidate(orderProvider(order.id));
+                    }
+                  },
+            icon: const Icon(Icons.local_shipping_outlined, size: 18),
+            label: const Text('Hand to a courier'),
+            style: FilledButton.styleFrom(
+              backgroundColor: EcomsbdColors.orange,
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
+          ),
       ],
     );
   }

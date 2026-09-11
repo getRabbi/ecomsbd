@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/money/models.dart';
+import '../../data/couriers/courier_providers.dart';
+import '../../data/couriers/models.dart' as couriers;
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
@@ -204,6 +206,7 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                       onRetry: controller.refresh,
                     ),
                   ],
+                  const _SteadfastPaymentsSection(),
                   const SectionHeader(title: 'Received'),
                   PagedListBody<Payout>(
                     state: state,
@@ -566,6 +569,177 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
           child: const Text('Record'),
         ),
       ],
+    );
+  }
+}
+
+/// Payments Steadfast sent, as Steadfast reports them.
+///
+/// Shown *above* the payout list rather than mixed into it, because it answers
+/// a different question: "has the courier paid me?" versus "what have we tied
+/// to a parcel?". Two facts are carried deliberately:
+///
+/// * the source is named — `Steadfast API`, not an anonymous row — so a seller
+///   can tell an imported payment from a statement they uploaded;
+/// * a payment whose field names were *inferred* says so. Steadfast documents
+///   no response schema for its payments endpoints, and a seller comparing
+///   these numbers against their courier portal deserves to know that rather
+///   than discovering it during a disagreement.
+class _SteadfastPaymentsSection extends ConsumerStatefulWidget {
+  const _SteadfastPaymentsSection();
+
+  @override
+  ConsumerState<_SteadfastPaymentsSection> createState() =>
+      _SteadfastPaymentsSectionState();
+}
+
+class _SteadfastPaymentsSectionState
+    extends ConsumerState<_SteadfastPaymentsSection> {
+  bool _syncing = false;
+
+  Future<void> _sync() async {
+    if (_syncing) {
+      return;
+    }
+    setState(() => _syncing = true);
+    try {
+      await ref.read(courierRepositoryProvider).syncPayments();
+      ref.invalidate(providerPaymentsProvider);
+      await ref.read(payoutListProvider.notifier).refresh();
+    } on ApiError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncing = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final account = ref.watch(courierAccountProvider('steadfast'));
+    final connected = account.maybeWhen(
+      data: (value) => value?.status.canBook ?? false,
+      orElse: () => false,
+    );
+    if (!connected) {
+      // No account: nothing to sync, and a disabled button explaining an
+      // absent integration is worse than no section at all.
+      return const SizedBox.shrink();
+    }
+
+    final payments = ref.watch(providerPaymentsProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SectionHeader(
+          title: 'From Steadfast',
+          subtitle: 'Payments the courier says it has sent',
+          actionLabel: _syncing ? 'Syncing…' : 'Sync now',
+          onAction: _syncing ? null : _sync,
+        ),
+        payments.when(
+          loading: () => const SkeletonLoader(height: 64),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (rows) => rows.isEmpty
+              ? Text(
+                  'No payments synced yet.',
+                  style: EcomsbdType.caption.copyWith(
+                    color: EcomsbdColors.muted2,
+                  ),
+                )
+              : Column(
+                  children: <Widget>[
+                    for (final payment in rows.take(5))
+                      _ProviderPaymentRow(payment: payment),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProviderPaymentRow extends StatelessWidget {
+  const _ProviderPaymentRow({required this.payment});
+
+  final couriers.ProviderPayment payment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EcomsbdSpacing.xs),
+      child: GlassCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    payment.providerReference ?? payment.providerPaymentId,
+                    style: EcomsbdType.label,
+                  ),
+                ),
+                Text(
+                  payment.totalPaisa == null
+                      ? '—'
+                      : Money(payment.totalPaisa!).format(),
+                  style: EcomsbdType.sectionTitle,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: EcomsbdSpacing.xs,
+              runSpacing: 4,
+              children: <Widget>[
+                const StatusChip(
+                  label: 'Steadfast API',
+                  tone: Tone.info,
+                  showIcon: false,
+                ),
+                StatusChip(
+                  label: payment.stateLabel,
+                  tone: payment.needsAttention ? Tone.warning : Tone.good,
+                  showIcon: false,
+                ),
+                if (payment.consignmentCount != null)
+                  StatusChip(
+                    label: '${payment.consignmentCount} parcels',
+                    tone: Tone.neutral,
+                    showIcon: false,
+                  ),
+              ],
+            ),
+            if (payment.needsAttention) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                payment.errorMessage ??
+                    'Steadfast changed its copy of this payment after we '
+                        'imported it. Nothing already settled has been '
+                        'rewritten — someone needs to look.',
+                style: EcomsbdType.caption.copyWith(color: Tone.warning.ink),
+              ),
+            ],
+            if (payment.schemaUnverified) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                'Steadfast does not publish the format of this response, so '
+                'these field names are our best reading of it.',
+                style: EcomsbdType.caption.copyWith(
+                  color: EcomsbdColors.muted2,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
