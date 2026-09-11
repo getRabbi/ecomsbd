@@ -25,7 +25,9 @@ from app.api.deps import (
     BookingRecoveryDep,
     CourierAccountsDep,
     CourierBookingDep,
+    CourierReturnsDep,
     DbSession,
+    PaymentSyncDep,
     Principal,
     require_permission,
 )
@@ -454,6 +456,157 @@ async def resolve_booking_attempt(
         "consignment_id": str(result.consignment_id),
         "outcome": str(result.outcome),
     }
+
+
+# --------------------------------------------------------------- returns --
+
+
+class ReturnRequestPayload(BaseModel):
+    """Why the parcel should come back.
+
+    ``reason`` is optional because the provider's documentation says it is.
+    ecomsbd asks for it anyway in the UI — a return report is only worth acting
+    on if its reasons are real — but an empty one never blocks the request.
+    """
+
+    reason: str | None = Field(default=None, max_length=400)
+
+
+class ReturnRequestResponse(BaseModel):
+    id: str
+    consignment_id: str
+    state: str
+    provider_return_id: str | None
+    provider_status: str | None
+    #: Seller-facing. For an unconfirmed request this is the Bangla copy that
+    #: tells them not to send another.
+    message: str
+
+
+@router.post(
+    "/consignments/{consignment_id}/return",
+    response_model=ReturnRequestResponse,
+    summary="Ask the courier to return a parcel",
+)
+async def request_return(
+    consignment_id: uuid.UUID,
+    payload: ReturnRequestPayload,
+    principal: Annotated[Principal, Depends(require_permission(Permission.ORDER_CANCEL))],
+    returns: CourierReturnsDep,
+) -> ReturnRequestResponse:
+    """Request a return, once.
+
+    A second request for the same parcel is refused with
+    ``RETURN_ALREADY_REQUESTED`` — including while an earlier one is still
+    unconfirmed, because a lost answer does not mean the courier did not get it,
+    and a parcel collected twice is a charge the seller cannot undo.
+    """
+    result = await returns.request_return(consignment_id, reason=payload.reason)
+    return ReturnRequestResponse(
+        id=str(result.request_id),
+        consignment_id=str(result.consignment_id),
+        state=str(result.state),
+        provider_return_id=result.provider_return_id,
+        provider_status=result.provider_status,
+        message=result.message,
+    )
+
+
+@router.get(
+    "/consignments/{consignment_id}/returns",
+    response_model=list[ReturnRequestResponse],
+    summary="Return requests raised for a parcel",
+)
+async def list_returns(
+    consignment_id: uuid.UUID,
+    principal: Booker,
+    returns: CourierReturnsDep,
+) -> list[ReturnRequestResponse]:
+    rows = await returns.for_consignment(consignment_id)
+    return [
+        ReturnRequestResponse(
+            id=str(row.id),
+            consignment_id=str(row.consignment_id),
+            state=row.state,
+            provider_return_id=row.provider_return_id,
+            provider_status=row.provider_status,
+            message=row.reason or "",
+        )
+        for row in rows
+    ]
+
+
+class ProviderPaymentResponse(BaseModel):
+    """A provider payment as the Money screen shows it.
+
+    ``schema_unverified`` is surfaced rather than hidden: Steadfast documents no
+    response schema for its payments endpoints, so the field names behind these
+    numbers are inferred. A seller comparing this against their courier portal
+    deserves to know that.
+    """
+
+    id: str
+    provider_payment_id: str
+    provider_reference: str | None
+    sync_state: str
+    total_paisa: int | None
+    paid_at: str | None
+    consignment_count: int | None
+    payout_id: str | None
+    first_seen_at: str
+    last_seen_at: str
+    error_message: str | None
+    observed_fields: list[str]
+    schema_unverified: bool = True
+
+
+@router.get(
+    "/payments",
+    response_model=list[ProviderPaymentResponse],
+    summary="Payments synced from the courier",
+)
+async def list_provider_payments(
+    principal: Annotated[Principal, Depends(require_permission(Permission.MONEY_VIEW))],
+    payments: PaymentSyncDep,
+    provider: str = "steadfast",
+    limit: int = 50,
+) -> list[ProviderPaymentResponse]:
+    rows = await payments.payments(provider=provider, limit=min(limit, 200))
+    return [
+        ProviderPaymentResponse(
+            id=str(row.id),
+            provider_payment_id=row.provider_payment_id,
+            provider_reference=row.provider_reference,
+            sync_state=row.sync_state,
+            total_paisa=row.total_paisa,
+            paid_at=row.paid_at.isoformat() if row.paid_at else None,
+            consignment_count=row.consignment_count,
+            payout_id=str(row.payout_id) if row.payout_id else None,
+            first_seen_at=row.first_seen_at.isoformat(),
+            last_seen_at=row.last_seen_at.isoformat(),
+            error_message=row.error_message,
+            observed_fields=list(row.observed_fields or []),
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/payments/sync",
+    summary="Sync payments from the courier now",
+)
+async def sync_provider_payments(
+    principal: Annotated[Principal, Depends(require_permission(Permission.MONEY_RECONCILE))],
+    payments: PaymentSyncDep,
+    provider: str = "steadfast",
+) -> dict[str, object]:
+    """Run the payment sync on demand.
+
+    Idempotent: a payment already imported is recognised by its provider id and
+    is not imported again, so pressing this twice cannot double a settled total.
+    """
+    report = await payments.sync(provider=provider)
+    return report.as_dict()
 
 
 __all__ = ["router"]

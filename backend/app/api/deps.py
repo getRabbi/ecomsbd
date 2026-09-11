@@ -38,12 +38,15 @@ from app.core.errors import AuthenticationError, ErrorCode, ForbiddenError
 from app.core.security import CredentialVault, SecretHasher, TokenService
 from app.couriers.accounts import CourierAccountService
 from app.couriers.booking import CourierBookingService
+from app.couriers.payments import PaymentSyncService
 from app.couriers.recovery import BookingRecoveryService
 from app.couriers.registry import (
     CourierAdapterRegistry,
     get_courier_registry,
     reset_courier_registry,
 )
+from app.couriers.returns import CourierReturnService
+from app.couriers.status_sync import StatusSyncService
 from app.db.session import session_scope
 from app.entitlements.service import EntitlementService
 from app.money.service import ReceivableService
@@ -56,12 +59,15 @@ __all__ = [
     "CourierAccountsDep",
     "CourierBookingDep",
     "CourierRegistryDep",
+    "CourierReturnsDep",
     "CurrentPrincipal",
     "DbSession",
     "DistributionChannelDep",
+    "PaymentSyncDep",
     "Principal",
     "ProviderRegistryDep",
     "SettingsDep",
+    "StatusSyncDep",
     "get_auth_service",
     "get_db",
     "get_principal",
@@ -400,7 +406,38 @@ async def get_booking_recovery(
     )
 
 
+async def get_courier_returns(
+    db: DbSession,
+    accounts: Annotated[CourierAccountService, Depends(get_courier_accounts)],
+) -> CourierReturnService:
+    return CourierReturnService(db, accounts=accounts)
+
+
+async def get_payment_sync(
+    db: DbSession,
+    settings: SettingsDep,
+    accounts: Annotated[CourierAccountService, Depends(get_courier_accounts)],
+) -> PaymentSyncService:
+    return PaymentSyncService(db, accounts=accounts, settings=settings)
+
+
+async def get_status_sync(
+    db: DbSession,
+    settings: SettingsDep,
+    accounts: Annotated[CourierAccountService, Depends(get_courier_accounts)],
+) -> StatusSyncService:
+    return StatusSyncService(
+        db,
+        accounts=accounts,
+        consignments=ConsignmentService(db, receivables=ReceivableService(db)),
+        settings=settings,
+    )
+
+
 CourierAccountsDep = Annotated[CourierAccountService, Depends(get_courier_accounts)]
+CourierReturnsDep = Annotated[CourierReturnService, Depends(get_courier_returns)]
+PaymentSyncDep = Annotated[PaymentSyncService, Depends(get_payment_sync)]
+StatusSyncDep = Annotated[StatusSyncService, Depends(get_status_sync)]
 CourierBookingDep = Annotated[CourierBookingService, Depends(get_courier_booking)]
 BookingRecoveryDep = Annotated[BookingRecoveryService, Depends(get_booking_recovery)]
 CourierRegistryDep = Annotated[CourierAdapterRegistry, Depends(get_courier_registry_dep)]

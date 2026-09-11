@@ -18,6 +18,7 @@ from app.api.v1 import (
     auth,
     billing,
     consignments,
+    courier_webhooks,
     couriers,
     customers,
     imports,
@@ -46,6 +47,10 @@ api_router.include_router(payouts.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(providers.router)
 api_router.include_router(couriers.router)
+# Unauthenticated by necessity: a provider callback carries no session. The
+# Steadfast route stores what it receives and processes nothing, because no
+# verified signature contract exists (STEADFAST_WEBHOOK_CONTRACT_REQUIRED).
+api_router.include_router(courier_webhooks.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
 api_router.include_router(team.router)

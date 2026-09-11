@@ -20,6 +20,13 @@ from arq.connections import RedisSettings
 from app import __version__
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.couriers.jobs import (
+    poll_courier_statuses,
+    recover_unknown_bookings,
+    refresh_courier_credentials,
+    sync_courier_payments,
+    sync_courier_returns,
+)
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
@@ -94,6 +101,11 @@ class WorkerSettings:
         dispatch_notifications,
         expire_exports,
         run_account_deletions,
+        poll_courier_statuses,
+        recover_unknown_bookings,
+        sync_courier_returns,
+        sync_courier_payments,
+        refresh_courier_credentials,
     ]
 
     cron_jobs: ClassVar[list[Any]] = [
@@ -126,6 +138,27 @@ class WorkerSettings:
         # window is measured in days.
         cron(expire_exports, minute={0, 30}),
         cron(run_account_deletions, hour=4, minute=0),
+        # Courier synchronisation (phase C). Steadfast documents no webhook, so
+        # polling is the production path rather than a safety net — the
+        # cadences below are what keeps a seller's parcel status true.
+        #
+        # Recovery runs most often and is the reason the whole set exists: every
+        # minute an ambiguous booking stays unresolved is an order the seller
+        # cannot book and a parcel that may or may not be moving. It is cheap
+        # when idle, because the query finds nothing.
+        cron(recover_unknown_bookings, minute=set(range(0, 60, 5))),
+        # Status polling decides per parcel how often to ask (fresh, active,
+        # stale), so running the sweep every ten minutes costs one query per
+        # shop when nothing is due.
+        cron(poll_courier_statuses, minute=set(range(0, 60, 10))),
+        # Returns move on a human timescale at the courier's end.
+        cron(sync_courier_returns, minute={7, 37}),
+        # Payments settle daily at most. Hourly is generous and keeps the
+        # Money screen close to the courier's own portal.
+        cron(sync_courier_payments, minute={12}),
+        # Credential health: slow on purpose. Its job is to notice a revoked
+        # key before a seller hits it mid-booking, not to poll a working one.
+        cron(refresh_courier_credentials, hour={5, 17}, minute=25),
     ]
 
     on_startup = startup
