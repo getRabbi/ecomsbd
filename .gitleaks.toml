@@ -59,3 +59,22 @@ paths = [
   '''apps/mobile_flutter/assets/fonts/.*\.ttf''',
   '''docs/CODPILOT_PREMIUM_REDDIT_GLASS_FINAL\.html''',
 ]
+
+[[allowlists]]
+description = """
+One synthetic courier credential from the Phase C courier-account tests, as it
+exists in commit 3eda807. It was never a real key — it is a made-up string used
+to prove that the credential vault encrypts, that the value never reaches a
+response, and that a ciphertext cannot be moved between rows.
+
+It is allowlisted rather than rewritten out of history because history is not
+rewritten on this repository. The literal was chosen badly: `sfk-live-...` is
+production-shaped, which is exactly the pattern a scanner should flag, and the
+scanner was right to. The constant in the working tree has been renamed to
+`synthetic-courier-key-for-tests-...`, so nothing new matches this rule.
+"""
+paths = ['''backend/tests/test_courier_accounts\.py''']
+regexes = [
+  '''sfk-live-0000-1111-2222-abcd''',
+  '''sfs-live-3333-4444-5555-wxyz''',
+]

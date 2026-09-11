@@ -33,10 +33,22 @@ a signing key, a courier, a billing provider, an SMS gateway, push credentials,
 object storage, error tracking and a staging restore drill. Each is refused
 honestly in the meantime — nothing pretends to work.
 
-Phase C (the Steadfast adapter) is **blocked** on merchant API documentation, so
-parcels move through **manual courier mode**: the seller records that a parcel
-went out and later what happened to it. No courier, payment or SMS provider is
-integrated, and nothing in this codebase makes a provider HTTP call.
+Phase C (the Steadfast adapter) is **code complete**. Steadfast's V1 API
+documentation was supplied on 2026-09-11, read in full, and implemented
+against — a seller can connect their merchant keys, book single and bulk
+parcels, survive an unconfirmed booking without duplicating it, track status by
+polling, request returns, and have Steadfast payments imported into the existing
+reconciliation engine. What is not done is **live verification**: no real key
+has authenticated and no real parcel has been created, so
+`STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED` remains open. The V1 document also has
+no webhook section at all, so the receiver is built and tested but refuses every
+delivery (`STEADFAST_WEBHOOK_CONTRACT_REQUIRED`); polling is the complete
+synchronisation path.
+
+**Manual courier mode is unconditional** and is what every courier failure
+degrades to: the seller records that a parcel went out and later what happened
+to it, uploads the payout statement, and the same reconciliation engine runs on
+it. No payment or SMS provider is integrated.
 
 ---
 

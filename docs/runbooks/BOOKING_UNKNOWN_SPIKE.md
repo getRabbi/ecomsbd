@@ -9,10 +9,17 @@ The rule this runbook exists to protect: **never rebook automatically.**
 Rebooking a parcel that was in fact created gives the customer two deliveries
 and the seller two charges, and the seller finds out from the courier's invoice.
 
-> Phase C is blocked on Steadfast documentation, so no provider booking path
-> exists yet and this state is currently unreachable. The runbook ships now so
-> the reconciliation procedure is written before the first outage rather than
-> during it.
+> **Live as of Phase C (2026-09-11).** Steadfast booking is implemented, so
+> this state is reachable. The automatic half of the procedure below now runs
+> as a job: `recover_unknown_bookings` asks Steadfast about the parcel's invoice
+> every few minutes on exponential backoff, and promotes it to `BOOKED` the
+> moment the provider confirms the parcel exists.
+>
+> What the job **cannot** do is prove absence. Steadfast's V1 documentation
+> describes no "not found" response, so a 404 is not evidence that the parcel
+> was never created. After the attempt budget runs out the booking moves to
+> `MANUAL_REVIEW` and lands on your desk — which is what the rest of this
+> runbook is for.
 
 ---
 
@@ -21,6 +28,8 @@ and the seller two charges, and the seller finds out from the courier's invoice.
 | Signal | Where |
 |---|---|
 | `booking_unknown` count rising | `GET /v1/admin/ops/counts` |
+| `steadfast_create_ambiguous` rising faster than `steadfast_unknown_recovered` | courier metrics — recovery is falling behind |
+| `steadfast_unknown_unresolved` non-zero | **any value needs a person**: the attempt budget ran out |
 | Consignments stuck in the state | query below |
 | Sellers reporting "it says booking unconfirmed" | support |
 
@@ -32,7 +41,8 @@ is a different problem from an outage.
 
 ## Immediate containment
 
-1. **Do not rebook.** Not by hand, not with a script.
+1. **Do not rebook.** Not by hand, not with a script. The app offers no
+   retry affordance on this state for the same reason.
 2. Check whether the provider is degraded at all
    ([PROVIDER_OUTAGE.md](PROVIDER_OUTAGE.md)). A spike with healthy latency
    means our timeout is too aggressive; a spike with rising latency means

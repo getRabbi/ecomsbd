@@ -1,20 +1,20 @@
 # Implementation status
 
-**Phase F (billing, entitlements and hardening) — COMPLETE.** Last updated
-2026-09-11.
+**Phase C (Steadfast courier integration) — CODE COMPLETE; external
+verification pending.** Last updated 2026-09-11.
 
 | | |
 |---|---|
 | **Phase A** | COMPLETE |
 | **Phase B** | COMPLETE |
-| **Phase C** | **BLOCKED** — needs Steadfast merchant API documentation and an account |
+| **Phase C** | **CODE COMPLETE** — Steadfast V1 documentation supplied and implemented; live credential test pending |
 | **Phase D** | COMPLETE |
 | **Phase E** | COMPLETE |
 | **Phase F** | COMPLETE |
 | **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
 | **Branch** | `main` |
 | **Phase A baseline commit** | `d70856f66ba206d1f1885235110680fbfc577eaf` |
-| **Verified at Phase F** | 833 backend tests **on SQLite and on real PostgreSQL 16.13**, 179 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean, and a passing backup restore drill |
+| **Verified at Phase C** | 1003 backend tests **on SQLite and on real PostgreSQL 16**, 203 Flutter tests, ruff + ruff format + mypy --strict + flutter analyze + dart format all clean, migration upgrade/downgrade/upgrade round-trip, and a passing backup restore drill |
 
 Phase F is the first phase whose test suite has been run against real
 PostgreSQL rather than only SQLite. That run found 43 failures the SQLite
@@ -27,12 +27,21 @@ runs both plus a backup restore drill on every build.
 but because it is not yet connected to the outside world it needs. Nine
 blockers, every one of them configuration an operator supplies.
 
-Phase D was built ahead of Phase C because Phase C cannot start: there is no
-provider documentation to build against, and master spec section 140 forbids
-inventing it. The money core depends on the order and consignment schema rather
-than on a provider, so parcels move through **manual courier mode** — the seller
-records a dispatch and later an outcome. When the Steadfast adapter arrives it
-replaces that entry point and nothing downstream changes.
+Phases D–F were built ahead of Phase C because Phase C could not start: there
+was no provider documentation to build against, and master spec section 140
+forbids inventing it. That changed on 2026-09-11, when Steadfast's V1 API
+documentation was supplied. It was read in full, transcribed into
+`docs/providers/steadfast/CONTRACT.md`, and implemented against — and the
+prediction held: the adapter replaced the entry point and nothing downstream
+changed. Manual courier mode remains unconditional and is what every provider
+failure degrades to.
+
+What the document does **not** contain shaped the implementation as much as what
+it does. It has no webhook section, no error-body schema, no idempotency
+statement, no rate limit, no pagination parameter, and no response schema at all
+for four of its twelve endpoints. Every one of those is recorded as `UNKNOWN` or
+`UNVERIFIED` rather than guessed — see
+`docs/providers/steadfast/IMPLEMENTATION.md`.
 
 All Phase B–F work is committed to this repository. Workflow: implement a
 vertical slice, test it, commit it, push it — not one commit at the end.
@@ -363,14 +372,14 @@ against the old code.
 | Area | What exists | What is missing |
 |---|---|---|
 | Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | Risk needs a data source (blocked). Profit and courier state are now real per parcel, but the order card still reads the order's own placeholder — wiring it to the consignment and its snapshot is a small follow-up. |
-| Courier adapter | `CourierAdapter` Protocol, `BookingOutcome` incl. `UNKNOWN`, capability manifests, `Unavailable` result type, the `consignments` / `consignment_items` schema, and a working **manual** dispatch/outcome path | No provider implementation. No HTTP call exists anywhere in the codebase. Manual mode is the working path and is what the money core runs on. |
-| Provider manifests | Loader, three-valued capability state, four manifests | Steadfast/Pathao/RedX are entirely `unknown` pending real documentation |
+| Courier adapter | Fully implemented for Steadfast V1: typed client, transport, contract-as-data, DTOs, status map, error taxonomy, plus the manual path | Live credential test pending. Pathao and RedX remain manifest placeholders. |
+| Provider manifests | Loader, three-valued capability state, per-capability evidence (endpoint, method, models, whether live credentials are needed), named unknowns and blockers | Pathao and RedX are entirely `unknown` pending real documentation. Steadfast is verified against V1 except `webhook`, which stays `unknown` because the document has no webhook section. |
 | Subscriptions | The full state model, provider architecture, verification flow, dunning and reconciliation; every transition recorded | No provider **credentials**. Play needs a service account and a decided package id; bKash needs merchant onboarding. Both refuse honestly and neither can grant today. |
 | Offline detection | `isOfflineProvider`, the banner, and the sync controller that sets it from the last attempt | No connectivity subscription; the flag follows API results, which is what actually matters |
 | Conflict resolution UI | A conflicted record is marked, kept, and never overwritten; the detail screen explains it | No side-by-side "yours / theirs" chooser yet |
 | Import formats | CSV, with encoding fallbacks and delimiter sniffing, for both products/orders and courier statements | XLSX is detected and refused with a clear message rather than mis-parsed. No provider statement format is verified, so the statement reader is generic and the seller confirms the column mapping. |
 | Payout source storage | The statement is retained in full, with its SHA-256; generated exports too | Cloudflare R2 is not provisioned, so `storage_key` is null and the content lives in the database row. Moving it is a migration, not a redesign. |
-| Provider payment API | `PayoutSource.API` exists in the model | No provider payment API is integrated. Statements and manual entry are the working paths. |
+| Provider payment API | Steadfast `/payments` and `/payments/{id}` are integrated end to end: dedupe by provider payment id, raw retention, payout + lines + adjustments, and hand-off to the existing reconciliation engine | Those two endpoints have **no documented response schema**, so the typed field names are inferred and marked `UNVERIFIED` until one live call confirms them. Statements and manual entry remain the working paths for other couriers. |
 | Notifications | The centre, the four alerts, the Friday summary, **and** the transport contracts, delivery records, retry policy, preferences and alert-fatigue rules | No push or SMS **provider**. Every attempt is recorded as `NOT_CONFIGURED` rather than as a quiet success, and section 94's rule that push is only ever a second copy means the product works without it. |
 | Courier scorecard | Delivery success and return rate per courier from the shop's own history, with the sample rule visible | Section 24's median delivery time, effective cost per delivered parcel and settlement lag need per-provider timing data that only accumulates once real bookings exist |
 
@@ -379,9 +388,6 @@ against the old code.
 ## Not started
 
 Everything below is in the V1 spec and is scheduled, not dropped.
-
-**Phase C — Steadfast:** credential vault UI, validation, real booking, status
-sync, webhooks, polling, `BOOKING_UNKNOWN` reconciliation, provider health.
 
 **Blocked on external configuration, not on engineering:** Play Billing
 verification, the bKash merchant client, SMS delivery, FCM push, R2 object
@@ -404,7 +410,8 @@ inventing any of it.
 |---|---|---|
 | **Android `applicationId`** | **An operator decision.** Neither the spec nor the prototype names one. Currently the scaffold default `com.example.ecomsbd`, which Play rejects — and the id is permanent once published. | `PACKAGE_ID_DECISION_REQUIRED` in `android/app/build.gradle.kts`. Blocks any Play upload and all billing work. Phase F **checked the repository for an official decision and found none**, so nothing was invented: the Play provider reports this blocker by name and refuses. |
 | Release signing keystore | Operator | Release builds use the debug key |
-| **Steadfast API** | Current merchant API documentation + a merchant account | Manifest is entirely `unknown`; no adapter. Manual courier mode is the working path. |
+| **Steadfast API** | A merchant account. The documentation blocker is **resolved** — V1 was supplied 2026-09-11 and implemented. | Everything is built and tested against contract fixtures. `STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED`: no real key has authenticated, no real parcel has been created, and four endpoints' response schemas are inferred rather than observed. |
+| **Steadfast webhook** | A webhook contract from Steadfast — the V1 document has no webhook section at all | `STEADFAST_WEBHOOK_CONTRACT_REQUIRED`. The receiver, replay protection, verifier/parser ports and queue are built and tested; the verifier refuses everything, and polling is the complete V1 sync path. |
 | Pathao API | Current merchant API documentation | Auto-address design decision is recorded and verified; endpoints are not |
 | RedX API | Any documentation | Manifest placeholder only |
 | bKash | Merchant onboarding contract | Checkout records, callback verification, the recurring/one-time split, dunning and cancellation are implemented; no endpoint path or signature scheme is guessed. `BKASH_MERCHANT_SETUP_REQUIRED`. |
@@ -423,10 +430,20 @@ inventing any of it.
 
 | Suite | Count | Command |
 |---|---:|---|
-| Backend (SQLite) | 833 | `cd backend && pytest -q` |
-| Backend (**PostgreSQL 16.13**) | 833 | `TEST_DATABASE_URL=postgresql+asyncpg://… pytest -q` |
-| Flutter | 179 | `cd apps/mobile_flutter && flutter test` |
+| Backend (SQLite) | 1003 | `cd backend && pytest -q` |
+| Backend (**PostgreSQL 16**) | 1003 | `TEST_DATABASE_URL=postgresql+asyncpg://… pytest -q` |
+| Flutter | 203 | `cd apps/mobile_flutter && flutter test` |
+| Migration round-trip | passing | `alembic upgrade head && alembic downgrade -1 && alembic upgrade head` |
 | Restore drill | passing | `infra/backup/restore.sh <dump>` |
+
+**Phase C added 170 backend and 24 Flutter tests.** The backend ones are grouped
+by the claim they defend rather than by module: the Steadfast contract and
+adapter (78), booking and `BOOKING_UNKNOWN` recovery (27), status/return/payment
+sync and the webhook receiver (32), courier accounts and credential handling
+(17), and tenant/permission/PII/concurrency safety (16). The Flutter ones cover
+the connection screen's four validation outcomes, the ambiguous-booking screen
+that deliberately offers no retry, bulk partial success, and the payout screen's
+honesty about an inferred schema.
 
 **Backend (833):** billing verification, replay and dunning (53), platform
 primitives — outbox, idempotency, crypto,

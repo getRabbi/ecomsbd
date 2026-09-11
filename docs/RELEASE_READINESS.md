@@ -1,6 +1,6 @@
 # Release readiness
 
-**Last updated 2026-09-10, end of Phase F.**
+**Last updated 2026-09-11, end of Phase C.**
 
 This is the gate. Nothing below is a "nice to have": each row is something that
 must be true before ecomsbd charges a real seller or handles a real parcel.
@@ -18,7 +18,7 @@ configured, and how to check it is done** — because a checklist that only says
 | **Blockers — must be resolved before any public release** | 9 |
 | Blockers that are an operator decision (no engineering work) | 3 |
 | Blockers that need a third-party account | 6 |
-| Engineering work outstanding | 0 for Phase F; Phase C remains blocked |
+| Engineering work outstanding | 0. Phase C is code complete as of 2026-09-11; what remains for Steadfast is live verification, not engineering. |
 
 **ecomsbd cannot be released today.** Not because the software is incomplete —
 Phases A, B, D, E and F are done and tested — but because it is not yet
@@ -77,15 +77,28 @@ faked.
 | **What exists already** | The checkout record, our own reference minted before anyone is redirected, callback verification, the recurring/one-time split, dunning and cancellation. A `BkashApiClient` implementation is the remaining work. |
 | **Validation** | Sandbox payment completes; `POST /v1/billing/web/confirm` returns `granted: true`; a replayed callback changes nothing. |
 
-## 5. `STEADFAST_CREDENTIALS_REQUIRED`
+## 5. `STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED`
 
 | | |
 |---|---|
-| **Status** | **BLOCKED — Phase C. Needs current merchant API documentation and an account** |
-| **What is missing** | See "Phase C blocker" below — it is the most detailed item on this list. |
-| **Consequence today** | Manual courier mode is the working path. Dispatch and outcome are recorded by the seller; the money core, profit engine and alerts all run on it unchanged. |
-| **Where it is configured** | Provider manifest `docs/provider_notes/steadfast.yaml`; flag `steadfast_enabled`. |
-| **Validation** | The manifest's capabilities move from `unknown` to verified with a date; a booking produces a consignment id; a status webhook is deduplicated. |
+| **Status** | **Code complete; needs a merchant account to verify.** The documentation blocker is resolved — Steadfast's V1 API documentation was supplied on 2026-09-11, read in full, and implemented against. |
+| **What is missing** | A merchant `Api-Key` and `Secret-Key`. Nothing else. |
+| **Why it is required** | Every code path is tested against contract fixtures over a fake transport, which proves the parsing, the state machine and the safety rules. It does not prove that a real key authenticates, that a real create returns what the document says, or what the four undocumented-schema endpoints actually return. |
+| **Where it is configured** | Seller-side: Settings → Courier accounts. Operator-side: `STEADFAST_SMOKE_API_KEY` / `STEADFAST_SMOKE_SECRET_KEY` for the smoke tool. Flag `steadfast_enabled` gates rollout and is **off** by default. |
+| **How to verify** | `python -m app.provider_smoke steadfast --account-id <uuid>` (read-only), then `--probe-undocumented` to record the real field names, then `--allow-create` with a recipient fixture for one real parcel. The checklist is in `docs/providers/steadfast/IMPLEMENTATION.md`. |
+| **Validation** | The smoke tool passes end to end; the "Live verification" table in `IMPLEMENTATION.md` is filled in with dates; any `UNVERIFIED` field name in the manifest is replaced with the observed one. |
+| **Consequence today** | Manual courier mode remains the working path and is unconditional. The money core, profit engine and alerts run on it unchanged. |
+
+## 5a. `STEADFAST_WEBHOOK_CONTRACT_REQUIRED`
+
+| | |
+|---|---|
+| **Status** | **BLOCKED — the supplied documentation has no webhook section at all.** |
+| **What is missing** | A signature header name, an HMAC algorithm, a payload shape, an event id and a retry contract. Not one of those appears in Steadfast's V1 documentation. |
+| **Why it is required** | It is not, for correctness — polling is the complete V1 synchronisation path and is built to be sufficient on its own. A webhook would make status arrive in seconds instead of minutes. |
+| **What exists already** | The receiving route, raw-body persistence, replay protection by body hash, the delivery state machine, verifier and parser ports, a constant-time signature comparator, and the queue hand-off. All tested. |
+| **Why it stays off** | `SteadfastWebhookVerifier.is_configured` returns `False` unconditionally. A verifier that returned `True` because there is nothing to check would not be a disabled webhook — it would be an open endpoint letting anyone mark any parcel delivered and move a seller's money. `Settings` refuses to boot a deployed environment with `STEADFAST_WEBHOOK_ENABLED=true`. |
+| **Validation** | Steadfast supplies a webhook contract; the verifier implements it; the capability moves from `unknown` to `true` with a date. |
 
 ## 6. `SMS_PROVIDER_REQUIRED`
 

@@ -40,6 +40,40 @@ and no dashboard. Wiring one is configuration, not redesign.
 | `receivable_ledger_drift_paisa` | the section 81.10 invariant, per tenant | **Any non-zero value.** This is the number that says a money figure is wrong. |
 | `cod_outstanding_paisa` | `cod_receivables` | Business health, not an alert. |
 
+## Courier integration (Steadfast)
+
+Emitted by `app/couriers/metrics.py` as structured log lines **and** kept as
+in-process counters, readable through the admin ops endpoint. There is still no
+scraper (see the gap above), so these are a diagnostic aid rather than a source
+of truth — anything that must survive a deploy is in a table.
+
+The label allowlist is enforced in code, not documented: `record_metric` drops
+anything outside it rather than trusting each call site. **No provider status
+string is ever a label** — an unbounded provider value would blow up
+cardinality, so it lives on the `courier_events` row and in the log line.
+
+| Metric | Source | Watch for |
+|---|---|---|
+| `steadfast_create_success` | booking | Business volume, not an alert. |
+| `steadfast_create_ambiguous` | booking | **The important one.** A rise means bookings are ending unconfirmed, which is orders a seller cannot book. Compare against `steadfast_unknown_recovered`. |
+| `steadfast_create_failed` | booking | Grouped by `reason`; a spike on one reason is usually a field the courier started rejecting. |
+| `steadfast_duplicate_prevented` | booking guard | **Healthy when non-zero.** Every increment is a duplicate parcel that did not happen. |
+| `steadfast_unknown_recovered` | recovery job | Should track `create_ambiguous` closely. A growing gap means bookings are getting stuck. |
+| `steadfast_unknown_unresolved` | recovery job | **Any value needs a person.** The attempt budget ran out and the parcel is in manual review. |
+| `steadfast_status_sync_lag` | `consignments.next_poll_at` overdue | Measured from the *due* time, so a healthy fleet on a six-hour interval reads zero. Above ~1h means the poll job is not keeping up. |
+| `steadfast_status_unknown_value` | `courier_events.status_undocumented` | **Any non-zero value.** Steadfast added a delivery status the mapping table does not know. Query the raw value from `courier_events` and decide what it means before it appears in a report. |
+| `steadfast_payment_sync_count` | payment sync | Imports per run. |
+| `steadfast_payment_sync_error` | payment sync | Any sustained value; check `courier_provider_payments.sync_state = 'FAILED'`. |
+| `steadfast_unmatched_payment_amount` | payout total − applied | Rising week over week means reconciliation is falling behind, same as the statement path. |
+| `steadfast_auth_failure` | credential validation | A platform-wide rise means *they* changed something; a single-tenant rise is that shop's key. |
+| `steadfast_latency` | client | Count + sum, so a mean is derivable. Doubling against yesterday. |
+| `steadfast_return_duplicate_prevented` | return guard | Healthy when non-zero. |
+| `steadfast_webhook_not_configured` | webhook receiver | **Rising is informative, not broken.** It means Steadfast *is* sending callbacks, and chasing `STEADFAST_WEBHOOK_CONTRACT_REQUIRED` would be worth someone's time. |
+
+Two provider-health rows also matter, per capability rather than per provider:
+a courier whose status lookup is failing can still take bookings, and the
+breaker opens on the capability rather than the whole integration.
+
 ## Providers
 
 | Metric | Source | Watch for |

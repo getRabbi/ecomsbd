@@ -34,8 +34,11 @@ from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
 from app.couriers.steadfast.transport import FakeSteadfastTransport
 
-API_KEY = "sfk-live-0000-1111-2222-abcd"
-SECRET_KEY = "sfs-live-3333-4444-5555-wxyz"
+# Synthetic. Deliberately *not* shaped like a live key: a test constant that
+# looks production-shaped trains reviewers to wave the pattern through, and a
+# secret scanner is right to flag one.
+API_KEY = "synthetic-courier-key-for-tests-abcd"
+SECRET_KEY = "synthetic-courier-secret-for-tests-wxyz"
 
 
 @pytest.fixture
