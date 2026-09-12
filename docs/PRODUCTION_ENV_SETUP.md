@@ -385,18 +385,14 @@ anyone can post that.
      SHA-1**. Gives you `GOOGLE_CLIENT_ID_ANDROID`.
    - **iOS** → needs the bundle identifier. Only if an iOS build is planned.
 
-**Blocked until the package id is decided.** The Android client cannot be
-created before:
+**Package ID resolved:** use `com.ecomsbd.app` when configuring the Android
+client later. `RELEASE_SIGNING_REQUIRED` remains: obtain the fingerprints from
+the actual release key, not the debug keystore. See section 13 for key creation.
 
-- `PACKAGE_ID_DECISION_REQUIRED` — the `applicationId` is still
-  `com.example.ecomsbd`, a placeholder Play rejects. See section 13.
-- `RELEASE_SIGNING_REQUIRED` — the SHA-1 must come from the **release upload
-  key**, not the debug keystore.
+Get both release SHA-1 and SHA-256 once the keystore exists (PowerShell):
 
-Get the release SHA-1 once the keystore exists:
-
-```bash
-keytool -list -v -keystore upload-keystore.jks -alias upload
+```powershell
+keytool -list -v -keystore "$env:USERPROFILE\ecomsbd-upload.jks" -alias ecomsbd-upload
 ```
 
 If Play App Signing is on, Google re-signs your app: register the SHA-1 from
@@ -653,7 +649,7 @@ Two different artifacts, and confusing them is the usual mistake.
 | **Where to obtain** | Firebase Console → Project settings → Your apps → **Add app → Android** → enter the package name → **Download google-services.json** |
 | **Where it goes** | `apps/mobile_flutter/android/app/google-services.json` |
 | **Secret?** | It carries identifiers and an API key that ships inside every APK, so it is not a high-value secret — but it is gitignored, because it is per-project configuration that should not be copied between environments by accident. |
-| **Blocked by** | The package name must be final first (`PACKAGE_ID_DECISION_REQUIRED`). |
+| **Android package** | Final: `com.ecomsbd.app`. Firebase setup remains a separate external step; release certificate fingerprints require the owner's key. |
 
 An iOS build additionally needs `GoogleService-Info.plist` in the Xcode project;
 also gitignored.
@@ -738,37 +734,30 @@ it ships in the app either way — but keep the *backend* DSN out of the client.
 
 These are decisions, not secrets, and each belongs somewhere other than `.env`.
 
-### Android package id — `PACKAGE_ID_DECISION_REQUIRED`
+### Android package id — resolved
 
-Still `com.example.ecomsbd`, the Flutter scaffold default.
+The owner permanently selected **`com.ecomsbd.app`**. Gradle `applicationId`,
+namespace and the `MainActivity` package/path now match this decision.
 
 | | |
 |---|---|
 | **Where it belongs** | `apps/mobile_flutter/android/app/build.gradle.kts` — both `namespace` and `defaultConfig.applicationId` — plus the `MainActivity` package path |
 | **Why it is urgent** | Play rejects anything under `com.example`. The id is **permanent once published**: changing it means shipping a different app and losing every install, review and subscription. |
-| **What it blocks** | The Google Android OAuth client, the Firebase Android app, `google-services.json`, the Play Console listing, and `PLAY_PACKAGE_NAME` |
-| **Shape** | `com.<yourorg>.ecomsbd`, on a domain you control |
+| **Dependent configuration** | Future Google Android/Firebase/Play registrations use `com.ecomsbd.app`; the production `PLAY_PACKAGE_NAME` example already matches. No external provider has been configured by this change. |
 
-No id has been invented. Neither the specification nor the prototype names one.
+Backend placeholder-rejection logic/tests and Apple identifiers are unchanged.
 
 ### Android release signing — `RELEASE_SIGNING_REQUIRED`
 
-Release builds currently sign with the **debug** key so `flutter run --release`
-works locally. Play refuses a debug-signed upload, and the upload key is as
-permanent as the package id.
+Release tasks use only the `release` signing config and fail if private settings
+or the keystore are missing, or the standard debug key is selected. Debug builds
+are unchanged. Supply the owner's ecomsbd release/upload keystore outside the
+repository and use ignored `android/key.properties` or `ECOMSBD_RELEASE_*`
+environment secrets; no passwords or aliases are hardcoded in Gradle.
 
-```bash
-keytool -genkey -v -keystore upload-keystore.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-```
-
-Store the keystore **outside the repository** and its passwords in
-`apps/mobile_flutter/android/key.properties` (gitignored), then point the
-`release` signing config at it. `*.jks` and `*.keystore` are gitignored so the
-keystore cannot be committed by accident.
-
-Resolving this also unblocks minification and resource shrinking, both off
-today because obfuscated stack traces with no mapping upload are unreadable.
+Follow [the exact key generation, local/CI configuration and SHA-1/SHA-256 commands](../apps/mobile_flutter/android/RELEASE_SIGNING.md).
+`key.properties`, `*.jks` and `*.keystore` are ignored globally. No key or password
+has been generated. Minification/resource-shrinking settings remain unchanged.
 
 ### Apple bundle identifier
 

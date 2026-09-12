@@ -20,8 +20,8 @@ printing a value.
 
 | | Count |
 |---|---:|
-| **Blockers — must be resolved before any public release** | 14 |
-| Blockers that are an operator decision (no engineering work) | 3 — §1, §2, §10 |
+| **Blockers — must be resolved before any public release** | 13 |
+| Blockers that are an operator decision (no engineering work) | 2 — §2, §10 |
 | Blockers that need a third-party account | 9 — §3, §4, §5, §6a, §6c (×2), §7, §8, §9 |
 | Blockers waiting on provider documentation | 1 — §5a |
 | **Auth platform release follow-up** | **1 — §6 Apple platform provisioning/device validation; Flutter integration implemented** |
@@ -35,9 +35,9 @@ the existing session repository; OTP UI is disabled by default. Provider setup
 and device sign-in checks remain external. Apple is unavailable on the current
 Android runner; an iOS release needs its runner and Apple provisioning.
 
-Everything else remains configuration an operator supplies: no package id, no
-signing key, no courier account, no billing provider, no email provider, no
-push, no object storage, no error tracking. Each is refused honestly today
+The Android package ID is now fixed as `com.ecomsbd.app`. Remaining operator
+configuration includes the signing key, courier account, billing/email providers,
+push, object storage and error tracking. Each is refused honestly today
 rather than faked.
 
 **What changed on 2026-09-12**
@@ -56,25 +56,25 @@ rather than faked.
 
 ---
 
-## 1. `PACKAGE_ID_DECISION_REQUIRED`
+## 1. `PACKAGE_ID_DECISION_REQUIRED` — resolved
 
 | | |
 |---|---|
-| **Status** | **BLOCKED — operator decision, no engineering work** |
-| **What is missing** | The Android `applicationId`. It is still the Flutter scaffold default `com.example.ecomsbd`. |
+| **Status** | **RESOLVED — permanent owner decision: `com.ecomsbd.app`.** |
+| **Implemented** | Gradle `applicationId` and namespace plus the `MainActivity` package/path all use `com.ecomsbd.app`. The production example's `PLAY_PACKAGE_NAME` matches; no provider account has been configured. |
 | **Why it is required** | Play rejects any id under `com.example`. More importantly the id is **permanent once published**: changing it later means shipping a different app and losing every install, review and subscription. Play Billing verification is bound to the package name (section 90), so it must be settled *before* billing is configured, not after. |
 | **Where it is configured** | `apps/mobile_flutter/android/app/build.gradle.kts` — `namespace` and `defaultConfig.applicationId`; the `MainActivity` package path; `PLAY_PACKAGE_NAME` in the backend environment. |
-| **Validation** | `grep -r "com.example" apps/mobile_flutter/android` returns nothing; `GET /v1/admin/ops/provider-health` no longer reports `PACKAGE_ID_DECISION_REQUIRED` for `play`. |
-| **Note** | No id has been invented. The spec and the prototype name none, and section 140 forbids guessing one. The suggested shape once a domain is chosen is `com.<org>.ecomsbd`. |
+| **Validation** | No scaffold package references remain in Android source/config. Future Play/Google/Firebase registrations must use the final ID; live backend provider health still depends on its deployed environment. |
+| **Note** | Backend rejection of placeholder package IDs and its negative tests are retained. Apple identifiers are unchanged. |
 
 ## 2. `RELEASE_SIGNING_REQUIRED`
 
 | | |
 |---|---|
 | **Status** | **BLOCKED — operator decision** |
-| **What is missing** | An upload keystore. Release builds currently sign with the debug key so `flutter run --release` works locally. |
-| **Why it is required** | Play refuses a debug-signed upload, and the upload key is as permanent as the package id. |
-| **Where it is configured** | `apps/mobile_flutter/android/key.properties` (gitignored) and the `release` signing config in `app/build.gradle.kts`. |
+| **What is missing** | The owner's ecomsbd release/upload keystore and private signing values. Release signing is implemented and refuses missing configuration or the standard debug key; normal debug builds need no release secrets. |
+| **Why it is required** | Play requires a properly signed upload. Protect and back up the private key; Play App Signing distinguishes the upload key from the app signing key. |
+| **Where it is configured** | Ignored `apps/mobile_flutter/android/key.properties` or `ECOMSBD_RELEASE_*` environment values. See [release signing and both SHA fingerprints](../apps/mobile_flutter/android/RELEASE_SIGNING.md). |
 | **Validation** | `flutter build appbundle --release` produces an artifact whose signer is not `androiddebugkey`. |
 | **Also unblocks** | Minification and resource shrinking, both off today because obfuscated stack traces with no mapping upload are unreadable in production. |
 

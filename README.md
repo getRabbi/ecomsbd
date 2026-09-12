@@ -28,8 +28,8 @@ no fixture left in the app to fall back to.
 
 **It cannot be released yet, and that is a configuration problem rather than a
 software one.** [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md) lists
-nine blockers, every one of them something an operator supplies: a package id,
-a signing key, a courier, a billing provider, an SMS gateway, push credentials,
+remaining operator-supplied items, including a signing key,
+a courier, a billing provider, an SMS gateway, push credentials,
 object storage, error tracking and a staging restore drill. Each is refused
 honestly in the meantime — nothing pretends to work.
 
@@ -455,12 +455,13 @@ Do not run this against real seller data until Phase F hardening is complete.
 
 ## Open decisions
 
-**`PACKAGE_ID_DECISION_REQUIRED`** — the Android `applicationId` is still the
-scaffold default `com.example.ecomsbd`. Play rejects `com.example`, and the id is
-permanent once published. See the comment block in
-`apps/mobile_flutter/android/app/build.gradle.kts`.
+**Android package ID resolved:** `com.ecomsbd.app` is the permanent owner-selected
+`applicationId`, namespace and activity package. Future Android provider/Play
+registrations must use that ID.
 
-**`RELEASE_SIGNING_REQUIRED`** — release builds still use the debug keystore.
+**`RELEASE_SIGNING_REQUIRED`** — release signing is wired to ignored local config
+or environment secrets and fails closed until the private keystore is supplied.
+Debug builds are unchanged. See [key generation and SHA-1/SHA-256 instructions](apps/mobile_flutter/android/RELEASE_SIGNING.md).
 
 Provider integrations blocked on documentation or credentials are listed in
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md#blocked--external-verification-required).

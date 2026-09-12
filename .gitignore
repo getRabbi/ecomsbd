@@ -48,8 +48,9 @@ apps/mobile_flutter/build/
 apps/mobile_flutter/.flutter-plugins
 apps/mobile_flutter/.flutter-plugins-dependencies
 apps/mobile_flutter/android/.gradle/
+apps/mobile_flutter/android/build/
 apps/mobile_flutter/android/local.properties
-apps/mobile_flutter/android/key.properties
+key.properties
 # Filled-in Flutter build configuration. The .example next to it is committed.
 apps/mobile_flutter/env/*.json
 !apps/mobile_flutter/env/*.example.json

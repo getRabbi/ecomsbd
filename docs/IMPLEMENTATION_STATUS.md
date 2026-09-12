@@ -408,8 +408,8 @@ inventing any of it.
 
 | Item | Blocked on | Consequence today |
 |---|---|---|
-| **Android `applicationId`** | **An operator decision.** Neither the spec nor the prototype names one. Currently the scaffold default `com.example.ecomsbd`, which Play rejects — and the id is permanent once published. | `PACKAGE_ID_DECISION_REQUIRED` in `android/app/build.gradle.kts`. Blocks any Play upload and all billing work. Phase F **checked the repository for an official decision and found none**, so nothing was invented: the Play provider reports this blocker by name and refuses. |
-| Release signing keystore | Operator | Release builds use the debug key |
+| **Android `applicationId`** | **Resolved:** owner permanently selected `com.ecomsbd.app`. | Gradle, activity package/path and production `PLAY_PACKAGE_NAME` example match. Google/Firebase/Play account configuration remains external; backend placeholder-rejection tests stay intact. |
+| Release signing keystore | Operator supplies the private ecomsbd key/config | Release signing is wired and fails closed without the key; debug builds remain unchanged. See [signing instructions](../apps/mobile_flutter/android/RELEASE_SIGNING.md). |
 | **Steadfast API** | A merchant account. The documentation blocker is **resolved** — V1 was supplied 2026-09-11 and implemented. | Everything is built and tested against contract fixtures. `STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED`: no real key has authenticated, no real parcel has been created, and four endpoints' response schemas are inferred rather than observed. |
 | **Steadfast webhook** | A webhook contract from Steadfast — the V1 document has no webhook section at all | `STEADFAST_WEBHOOK_CONTRACT_REQUIRED`. The receiver, replay protection, verifier/parser ports and queue are built and tested; the verifier refuses everything, and polling is the complete V1 sync path. |
 | Pathao API | Current merchant API documentation | Auto-address design decision is recorded and verified; endpoints are not |

@@ -1,0 +1,8 @@
+# Copy to key.properties (ignored), then fill in locally. Never commit that file.
+# Keep the keystore outside the repository. Use an absolute path with forward
+# slashes on Windows (C:/Users/YourName/ecomsbd-upload.jks), or escape backslashes.
+# Values here are intentionally empty; the build has no password/alias defaults.
+storeFile=
+storePassword=
+keyAlias=
+keyPassword=

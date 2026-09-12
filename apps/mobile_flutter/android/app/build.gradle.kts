@@ -1,32 +1,51 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Public setup instructions: ../RELEASE_SIGNING.md. Never log these values.
+val localSigning = Properties().apply {
+    val configFile = rootProject.file("key.properties")
+    if (configFile.isFile) configFile.inputStream().use { load(it) }
+}
+val releaseSigning = mapOf(
+    "storeFile" to "ECOMSBD_RELEASE_STORE_FILE",
+    "storePassword" to "ECOMSBD_RELEASE_STORE_PASSWORD",
+    "keyAlias" to "ECOMSBD_RELEASE_KEY_ALIAS",
+    "keyPassword" to "ECOMSBD_RELEASE_KEY_PASSWORD",
+).mapValues { (property, environment) ->
+    providers.environmentVariable(environment).orNull?.takeIf { it.isNotBlank() }
+        ?: localSigning.getProperty(property)?.takeIf { it.isNotBlank() }
+}
+val releaseStoreFile = releaseSigning["storeFile"]?.let { rootProject.file(it) }
+
+// Run only for release tasks: a developer without signing secrets can still
+// sync Gradle and build/debug normally. Never fall back to an unsigned/debug release.
+val validateReleaseSigning = tasks.register("validateReleaseSigning") {
+    group = "verification"
+    description = "Check private release signing configuration without building the app."
+    doLast {
+        val missing = releaseSigning.filterValues { it == null }.keys
+        check(missing.isEmpty()) {
+            "Release signing is required. Missing: ${missing.joinToString()}. " +
+                "Configure android/key.properties or ECOMSBD_RELEASE_*; see RELEASE_SIGNING.md."
+        }
+        check(releaseStoreFile?.isFile == true) { "Release keystore file does not exist." }
+        check(!releaseSigning["keyAlias"].equals("androiddebugkey", ignoreCase = true) &&
+            !releaseStoreFile!!.name.equals("debug.keystore", ignoreCase = true)) {
+            "The Android debug key must not be used for production releases."
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" || it.name == "validateSigningRelease" }
+    .configureEach { dependsOn(validateReleaseSigning) }
+
 android {
-    // ==========================================================================
-    // PACKAGE_ID_DECISION_REQUIRED
-    // --------------------------------------------------------------------------
-    // "com.example.ecomsbd" is the Flutter scaffold default and is a PLACEHOLDER.
-    //
-    // The operator must choose the final applicationId before the first Play
-    // upload. Neither the master specification nor the UI prototype names one,
-    // and it must not be guessed:
-    //
-    //   * Play rejects any id under com.example;
-    //   * the applicationId is PERMANENT once published — it cannot be changed
-    //     without shipping a different app and losing every install, review and
-    //     subscription;
-    //   * Google Play Billing purchase verification is bound to the package name
-    //     (master spec section 90), so it must be settled before billing work.
-    //
-    // Changing it now costs one edit here plus the MainActivity package path and
-    // the `namespace` below. Changing it after publication is not possible.
-    //
-    // Suggested shape once the operator picks a domain: com.<org>.ecomsbd
-    // ==========================================================================
-    namespace = "com.example.ecomsbd"
+    // Permanent Android identity, explicitly chosen by the owner.
+    namespace = "com.ecomsbd.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -36,8 +55,7 @@ android {
     }
 
     defaultConfig {
-        // PACKAGE_ID_DECISION_REQUIRED — see the block above.
-        applicationId = "com.example.ecomsbd"
+        applicationId = "com.ecomsbd.app"
 
         // Android-first, low-end devices in scope (master spec section 53).
         // minSdk comes from the Flutter toolchain so plugin requirements and the
@@ -48,13 +66,18 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseStoreFile
+            storePassword = releaseSigning["storePassword"]
+            keyAlias = releaseSigning["keyAlias"]
+            keyPassword = releaseSigning["keyPassword"]
+        }
+    }
+
     buildTypes {
         release {
-            // RELEASE_SIGNING_REQUIRED: still the debug keystore, so
-            // `flutter run --release` works locally. A real upload key must be
-            // provisioned before any Play track, and its credentials must live
-            // outside this repository (android/key.properties, gitignored).
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
 
             // Shrinking is off until a release keystore and a crash-reporting
             // symbol upload exist; obfuscated stack traces with no mapping file
