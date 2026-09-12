@@ -191,7 +191,7 @@ void main() {
         'tenants': <dynamic>[],
         'needs_onboarding': true,
       });
-      expect(RegExp(r'01\d{9}').hasMatch(profile.maskedPhone), isFalse);
+      expect(RegExp(r'01\d{9}').hasMatch(profile.maskedPhone!), isFalse);
     });
   });
 

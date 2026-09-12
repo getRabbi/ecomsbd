@@ -63,18 +63,21 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
       return;
     }
     final controller = ref.read(authControllerProvider.notifier);
-    final created = await controller.createShop(<String, dynamic>{
-      'name': _name.text.trim(),
-      'business_category': _category,
-      if (_contact.text.trim().isNotEmpty)
-        'pickup_contact_name': _contact.text.trim(),
-      if (_phone.text.trim().isNotEmpty) 'pickup_phone': _phone.text.trim(),
-      if (_address.text.trim().isNotEmpty)
-        'pickup_address': _address.text.trim(),
-      if (_district.text.trim().isNotEmpty)
-        'pickup_district': _district.text.trim(),
-      if (_area.text.trim().isNotEmpty) 'pickup_area': _area.text.trim(),
-    });
+    // A retry after the completion request failed must not create another shop.
+    final created =
+        ref.read(authControllerProvider).tenantId != null ||
+        await controller.createShop(<String, dynamic>{
+          'name': _name.text.trim(),
+          'business_category': _category,
+          if (_contact.text.trim().isNotEmpty)
+            'pickup_contact_name': _contact.text.trim(),
+          if (_phone.text.trim().isNotEmpty) 'pickup_phone': _phone.text.trim(),
+          if (_address.text.trim().isNotEmpty)
+            'pickup_address': _address.text.trim(),
+          if (_district.text.trim().isNotEmpty)
+            'pickup_district': _district.text.trim(),
+          if (_area.text.trim().isNotEmpty) 'pickup_area': _area.text.trim(),
+        });
     if (!created) {
       return;
     }

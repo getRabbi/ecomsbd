@@ -1,6 +1,6 @@
 # Release readiness
 
-**Last updated 2026-09-12, after backend seller authentication completion.**
+**Last updated 2026-09-12, after Flutter seller authentication integration.**
 
 This is the gate. Nothing below is a "nice to have": each row is something that
 must be true before ecomsbd charges a real seller or handles a real parcel.
@@ -24,14 +24,16 @@ printing a value.
 | Blockers that are an operator decision (no engineering work) | 3 — §1, §2, §10 |
 | Blockers that need a third-party account | 9 — §3, §4, §5, §6a, §6c (×2), §7, §8, §9 |
 | Blockers waiting on provider documentation | 1 — §5a |
-| **Blockers that need engineering work** | **1 — §6 Flutter auth integration; backend complete** |
+| **Auth platform release follow-up** | **1 — §6 Apple platform provisioning/device validation; Flutter integration implemented** |
 | Deferred, no longer a blocker | §6b `SMS_PROVIDER_REQUIRED` |
 
 **ecomsbd cannot be released today.** The backend production sign-in model is
 implemented: **email/password + Google + Apple**, sharing existing sessions and
 shop onboarding. Phone OTP is deferred and Facebook/Meta login is excluded.
-Provider configuration remains external. The untouched Flutter app still offers
-only OTP screens, so mobile integration remains a separate release requirement.
+Flutter now implements the email flows and native provider-token exchange using
+the existing session repository; OTP UI is disabled by default. Provider setup
+and device sign-in checks remain external. Apple is unavailable on the current
+Android runner; an iOS release needs its runner and Apple provisioning.
 
 Everything else remains configuration an operator supplies: no package id, no
 signing key, no courier account, no billing provider, no email provider, no
@@ -43,8 +45,8 @@ rather than faked.
 - `SMS_PROVIDER_REQUIRED` is **no longer a release blocker**. Phone OTP is
   deferred, so an SMS gateway is not on the path to first release. It survives
   below as a *deferred* item for future use.
-- Backend `SELLER_AUTH_IMPLEMENTATION_REQUIRED` is resolved. Flutter login
-  integration remains outstanding.
+- Backend `SELLER_AUTH_IMPLEMENTATION_REQUIRED` and Flutter login integration
+  are implemented. Provider credentials and platform/device checks remain.
 - `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` is **new**: email/password auth needs
   verification and password-reset mail. The Resend adapter is implemented;
   an account, verified sender and send-only key are still required.
@@ -122,11 +124,11 @@ rather than faked.
 | **Why it stays off** | `SteadfastWebhookVerifier.is_configured` returns `False` unconditionally. A verifier that returned `True` because there is nothing to check would not be a disabled webhook — it would be an open endpoint letting anyone mark any parcel delivered and move a seller's money. `Settings` refuses to boot a deployed environment with `STEADFAST_WEBHOOK_ENABLED=true`. |
 | **Validation** | Steadfast supplies a webhook contract; the verifier implements it; the capability moves from `unknown` to `true` with a date. |
 
-## 6. Seller authentication — backend complete, Flutter integration pending
+## 6. Seller authentication — backend and Flutter integration implemented
 
 | | |
 |---|---|
-| **Status** | **Backend implemented and tested. Mobile UI integration and external provider setup remain.** |
+| **Status** | **Backend and Flutter integration implemented. External provider setup and device validation remain; Apple needs an iOS runner/provisioning for native release.** |
 | **Implemented** | Register/login, Argon2id passwords, email verification/resend, forgot/reset/change password, Google and Apple identity-token verification, shared refresh rotation, session revocation, audit events and shop onboarding. No second session architecture. |
 | **Endpoints** | `POST /v1/auth/register`, `/login`, `/email/verify`, `/email/resend`, `/password/forgot`, `/password/reset`, `/password/change`, `/oauth/google`, `/oauth/apple`. Link landing pages are served under `/auth` on `PUBLIC_BASE_URL`. |
 | **Identity safety** | Provider subject remains authoritative. Linking requires a unique existing user and verified email proof on both sides; unverified claims, Apple relay addresses, Google third-party mailboxes and ambiguous users do not automatically merge. |
@@ -134,7 +136,8 @@ rather than faked.
 | **External configuration** | Google client IDs, `APPLE_CLIENT_ID`, and Resend sender/API configuration. Apple's private key, Team ID and Key ID are optional for the implemented identity-token flow, which uses public JWKS. |
 | **Migration** | `c41f8b2ad7e5` retained; creates identities/link tokens and permits users without phone numbers. Auth fixtures apply it on SQLite; PostgreSQL SQL rendering checked without a live database. |
 | **Validation** | Targeted auth/config tests cover forged/wrong-audience/expired tokens, linking, reset replay, revocation and all three methods creating shops with the existing session system. Real provider sign-in and email delivery still require credentials. |
-| **Mobile follow-up** | Add the new login methods to the existing Flutter repository/controller/screens and accept nullable phone profiles. The current mobile UI remains OTP-only; backend completion alone does not make that UI production-ready. |
+| **Mobile integration** | Email login/register/verification/resend/forgot/reset screens; native Google/Apple ID tokens verified by the existing backend; nullable phone profiles; shared logout/refresh; existing shop → Home, no shop → Create Shop, multiple shops → existing tenant selection. OTP UI and routes disabled by default. |
+| **Mobile release follow-up** | Supply Google web client ID, register Android package/signing fingerprints and validate real sign-in. Apple safely reports unavailable on Android; provisioning an iOS runner with Sign in with Apple capability is required to release the native Apple flow. Existing browser email verification/reset links work without app-link registration. See [Flutter auth configuration](../apps/mobile_flutter/env/README.md). |
 
 ## 6a. `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`
 

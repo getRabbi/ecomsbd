@@ -1,0 +1,106 @@
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import '../../core/api/api_error.dart';
+import '../../core/env.dart';
+
+enum SignInProvider { google, apple }
+
+/// Obtains provider credentials only. It cannot create an ecomsbd session.
+abstract class ProviderSignIn {
+  Future<String> identityToken(SignInProvider provider);
+  Future<void> signOut();
+}
+
+ApiError providerSignInError(
+  SignInProvider provider, {
+  bool cancelled = false,
+}) => ApiError(
+  code:
+      '${provider.name.toUpperCase()}_${cancelled ? 'CANCELLED' : 'UNAVAILABLE'}',
+  messageBn: '',
+  messageEn: cancelled ? 'Sign-in cancelled.' : 'Sign-in unavailable.',
+  retryable: true,
+);
+
+class NativeProviderSignIn implements ProviderSignIn {
+  static Future<void>? _googleInitialization;
+
+  bool get _isApplePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+
+  @override
+  Future<String> identityToken(SignInProvider provider) async {
+    try {
+      final String? token;
+      if (provider == SignInProvider.google) {
+        if (kIsWeb ||
+            (!_isApplePlatform &&
+                defaultTargetPlatform != TargetPlatform.android) ||
+            Env.googleServerClientId.isEmpty) {
+          throw providerSignInError(provider);
+        }
+        final google = GoogleSignIn.instance;
+        try {
+          await (_googleInitialization ??= google.initialize(
+            serverClientId: Env.googleServerClientId,
+            clientId: _isApplePlatform && Env.googleIosClientId.isNotEmpty
+                ? Env.googleIosClientId
+                : null,
+          ));
+        } on Object {
+          _googleInitialization = null;
+          rethrow;
+        }
+        if (!google.supportsAuthenticate()) {
+          throw providerSignInError(provider);
+        }
+        final account = await google.authenticate();
+        token = account.authentication.idToken;
+      } else {
+        // Android requires a hosted Apple redirect/code-exchange integration.
+        // The existing backend supports native ID tokens, so do not launch an
+        // unconfigured browser flow or assume the plugin is available.
+        if (!_isApplePlatform || !await SignInWithApple.isAvailable()) {
+          throw providerSignInError(provider);
+        }
+        final credential = await SignInWithApple.getAppleIDCredential(
+          scopes: const [AppleIDAuthorizationScopes.email],
+        );
+        token = credential.identityToken;
+      }
+      if (token == null || token.isEmpty) {
+        throw providerSignInError(provider);
+      }
+      return token;
+    } on GoogleSignInException catch (error) {
+      throw providerSignInError(
+        provider,
+        cancelled: error.code == GoogleSignInExceptionCode.canceled,
+      );
+    } on SignInWithAppleAuthorizationException catch (error) {
+      throw providerSignInError(
+        provider,
+        cancelled: error.code == AuthorizationErrorCode.canceled,
+      );
+    } on ApiError {
+      rethrow;
+    } on Object {
+      throw providerSignInError(provider);
+    }
+  }
+
+  @override
+  Future<void> signOut() async {
+    if (_googleInitialization == null) return;
+    try {
+      await _googleInitialization;
+      await GoogleSignIn.instance.signOut();
+    } on Object {
+      // Provider cleanup must not prevent local/backend session logout.
+    }
+  }
+}

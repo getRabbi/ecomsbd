@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/auth/auth_controller.dart';
+import '../core/env.dart';
+import '../features/auth/email_auth_screen.dart';
+import '../features/auth/verification_screen.dart';
 import '../features/auth/otp_verify_screen.dart';
 import '../features/auth/phone_login_screen.dart';
 import '../features/onboarding/shop_setup_screen.dart';
@@ -16,38 +19,85 @@ class Routes {
 
   static const String splash = '/';
   static const String login = '/login';
+  static const String register = '/register';
+  static const String forgotPassword = '/forgot-password';
+  static const String phoneLogin = '/login/phone';
+  static const String verificationPending = '/verify-email';
+  static const String emailLink = '/auth/email/verify';
+  static const String resetPassword = '/auth/password/reset';
+  static const String selectShop = '/choose-shop';
   static const String verify = '/login/verify';
   static const String onboarding = '/onboarding';
   static const String home = '/home';
+}
+
+String? authRedirect(
+  AuthState auth,
+  String location, {
+  bool phoneOtpEnabled = Env.phoneOtpLoginEnabled,
+}) {
+  // Emailed bearer links can be completed even without an app session.
+  if (location == Routes.resetPassword || location == Routes.emailLink) {
+    return null;
+  }
+  if (auth.stage == AuthStage.restoring) {
+    return location == Routes.splash ? null : Routes.splash;
+  }
+  if (auth.verificationEmail != null) {
+    return location == Routes.verificationPending
+        ? null
+        : Routes.verificationPending;
+  }
+  return switch (auth.stage) {
+    AuthStage.restoring => null,
+    AuthStage.signedOut =>
+      {
+            Routes.login,
+            Routes.register,
+            Routes.forgotPassword,
+            if (phoneOtpEnabled) Routes.phoneLogin,
+            if (phoneOtpEnabled) Routes.verify,
+          }.contains(location)
+          ? null
+          : Routes.login,
+    AuthStage.needsShopSelection =>
+      location == Routes.selectShop ? null : Routes.selectShop,
+    AuthStage.needsOnboarding =>
+      location == Routes.onboarding ? null : Routes.onboarding,
+    AuthStage.ready => location == Routes.home ? null : Routes.home,
+  };
+}
+
+String? _linkToken(Uri uri) {
+  try {
+    final token =
+        Uri.splitQueryString(uri.fragment)['token'] ??
+        uri.queryParameters['token'];
+    return token == null || token.isEmpty ? null : token;
+  } on FormatException {
+    return null;
+  }
 }
 
 /// The router.
 ///
 /// Redirection is driven entirely by [AuthStage], so "which screen may this
 /// seller see" is decided in one place. A screen never checks the session
-/// itself, which is what stops a half-onboarded account from reaching the
-/// dashboard through some path nobody thought about.
+/// itself. Accounts without a shop enter the existing onboarding flow; accounts
+/// with a shop enter Home (or choose among their existing shops first).
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _AuthRouteNotifier(ref);
   ref.onDispose(notifier.dispose);
 
-  return GoRouter(
+  void clearError() => ref.read(authControllerProvider.notifier).clearError();
+  final router = GoRouter(
     initialLocation: Routes.splash,
     refreshListenable: notifier,
     redirect: (context, state) {
-      final stage = ref.read(authControllerProvider).stage;
-      final location = state.matchedLocation;
-
-      return switch (stage) {
-        AuthStage.restoring => location == Routes.splash ? null : Routes.splash,
-        AuthStage.signedOut =>
-          location == Routes.login || location == Routes.verify
-              ? null
-              : Routes.login,
-        AuthStage.needsOnboarding =>
-          location == Routes.onboarding ? null : Routes.onboarding,
-        AuthStage.ready => location == Routes.home ? null : Routes.home,
-      };
+      return authRedirect(
+        ref.read(authControllerProvider),
+        state.matchedLocation,
+      );
     },
     routes: <RouteBase>[
       GoRoute(
@@ -56,6 +106,74 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.login,
+        builder: (context, state) => EmailAuthScreen(
+          onCreateAccount: () {
+            clearError();
+            context.go(Routes.register);
+          },
+          onForgotPassword: () {
+            clearError();
+            context.go(Routes.forgotPassword);
+          },
+          onPhoneLogin: () {
+            clearError();
+            context.go(Routes.phoneLogin);
+          },
+        ),
+      ),
+      GoRoute(
+        path: Routes.register,
+        builder: (context, state) => EmailAuthScreen(
+          mode: EmailAuthMode.register,
+          onSignIn: () {
+            clearError();
+            context.go(Routes.login);
+          },
+        ),
+      ),
+      GoRoute(
+        path: Routes.forgotPassword,
+        builder: (context, state) => EmailAuthScreen(
+          mode: EmailAuthMode.forgotPassword,
+          onSignIn: () {
+            clearError();
+            context.go(Routes.login);
+          },
+        ),
+      ),
+      GoRoute(
+        path: Routes.resetPassword,
+        builder: (context, state) => EmailAuthScreen(
+          mode: EmailAuthMode.resetPassword,
+          resetToken: _linkToken(state.uri),
+          onSignIn: () {
+            clearError();
+            context.go(Routes.login);
+          },
+          onForgotPassword: () {
+            clearError();
+            context.go(Routes.forgotPassword);
+          },
+        ),
+      ),
+      GoRoute(
+        path: Routes.verificationPending,
+        builder: (context, state) =>
+            VerificationScreen(onContinue: () => context.go(Routes.login)),
+      ),
+      GoRoute(
+        path: Routes.emailLink,
+        builder: (context, state) => VerificationScreen(
+          token: _linkToken(state.uri),
+          onContinue: () => context.go(Routes.login),
+        ),
+      ),
+      GoRoute(
+        path: Routes.selectShop,
+        builder: (context, state) => const SelectShopScreen(),
+      ),
+      GoRoute(
+        path: Routes.phoneLogin,
         builder: (context, state) => PhoneLoginScreen(
           onCodeSent: (challengeId, maskedPhone, debugCode) {
             context.push(
@@ -97,7 +215,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               // the account has a shop.
               ref.read(authControllerProvider);
             },
-            onChangeNumber: () => context.go(Routes.login),
+            onChangeNumber: () => context.go(Routes.phoneLogin),
           );
         },
       ),
@@ -114,6 +232,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) =>
         const SplashScreen(message: 'Taking you back…'),
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
 
 /// Arguments passed from the phone screen to the OTP screen.
@@ -136,7 +256,8 @@ class _AuthRouteNotifier extends ChangeNotifier {
       previous,
       next,
     ) {
-      if (previous?.stage != next.stage) {
+      if (previous?.stage != next.stage ||
+          previous?.verificationEmail != next.verificationEmail) {
         notifyListeners();
       }
     });

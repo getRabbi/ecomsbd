@@ -126,7 +126,7 @@ class AccountProfile {
   factory AccountProfile.fromJson(Map<String, dynamic> json) => AccountProfile(
     userId: json['user_id'] as String,
     displayName: json['display_name'] as String?,
-    maskedPhone: json['masked_phone'] as String,
+    maskedPhone: json['masked_phone'] as String?,
     locale: json['locale'] as String? ?? 'bn',
     sessionId: json['session_id'] as String,
     tenantId: json['tenant_id'] as String?,
@@ -144,7 +144,7 @@ class AccountProfile {
 
   final String userId;
   final String? displayName;
-  final String maskedPhone;
+  final String? maskedPhone;
   final String locale;
   final String sessionId;
   final String? tenantId;

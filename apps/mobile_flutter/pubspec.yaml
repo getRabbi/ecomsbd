@@ -30,6 +30,10 @@ dependencies:
   # Tokens are stored in the Android keystore, never in shared preferences.
   flutter_secure_storage: ^9.2.2
 
+  # Provider identity tokens are verified by the ecomsbd backend.
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^8.2.0
+
   # Routing.
   go_router: ^14.6.1
 

@@ -216,8 +216,11 @@ if two of them hold the same value, or if no seller could sign in.
 Google and Apple; phone OTP is deferred and Facebook/Meta login is not part of
 the product. All three backend methods are implemented, with server-side
 identity verification and the existing session/shop onboarding system. Real
-provider configuration is still required, and the Flutter login UI remains
-OTP-only pending separate integration. See the auth readiness entry in
+provider configuration is still required. Flutter now provides email login,
+registration, verification/resend and password recovery plus native provider
+token exchange. OTP UI is production-disabled. Apple is wired for iOS/macOS;
+the current Android-only runner reports Apple unavailable. See platform setup in
+[`apps/mobile_flutter/env/README.md`](apps/mobile_flutter/env/README.md) and
 [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
 
 ---

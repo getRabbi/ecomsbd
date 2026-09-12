@@ -69,8 +69,13 @@ refresh-token and shop onboarding system. Set `EMAIL_PASSWORD_AUTH_ENABLED`,
 `PHONE_OTP_LOGIN_ENABLED=false`. No SMS provider is required.
 
 Supply the Google client IDs, Apple client ID and transactional email settings.
-Missing configuration remains a deployment blocker. The Flutter login screens
-are still OTP-only and require a separate client integration before mobile release.
+Missing configuration remains a deployment blocker. Flutter's email/password,
+Google and Apple token-exchange flows now use the existing backend sessions.
+Set the Flutter build's `GOOGLE_CLIENT_ID_WEB` and keep its
+`PHONE_OTP_LOGIN_ENABLED=false`. Apple is native-only (iOS/macOS); the repository
+currently has only an Android runner, where Apple reports unavailable. See
+[`apps/mobile_flutter/env/README.md`](../apps/mobile_flutter/env/README.md) for
+platform provisioning and the existing browser email-link flow.
 
 ### 2. BOOT CONFIG is not a RUNTIME FEATURE FLAG
 

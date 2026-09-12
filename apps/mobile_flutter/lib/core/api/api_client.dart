@@ -206,7 +206,10 @@ class ApiClient {
 
     final error = _translateResponse(response);
 
-    if (allowRefresh && error.code == ApiErrorCode.tokenExpired) {
+    final authenticated = response.requestOptions.extra['skipAuth'] != true;
+    if (authenticated &&
+        allowRefresh &&
+        error.code == ApiErrorCode.tokenExpired) {
       // Only an *expired* access token is refreshable. A revoked session or an
       // invalid token means the credential is gone, and retrying would just
       // burn the refresh token too.
@@ -216,7 +219,7 @@ class ApiClient {
       }
     }
 
-    if (error.requiresReauthentication) {
+    if (authenticated && error.requiresReauthentication) {
       await _sessions.onSessionInvalidated(error);
     }
     throw error;

@@ -1,10 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:uuid/uuid.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../core/storage/token_store.dart';
 import 'auth_models.dart';
+import 'provider_sign_in.dart';
 
 /// Talks to `/v1/auth` and `/v1/me`, and owns the stored session.
 ///
@@ -120,6 +125,117 @@ class AuthRepository implements SessionProvider {
   }
 
   // --- session --------------------------------------------------------------
+
+  Future<({SessionEnvelope session, bool verificationSent})> register({
+    required String email,
+    required String password,
+  }) async {
+    final json = await _api.post(
+      '/auth/register',
+      body: {
+        'email': email.trim(),
+        'password': password,
+        'device': await _device(),
+      },
+      authenticated: false,
+    );
+    final envelope = SessionEnvelope.fromJson(
+      json['session'] as Map<String, dynamic>,
+    );
+    await _persist(envelope);
+    return (
+      session: envelope,
+      verificationSent: json['email_verification_sent'] == true,
+    );
+  }
+
+  Future<SessionEnvelope> login({
+    required String email,
+    required String password,
+  }) async {
+    final json = await _api.post(
+      '/auth/login',
+      body: {
+        'email': email.trim(),
+        'password': password,
+        'device': await _device(),
+      },
+      authenticated: false,
+    );
+    final envelope = SessionEnvelope.fromJson(json);
+    await _persist(envelope);
+    return envelope;
+  }
+
+  Future<SessionEnvelope> signInWithProvider(
+    SignInProvider provider,
+    String token,
+  ) async {
+    final json = await _api.post(
+      '/auth/oauth/${provider.name}',
+      body: {'id_token': token, 'device': await _device()},
+      authenticated: false,
+    );
+    final envelope = SessionEnvelope.fromJson(json);
+    await _persist(envelope);
+    return envelope;
+  }
+
+  Future<void> resendVerification(String email) async {
+    await _api.post(
+      '/auth/email/resend',
+      body: {'email': email.trim()},
+      authenticated: false,
+    );
+  }
+
+  Future<void> verifyEmail(String token) async {
+    await _api.post(
+      '/auth/email/verify',
+      body: {'token': token},
+      authenticated: false,
+    );
+  }
+
+  Future<void> forgotPassword(String email) async {
+    await _api.post(
+      '/auth/password/forgot',
+      body: {'email': email.trim()},
+      authenticated: false,
+    );
+  }
+
+  Future<void> resetPassword(String token, String password) async {
+    await _api.post(
+      '/auth/password/reset',
+      body: {'token': token, 'new_password': password},
+      authenticated: false,
+    );
+    // The backend revokes every session on reset, including this device.
+    await signOutLocally();
+  }
+
+  Future<Map<String, dynamic>> _device() async {
+    final installId = await _tokens.installId(() => const Uuid().v4());
+    String? version;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      version = '${info.version}+${info.buildNumber}';
+    } on Object {
+      // Device metadata is advisory and must not block authentication.
+    }
+    return {
+      'install_id': installId,
+      'platform': kIsWeb
+          ? 'WEB'
+          : switch (defaultTargetPlatform) {
+              TargetPlatform.android => 'ANDROID',
+              TargetPlatform.iOS => 'IOS',
+              _ => 'UNKNOWN',
+            },
+      if (version != null) 'app_version': version,
+    };
+  }
 
   Future<AccountProfile> fetchProfile() async {
     return AccountProfile.fromJson(await _api.get('/me'));

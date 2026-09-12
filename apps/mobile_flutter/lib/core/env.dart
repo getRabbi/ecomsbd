@@ -24,6 +24,21 @@ class Env {
 
   static const String apiVersionPrefix = '/v1';
 
+  // Keep this aligned with the backend flag. Off unless explicitly enabled.
+  static const bool phoneOtpLoginEnabled = bool.fromEnvironment(
+    'PHONE_OTP_LOGIN_ENABLED',
+    defaultValue: false,
+  );
+
+  // Public OAuth identifiers, never client secrets. Android uses the web
+  // client id as serverClientId so the ID token is minted for the backend.
+  static const String googleServerClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID_WEB',
+  );
+  static const String googleIosClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID_IOS',
+  );
+
   /// Sentry DSN. Empty disables reporting.
   static const String sentryDsn = String.fromEnvironment('ECOMSBD_SENTRY_DSN');
 

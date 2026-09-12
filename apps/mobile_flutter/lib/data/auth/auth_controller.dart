@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../../core/api/api_error.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
+import 'provider_sign_in.dart';
 
 /// Where the app is in the sign-in lifecycle.
 ///
@@ -17,6 +18,9 @@ enum AuthStage {
 
   /// No usable session.
   signedOut,
+
+  /// Several existing shops: select one before opening the home screen.
+  needsShopSelection,
 
   /// Signed in, but no shop yet — onboarding.
   needsOnboarding,
@@ -32,6 +36,8 @@ class AuthState {
     this.profile,
     this.error,
     this.isBusy = false,
+    this.verificationEmail,
+    this.verificationSent,
   });
 
   const AuthState.restoring() : this(stage: AuthStage.restoring);
@@ -43,9 +49,13 @@ class AuthState {
   final ApiError? error;
 
   final bool isBusy;
+  final String? verificationEmail;
+  final bool? verificationSent;
 
   bool get isSignedIn =>
-      stage == AuthStage.ready || stage == AuthStage.needsOnboarding;
+      stage == AuthStage.ready ||
+      stage == AuthStage.needsOnboarding ||
+      stage == AuthStage.needsShopSelection;
 
   String? get tenantId => profile?.tenantId;
 
@@ -55,21 +65,33 @@ class AuthState {
     ApiError? error,
     bool clearError = false,
     bool? isBusy,
+    String? verificationEmail,
+    bool? verificationSent,
+    bool clearVerification = false,
   }) => AuthState(
     stage: stage ?? this.stage,
     profile: profile ?? this.profile,
     error: clearError ? null : (error ?? this.error),
     isBusy: isBusy ?? this.isBusy,
+    verificationEmail: clearVerification
+        ? null
+        : (verificationEmail ?? this.verificationEmail),
+    verificationSent: clearVerification
+        ? null
+        : (verificationSent ?? this.verificationSent),
   );
 }
 
 /// Owns the session lifecycle.
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository) : super(const AuthState.restoring()) {
+  AuthController(this._repository, {ProviderSignIn? providerSignIn})
+    : _providerSignIn = providerSignIn ?? NativeProviderSignIn(),
+      super(const AuthState.restoring()) {
     _invalidationSub = _repository.onSessionInvalid.listen(_onInvalidated);
   }
 
   final AuthRepository _repository;
+  final ProviderSignIn _providerSignIn;
   late final StreamSubscription<ApiError> _invalidationSub;
 
   /// Restore the stored session and confirm it is still valid.
@@ -85,12 +107,7 @@ class AuthController extends StateNotifier<AuthState> {
     }
     try {
       final profile = await _repository.fetchProfile();
-      state = AuthState(
-        stage: profile.needsOnboarding
-            ? AuthStage.needsOnboarding
-            : AuthStage.ready,
-        profile: profile,
-      );
+      state = AuthState(stage: _stageFor(profile), profile: profile);
     } on ApiError catch (error) {
       if (error.isOffline) {
         // Offline launch: the stored session is the best information available
@@ -142,7 +159,11 @@ class AuthController extends StateNotifier<AuthState> {
   Future<bool> createShop(Map<String, dynamic> payload) async {
     state = state.copyWith(isBusy: true, clearError: true);
     try {
-      await _adoptSession(await _repository.createShop(payload));
+      // Finish the existing create/complete sequence before leaving this page.
+      await _adoptSession(
+        await _repository.createShop(payload),
+        keepOnboarding: true,
+      );
       return true;
     } on ApiError catch (error) {
       state = state.copyWith(isBusy: false, error: error);
@@ -168,6 +189,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> signOut({bool allDevices = false}) async {
     state = state.copyWith(isBusy: true, clearError: true);
     await _repository.signOut(allDevices: allDevices);
+    await _clearProviderSession();
     state = const AuthState(stage: AuthStage.signedOut);
   }
 
@@ -177,28 +199,151 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> _adoptSession(SessionEnvelope envelope) async {
+  Future<void> _adoptSession(
+    SessionEnvelope envelope, {
+    String? verificationEmail,
+    bool? verificationSent,
+    bool keepOnboarding = false,
+  }) async {
     // The profile is re-fetched rather than derived from the envelope so the
     // permission list and shop state come from a single server-owned source.
     try {
       final profile = await _repository.fetchProfile();
       state = AuthState(
-        stage: profile.needsOnboarding
-            ? AuthStage.needsOnboarding
-            : AuthStage.ready,
+        stage: keepOnboarding ? AuthStage.needsOnboarding : _stageFor(profile),
         profile: profile,
+        verificationEmail: verificationEmail,
+        verificationSent: verificationSent,
       );
-    } on ApiError {
+    } on ApiError catch (error) {
+      if (!error.isOffline && error.code != ApiErrorCode.serviceUnavailable) {
+        rethrow;
+      }
       state = AuthState(
-        stage: envelope.needsOnboarding
+        stage: keepOnboarding
             ? AuthStage.needsOnboarding
-            : AuthStage.ready,
+            : envelope.tenantId != null
+            ? AuthStage.ready
+            : envelope.tenants.isNotEmpty
+            ? AuthStage.needsShopSelection
+            : AuthStage.needsOnboarding,
+        profile: AccountProfile(
+          userId: envelope.userId,
+          maskedPhone: null,
+          locale: 'bn',
+          sessionId: envelope.sessionId,
+          tenantId: envelope.tenantId,
+          role: envelope.role,
+          permissions: const [],
+          tenants: envelope.tenants,
+          needsOnboarding: envelope.needsOnboarding,
+        ),
+        verificationEmail: verificationEmail,
+        verificationSent: verificationSent,
       );
     }
   }
 
   void _onInvalidated(ApiError error) {
     state = AuthState(stage: AuthStage.signedOut, error: error);
+  }
+
+  static AuthStage _stageFor(AccountProfile profile) {
+    if (profile.tenantId == null && profile.tenants.isNotEmpty) {
+      return AuthStage.needsShopSelection;
+    }
+    return profile.tenantId == null
+        ? AuthStage.needsOnboarding
+        : AuthStage.ready;
+  }
+
+  Future<bool> _authAction(Future<void> Function() action) async {
+    if (state.isBusy) return false;
+    state = state.copyWith(isBusy: true, clearError: true);
+    try {
+      await action();
+      state = state.copyWith(isBusy: false);
+      return true;
+    } on ApiError catch (error) {
+      state = state.copyWith(isBusy: false, error: error);
+      return false;
+    } on Object {
+      // Storage/platform failures are never rendered from their raw exception.
+      state = state.copyWith(
+        isBusy: false,
+        error: const ApiError(
+          code: ApiErrorCode.internal,
+          messageBn: '',
+          messageEn: '',
+          retryable: true,
+        ),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> login(String email, String password) => _authAction(() async {
+    try {
+      await _adoptSession(
+        await _repository.login(email: email, password: password),
+      );
+    } on ApiError catch (error) {
+      if (error.code == 'EMAIL_NOT_VERIFIED') {
+        state = state.copyWith(verificationEmail: email.trim());
+      }
+      rethrow;
+    }
+  });
+
+  Future<bool> register(String email, String password) => _authAction(() async {
+    final result = await _repository.register(email: email, password: password);
+    await _adoptSession(
+      result.session,
+      verificationEmail: email.trim(),
+      verificationSent: result.verificationSent,
+    );
+  });
+
+  Future<bool> signInWithProvider(SignInProvider provider) =>
+      _authAction(() async {
+        final token = await _providerSignIn.identityToken(provider);
+        await _adoptSession(
+          await _repository.signInWithProvider(provider, token),
+        );
+      });
+
+  Future<bool> forgotPassword(String email) =>
+      _authAction(() => _repository.forgotPassword(email));
+
+  Future<bool> resendVerification(String email) =>
+      _authAction(() => _repository.resendVerification(email));
+
+  Future<bool> verifyEmail(String token) => _authAction(() async {
+    await _repository.verifyEmail(token);
+    state = state.copyWith(clearVerification: true);
+  });
+
+  Future<bool> resetPassword(String token, String password) =>
+      _authAction(() async {
+        await _repository.resetPassword(token, password);
+        await _clearProviderSession();
+        state = const AuthState(stage: AuthStage.signedOut);
+      });
+
+  Future<bool> selectShop(String tenantId) => _authAction(() async {
+    await _adoptSession(await _repository.selectTenant(tenantId));
+  });
+
+  void continueAfterVerification() {
+    state = state.copyWith(clearVerification: true, clearError: true);
+  }
+
+  Future<void> _clearProviderSession() async {
+    try {
+      await _providerSignIn.signOut();
+    } on Object {
+      // Provider cleanup must not undo an already completed backend logout/reset.
+    }
   }
 
   @override

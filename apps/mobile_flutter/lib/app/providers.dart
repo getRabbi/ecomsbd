@@ -6,6 +6,7 @@ import '../core/api/api_client.dart';
 import '../core/storage/token_store.dart';
 import '../data/auth/auth_controller.dart';
 import '../data/auth/auth_repository.dart';
+import '../data/auth/provider_sign_in.dart';
 import '../data/local/database.dart';
 
 /// The application's provider graph.
@@ -51,9 +52,16 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ref.watch(authRepositoryProvider).api;
 });
 
+final providerSignInProvider = Provider<ProviderSignIn>(
+  (ref) => NativeProviderSignIn(),
+);
+
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
-    return AuthController(ref.watch(authRepositoryProvider));
+    return AuthController(
+      ref.watch(authRepositoryProvider),
+      providerSignIn: ref.watch(providerSignInProvider),
+    );
   },
 );
 
