@@ -23,7 +23,9 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import AuthSession
+from app.auth.oidc import IdTokenVerifier, build_apple_verifier, build_google_verifier
 from app.auth.otp_providers import OtpSender, build_otp_provider
+from app.auth.passwords import PasswordHasher
 from app.auth.service import AuthService
 from app.billing.models import DistributionChannel
 from app.billing.providers.registry import BillingProviderRegistry, build_registry, resolve_channel
@@ -50,10 +52,12 @@ from app.couriers.status_sync import StatusSyncService
 from app.db.session import session_scope
 from app.entitlements.service import EntitlementService
 from app.money.service import ReceivableService
+from app.notifications.transport import EmailTransport, build_email_transport
 from app.tenants.roles import Permission, TenantRole, has_permission
 from app.users.models import User
 
 __all__ = [
+    "AppleVerifierDep",
     "BillingServiceDep",
     "BookingRecoveryDep",
     "CourierAccountsDep",
@@ -63,6 +67,7 @@ __all__ = [
     "CurrentPrincipal",
     "DbSession",
     "DistributionChannelDep",
+    "GoogleVerifierDep",
     "PaymentSyncDep",
     "Principal",
     "ProviderRegistryDep",
@@ -84,6 +89,10 @@ _hasher: SecretHasher | None = None
 _vault: CredentialVault | None = None
 _tokens: TokenService | None = None
 _otp_sender: OtpSender | None = None
+_passwords: PasswordHasher | None = None
+_email_transport: EmailTransport | None = None
+_google_verifier: IdTokenVerifier | None = None
+_apple_verifier: IdTokenVerifier | None = None
 
 
 async def get_app_settings() -> Settings:
@@ -124,8 +133,13 @@ def get_otp_sender(settings: Settings | None = None) -> OtpSender:
 def reset_singletons() -> None:
     """Drop cached service instances. Used when settings change in tests."""
     global _hasher, _vault, _tokens, _otp_sender, _registry
+    global _passwords, _email_transport, _google_verifier, _apple_verifier
     _hasher = _vault = _tokens = _otp_sender = None
     _registry = None
+    # The OIDC verifiers hold a JWKS cache and, more importantly, the audience
+    # list they were built from. A stale one would keep verifying against the
+    # previous test's client ids.
+    _passwords = _email_transport = _google_verifier = _apple_verifier = None
     # The courier registry holds live HTTP connection pools, so a stale one
     # between tests would keep a fake transport installed for the next test —
     # or, worse, a real one.
@@ -290,6 +304,60 @@ async def get_rate_limiter() -> RateLimiter:
     return RateLimiter(get_cache())
 
 
+def get_password_hasher() -> PasswordHasher:
+    global _passwords
+    if _passwords is None:
+        _passwords = PasswordHasher()
+    return _passwords
+
+
+def get_email_transport(settings: Settings | None = None) -> EmailTransport:
+    global _email_transport
+    if _email_transport is None:
+        _email_transport = build_email_transport(settings or get_settings())
+    return _email_transport
+
+
+def get_google_verifier(settings: Settings | None = None) -> IdTokenVerifier:
+    """Google's identity-token verifier.
+
+    A process-wide singleton so the JWKS cache is shared: a per-request
+    verifier would fetch Google's key set on every sign-in, putting an outbound
+    request on the login path and making Google's availability ours.
+    """
+    global _google_verifier
+    if _google_verifier is None:
+        _google_verifier = build_google_verifier(settings or get_settings())
+    return _google_verifier
+
+
+def get_apple_verifier(settings: Settings | None = None) -> IdTokenVerifier:
+    global _apple_verifier
+    if _apple_verifier is None:
+        _apple_verifier = build_apple_verifier(settings or get_settings())
+    return _apple_verifier
+
+
+async def get_google_verifier_dep(settings: SettingsDep) -> IdTokenVerifier:
+    """Injectable wrapper around the Google verifier singleton.
+
+    A dependency rather than a direct call inside the route, so a test can
+    substitute a verifier with a seeded key set. Reaching for the factory from
+    the route body would make the audience list and the JWKS source
+    unsubstitutable, which is exactly what the wrong-audience tests need to
+    control.
+    """
+    return get_google_verifier(settings)
+
+
+async def get_apple_verifier_dep(settings: SettingsDep) -> IdTokenVerifier:
+    return get_apple_verifier(settings)
+
+
+GoogleVerifierDep = Annotated[IdTokenVerifier, Depends(get_google_verifier_dep)]
+AppleVerifierDep = Annotated[IdTokenVerifier, Depends(get_apple_verifier_dep)]
+
+
 async def get_auth_service(
     db: DbSession,
     settings: SettingsDep,
@@ -303,6 +371,8 @@ async def get_auth_service(
         tokens=get_token_service(settings),
         otp_sender=get_otp_sender(settings),
         rate_limiter=limiter,
+        passwords=get_password_hasher(),
+        email=get_email_transport(settings),
     )
 
 

@@ -23,6 +23,7 @@ from app import __version__
 # Imported for its side effect: configuring every mapper at import time, so a
 # broken relationship fails at startup rather than on a seller's first request.
 from app import models as _models  # noqa: F401
+from app.api.auth_links import router as auth_links_router
 from app.api.errors import install_exception_handlers
 from app.api.health import router as health_router
 from app.api.middleware import BodySizeLimitMiddleware, RequestContextMiddleware
@@ -131,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_exception_handlers(app)
 
     app.include_router(health_router)
+    app.include_router(auth_links_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     return app

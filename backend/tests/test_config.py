@@ -151,32 +151,25 @@ class TestBlankValues:
 
 
 class TestAuthMethods:
-    """Sign-in must be configured *and* reachable.
+    """Sign-in must be configured and reachable without an SMS gateway."""
 
-    The second half is what matters in this build: only phone OTP has an
-    implementation, so a deployment that switches it off and turns on the three
-    intended production methods has nobody able to log in.
-    """
-
-    def test_the_intended_production_auth_model_cannot_boot_yet(self) -> None:
-        # Exactly the shipped .env.production.example posture. It is refused,
-        # and the refusal names the blocker rather than failing silently.
-        with pytest.raises(ValueError, match="SELLER_AUTH_IMPLEMENTATION_REQUIRED"):
-            production_settings(
-                phone_otp_login_enabled=False,
-                email_password_auth_enabled=True,
-                google_auth_enabled=True,
-                google_client_id_web="123.apps.googleusercontent.com",
-                apple_auth_enabled=True,
-                apple_team_id="ABCDE12345",
-                apple_client_id="com.example.app",
-                apple_key_id="FGHIJ67890",
-                apple_private_key=APPLE_KEY,
-                email_transport="provider_api",
-                email_api_base_url="https://api.email.example.com",
-                email_api_key="k" * 32,
-                email_from_address="no-reply@example.com",
-            )
+    def test_the_intended_production_auth_model_boots(self) -> None:
+        settings = production_settings(
+            phone_otp_login_enabled=False,
+            otp_provider=OtpProvider.SMS_GATEWAY,
+            otp_provider_secret=None,
+            email_password_auth_enabled=True,
+            google_auth_enabled=True,
+            google_client_id_web="123.apps.googleusercontent.com",
+            apple_auth_enabled=True,
+            apple_client_id="com.example.app",
+            email_transport="provider_api",
+            email_api_base_url="https://api.email.example.com",
+            email_api_key="k" * 32,
+            email_from_address="no-reply@example.com",
+        )
+        assert settings.available_auth_methods == {"email_password", "google", "apple"}
+        assert not settings.dev_otp_enabled
 
     def test_disabling_everything_is_refused(self) -> None:
         with pytest.raises(ValueError, match="no seller can sign in"):
@@ -203,18 +196,17 @@ class TestAuthMethods:
             )
         message = str(excinfo.value)
         assert "OTP_PROVIDER_SECRET" not in message
-        assert "SELLER_AUTH_IMPLEMENTATION_REQUIRED" in message
+        assert "no seller can sign in" in message
 
     def test_google_enabled_without_an_audience_is_refused(self) -> None:
         with pytest.raises(ValueError, match="no Google client id is set"):
             production_settings(google_auth_enabled=True)
 
-    def test_apple_enabled_without_its_key_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="APPLE_PRIVATE_KEY"):
+    def test_apple_enabled_without_its_audience_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="APPLE_CLIENT_ID"):
             production_settings(
                 apple_auth_enabled=True,
                 apple_team_id="ABCDE12345",
-                apple_client_id="com.example.app",
                 apple_key_id="FGHIJ67890",
             )
 

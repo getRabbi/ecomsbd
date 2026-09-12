@@ -58,30 +58,19 @@ release blockers and which are not.
 
 ## Read this before you start
 
-### 1. You cannot deploy a working sign-in today
+### 1. Configure the implemented backend sign-in methods
 
 The production auth decision is **email/password + Google + Apple**, with phone
 OTP deferred. `.env.production.example` encodes that decision.
 
-None of those three has a server-side implementation in this build. Phone OTP
-does. So a deployed environment with the shipped settings **refuses to start**,
-reporting:
+All three backend methods are implemented and use the existing session,
+refresh-token and shop onboarding system. Set `EMAIL_PASSWORD_AUTH_ENABLED`,
+`GOOGLE_AUTH_ENABLED` and `APPLE_AUTH_ENABLED` to `true`, and keep
+`PHONE_OTP_LOGIN_ENABLED=false`. No SMS provider is required.
 
-```
-no seller can sign in: every sign-in method is disabled.
-Implemented methods are ['phone_otp'] (SELLER_AUTH_IMPLEMENTATION_REQUIRED)
-```
-
-That refusal is deliberate. An API that starts cleanly and turns every seller
-away is worse than one that will not start. Two ways forward:
-
-- **land the sign-in work**, then leave the configuration as it ships; or
-- **to deploy before then**, set `PHONE_OTP_LOGIN_ENABLED=true` and configure
-  an SMS gateway (`OTP_PROVIDER=sms_gateway`, `OTP_PROVIDER_SECRET`).
-
-Collect the Google and Apple credentials now regardless. They have a validated
-home in the configuration, the check command reports on them, and having them
-ready shortens the sign-in work to code.
+Supply the Google client IDs, Apple client ID and transactional email settings.
+Missing configuration remains a deployment blocker. The Flutter login screens
+are still OTP-only and require a separate client integration before mobile release.
 
 ### 2. BOOT CONFIG is not a RUNTIME FEATURE FLAG
 
@@ -177,8 +166,8 @@ Must be `false`. Staging and production refuse to start otherwise. Not secret.
 
 ### `PUBLIC_WEB_URL`, `SUPPORT_EMAIL`
 
-Optional. `PUBLIC_WEB_URL` is the base for links inside transactional email —
-there is no web client today, so it is unused until email is wired up.
+Optional. `PUBLIC_WEB_URL` is reserved for a separate web client. Auth emails use
+`PUBLIC_BASE_URL`, where the backend serves verification and password-reset pages.
 `SUPPORT_EMAIL` is the reply-to on outbound mail and the address shown to a
 seller who needs help. Use a mailbox a person actually reads.
 
@@ -342,14 +331,14 @@ No actual key is ever printed — not truncated, not fingerprinted.
 
 ## 5. Sign-in methods
 
-Read "You cannot deploy a working sign-in today" above first.
+See the backend sign-in configuration above.
 
 | Variable | Required | Secret | Meaning |
 |---|---|---|---|
 | `PHONE_OTP_LOGIN_ENABLED` | Yes | No | `false` closes both OTP endpoints; they answer `FEATURE_DISABLED` |
 | `EMAIL_PASSWORD_AUTH_ENABLED` | Yes | No | Turning it on makes a deliverable email transport mandatory |
 | `GOOGLE_AUTH_ENABLED` | Yes | No | Turning it on makes at least one Google client id mandatory |
-| `APPLE_AUTH_ENABLED` | Yes | No | Turning it on makes all four Apple values mandatory |
+| `APPLE_AUTH_ENABLED` | Yes | No | Requires `APPLE_CLIENT_ID`; tokens are verified with Apple's public keys |
 
 The gate for phone OTP is inside `AuthService`, not on the two routes, so a
 future endpoint that issues or verifies a challenge cannot reopen the path by
@@ -412,10 +401,12 @@ or Google sign-in works in internal testing and fails in production.
 **Where to paste.** Backend: `.env.production.local`. Android: the client id is
 carried in `google-services.json`; no `--dart-define` is needed for it.
 
-**How to verify.** `GOOGLE AUTH ..... PARTIAL` in the config check — configured,
-with no verifier implemented yet. Once the sign-in work lands: a real Google
-sign-in returns an ecomsbd session, and a token minted for a *different* client
-id is rejected.
+**How to verify.** `GOOGLE AUTH ..... OK` in the config check.
+`POST /v1/auth/oauth/google` accepts an `id_token` and optional `device`, and
+returns an ecomsbd session. Wrong audience, issuer, expiry or signature is refused.
+Automatic email linking requires proof on both sides; for Google, Gmail or a
+verified Workspace address is required. Third-party mailbox claims sign in by
+provider subject without automatically linking existing accounts.
 
 ---
 
@@ -449,11 +440,14 @@ before that for the web flow.
   verifier must accept both; only one can be configured today, so start with
   the one the first shipping client uses.
 
-**Redirect URL** (web/Services ID flow only). Apple posts back to a URL you
-register on the Services ID — `https://api.yourdomain.com/v1/auth/apple/callback`
-is the natural shape. Apple requires HTTPS and refuses `localhost`, so testing
-the web flow needs a real domain or a tunnel. No callback route exists yet; add
-it with the sign-in work, and register the URL then.
+**Supported backend flow.** The client obtains an Apple identity token and posts
+it to `POST /v1/auth/oauth/apple` with optional `device` metadata. The server
+checks Apple's public JWKS, issuer, audience and expiry. An authorization-code
+exchange or redirect callback is not used by this endpoint. Returning tokens
+without email are accepted using the same provider subject.
+
+Only `APPLE_CLIENT_ID` is needed for this verification. The other three Apple
+settings remain optional interfaces for a future code-exchange flow.
 
 **The private key.** Certificates, IDs & Profiles → Keys → **+** → enable "Sign
 in with Apple" → download the `.p8`.
@@ -465,26 +459,25 @@ in with Apple" → download the `.p8`.
 - `*.p8` is gitignored. Do not commit it, and do not leave it on the production
   host as a file.
 
-**How to verify.** `APPLE AUTH ..... PARTIAL` in the config check. Once the
-verifier lands: an Apple identity token with the right `aud` produces a session,
+**How to verify.** `APPLE AUTH ..... OK` in the config check. An Apple
+identity token with the right `aud` produces a session,
 and one with a wrong `aud` or an expired `exp` does not.
 
 ---
 
 ## 8. Transactional email
 
-`TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`. No provider has been selected, so no
-provider's request shape is encoded in the code. The configuration is
-provider-neutral and validated; a client implementation is the remaining work.
+`TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` now means a Resend account, verified
+sending domain and API key are needed. The delivery adapter is implemented using
+the [Resend send-email contract](https://resend.com/docs/api-reference/emails/send-email).
 
 ### What email/password auth needs
 
-Four flows, and each one is the **only** copy of what it carries:
-
-1. **Email verification** — proves the address belongs to the person.
-2. **Forgot password** — a single-use, expiring reset link.
-3. **Password reset confirmation** — so a hijack is visible to the real owner.
-4. **Security notifications** — new device, password changed.
+Registration and resend send an email verification link. Forgot-password sends
+a single-use reset link. Both land on browser pages served at `PUBLIC_BASE_URL`
+(`/auth/email/verify` and `/auth/password/reset`). Tokens travel in URL fragments,
+then POST bodies, keeping them out of access logs. Password changes and resets
+are audited, and revoke other sessions or all sessions respectively.
 
 There is no SMS in any of them. Email/password auth does not depend on the
 deferred SMS gateway.
@@ -518,22 +511,22 @@ reset does not work".
 
 Required when `EMAIL_TRANSPORT=provider_api`. **`EMAIL_API_KEY` is secret.**
 
-**Where to obtain.** Any transactional provider — Resend, Postmark, SendGrid,
-Amazon SES, Mailgun. Choose one, then take the REST endpoint from *its current
-documentation* and a **send-only** API key from its dashboard. The endpoint is
-configuration rather than a constant in the code precisely so that picking a
-provider does not need a release, and so that nobody hard-codes a URL they have
-not read.
+**Where to obtain.** Use `EMAIL_API_BASE_URL=https://api.resend.com` (without
+`/emails`) and a send-only API key from the Resend dashboard. Other providers
+need an adapter for their own request contract; changing the URL alone is not
+enough. Production requires HTTPS.
 
 **How to verify.** With credentials present the check reports:
 
 ```
-EMAIL ................... PARTIAL
-                          credentials present; no provider client is wired in
+EMAIL ................... OK
+                          Resend API transport configured; verify delivery with a real inbox
 ```
 
-Once the client is implemented, a verification email arrives at a real inbox
-and the delivery record says `SENT` rather than `NOT_CONFIGURED`.
+Verify that an email arrives at a real inbox and its link completes the flow.
+Configuration checks do not send email. Registration only reports
+`email_verification_sent=true` when the transport confirms acceptance; delivery
+failures are audited. Forgot-password always gives a generic acknowledgment.
 
 ---
 

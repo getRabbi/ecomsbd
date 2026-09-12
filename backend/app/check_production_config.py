@@ -188,9 +188,8 @@ def _check_email(settings: Settings) -> CheckResult:
         )
     return CheckResult(
         "EMAIL",
-        Status.PARTIAL,
-        "credentials present; no provider client is wired in "
-        "(TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED)",
+        Status.OK,
+        "Resend API transport configured; verify delivery with a real inbox",
     )
 
 
@@ -201,9 +200,9 @@ def _check_google_auth(settings: Settings) -> CheckResult:
         return CheckResult("GOOGLE AUTH", Status.BLOCKING, "enabled with no client id configured")
     return CheckResult(
         "GOOGLE AUTH",
-        Status.PARTIAL,
-        f"{len(settings.google_client_ids)} audience(s) configured; "
-        "no token verifier is implemented yet",
+        Status.OK,
+        f"{len(settings.google_client_ids)} audience(s); identity tokens are "
+        "verified server-side against Google's JWKS",
     )
 
 
@@ -211,11 +210,11 @@ def _check_apple_auth(settings: Settings) -> CheckResult:
     if not settings.apple_auth_enabled:
         return CheckResult("APPLE AUTH", Status.DISABLED, "APPLE_AUTH_ENABLED=false")
     if not settings.apple_auth_configured:
-        return CheckResult(
-            "APPLE AUTH", Status.BLOCKING, "enabled with team id, key id, client id or key missing"
-        )
+        return CheckResult("APPLE AUTH", Status.BLOCKING, "enabled with no client id configured")
     return CheckResult(
-        "APPLE AUTH", Status.PARTIAL, "credentials present; no token verifier is implemented yet"
+        "APPLE AUTH",
+        Status.OK,
+        "identity tokens are verified server-side against Apple's JWKS",
     )
 
 

@@ -15,7 +15,7 @@ the *only* copy. That is why ``console`` — which writes the message to a log �
 is refused in staging and production by :class:`~app.core.config.Settings`
 rather than merely discouraged.
 
-No transport here has a live implementation in this repository:
+Push and SMS still require provider wiring; transactional email uses Resend:
 
 *   ``FCM_CREDENTIALS_REQUIRED`` — no Firebase project exists, so
     :class:`FcmPushTransport` validates the payload it would send, records the
@@ -24,11 +24,8 @@ No transport here has a live implementation in this repository:
     section 22 forbids assuming segment counting or per-segment cost that has
     not been verified against the chosen provider. So
     :class:`SmsGatewayTransport` does the same.
-*   ``TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`` — no email provider has been
-    selected, so :class:`ProviderApiEmailTransport` validates the message,
-    records the attempt, and reports itself unconfigured. Its request shape is
-    not invented here: every provider's REST API differs, and guessing one
-    would ship an integration nobody has verified.
+*   ``TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`` — configure a Resend account,
+    sending domain and API key for :class:`ProviderApiEmailTransport`.
 
 Both refuse rather than pretend. A transport that returned "sent" without
 sending would make the delivery metrics in section 49 a comfortable fiction.
@@ -44,6 +41,8 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
+
+import httpx
 
 from app.core.config import Settings
 from app.core.logging import get_logger
@@ -603,23 +602,20 @@ class MockEmailTransport:
 
 
 class ProviderApiEmailTransport:
-    """A transactional email provider's REST API.
+    """Resend's REST API, using the existing EMAIL_* configuration.
 
-    ``TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED``. No provider has been selected,
-    so no request body, endpoint path or error taxonomy is encoded here —
-    those differ per provider and master spec section 140 forbids assuming one
-    that has not been read. What is here is everything that is *not*
-    provider-specific: the payload validation, the header-injection check and
-    the configuration gate.
-
-    As with FCM, validation runs before the configuration check, so a malformed
-    message fails identically whether or not a provider is configured.
+    Contract: https://resend.com/docs/api-reference/emails/send-email
+    Checked 2026-09-12. No redirects, automatic retries or response-body logs:
+    the request carries both an API key and a live account recovery token.
     """
 
     name = "provider_api"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
         self._settings = settings
+        self._transport = transport
 
     @property
     def is_configured(self) -> bool:
@@ -641,14 +637,53 @@ class ProviderApiEmailTransport:
                     f"{EMAIL_BLOCKER}: set EMAIL_API_BASE_URL, EMAIL_API_KEY and EMAIL_FROM_ADDRESS"
                 ),
             )
-        return TransportResult(
-            DeliveryOutcome.NOT_CONFIGURED,
-            self.name,
-            detail=(
-                f"{EMAIL_BLOCKER}: no provider client is wired in; "
-                "the payload validated successfully."
-            ),
-        )
+        settings = self._settings
+        if settings.email_api_key is None:
+            return TransportResult(DeliveryOutcome.NOT_CONFIGURED, self.name, detail=EMAIL_BLOCKER)
+        sender = settings.email_from_address or ""
+        sender_name = settings.email_from_name or ""
+        if not _EMAIL_RE.fullmatch(sender) or any(c in sender_name for c in '\r\n<>"'):
+            return TransportResult(DeliveryOutcome.REJECTED, self.name, detail="invalid sender")
+        payload: dict[str, Any] = {
+            "from": f"{sender_name} <{sender}>" if sender_name else sender,
+            "to": [message.to_address],
+            "subject": message.subject,
+            "text": message.text_body,
+        }
+        if message.html_body is not None:
+            payload["html"] = message.html_body
+        if message.reply_to is not None:
+            payload["reply_to"] = message.reply_to
+        headers = {"Authorization": f"Bearer {settings.email_api_key.get_secret_value()}"}
+        if message.idempotency_key:
+            headers["Idempotency-Key"] = message.idempotency_key
+        try:
+            async with httpx.AsyncClient(
+                timeout=10.0, follow_redirects=False, transport=self._transport
+            ) as client:
+                response = await client.post(
+                    f"{(settings.email_api_base_url or '').rstrip('/')}/emails",
+                    headers=headers,
+                    json=payload,
+                )
+            if not response.is_success:
+                outcome = (
+                    DeliveryOutcome.FAILED
+                    if response.status_code in (408, 429) or response.status_code >= 500
+                    else DeliveryOutcome.REJECTED
+                )
+                return TransportResult(outcome, self.name, detail=f"HTTP {response.status_code}")
+            body = response.json()
+            reference = body.get("id") if isinstance(body, dict) else None
+            if not isinstance(reference, str) or not reference:
+                return TransportResult(
+                    DeliveryOutcome.FAILED, self.name, detail="provider returned no message id"
+                )
+            return TransportResult(DeliveryOutcome.SENT, self.name, provider_reference=reference)
+        except (httpx.HTTPError, ValueError):
+            return TransportResult(
+                DeliveryOutcome.FAILED, self.name, detail="email provider request failed"
+            )
 
 
 def build_email_transport(settings: Settings) -> EmailTransport:

@@ -123,6 +123,82 @@ class SessionResponse(BaseModel):
     tenants: list[TenantSummaryResponse]
 
 
+class RegisterPayload(BaseModel):
+    """Create an account from an email and a password."""
+
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=200)
+    display_name: str | None = Field(default=None, max_length=160)
+    device: DevicePayload = Field(default_factory=DevicePayload)
+
+
+class RegisterResponse(BaseModel):
+    """The new session, plus what the client should say about verification."""
+
+    session: SessionResponse
+    email_verification_sent: bool
+    verification_token: str | None = Field(
+        default=None,
+        description=(
+            "The raw verification token. Present only in local/test environments "
+            "where no email provider is configured, so the flow is testable "
+            "without one; always null in staging and production."
+        ),
+    )
+
+
+class LoginPayload(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=200)
+    device: DevicePayload = Field(default_factory=DevicePayload)
+
+
+class EmailPayload(BaseModel):
+    """Used by the two flows that must not reveal whether an account exists."""
+
+    email: str = Field(min_length=3, max_length=254)
+
+
+class AuthTokenPayload(BaseModel):
+    """A verification or reset link token."""
+
+    token: str = Field(min_length=16, max_length=400)
+
+
+class PasswordResetPayload(AuthTokenPayload):
+    new_password: str = Field(min_length=1, max_length=200)
+
+
+class PasswordChangePayload(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=1, max_length=200)
+
+
+class ProviderSignInPayload(BaseModel):
+    """A Google or Apple identity token, to be verified server-side.
+
+    There is deliberately no ``email``, ``user_id`` or ``verified`` field: every
+    fact about the person comes out of the token after the server checks it,
+    never out of the request body.
+    """
+
+    id_token: str = Field(min_length=16, max_length=8192)
+    device: DevicePayload = Field(default_factory=DevicePayload)
+
+
+class AcknowledgedResponse(BaseModel):
+    """A deliberately uninformative success.
+
+    Forgot-password and resend-verification return this whether or not the
+    address has an account. Saying anything more precise would turn either
+    endpoint into a way to test a leaked address list against ecomsbd's sellers.
+    """
+
+    acknowledged: bool = True
+    #: Local/test only, for the same reason as ``RegisterResponse.verification_token``.
+    debug_token: str | None = None
+
+
 # --------------------------------------------------------------------------- #
 # Tenant / me
 # --------------------------------------------------------------------------- #
@@ -171,7 +247,7 @@ class TenantResponse(BaseModel):
 class MeResponse(BaseModel):
     user_id: uuid.UUID
     display_name: str | None
-    masked_phone: str
+    masked_phone: str | None
     locale: str
     session_id: uuid.UUID
     tenant_id: uuid.UUID | None

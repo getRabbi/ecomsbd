@@ -11,6 +11,7 @@ and the test suite all import this module rather than individual model files.
 from __future__ import annotations
 
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
+from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken
 from app.billing.models import (
     BillingAttempt,
@@ -64,7 +65,9 @@ from app.users.models import User
 
 __all__ = [
     "AuditLog",
+    "AuthIdentity",
     "AuthSession",
+    "AuthToken",
     "Base",
     "BillingAttempt",
     "BillingProviderCustomer",

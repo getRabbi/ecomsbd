@@ -1,6 +1,6 @@
 # Release readiness
 
-**Last updated 2026-09-12, after the production environment configuration.**
+**Last updated 2026-09-12, after backend seller authentication completion.**
 
 This is the gate. Nothing below is a "nice to have": each row is something that
 must be true before ecomsbd charges a real seller or handles a real parcel.
@@ -24,17 +24,14 @@ printing a value.
 | Blockers that are an operator decision (no engineering work) | 3 — §1, §2, §10 |
 | Blockers that need a third-party account | 9 — §3, §4, §5, §6a, §6c (×2), §7, §8, §9 |
 | Blockers waiting on provider documentation | 1 — §5a |
-| **Blockers that need engineering work** | **1 — §6 `SELLER_AUTH_IMPLEMENTATION_REQUIRED`** |
+| **Blockers that need engineering work** | **1 — §6 Flutter auth integration; backend complete** |
 | Deferred, no longer a blocker | §6b `SMS_PROVIDER_REQUIRED` |
 
-**ecomsbd cannot be released today**, and as of the 2026-09-12 auth decision one
-of the reasons is engineering rather than configuration.
-
-The production sign-in model is now **email/password + Google + Apple**, with
-phone OTP deferred and Facebook/Meta login excluded. **None of those three is
-implemented.** Phone OTP is the only sign-in method this build has, so a
-production deployment that honours the decision has no working login at all —
-and refuses to start rather than serving an app nobody can sign in to.
+**ecomsbd cannot be released today.** The backend production sign-in model is
+implemented: **email/password + Google + Apple**, sharing existing sessions and
+shop onboarding. Phone OTP is deferred and Facebook/Meta login is excluded.
+Provider configuration remains external. The untouched Flutter app still offers
+only OTP screens, so mobile integration remains a separate release requirement.
 
 Everything else remains configuration an operator supplies: no package id, no
 signing key, no courier account, no billing provider, no email provider, no
@@ -45,12 +42,12 @@ rather than faked.
 
 - `SMS_PROVIDER_REQUIRED` is **no longer a release blocker**. Phone OTP is
   deferred, so an SMS gateway is not on the path to first release. It survives
-  below as a *deferred* item, because OTP remains the only implemented sign-in
-  and is therefore the fallback if the new auth work slips.
-- `SELLER_AUTH_IMPLEMENTATION_REQUIRED` is **new**, and is the one blocker that
-  needs code.
+  below as a *deferred* item for future use.
+- Backend `SELLER_AUTH_IMPLEMENTATION_REQUIRED` is resolved. Flutter login
+  integration remains outstanding.
 - `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` is **new**: email/password auth needs
-  verification and password-reset mail, and no provider has been selected.
+  verification and password-reset mail. The Resend adapter is implemented;
+  an account, verified sender and send-only key are still required.
 - `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` and
   `REDIS_CONFIGURATION_REQUIRED` are recorded explicitly. They were always
   true; they were never written down.
@@ -125,29 +122,29 @@ rather than faked.
 | **Why it stays off** | `SteadfastWebhookVerifier.is_configured` returns `False` unconditionally. A verifier that returned `True` because there is nothing to check would not be a disabled webhook — it would be an open endpoint letting anyone mark any parcel delivered and move a seller's money. `Settings` refuses to boot a deployed environment with `STEADFAST_WEBHOOK_ENABLED=true`. |
 | **Validation** | Steadfast supplies a webhook contract; the verifier implements it; the capability moves from `unknown` to `true` with a date. |
 
-## 6. `SELLER_AUTH_IMPLEMENTATION_REQUIRED`
+## 6. Seller authentication — backend complete, Flutter integration pending
 
 | | |
 |---|---|
-| **Status** | **BLOCKED — engineering work. The only blocker on this page that is not configuration.** |
-| **What is missing** | Server-side email/password, Google Sign-In and Sign in with Apple. The production auth decision of 2026-09-12 is those three; the repository implements none of them. |
-| **Why it is required** | Phone OTP is the only sign-in this build has, and it is deferred. A production deployment that honours the decision therefore has no way for any seller to log in. |
-| **What exists already** | Everything sign-in sits on: sessions, refresh-token rotation with reuse detection, device records, tenant selection and binding, the audit trail, rate limiting, and the `users` table. What is missing is the front half — a password credential with a modern KDF, an email verification and reset flow, and a verifier for each provider's identity token. |
-| **What is configured already** | All of it. `GOOGLE_CLIENT_ID_ANDROID` / `_IOS` / `_WEB`, `APPLE_TEAM_ID` / `APPLE_CLIENT_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY`, `EMAIL_*`, and the four `*_AUTH_ENABLED` boot flags are defined, validated and documented. An operator can collect every credential now, before the code lands. |
-| **The rule the verifiers must obey** | The backend verifies the provider's identity token itself — signature, issuer, expiry, and an `aud` matching a configured client id. A client's claim that Google or Apple approved it is never evidence; anyone can post that claim. |
-| **How this is enforced today** | `Settings` refuses to start a deployed environment in which no *implemented* sign-in method is enabled, naming this blocker. Enabling `GOOGLE_AUTH_ENABLED` does not create a login; `IMPLEMENTED_AUTH_METHODS` in `app/core/config.py` is the single place that says which methods are real, and the config check reports configured-but-unimplemented as `PARTIAL`. |
-| **Validation** | A seller registers with an email and a password, receives a verification email, resets a forgotten password, and signs in with Google and with Apple — each producing an ecomsbd session. A token minted for a different `aud` is rejected. `python -m app.check_production_config` reports `SIGN-IN ... OK`. |
-| **Interim option** | Set `PHONE_OTP_LOGIN_ENABLED=true` and resolve `SMS_PROVIDER_REQUIRED` (below). That ships a working, if deferred, sign-in. |
+| **Status** | **Backend implemented and tested. Mobile UI integration and external provider setup remain.** |
+| **Implemented** | Register/login, Argon2id passwords, email verification/resend, forgot/reset/change password, Google and Apple identity-token verification, shared refresh rotation, session revocation, audit events and shop onboarding. No second session architecture. |
+| **Endpoints** | `POST /v1/auth/register`, `/login`, `/email/verify`, `/email/resend`, `/password/forgot`, `/password/reset`, `/password/change`, `/oauth/google`, `/oauth/apple`. Link landing pages are served under `/auth` on `PUBLIC_BASE_URL`. |
+| **Identity safety** | Provider subject remains authoritative. Linking requires a unique existing user and verified email proof on both sides; unverified claims, Apple relay addresses, Google third-party mailboxes and ambiguous users do not automatically merge. |
+| **Production flags** | `EMAIL_PASSWORD_AUTH_ENABLED=true`, `GOOGLE_AUTH_ENABLED=true`, `APPLE_AUTH_ENABLED=true`, `PHONE_OTP_LOGIN_ENABLED=false`. No SMS gateway required. |
+| **External configuration** | Google client IDs, `APPLE_CLIENT_ID`, and Resend sender/API configuration. Apple's private key, Team ID and Key ID are optional for the implemented identity-token flow, which uses public JWKS. |
+| **Migration** | `c41f8b2ad7e5` retained; creates identities/link tokens and permits users without phone numbers. Auth fixtures apply it on SQLite; PostgreSQL SQL rendering checked without a live database. |
+| **Validation** | Targeted auth/config tests cover forged/wrong-audience/expired tokens, linking, reset replay, revocation and all three methods creating shops with the existing session system. Real provider sign-in and email delivery still require credentials. |
+| **Mobile follow-up** | Add the new login methods to the existing Flutter repository/controller/screens and accept nullable phone profiles. The current mobile UI remains OTP-only; backend completion alone does not make that UI production-ready. |
 
 ## 6a. `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`
 
 | | |
 |---|---|
-| **Status** | **BLOCKED — needs a provider choice and an account** |
-| **What is missing** | A transactional email provider: an account, a REST endpoint from its current documentation, a send-only API key, and a sending domain with SPF, DKIM and DMARC published. |
-| **Why it is required** | Email verification, forgot-password, reset confirmation and security notices all travel on it, and each is the *only* copy of what it carries. Email/password auth without deliverable mail locks sellers out of their own accounts. |
+| **Status** | **Code complete; needs an account and sender configuration** |
+| **What is missing** | A Resend account, send-only API key, and verified sending domain. |
+| **Why it is required** | Email verification and forgot-password links need deliverable mail. |
 | **Where it is configured** | `EMAIL_TRANSPORT`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `EMAIL_API_BASE_URL`, `EMAIL_API_KEY`. |
-| **What exists already** | The provider-neutral transport, address and header-injection validation, masked logging that never renders a body or a full address, and the `disabled` / `console` / `mock` / `provider_api` selection. No provider's request shape is encoded — every provider's REST API differs, and section 140 forbids guessing one. |
+| **What exists already** | Resend REST adapter with payload validation, idempotency headers, delivery outcomes and redacted errors; browser verification/reset pages; existing `disabled` / `console` / `mock` / `provider_api` interfaces. Contract: [Resend send email](https://resend.com/docs/api-reference/emails/send-email). |
 | **Safety already enforced** | `EMAIL_TRANSPORT=console` writes the message to the log and is **refused at startup in staging and production**: a reset link is a credential, so a transport that prints it publishes account takeovers to everyone who can read the log. `mock` is refused for the same reason. `EMAIL_PASSWORD_AUTH_ENABLED=true` with no deliverable transport is refused. |
 | **Validation** | A verification email arrives at a real inbox from the production sender, and the delivery record says `SENT` rather than `NOT_CONFIGURED`. |
 
@@ -156,7 +153,7 @@ rather than faked.
 | | |
 |---|---|
 | **Status** | **DEFERRED.** Phone OTP sign-in is off in production (`PHONE_OTP_LOGIN_ENABLED=false`), so no SMS gateway is on the path to first release. |
-| **Why it is still listed** | OTP is the only *implemented* sign-in method. If the auth work above slips, this is the fallback that makes a pilot possible — and resolving it is then a release blocker again. |
+| **Why it is still listed** | OTP code is retained for possible future use. It is not required by any production login method. |
 | **What is missing** | A Bangladeshi SMS gateway, a registered sender id, and that gateway's segment and cost rules. |
 | **Where it is configured** | `PHONE_OTP_LOGIN_ENABLED=true`, `OTP_PROVIDER=sms_gateway`, `OTP_PROVIDER_SECRET`, `SMS_TRANSPORT=sms_gateway`. |
 | **What exists already** | The provider-neutral transport, payload validation, GSM-03.38/UCS-2 segment estimation, per-segment quota metering, Banglish templates, and delivery records. Section 22's rule holds: the provider's own segment count wins over our estimate, and both are stored. |

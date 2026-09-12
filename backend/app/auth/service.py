@@ -20,14 +20,24 @@ Notable decisions, each with a reason:
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import lru_cache
 from typing import NoReturn
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.identities import (
+    MAX_EMAIL_LENGTH,
+    AuthIdentity,
+    AuthProvider,
+    AuthToken,
+    AuthTokenPurpose,
+    normalize_email,
+)
 from app.auth.models import (
     AuthSession,
     Device,
@@ -37,14 +47,22 @@ from app.auth.models import (
     RefreshToken,
     RevocationReason,
 )
+from app.auth.oidc import IdTokenVerifier, OidcIdentity
 from app.auth.otp_providers import OtpSender
+from app.auth.passwords import PasswordHasher, validate_password
 from app.common.audit import AuditAction, record_audit
 from app.common.cache import RateLimiter
 from app.common.outbox import OutboxTopic, enqueue
 from app.core.clock import utc_now
 from app.core.config import Settings
 from app.core.context import ActorType
-from app.core.errors import AppError, AuthenticationError, ErrorCode, RateLimitedError
+from app.core.errors import (
+    AppError,
+    AuthenticationError,
+    ErrorCode,
+    RateLimitedError,
+    ValidationError,
+)
 from app.core.ids import new_id
 from app.core.logging import get_logger
 from app.core.security import (
@@ -55,12 +73,39 @@ from app.core.security import (
     generate_opaque_token,
 )
 from app.db.tenancy import allow_cross_tenant
+from app.notifications.transport import EmailMessage, EmailTransport, build_email_transport
 from app.tenants.models import Tenant, TenantStatus, TenantUser
 from app.users.models import User, UserStatus
 
-__all__ = ["AuthService", "ChallengeResult", "DeviceInfo", "SignInResult"]
+__all__ = [
+    "AuthService",
+    "ChallengeResult",
+    "DeviceInfo",
+    "RegistrationResult",
+    "SignInResult",
+]
 
 log = get_logger(__name__)
+
+#: Deliberately permissive. The authority on whether an address exists is
+#: whether mail to it arrives, which is what the verification link tests; a
+#: stricter pattern here only rejects valid unusual addresses.
+_EMAIL_RE = re.compile(r"^[^@\s,;]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z]{2,}$")
+
+
+@lru_cache(maxsize=1)
+def _absent_password_hash() -> str:
+    """A digest to verify against when no identity was found.
+
+    Its plaintext is random and thrown away, so nothing can ever match it. The
+    point is the *work*: without this, a login for an address with no account
+    would return before any Argon2id derivation and be measurably faster than a
+    wrong password, which is an enumeration oracle no wording in the response
+    can close. Computed once, on first use rather than at import, so the cost
+    lands on the first login instead of on every process start.
+    """
+    return PasswordHasher().hash(generate_opaque_token())
+
 
 #: Context string binding a user's phone ciphertext to its row.
 #: AEAD context for a user's phone. Public so the team-invite path, which
@@ -104,6 +149,20 @@ class TenantSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistrationResult:
+    """A new account, plus the verification token for the caller to deliver.
+
+    The token is carried out of the service rather than returned to the client:
+    the API layer exposes it only where the transport could not send it and the
+    environment is one where saying so out loud is safe.
+    """
+
+    session: SignInResult
+    verification_token: str | None
+    email_verification_sent: bool
+
+
+@dataclass(frozen=True, slots=True)
 class SignInResult:
     """Tokens plus everything the client needs to decide its next screen."""
 
@@ -138,6 +197,8 @@ class AuthService:
         tokens: TokenService,
         otp_sender: OtpSender,
         rate_limiter: RateLimiter,
+        passwords: PasswordHasher | None = None,
+        email: EmailTransport | None = None,
     ) -> None:
         self._db = session
         self._settings = settings
@@ -146,6 +207,12 @@ class AuthService:
         self._tokens = tokens
         self._otp = otp_sender
         self._limits = rate_limiter
+        self._passwords = passwords or PasswordHasher()
+        # Defaulted rather than required, so every existing construction site -
+        # the OTP tests among them - keeps working untouched. The disabled
+        # transport records the attempt and sends nothing, which is the correct
+        # behaviour for a deployment with no email provider yet.
+        self._email = email or build_email_transport(settings)
 
     async def _persist_then_raise(self, error: AppError) -> NoReturn:
         """Commit security bookkeeping, then raise.
@@ -768,5 +835,910 @@ class AuthService:
             tenant_id=tenant_id,
             role=match.role,
             is_new_user=False,
+            tenants=memberships,
+        )
+
+    # ================================================================= #
+    # Email + password, Google, Apple
+    # ================================================================= #
+    #
+    # Every method below ends at the same place: :meth:`_complete_sign_in`,
+    # which upserts the device, creates the session and issues the token pair.
+    # There is one session system, and adding a provider does not add another.
+
+    async def register_with_password(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str | None,
+        device: DeviceInfo,
+        client_ip: str | None,
+    ) -> RegistrationResult:
+        """Create an account from an email and a password.
+
+        Registration is **not** enumeration-safe, and that is deliberate: a
+        sign-up form has to tell you the address is taken or you cannot finish
+        the form. The flows that do not need to say — forgot-password and
+        resend-verification — do not.
+        """
+        self._require_auth_method(self._settings.email_password_auth_enabled, "Email sign-in")
+        normalized = self._require_email(email)
+        validated = validate_password(password)
+        ip_hash = self._hasher.ip_hash(client_ip)
+
+        await self._enforce_login_limits(email=normalized, ip_hash=ip_hash, scope="register")
+
+        existing = await self._find_identity(AuthProvider.PASSWORD, normalized)
+        if existing is not None:
+            raise AppError(
+                "An account already exists for this email. Sign in instead.",
+                code=ErrorCode.EMAIL_ALREADY_REGISTERED,
+            )
+
+        user = User(status=UserStatus.ACTIVE, display_name=display_name)
+        self._db.add(user)
+        await self._db.flush()
+
+        identity = AuthIdentity(
+            user_id=user.id,
+            provider=AuthProvider.PASSWORD,
+            provider_subject=normalized,
+            normalized_email=normalized,
+            email_verified=False,
+            password_hash=self._passwords.hash(validated),
+            password_updated_at=utc_now(),
+        )
+        self._db.add(identity)
+        await self._db.flush()
+
+        await record_audit(
+            self._db,
+            AuditAction.USER_REGISTERED,
+            entity_type="user",
+            entity_id=user.id,
+            context={"provider": str(AuthProvider.PASSWORD)},
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            client_ip_hash=ip_hash,
+        )
+
+        verification, sent = await self._send_email_verification(identity, ip_hash=ip_hash)
+        result = await self._complete_sign_in(
+            user=user,
+            identity=identity,
+            device=device,
+            ip_hash=ip_hash,
+            is_new_user=True,
+            audit_action=AuditAction.SESSION_CREATED,
+        )
+        return RegistrationResult(
+            session=result, verification_token=verification, email_verification_sent=sent
+        )
+
+    async def login_with_password(
+        self,
+        *,
+        email: str,
+        password: str,
+        device: DeviceInfo,
+        client_ip: str | None,
+    ) -> SignInResult:
+        """Sign in with an email and a password."""
+        self._require_auth_method(self._settings.email_password_auth_enabled, "Email sign-in")
+        normalized = normalize_email(email)
+        ip_hash = self._hasher.ip_hash(client_ip)
+
+        await self._enforce_login_limits(email=normalized, ip_hash=ip_hash, scope="login")
+
+        identity = await self._find_identity(AuthProvider.PASSWORD, normalized)
+        # The hash is verified even when no identity was found, against a
+        # throwaway digest. Returning early here would make a missing account
+        # measurably faster than a wrong password, which is an enumeration
+        # oracle that no amount of careful wording in the response can close.
+        stored = identity.password_hash if identity is not None else _absent_password_hash()
+        matched = self._passwords.verify(password, stored)
+
+        if identity is None or not matched:
+            await record_audit(
+                self._db,
+                AuditAction.PASSWORD_LOGIN_FAILED,
+                entity_type="auth_identity",
+                entity_id=identity.id if identity else None,
+                context={"reason": "no_identity" if identity is None else "bad_password"},
+                actor_type=ActorType.ANONYMOUS,
+                client_ip_hash=ip_hash,
+            )
+            await self._persist_then_raise(
+                AuthenticationError(
+                    "That email and password do not match an account.",
+                    code=ErrorCode.INVALID_CREDENTIALS,
+                )
+            )
+
+        user = await self._require_active_user(identity.user_id)
+
+        if self._settings.email_verification_required_for_login and not identity.email_verified:
+            raise AppError("Verify your email address first.", code=ErrorCode.EMAIL_NOT_VERIFIED)
+
+        # Upgrade the stored digest opportunistically. This is the only moment
+        # the plaintext exists, so a cost increase can never be applied later.
+        if self._passwords.needs_rehash(identity.password_hash):
+            identity.password_hash = self._passwords.hash(password)
+            identity.password_updated_at = utc_now()
+
+        return await self._complete_sign_in(
+            user=user,
+            identity=identity,
+            device=device,
+            ip_hash=ip_hash,
+            is_new_user=False,
+            audit_action=AuditAction.SESSION_CREATED,
+        )
+
+    async def sign_in_with_provider(
+        self,
+        *,
+        verifier: IdTokenVerifier,
+        id_token: str,
+        device: DeviceInfo,
+        client_ip: str | None,
+    ) -> SignInResult:
+        """Verify a Google or Apple identity token, then sign in.
+
+        Order matters. The token is verified against the provider's keys
+        *before* anything is looked up, so a forged or misdirected token never
+        reaches the identity tables at all.
+        """
+        provider = verifier.provider
+        enabled = (
+            self._settings.google_auth_enabled
+            if provider is AuthProvider.GOOGLE
+            else self._settings.apple_auth_enabled
+        )
+        self._require_auth_method(enabled, f"{provider.title()} sign-in")
+
+        ip_hash = self._hasher.ip_hash(client_ip)
+        asserted = await verifier.verify(id_token)
+
+        identity = await self._find_identity(provider, asserted.subject)
+        is_new_user = False
+
+        if identity is not None:
+            user = await self._require_active_user(identity.user_id)
+            # The provider's own view of the address can change between
+            # sign-ins; `sub` cannot, which is why it is the key and this is
+            # only bookkeeping.
+            if asserted.email is not None:
+                identity.normalized_email = asserted.email
+                # Verification belongs to this address and this assertion;
+                # a previous verified address cannot verify a replacement.
+                identity.email_verified = asserted.email_verified
+        else:
+            user, identity, is_new_user = await self._link_or_create(asserted, ip_hash=ip_hash)
+
+        return await self._complete_sign_in(
+            user=user,
+            identity=identity,
+            device=device,
+            ip_hash=ip_hash,
+            is_new_user=is_new_user,
+            audit_action=AuditAction.PROVIDER_SIGN_IN,
+            context={"provider": str(provider), "is_new_user": is_new_user},
+        )
+
+    async def _link_or_create(
+        self, asserted: OidcIdentity, *, ip_hash: str | None
+    ) -> tuple[User, AuthIdentity, bool]:
+        """Attach a new provider identity to an existing user, or start a new one.
+
+        The linking rule is one line of code and several paragraphs of reason:
+        both sides must have **proven** the same address.
+
+        Without that, the pre-hijack attack works. Register
+        ``victim@example.com`` with a password, never verify it, and wait. When
+        the real owner arrives through Google, an email-only match would hand
+        them — and their shop — to the account whose address nobody checked.
+        Requiring the existing identity to be verified makes that attack land on
+        a new, separate account instead, which is the safe failure.
+
+        The cost is a duplicate user in one case: an unverified squatter holds
+        the address and the real owner gets a second account. That is the right
+        trade. Merging two established users is not reversible; a duplicate is.
+        """
+        candidate_email = asserted.linkable_email
+        if candidate_email is not None:
+            match = await self._find_linkable_identity(candidate_email, asserted.provider)
+            if match is not None and await self._already_has_provider(
+                match.user_id, asserted.provider
+            ):
+                # The candidate user already signs in with this provider, under
+                # a different subject. Attaching a second one would let anybody
+                # who can create a provider account bearing a verified address
+                # attach themselves to the user who owns it. The database
+                # constraint would stop the write; refusing here means a clean
+                # answer and an audit row instead of an integrity error.
+                await record_audit(
+                    self._db,
+                    AuditAction.IDENTITY_LINK_REFUSED,
+                    entity_type="auth_identity",
+                    entity_id=match.id,
+                    context={
+                        "provider": str(asserted.provider),
+                        "reason": "user_already_has_this_provider",
+                    },
+                    actor_type=ActorType.ANONYMOUS,
+                    client_ip_hash=ip_hash,
+                )
+                match = None
+
+            if match is not None:
+                user = await self._require_active_user(match.user_id)
+                identity = AuthIdentity(
+                    user_id=user.id,
+                    provider=asserted.provider,
+                    provider_subject=asserted.subject,
+                    normalized_email=asserted.email,
+                    email_verified=asserted.email_verified,
+                )
+                self._db.add(identity)
+                await self._db.flush()
+                await record_audit(
+                    self._db,
+                    AuditAction.IDENTITY_LINKED,
+                    entity_type="auth_identity",
+                    entity_id=identity.id,
+                    context={
+                        "provider": str(asserted.provider),
+                        "linked_to_provider": match.provider,
+                        "matched_on": "verified_email",
+                    },
+                    actor_type=ActorType.USER,
+                    actor_id=user.id,
+                    client_ip_hash=ip_hash,
+                )
+                return user, identity, False
+
+            blocked = await self._find_identity_by_email(candidate_email, asserted.provider)
+            if blocked is not None:
+                # Same address, but unproven on the existing side. Recorded
+                # rather than silently ignored: a run of these against one
+                # address is what a takeover attempt looks like from in here.
+                await record_audit(
+                    self._db,
+                    AuditAction.IDENTITY_LINK_REFUSED,
+                    entity_type="auth_identity",
+                    entity_id=blocked.id,
+                    context={
+                        "provider": str(asserted.provider),
+                        "reason": "existing_identity_email_unverified",
+                    },
+                    actor_type=ActorType.ANONYMOUS,
+                    client_ip_hash=ip_hash,
+                )
+
+        user = User(status=UserStatus.ACTIVE, display_name=asserted.display_name)
+        self._db.add(user)
+        await self._db.flush()
+        identity = AuthIdentity(
+            user_id=user.id,
+            provider=asserted.provider,
+            provider_subject=asserted.subject,
+            normalized_email=asserted.email,
+            email_verified=asserted.email_verified,
+        )
+        self._db.add(identity)
+        await self._db.flush()
+        await record_audit(
+            self._db,
+            AuditAction.USER_REGISTERED,
+            entity_type="user",
+            entity_id=user.id,
+            context={"provider": str(asserted.provider)},
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            client_ip_hash=ip_hash,
+        )
+        return user, identity, True
+
+    # --------------------------------------------------- email verification --
+
+    async def resend_email_verification(self, *, email: str, client_ip: str | None) -> str | None:
+        """Re-send a verification link, saying nothing about whether one was sent."""
+        normalized = normalize_email(email)
+        ip_hash = self._hasher.ip_hash(client_ip)
+        await self._enforce_login_limits(email=normalized, ip_hash=ip_hash, scope="verify")
+
+        identity = await self._find_identity(AuthProvider.PASSWORD, normalized)
+        if identity is None or identity.email_verified:
+            return None
+        token, _sent = await self._send_email_verification(identity, ip_hash=ip_hash)
+        return token
+
+    async def verify_email(self, *, token: str, client_ip: str | None) -> uuid.UUID:
+        """Consume a verification token and mark the address proven."""
+        ip_hash = self._hasher.ip_hash(client_ip)
+        row = await self._consume_auth_token(
+            token, purpose=AuthTokenPurpose.EMAIL_VERIFICATION, ip_hash=ip_hash
+        )
+        identity = await self._db.get(AuthIdentity, row.identity_id)
+        if identity is None:
+            raise AuthenticationError(
+                "This verification link is no longer valid.", code=ErrorCode.INVALID_TOKEN
+            )
+
+        identity.email_verified = True
+        await record_audit(
+            self._db,
+            AuditAction.EMAIL_VERIFIED,
+            entity_type="auth_identity",
+            entity_id=identity.id,
+            context={"provider": identity.provider},
+            actor_type=ActorType.USER,
+            actor_id=identity.user_id,
+            client_ip_hash=ip_hash,
+        )
+        await self._db.flush()
+        return identity.user_id
+
+    # ---------------------------------------------------------- passwords --
+
+    async def request_password_reset(self, *, email: str, client_ip: str | None) -> str | None:
+        """Start a reset, or appear to.
+
+        The response is identical whether or not the address has an account.
+        Anything else turns this endpoint into a list of which of a leaked
+        address dump are ecomsbd sellers — and sellers are a small, targetable
+        population. The caller returns the same body regardless; the token this
+        returns is for the transport, never for the response.
+        """
+        normalized = normalize_email(email)
+        ip_hash = self._hasher.ip_hash(client_ip)
+        await self._enforce_login_limits(email=normalized, ip_hash=ip_hash, scope="reset")
+
+        identity = await self._find_identity(AuthProvider.PASSWORD, normalized)
+        if identity is None:
+            return None
+
+        await record_audit(
+            self._db,
+            AuditAction.PASSWORD_RESET_REQUESTED,
+            entity_type="auth_identity",
+            entity_id=identity.id,
+            context={},
+            actor_type=ActorType.ANONYMOUS,
+            client_ip_hash=ip_hash,
+        )
+        raw = await self._issue_auth_token(
+            identity,
+            purpose=AuthTokenPurpose.PASSWORD_RESET,
+            ttl_seconds=self._settings.password_reset_ttl_seconds,
+            ip_hash=ip_hash,
+        )
+        await self._email_reset_link(identity, raw)
+        await self._db.flush()
+        return raw
+
+    async def reset_password(
+        self, *, token: str, new_password: str, client_ip: str | None
+    ) -> uuid.UUID:
+        """Set a new password from a reset token, and end every existing session.
+
+        Revoking sessions is the point of the flow, not a side effect. A reset
+        is what a person does when they believe someone else has their account;
+        leaving that someone else signed in on their own device would make the
+        reset theatre.
+        """
+        validated = validate_password(new_password)
+        ip_hash = self._hasher.ip_hash(client_ip)
+        row = await self._consume_auth_token(
+            token, purpose=AuthTokenPurpose.PASSWORD_RESET, ip_hash=ip_hash
+        )
+        identity = await self._db.get(AuthIdentity, row.identity_id)
+        if identity is None:
+            raise AuthenticationError(
+                "This reset link is no longer valid.", code=ErrorCode.INVALID_TOKEN
+            )
+
+        identity.password_hash = self._passwords.hash(validated)
+        identity.password_updated_at = utc_now()
+        # Completing a reset also proves the address: the link only reachable
+        # from that inbox was followed.
+        identity.email_verified = True
+
+        revoked = await self._revoke_all_sessions(
+            identity.user_id, reason=RevocationReason.ADMIN_ACTION
+        )
+        await self._invalidate_tokens(
+            identity.id, purpose=AuthTokenPurpose.PASSWORD_RESET, keep=row.id
+        )
+
+        await record_audit(
+            self._db,
+            AuditAction.PASSWORD_RESET_COMPLETED,
+            entity_type="auth_identity",
+            entity_id=identity.id,
+            context={"sessions_revoked": revoked},
+            actor_type=ActorType.USER,
+            actor_id=identity.user_id,
+            client_ip_hash=ip_hash,
+        )
+        await self._db.flush()
+        return identity.user_id
+
+    async def change_password(
+        self,
+        *,
+        user_id: uuid.UUID,
+        session_id: uuid.UUID,
+        current_password: str,
+        new_password: str,
+    ) -> int:
+        """Change a password from inside a session.
+
+        The current password is required even though the caller is already
+        authenticated: a borrowed unlocked phone should not be enough to lock
+        its owner out of their own shop.
+
+        Every *other* session is revoked. The one doing the changing survives,
+        because signing someone out of the screen they are looking at to tell
+        them their password changed is a worse experience than the risk it
+        removes.
+        """
+        identity = (
+            await self._db.execute(
+                sa.select(AuthIdentity).where(
+                    AuthIdentity.user_id == user_id,
+                    AuthIdentity.provider == AuthProvider.PASSWORD,
+                )
+            )
+        ).scalar_one_or_none()
+        if identity is None:
+            raise AppError(
+                "This account has no password to change.",
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"field": "current_password"},
+            )
+        if not self._passwords.verify(current_password, identity.password_hash):
+            await record_audit(
+                self._db,
+                AuditAction.PASSWORD_LOGIN_FAILED,
+                entity_type="auth_identity",
+                entity_id=identity.id,
+                context={"reason": "change_password_current_mismatch"},
+                actor_type=ActorType.USER,
+                actor_id=user_id,
+            )
+            await self._persist_then_raise(
+                AuthenticationError(
+                    "That is not your current password.",
+                    code=ErrorCode.INVALID_CREDENTIALS,
+                )
+            )
+
+        identity.password_hash = self._passwords.hash(validate_password(new_password))
+        identity.password_updated_at = utc_now()
+        revoked = await self._revoke_all_sessions(
+            user_id, reason=RevocationReason.USER_LOGOUT, keep_session_id=session_id
+        )
+        await self._invalidate_tokens(identity.id, purpose=AuthTokenPurpose.PASSWORD_RESET)
+
+        await record_audit(
+            self._db,
+            AuditAction.PASSWORD_CHANGED,
+            entity_type="auth_identity",
+            entity_id=identity.id,
+            context={"other_sessions_revoked": revoked},
+            actor_type=ActorType.USER,
+            actor_id=user_id,
+        )
+        await self._db.flush()
+        return revoked
+
+    # ------------------------------------------------------ shared helpers --
+
+    def _require_auth_method(self, enabled: bool, label: str) -> None:
+        if not enabled:
+            raise AppError(
+                f"{label} is not available.",
+                code=ErrorCode.FEATURE_DISABLED,
+                message_bn="এই সাইন-ইন পদ্ধতি এখন বন্ধ আছে।",
+            )
+
+    def _require_email(self, raw: str) -> str:
+        normalized = normalize_email(raw)
+        if not _EMAIL_RE.match(normalized) or len(normalized) > MAX_EMAIL_LENGTH:
+            raise ValidationError(
+                "Enter a valid email address.",
+                message_bn="সঠিক ইমেইল ঠিকানা দিন।",
+                details={"field": "email"},
+            )
+        return normalized
+
+    async def _require_active_user(self, user_id: uuid.UUID) -> User:
+        user = await self._db.get(User, user_id)
+        if user is None or not user.is_active:
+            raise AuthenticationError(
+                "This account is not active", code=ErrorCode.FORBIDDEN, http_status=403
+            )
+        return user
+
+    async def _find_identity(self, provider: AuthProvider, subject: str) -> AuthIdentity | None:
+        return (
+            await self._db.execute(
+                sa.select(AuthIdentity).where(
+                    AuthIdentity.provider == provider,
+                    AuthIdentity.provider_subject == subject,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def _find_identity_by_email(
+        self, email: str, provider: AuthProvider
+    ) -> AuthIdentity | None:
+        return (
+            await self._db.execute(
+                sa.select(AuthIdentity)
+                .where(
+                    AuthIdentity.normalized_email == email,
+                    AuthIdentity.provider != provider,
+                )
+                .order_by(AuthIdentity.created_at)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    async def _already_has_provider(self, user_id: uuid.UUID, provider: AuthProvider) -> bool:
+        """Whether this user already signs in with this provider.
+
+        One identity per provider per user, so "which Google account owns this
+        shop?" always has one answer.
+        """
+        found = (
+            await self._db.execute(
+                sa.select(AuthIdentity.id).where(
+                    AuthIdentity.user_id == user_id,
+                    AuthIdentity.provider == provider,
+                )
+            )
+        ).first()
+        return found is not None
+
+    async def _find_linkable_identity(
+        self, email: str, provider: AuthProvider
+    ) -> AuthIdentity | None:
+        """The one existing identity a new provider identity may join.
+
+        More than one match means two separate users already hold the same
+        proven address, which should not happen and is not something to guess
+        about — nothing is linked, and a new account is created instead.
+        """
+        rows = list(
+            (
+                await self._db.execute(
+                    sa.select(AuthIdentity).where(
+                        AuthIdentity.normalized_email == email,
+                        AuthIdentity.email_verified.is_(True),
+                        AuthIdentity.provider != provider,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        distinct_users = {row.user_id for row in rows}
+        if len(distinct_users) != 1:
+            return None
+        return rows[0]
+
+    async def _enforce_login_limits(self, *, email: str, ip_hash: str | None, scope: str) -> None:
+        """Throttle by address and by network.
+
+        The email key is hashed rather than used raw: the rate-limit backend is
+        Redis, and a key list there should not also be a list of who has an
+        ecomsbd account.
+        """
+        settings = self._settings
+        email_result = await self._limits.hit(
+            f"auth:{scope}:email",
+            self._hasher.token_hash(email),
+            limit=settings.login_max_attempts_per_email_hour,
+            window_seconds=3600,
+        )
+        if email_result.exceeded:
+            raise RateLimitedError(
+                "Too many attempts for this account. Try again later.",
+                retry_after_seconds=email_result.retry_after_seconds,
+            )
+        if ip_hash is not None:
+            ip_result = await self._limits.hit(
+                f"auth:{scope}:ip",
+                ip_hash,
+                limit=settings.login_max_attempts_per_ip_hour,
+                window_seconds=3600,
+            )
+            if ip_result.exceeded:
+                raise RateLimitedError(
+                    "Too many attempts from this network. Try again later.",
+                    retry_after_seconds=ip_result.retry_after_seconds,
+                )
+
+    async def _issue_auth_token(
+        self,
+        identity: AuthIdentity,
+        *,
+        purpose: AuthTokenPurpose,
+        ttl_seconds: int,
+        ip_hash: str | None,
+    ) -> str:
+        """Mint a single-use link token, superseding any earlier one.
+
+        Superseding matters: two live reset links double the window in which a
+        stolen inbox is an account, for no benefit to the person who asked.
+        """
+        await self._invalidate_tokens(identity.id, purpose=purpose)
+        raw = generate_opaque_token()
+        self._db.add(
+            AuthToken(
+                identity_id=identity.id,
+                user_id=identity.user_id,
+                purpose=purpose,
+                token_hash=self._hasher.token_hash(raw),
+                expires_at=utc_now() + timedelta(seconds=ttl_seconds),
+                request_ip_hash=ip_hash,
+            )
+        )
+        await self._db.flush()
+        return raw
+
+    async def _invalidate_tokens(
+        self,
+        identity_id: uuid.UUID,
+        *,
+        purpose: AuthTokenPurpose,
+        keep: uuid.UUID | None = None,
+    ) -> None:
+        conditions = [
+            AuthToken.identity_id == identity_id,
+            AuthToken.purpose == purpose,
+            AuthToken.consumed_at.is_(None),
+            AuthToken.invalidated_at.is_(None),
+        ]
+        if keep is not None:
+            conditions.append(AuthToken.id != keep)
+        await self._db.execute(
+            sa.update(AuthToken).where(*conditions).values(invalidated_at=utc_now())
+        )
+
+    async def _consume_auth_token(
+        self, raw: str, *, purpose: AuthTokenPurpose, ip_hash: str | None
+    ) -> AuthToken:
+        """Look up, check and burn a link token.
+
+        A replayed token is audited before it is refused, and the audit row is
+        committed even though the request fails — the whole value of recording
+        a replay is lost if the rollback that accompanies the refusal takes the
+        record with it.
+        """
+        row = (
+            await self._db.execute(
+                sa.select(AuthToken).where(
+                    AuthToken.token_hash == self._hasher.token_hash(raw or ""),
+                    AuthToken.purpose == purpose,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            raise AuthenticationError("This link is not valid.", code=ErrorCode.INVALID_TOKEN)
+        if row.is_consumed:
+            await record_audit(
+                self._db,
+                AuditAction.AUTH_TOKEN_REPLAY_BLOCKED,
+                entity_type="auth_token",
+                entity_id=row.id,
+                context={"purpose": str(purpose)},
+                actor_type=ActorType.ANONYMOUS,
+                client_ip_hash=ip_hash,
+            )
+            await self._persist_then_raise(
+                AuthenticationError(
+                    "This link has already been used.", code=ErrorCode.INVALID_TOKEN
+                )
+            )
+        if not row.is_usable():
+            raise AuthenticationError(
+                "This link has expired. Ask for a new one.", code=ErrorCode.TOKEN_EXPIRED
+            )
+
+        # Compare-and-set in the database: two requests may both read an unused
+        # token, but only one may consume it, including on SQLite.
+        now = utc_now()
+        consumed = (
+            await self._db.execute(
+                sa.update(AuthToken)
+                .where(
+                    AuthToken.id == row.id,
+                    AuthToken.consumed_at.is_(None),
+                    AuthToken.invalidated_at.is_(None),
+                    AuthToken.expires_at > now,
+                )
+                .values(consumed_at=now)
+                .returning(AuthToken.id)
+            )
+        ).scalar_one_or_none()
+        if consumed is None:
+            raise AuthenticationError("This link is no longer valid.", code=ErrorCode.INVALID_TOKEN)
+        return row
+
+    async def _send_email_verification(
+        self, identity: AuthIdentity, *, ip_hash: str | None
+    ) -> tuple[str | None, bool]:
+        if identity.normalized_email is None:
+            return None, False
+        raw = await self._issue_auth_token(
+            identity,
+            purpose=AuthTokenPurpose.EMAIL_VERIFICATION,
+            ttl_seconds=self._settings.email_verification_ttl_seconds,
+            ip_hash=ip_hash,
+        )
+        delivery = await self._email.send(
+            EmailMessage(
+                to_address=identity.normalized_email,
+                subject="Verify your ecomsbd email",
+                text_body=(
+                    "Confirm this address to finish setting up your ecomsbd account.\n\n"
+                    f"{self._link('/auth/email/verify', raw)}\n\n"
+                    "If you did not create an ecomsbd account, ignore this message."
+                ),
+                reply_to=self._settings.support_email,
+                idempotency_key=f"verify:{identity.id}:{self._hasher.token_hash(raw)}",
+            )
+        )
+        await record_audit(
+            self._db,
+            AuditAction.EMAIL_VERIFICATION_SENT
+            if delivery.delivered
+            else AuditAction.EMAIL_DELIVERY_FAILED,
+            entity_type="auth_identity",
+            entity_id=identity.id,
+            context={"transport": self._email.name, "outcome": str(delivery.outcome)},
+            actor_type=ActorType.USER,
+            actor_id=identity.user_id,
+            client_ip_hash=ip_hash,
+        )
+        return raw, delivery.delivered
+
+    async def _email_reset_link(self, identity: AuthIdentity, raw: str) -> None:
+        if identity.normalized_email is None:
+            return
+        delivery = await self._email.send(
+            EmailMessage(
+                to_address=identity.normalized_email,
+                subject="Reset your ecomsbd password",
+                text_body=(
+                    "Use this link to choose a new ecomsbd password. It works once "
+                    "and expires shortly.\n\n"
+                    f"{self._link('/auth/password/reset', raw)}\n\n"
+                    "If you did not ask for this, nothing has changed and you can "
+                    "ignore this message."
+                ),
+                reply_to=self._settings.support_email,
+                idempotency_key=f"reset:{identity.id}:{self._hasher.token_hash(raw)}",
+            )
+        )
+        if not delivery.delivered:
+            await record_audit(
+                self._db,
+                AuditAction.EMAIL_DELIVERY_FAILED,
+                entity_type="auth_identity",
+                entity_id=identity.id,
+                context={"transport": self._email.name, "outcome": str(delivery.outcome)},
+                actor_type=ActorType.ANONYMOUS,
+            )
+
+    def _link(self, path: str, token: str) -> str:
+        # The API serves both landing pages. Fragments keep tokens out of HTTP
+        # requests, proxy access logs and referrers; JS posts them in the body.
+        base = self._settings.public_base_url.rstrip("/")
+        return f"{base}{path}#token={token}"
+
+    async def _revoke_all_sessions(
+        self,
+        user_id: uuid.UUID,
+        *,
+        reason: RevocationReason,
+        keep_session_id: uuid.UUID | None = None,
+    ) -> int:
+        rows = list(
+            (
+                await self._db.execute(
+                    sa.select(AuthSession).where(
+                        AuthSession.user_id == user_id,
+                        AuthSession.revoked_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        revoked = 0
+        for row in rows:
+            if keep_session_id is not None and row.id == keep_session_id:
+                continue
+            await self._revoke_session(row, reason=reason)
+            revoked += 1
+        return revoked
+
+    async def _complete_sign_in(
+        self,
+        *,
+        user: User,
+        identity: AuthIdentity,
+        device: DeviceInfo,
+        ip_hash: str | None,
+        is_new_user: bool,
+        audit_action: AuditAction,
+        context: dict[str, object] | None = None,
+    ) -> SignInResult:
+        """The one path to a session, whichever identity proved the sign-in.
+
+        Onboarding is decided here too, and only here: a user with one shop is
+        bound to it, a user with several must choose, and a user with none is
+        told to create one. Every provider gets the same answer because every
+        provider ends up in this method.
+        """
+        memberships = await self._load_memberships(user.id)
+        active_tenant = memberships[0] if len(memberships) == 1 else None
+
+        device_row = await self._upsert_device(user_id=user.id, device=device)
+        session_row = await self._create_session(
+            user=user,
+            tenant_id=active_tenant.id if active_tenant else None,
+            device=device_row,
+            device_info=device,
+            ip_hash=ip_hash,
+        )
+        access_token, refresh_token = await self._issue_tokens(
+            session_row, role=active_tenant.role if active_tenant else None
+        )
+
+        now = utc_now()
+        user.last_login_at = now
+        identity.last_login_at = now
+
+        await record_audit(
+            self._db,
+            audit_action,
+            entity_type="user",
+            entity_id=user.id,
+            context={
+                "provider": identity.provider,
+                "is_new_user": is_new_user,
+                "tenant_count": len(memberships),
+                **(context or {}),
+            },
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            tenant_id=session_row.tenant_id,
+            client_ip_hash=ip_hash,
+        )
+        await enqueue(
+            self._db,
+            OutboxTopic.USER_SIGNED_IN,
+            {"user_id": str(user.id), "is_new_user": is_new_user},
+            tenant_id=session_row.tenant_id,
+        )
+        await self._db.flush()
+
+        return SignInResult(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in_seconds=self._tokens.access_token_ttl_seconds,
+            session_id=session_row.id,
+            user_id=user.id,
+            tenant_id=session_row.tenant_id,
+            role=active_tenant.role if active_tenant else None,
+            is_new_user=is_new_user,
             tenants=memberships,
         )

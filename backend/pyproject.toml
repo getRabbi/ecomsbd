@@ -80,6 +80,9 @@ ignore = [
 # TOKEN_REUSE_DETECTED, token_type: "Bearer"), not embedded credentials.
 "app/core/errors.py" = ["S105"]
 "app/auth/models.py" = ["S105"]
+# AuthProvider.PASSWORD and AuthTokenPurpose.PASSWORD_RESET are enum members
+# naming a kind of credential, not a credential.
+"app/auth/identities.py" = ["S105"]
 "app/common/audit.py" = ["S105"]
 "app/common/pagination.py" = ["S105"]
 "app/api/v1/schemas.py" = ["S105"]

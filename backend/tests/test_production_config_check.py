@@ -15,7 +15,9 @@ signed up for. Missing Sentry, missing R2 and a disabled bKash all exit zero.
 from __future__ import annotations
 
 import base64
+import json
 
+import httpx
 import pytest
 
 from app.check_production_config import Status, main, run_checks
@@ -120,14 +122,19 @@ class TestExitCode:
         assert result.status is Status.OK
         assert "READY FOR MERCHANT ACCOUNT" in result.detail
 
-    def test_google_and_apple_report_partial_when_configured(self) -> None:
+    def test_google_and_apple_report_ready_when_configured(self) -> None:
         settings = production_settings(
             google_auth_enabled=True,
             google_client_id_web="web.apps.googleusercontent.com",
+            apple_auth_enabled=True,
+            apple_client_id="com.example.app",
+            phone_otp_login_enabled=False,
+            otp_provider_secret=None,
         )
-        # Configured, and still not usable: no verifier exists.
-        assert status_for("GOOGLE AUTH", settings) is Status.PARTIAL
-        assert status_for("SIGN-IN", settings) is Status.PARTIAL
+        assert status_for("GOOGLE AUTH", settings) is Status.OK
+        assert status_for("APPLE AUTH", settings) is Status.OK
+        assert status_for("SIGN-IN", settings) is Status.OK
+        assert status_for("PHONE OTP", settings) is Status.DISABLED
 
     def test_an_empty_trusted_host_list_is_reported_but_not_fatal(self) -> None:
         settings = production_settings(trusted_hosts=[])
@@ -169,7 +176,21 @@ class TestEmailTransports:
         )
         assert result.outcome is DeliveryOutcome.REJECTED
 
-    async def test_a_configured_provider_still_refuses_rather_than_pretending(self) -> None:
+    @pytest.mark.parametrize(
+        ("status", "body", "outcome"),
+        [
+            (200, {"id": "email-123"}, DeliveryOutcome.SENT),
+            (200, {}, DeliveryOutcome.FAILED),
+            (401, {"message": SECRET_MARKER}, DeliveryOutcome.REJECTED),
+            (422, {"message": SECRET_MARKER}, DeliveryOutcome.REJECTED),
+            (429, {"message": SECRET_MARKER}, DeliveryOutcome.FAILED),
+            (503, {"message": SECRET_MARKER}, DeliveryOutcome.FAILED),
+            (307, {}, DeliveryOutcome.REJECTED),
+        ],
+    )
+    async def test_configured_email_delivery(
+        self, status: int, body: dict[str, str], outcome: DeliveryOutcome
+    ) -> None:
         settings = Settings(
             app_env=AppEnv.LOCAL,
             email_transport="provider_api",
@@ -177,13 +198,45 @@ class TestEmailTransports:
             email_api_key=SECRET_MARKER,
             email_from_address="no-reply@example.com",
         )
-        transport = ProviderApiEmailTransport(settings)
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert str(request.url) == "https://api.email.example.com/emails"
+            assert request.headers["Authorization"] == f"Bearer {SECRET_MARKER}"
+            assert request.headers["Idempotency-Key"] == "test-email-1"
+            assert json.loads(request.content)["to"] == ["seller@example.com"]
+            assert json.loads(request.content)["text"] == "Body"
+            return httpx.Response(status, json=body)
+
+        transport = ProviderApiEmailTransport(settings, transport=httpx.MockTransport(respond))
         assert transport.is_configured
         result = await transport.send(
-            EmailMessage(to_address="seller@example.com", subject="Hi", text_body="Body")
+            EmailMessage(
+                to_address="seller@example.com",
+                subject="Hi",
+                text_body="Body",
+                idempotency_key="test-email-1",
+            )
         )
-        assert result.outcome is DeliveryOutcome.NOT_CONFIGURED
-        assert EMAIL_BLOCKER in (result.detail or "")
+        assert result.outcome is outcome
+        assert SECRET_MARKER not in (result.detail or "")
+
+    async def test_provider_timeout_is_a_failed_delivery(self) -> None:
+        def timeout(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout(SECRET_MARKER, request=request)
+
+        settings = Settings(
+            app_env=AppEnv.LOCAL,
+            email_transport="provider_api",
+            email_api_base_url="https://api.email.example.com",
+            email_api_key=SECRET_MARKER,
+            email_from_address="no-reply@example.com",
+        )
+        result = await ProviderApiEmailTransport(
+            settings, transport=httpx.MockTransport(timeout)
+        ).send(EmailMessage(to_address="seller@example.com", subject="Hi", text_body="Body"))
+        assert result.outcome is DeliveryOutcome.FAILED
+        assert SECRET_MARKER not in (result.detail or "")
 
     async def test_the_mock_transport_is_idempotent(self) -> None:
         transport = MockEmailTransport()

@@ -60,7 +60,7 @@ backend/                 FastAPI modular monolith — SQLAlchemy 2 async, Alembi
   app/core/              config, context, logging, errors, crypto, time, ids
   app/db/                portable column types, declarative base, TENANCY GUARDS
   app/common/            money, phone, outbox, audit, feature flags, idempotency
-  app/auth/              phone-OTP, sessions, rotating refresh tokens, devices
+  app/auth/              email/password, Google, Apple, deferred OTP, shared sessions
   app/tenants/           shops, membership, RBAC matrix
   app/entitlements/      plan catalogue, subscriptions, server-side gating
   app/products/          products + the append-only stock movement ledger
@@ -214,10 +214,10 @@ if two of them hold the same value, or if no seller could sign in.
 
 **Sign-in, as of 2026-09-12.** The production auth model is email/password plus
 Google and Apple; phone OTP is deferred and Facebook/Meta login is not part of
-the product. None of those three has a server-side implementation yet, so
-`IMPLEMENTED_AUTH_METHODS` in `app/core/config.py` still lists only `phone_otp`
-and a deployed environment refuses to start with all methods disabled. See
-`SELLER_AUTH_IMPLEMENTATION_REQUIRED` in
+the product. All three backend methods are implemented, with server-side
+identity verification and the existing session/shop onboarding system. Real
+provider configuration is still required, and the Flutter login UI remains
+OTP-only pending separate integration. See the auth readiness entry in
 [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
 
 ---

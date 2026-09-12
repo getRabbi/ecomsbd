@@ -50,7 +50,7 @@ class TeamMemberResponse(BaseModel):
     user_id: uuid.UUID
     role: str
     is_active: bool
-    masked_phone: str
+    masked_phone: str | None
     display_name: str | None
     joined_at: str
     permissions: list[str]

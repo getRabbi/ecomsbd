@@ -81,6 +81,12 @@ class ErrorCode(StrEnum):
     # --- phone / identity --------------------------------------------------
     INVALID_PHONE_NUMBER = "INVALID_PHONE_NUMBER"
     AMBIGUOUS_PHONE_NUMBER = "AMBIGUOUS_PHONE_NUMBER"
+    #: Email or password was wrong. Deliberately one code for both, so the
+    #: response cannot be used to discover which addresses have accounts.
+    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+    EMAIL_ALREADY_REGISTERED = "EMAIL_ALREADY_REGISTERED"
+    EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED"
+    IDENTITY_LINK_REFUSED = "IDENTITY_LINK_REFUSED"
 
     # --- money / external safety -------------------------------------------
     IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT"
@@ -203,6 +209,30 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         400,
         "কোডটি ঠিক নয়। আবার দেখুন।",
         "The verification code is incorrect.",
+        False,
+    ),
+    ErrorCode.INVALID_CREDENTIALS: (
+        401,
+        "ইমেইল বা পাসওয়ার্ড ঠিক নয়।",
+        "That email and password do not match an account.",
+        False,
+    ),
+    ErrorCode.EMAIL_ALREADY_REGISTERED: (
+        409,
+        "এই ইমেইলে ইতিমধ্যে একটি অ্যাকাউন্ট আছে।",
+        "An account already exists for this email. Sign in instead.",
+        False,
+    ),
+    ErrorCode.EMAIL_NOT_VERIFIED: (
+        403,
+        "আগে আপনার ইমেইল যাচাই করুন।",
+        "Verify your email address first.",
+        False,
+    ),
+    ErrorCode.IDENTITY_LINK_REFUSED: (
+        409,
+        "এই সাইন-ইন পদ্ধতি অন্য অ্যাকাউন্টের সাথে যুক্ত।",
+        "That sign-in method belongs to a different account.",
         False,
     ),
     ErrorCode.OTP_EXPIRED: (

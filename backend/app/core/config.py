@@ -75,14 +75,15 @@ class OtpProvider(StrEnum):
 
 #: Sign-in methods that have a working server-side implementation in this build.
 #:
-#: Phone OTP is the only one. Email/password, Google and Apple have
-#: configuration here — so an operator can collect the credentials now and so
-#: the values have one validated home — but no verifier, no endpoint and no
-#: user record. Enabling one of those flags therefore does **not** make a login
-#: method available, and this set is what the "can anyone actually sign in?"
-#: boot check counts. See ``SELLER_AUTH_IMPLEMENTATION_REQUIRED`` in
-#: docs/RELEASE_READINESS.md.
-IMPLEMENTED_AUTH_METHODS = frozenset({"phone_otp"})
+#: All four are implemented: email/password with Argon2id and verified email,
+#: Google and Apple with server-side identity-token verification, and phone OTP
+#: (deferred in production but still working code). This set is what the "can
+#: anyone actually sign in?" boot check counts, so a method is added here only
+#: once its endpoint, its verifier and its tests exist.
+#:
+#: Being implemented is not the same as being *configured*: Google and Apple
+#: still need client ids, which is a separate refusal below.
+IMPLEMENTED_AUTH_METHODS = frozenset({"phone_otp", "email_password", "google", "apple"})
 
 #: Hosts that mean "this machine" and so must never appear in a production URL.
 #: ``10.0.2.2`` is the Android emulator's alias for its host and reaches a
@@ -222,6 +223,22 @@ class Settings(BaseSettings):
     apple_key_id: str | None = None
     apple_private_key: SecretStr | None = None
 
+    # Email/password policy.
+    #: How long a verification link stays valid. A day is long enough for mail
+    #: that was delayed and short enough that an old inbox is not a key.
+    email_verification_ttl_seconds: int = 86_400
+    #: Password reset. Much shorter, because a live reset link *is* the account.
+    password_reset_ttl_seconds: int = 3_600
+    #: Whether an unverified address blocks sign-in. False by default: a seller
+    #: who cannot receive mail must still be able to reach the shop they just
+    #: created, and the verified flag already gates what it needs to gate
+    #: (account linking). Turn it on once email delivery is proven.
+    email_verification_required_for_login: bool = False
+    #: Login throttling, per hour. Per-address stops one account being ground
+    #: down; per-IP stops one attacker grinding down many.
+    login_max_attempts_per_email_hour: int = 10
+    login_max_attempts_per_ip_hour: int = 30
+
     # ------------------------------------------------------------ crypto ---
     # AES-GCM application-level vault for courier/billing credentials.
     credential_encryption_key: SecretStr = SecretStr(_DEV_CREDENTIAL_KEY)
@@ -348,16 +365,13 @@ class Settings(BaseSettings):
     #: SMS. ``console`` writes the message to the log and sends nothing — it is
     #: the development transport, and it is refused in staging and production
     #: so it cannot become the thing that "delivers" a password reset.
-    #: ``provider_api`` is the shape a real provider plugs into; no provider has
-    #: been selected, so it validates the payload and reports itself
-    #: unconfigured rather than reporting a send that did not happen.
+    #: ``provider_api`` uses Resend's documented send-email contract.
     email_transport: str = "disabled"
     #: Envelope sender. Must be on a domain whose SPF/DKIM/DMARC you control,
     #: or verification mail lands in spam and password resets stop arriving.
     email_from_address: str | None = None
     email_from_name: str = "ecomsbd"
-    #: Provider REST endpoint. Not guessed: it is whatever the selected
-    #: provider's current documentation says, supplied at configuration time.
+    #: Resend API base URL (https://api.resend.com), without /emails.
     email_api_base_url: str | None = None
     email_api_key: SecretStr | None = None
 
@@ -729,11 +743,8 @@ class Settings(BaseSettings):
     def _auth_method_problems(self) -> list[str]:
         """Sign-in must be both configured and reachable.
 
-        Two separate failures live here. One is an enabled method missing the
-        credentials it cannot work without. The other is subtler and is the one
-        that matters right now: a deployed environment where every method that
-        is switched on has no implementation behind it. That boots cleanly,
-        passes every health check, and nobody can sign in.
+        Enabled providers need their configuration, and a deployed environment
+        must enable at least one implemented method.
         """
         problems: list[str] = []
 
@@ -748,14 +759,7 @@ class Settings(BaseSettings):
 
         if self.apple_auth_enabled:
             missing = [
-                name
-                for name, value in (
-                    ("APPLE_TEAM_ID", self.apple_team_id),
-                    ("APPLE_CLIENT_ID", self.apple_client_id),
-                    ("APPLE_KEY_ID", self.apple_key_id),
-                    ("APPLE_PRIVATE_KEY", self.apple_private_key),
-                )
-                if not value
+                name for name, value in (("APPLE_CLIENT_ID", self.apple_client_id),) if not value
             ]
             if missing:
                 problems.append(
@@ -786,7 +790,6 @@ class Settings(BaseSettings):
             problems.append(
                 f"no seller can sign in: {detail}. Implemented methods are "
                 f"{sorted(IMPLEMENTED_AUTH_METHODS)} "
-                "(SELLER_AUTH_IMPLEMENTATION_REQUIRED - see docs/RELEASE_READINESS.md). "
                 "Refusing to start rather than serving an app nobody can log in to"
             )
 
@@ -815,6 +818,8 @@ class Settings(BaseSettings):
             ]
             if missing:
                 problems.append(f"EMAIL_TRANSPORT=provider_api requires {', '.join(missing)}")
+            if self.email_api_base_url and not self.email_api_base_url.startswith("https://"):
+                problems.append("EMAIL_API_BASE_URL must use https outside local/test")
         if self.email_from_address and "@" not in self.email_from_address:
             problems.append("EMAIL_FROM_ADDRESS is not an email address")
         if self.support_email and "@" not in self.support_email:
@@ -912,9 +917,9 @@ class Settings(BaseSettings):
 
     @property
     def apple_auth_configured(self) -> bool:
-        return self.apple_auth_enabled and all(
-            (self.apple_team_id, self.apple_client_id, self.apple_key_id, self.apple_private_key)
-        )
+        # Identity-token verification uses Apple's public JWKS. Team/key ids and
+        # a private key are only needed for a separate authorization-code exchange.
+        return self.apple_auth_enabled and bool(self.apple_client_id)
 
     @property
     def email_transport_can_deliver(self) -> bool:

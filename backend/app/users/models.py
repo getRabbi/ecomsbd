@@ -47,11 +47,17 @@ class User(Base, PrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "users"
     __table_args__ = (sa.UniqueConstraint("phone_search_hmac", name="uq_users_phone_search_hmac"),)
 
+    # Nullable since the email/password, Google and Apple sign-ins landed: a
+    # seller who signed up with an email has no phone number, and demanding a
+    # placeholder would put fake numbers in the column that customer lookup
+    # matches on. The unique constraint still holds for the rows that do have
+    # one — SQL treats NULLs as distinct, which is exactly the wanted
+    # behaviour here.
     #: Keyed HMAC of the canonical ``+8801XXXXXXXXX`` form. Exact lookups only.
-    phone_search_hmac: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    phone_search_hmac: Mapped[str | None] = mapped_column(sa.String(64), nullable=True, index=True)
     #: AES-GCM envelope of the canonical number.
-    phone_enc: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    phone_last4: Mapped[str] = mapped_column(sa.String(4), nullable=False)
+    phone_enc: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    phone_last4: Mapped[str | None] = mapped_column(sa.String(4), nullable=True)
 
     display_name: Mapped[str | None] = mapped_column(sa.String(160), nullable=True)
     status: Mapped[str] = mapped_column(
@@ -71,6 +77,8 @@ class User(Base, PrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         return self.status == UserStatus.ACTIVE and self.deleted_at is None
 
     @property
-    def masked_phone(self) -> str:
+    def masked_phone(self) -> str | None:
         """``*******78`` — the last four are all this row can reveal on its own."""
+        if not self.phone_last4:
+            return None
         return f"*******{self.phone_last4[-2:]}"

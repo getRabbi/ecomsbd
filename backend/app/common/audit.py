@@ -44,6 +44,22 @@ class AuditAction(StrEnum):
     SESSION_REFRESHED = "auth.session_refreshed"
     SESSION_REVOKED = "auth.session_revoked"
     REFRESH_TOKEN_REUSE_DETECTED = "auth.refresh_token_reuse_detected"
+    USER_REGISTERED = "auth.user_registered"
+    PASSWORD_LOGIN_FAILED = "auth.password_login_failed"
+    PASSWORD_CHANGED = "auth.password_changed"
+    PASSWORD_RESET_REQUESTED = "auth.password_reset_requested"
+    PASSWORD_RESET_COMPLETED = "auth.password_reset_completed"
+    EMAIL_VERIFICATION_SENT = "auth.email_verification_sent"
+    EMAIL_DELIVERY_FAILED = "auth.email_delivery_failed"
+    EMAIL_VERIFIED = "auth.email_verified"
+    PROVIDER_SIGN_IN = "auth.provider_sign_in"
+    IDENTITY_LINKED = "auth.identity_linked"
+    #: A link was possible by email but refused. Worth a row of its own: a run
+    #: of these against one address is what an account-takeover attempt looks
+    #: like from the inside.
+    IDENTITY_LINK_REFUSED = "auth.identity_link_refused"
+    #: A verification or reset token presented after it was already used.
+    AUTH_TOKEN_REPLAY_BLOCKED = "auth.token_replay_blocked"
 
     # Tenancy
     TENANT_CREATED = "tenant.created"
