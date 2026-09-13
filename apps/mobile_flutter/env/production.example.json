@@ -1,6 +1,6 @@
 {
   "_README": "NON-SECRET VALUES ONLY. Every key here is compiled into the APK/AAB and can be read back out of it. See README.md in this directory for what must never appear, and for the build command.",
-  "ECOMSBD_API_BASE_URL": "https://api.yourdomain.com",
+  "ECOMSBD_API_BASE_URL": "https://api.scalemyprints.com",
   "ECOMSBD_SENTRY_DSN": "",
   "PHONE_OTP_LOGIN_ENABLED": false,
   "GOOGLE_CLIENT_ID_WEB": "",

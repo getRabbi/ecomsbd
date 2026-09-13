@@ -41,7 +41,7 @@ flutter build appbundle --release \
 
 ## Provider setup and remaining external validation
 
-- **Google / Android:** when configuring later, register `com.ecomsbd.app` and debug,
+- **Google / Android:** when configuring later, register `com.smply.app` and debug,
   release and Play App Signing certificate SHA fingerprints in the same Google
   project as the web OAuth client. Supply `GOOGLE_CLIENT_ID_WEB` at build time
   and in the backend's Google audience configuration. This integration passes
@@ -80,4 +80,4 @@ release check once IDs, signing and the relevant platform runner are available.
 |---|---|---|
 | `google-services.json` | `android/app/google-services.json` | Optional for a future Firebase integration; not required by this auth flow. Gitignored. |
 | `key.properties` | `android/key.properties` | Private release signing config; environment overrides are also supported. See [key generation and fingerprints](../android/RELEASE_SIGNING.md). The keystore stays outside the repository. |
-| `applicationId` | `android/app/build.gradle.kts` | Permanently `com.ecomsbd.app`, also the namespace/activity package. `PLAY_PACKAGE_NAME` must match when Play is configured. |
+| `applicationId` | `android/app/build.gradle.kts` | Permanently `com.smply.app`, also the namespace/activity package. `PLAY_PACKAGE_NAME` must match when Play is configured. |

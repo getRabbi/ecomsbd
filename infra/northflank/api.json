@@ -1,0 +1,27 @@
+{
+  "name": "ecomsbd-api",
+  "description": "ecomsbd production FastAPI service",
+  "billing": {"deploymentPlan": "nf-compute-20", "buildPlan": "nf-compute-200-8"},
+  "deployment": {"instances": 0, "docker": {"configType": "default"}},
+  "ports": [{"name": "http", "internalPort": 8000, "public": true, "protocol": "HTTP"}],
+  "buildSource": "git",
+  "disabledCI": false,
+  "vcsData": {
+    "projectUrl": "https://github.com/getRabbi/ecomsbd",
+    "projectType": "github",
+    "accountLogin": "getRabbi",
+    "projectBranch": "main"
+  },
+  "buildSettings": {
+    "dockerfile": {
+      "buildEngine": "buildkit",
+      "dockerFilePath": "/infra/docker/backend.Dockerfile",
+      "dockerWorkDir": "/backend"
+    }
+  },
+  "runtimeEnvironment": {"PORT": "8000", "TZ": "UTC"},
+  "healthChecks": [
+    {"type": "livenessProbe", "protocol": "CMD", "cmd": "curl -fsS http://127.0.0.1:8000/health/live", "initialDelaySeconds": 15, "periodSeconds": 30, "timeoutSeconds": 5, "failureThreshold": 3},
+    {"type": "readinessProbe", "protocol": "CMD", "cmd": "curl -fsS http://127.0.0.1:8000/health/ready", "initialDelaySeconds": 10, "periodSeconds": 15, "timeoutSeconds": 5, "failureThreshold": 3, "successThreshold": 1}
+  ]
+}

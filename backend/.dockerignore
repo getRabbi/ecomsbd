@@ -1,0 +1,15 @@
+# This directory is the backend Docker build context, including on Northflank.
+.env
+.env.*
+.venv/
+__pycache__/
+**/__pycache__/
+*.db
+*.sqlite3
+*.jks
+*.keystore
+key.properties
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/

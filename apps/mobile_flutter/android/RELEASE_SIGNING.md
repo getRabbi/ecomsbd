@@ -1,7 +1,7 @@
 # Android identity and release signing
 
 The permanent `applicationId`, namespace and activity package are
-`com.ecomsbd.app`. Keep future Play/Google/Firebase Android registrations aligned
+`com.smply.app`. Keep future Play/Google/Firebase Android registrations aligned
 with this ID. This change does not configure those providers or change Apple IDs.
 
 ## 1. Create the private release/upload key

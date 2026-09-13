@@ -1,0 +1,12 @@
+{
+  "name": "ecomsbd-worker",
+  "description": "ecomsbd production ARQ worker; no public port",
+  "billing": {"deploymentPlan": "nf-compute-20"},
+  "deployment": {
+    "instances": 0,
+    "internal": {"id": "ecomsbd-api", "branch": "main", "buildSHA": "latest"},
+    "docker": {"configType": "customCommand", "customCommand": "arq app.worker.main.WorkerSettings"}
+  },
+  "ports": [],
+  "runtimeEnvironment": {"TZ": "UTC"}
+}

@@ -13,11 +13,13 @@ a database server. The PostgreSQL rendering is always the richer one — native
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
@@ -32,8 +34,17 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# A controlled production migration needs database access, not OAuth/email
+# credentials. This explicit mode is never used by API/worker startup and never
+# changes their production safety checks. It accepts only PostgreSQL/asyncpg.
+if context.get_x_argument(as_dictionary=True).get("database-only") == "true":
+    database_url = os.environ.get("DATABASE_URL", "")
+    if not database_url or make_url(database_url).drivername != "postgresql+asyncpg":
+        raise RuntimeError("DATABASE_URL must use postgresql+asyncpg for database-only migrations")
+else:
+    database_url = get_settings().database_url
+# ConfigParser treats '%' specially; URL-encoded passwords must survive intact.
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
@@ -71,7 +82,7 @@ def _render_item(type_, obj, autogen_context):
 def run_migrations_offline() -> None:
     """Emit SQL without connecting. Used to review a migration before it runs."""
     context.configure(
-        url=settings.database_url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -80,7 +91,7 @@ def run_migrations_offline() -> None:
         include_object=_include_object,
         render_item=_render_item,
         # Required on SQLite: it cannot ALTER most columns in place.
-        render_as_batch=settings.is_sqlite,
+        render_as_batch=database_url.startswith("sqlite"),
     )
     with context.begin_transaction():
         context.run_migrations()

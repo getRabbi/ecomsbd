@@ -5,6 +5,10 @@
 **/.mypy_cache
 **/.ruff_cache
 **/.env
+**/.env.*
+**/*.jks
+**/*.keystore
+**/key.properties
 **/*.db
 apps/
 docs/

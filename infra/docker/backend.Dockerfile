@@ -23,7 +23,9 @@ FROM python:3.12-slim AS runtime
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    APP_ENV=production
+    APP_ENV=production \
+    PORT=8000 \
+    TZ=UTC
 
 # curl is used by the container healthcheck only.
 RUN apt-get update \
@@ -44,6 +46,7 @@ EXPOSE 8000
 # Liveness only: readiness checks the database and belongs to the orchestrator,
 # which can act on it, rather than to a container restart loop.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health/live || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health/live" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Migrations run once as a controlled deployment job, never on container boot.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-8000}\""]

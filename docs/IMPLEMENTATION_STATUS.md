@@ -408,7 +408,7 @@ inventing any of it.
 
 | Item | Blocked on | Consequence today |
 |---|---|---|
-| **Android `applicationId`** | **Resolved:** owner permanently selected `com.ecomsbd.app`. | Gradle, activity package/path and production `PLAY_PACKAGE_NAME` example match. Google/Firebase/Play account configuration remains external; backend placeholder-rejection tests stay intact. |
+| **Android `applicationId`** | **Resolved:** owner permanently selected `com.smply.app`. | Gradle, activity package/path and production `PLAY_PACKAGE_NAME` example match. Google/Firebase/Play account configuration remains external; backend placeholder-rejection tests stay intact. |
 | Release signing keystore | Operator supplies the private ecomsbd key/config | Release signing is wired and fails closed without the key; debug builds remain unchanged. See [signing instructions](../apps/mobile_flutter/android/RELEASE_SIGNING.md). |
 | **Steadfast API** | A merchant account. The documentation blocker is **resolved** — V1 was supplied 2026-09-11 and implemented. | Everything is built and tested against contract fixtures. `STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED`: no real key has authenticated, no real parcel has been created, and four endpoints' response schemas are inferred rather than observed. |
 | **Steadfast webhook** | A webhook contract from Steadfast — the V1 document has no webhook section at all | `STEADFAST_WEBHOOK_CONTRACT_REQUIRED`. The receiver, replay protection, verifier/parser ports and queue are built and tested; the verifier refuses everything, and polling is the complete V1 sync path. |

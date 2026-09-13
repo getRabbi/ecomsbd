@@ -35,7 +35,7 @@ the existing session repository; OTP UI is disabled by default. Provider setup
 and device sign-in checks remain external. Apple is unavailable on the current
 Android runner; an iOS release needs its runner and Apple provisioning.
 
-The Android package ID is now fixed as `com.ecomsbd.app`. Remaining operator
+The Android package ID is now fixed as `com.smply.app`. Remaining operator
 configuration includes the signing key, courier account, billing/email providers,
 push, object storage and error tracking. Each is refused honestly today
 rather than faked.
@@ -60,8 +60,8 @@ rather than faked.
 
 | | |
 |---|---|
-| **Status** | **RESOLVED — permanent owner decision: `com.ecomsbd.app`.** |
-| **Implemented** | Gradle `applicationId` and namespace plus the `MainActivity` package/path all use `com.ecomsbd.app`. The production example's `PLAY_PACKAGE_NAME` matches; no provider account has been configured. |
+| **Status** | **RESOLVED — permanent owner decision: `com.smply.app`.** |
+| **Implemented** | Gradle `applicationId` and namespace plus the `MainActivity` package/path all use `com.smply.app`. The production example's `PLAY_PACKAGE_NAME` matches; no provider account has been configured. |
 | **Why it is required** | Play rejects any id under `com.example`. More importantly the id is **permanent once published**: changing it later means shipping a different app and losing every install, review and subscription. Play Billing verification is bound to the package name (section 90), so it must be settled *before* billing is configured, not after. |
 | **Where it is configured** | `apps/mobile_flutter/android/app/build.gradle.kts` — `namespace` and `defaultConfig.applicationId`; the `MainActivity` package path; `PLAY_PACKAGE_NAME` in the backend environment. |
 | **Validation** | No scaffold package references remain in Android source/config. Future Play/Google/Firebase registrations must use the final ID; live backend provider health still depends on its deployed environment. |

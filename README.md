@@ -455,7 +455,7 @@ Do not run this against real seller data until Phase F hardening is complete.
 
 ## Open decisions
 
-**Android package ID resolved:** `com.ecomsbd.app` is the permanent owner-selected
+**Android package ID resolved:** `com.smply.app` is the permanent owner-selected
 `applicationId`, namespace and activity package. Future Android provider/Play
 registrations must use that ID.
 
