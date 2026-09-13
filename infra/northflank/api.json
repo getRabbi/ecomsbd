@@ -1,7 +1,7 @@
 {
   "name": "ecomsbd-api",
   "description": "ecomsbd production FastAPI service",
-  "billing": {"deploymentPlan": "nf-compute-20", "buildPlan": "nf-compute-200-8"},
+  "billing": {"deploymentPlan": "nf-compute-20"},
   "deployment": {"instances": 0, "docker": {"configType": "default"}},
   "ports": [{"name": "http", "internalPort": 8000, "public": true, "protocol": "HTTP"}],
   "buildSource": "git",

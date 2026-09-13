@@ -20,6 +20,8 @@ and the controlled migration are complete. Then scale each to one instance.
 Keep automatic builds/deployments linked to `main`; the worker follows the
 API build service. Verify these settings in Northflank after resource creation.
 Northflank manages restarts; only the API exposes a public HTTP port.
+The API uses Northflank's default build plan. Redis uses the supported `7.2.14`
+version and the platform's minimum `4096` MB storage allocation.
 
 The build context is `backend`, with Dockerfile
 `/infra/docker/backend.Dockerfile`. Local equivalent, from the repository root:
@@ -41,9 +43,10 @@ Reuse `ecomsbd-production`. Nonblank runtime settings and the database URL have
 been copied from the ignored local production configuration. Four cryptographic
 secrets were generated directly in Northflank; preserve them on subsequent runs.
 Deployment-admin tokens are **not** runtime variables. The group is restricted
-and must be explicitly attached to the API and worker once they exist.
+and is attached to the API and worker.
 
-Link the Redis addon's private connection URL as `REDIS_URL` in this group.
+The Redis addon's `REDIS_MASTER_URL` is linked as `REDIS_URL` in this group;
+Northflank manages the connection secret rather than a copied static value.
 Keep the following flags; missing provider credentials must not be replaced with
 fake values or bypassed by disabling the production checks:
 
@@ -79,23 +82,49 @@ version files were changed. Container build, non-root/start-command inspection,
 Android `:app:preDebugBuild` configuration check, package-reference consistency,
 and focused migration-environment Ruff checks passed. No full test suites ran.
 
-## Domain, storage and current account blockers
+## Domain, storage and remaining credentials
 
-Northflank currently rejects service/addon creation until a default payment
-method is added. The production secret group is created, domain ownership is
-verified, and the `api` subdomain is registered in Northflank. Cloudflare contains
-Northflank's domain-ownership TXT record; API DNS/HTTPS cutover is still pending.
+Northflank billing is now configured. `ecomsbd-api`, `ecomsbd-worker` and
+`ecomsbd-redis` are created; the GitHub `main` backend build succeeded and both
+services follow that image. Redis is running, and both services' effective
+environments contain its linked URL and the existing cryptographic secrets.
+Deployment-admin tokens remain excluded. No migration or full test suite was
+rerun during this continuation.
+
+API and worker remain at zero instances until the real provider credentials
+below are supplied. The production validator rejects the incomplete settings;
+the auth flags and safety checks have not been disabled. Both API health probes
+currently return `503`, so no traffic cutover has been made.
+
+Domain ownership is verified and the `api` subdomain is registered in Northflank.
+Cloudflare contains Northflank's ownership TXT record. Subdomain verification,
+service assignment and API DNS/HTTPS cutover remain pending readiness.
+The exact generated API hostname is also in the Host allow-list, so it can be
+used for pre-cutover health checks without allowing arbitrary hosts.
 
 Do not replace the existing `api.scalemyprints.com` DNS record or remove its old
-Worker route until the new API passes readiness. Then assign the `api` subdomain
-to the API's `http` port, use Northflank's returned DNS target, complete domain
-verification/HTTPS, and remove only the superseded production API Worker/route.
+Worker route until the new API passes readiness. Then coordinate the cutover:
+use Northflank's returned DNS target, verify the `api` subdomain, assign it to
+the API's `http` port, and confirm custom-domain HTTPS and health. Northflank
+refuses service assignment before subdomain verification. Remove only the
+superseded production API Worker/route after the replacement is healthy.
 Leave staging, crawler, Pages, D1 and unrelated account resources untouched unless
 their retirement is separately established.
 
-Cloudflare currently rejects R2 operations with code `10042`: R2 must first be
-[enabled in the dashboard](https://developers.cloudflare.com/r2/api/error-codes/).
-After enablement, create/reuse private bucket `ecomsbd-production` and create
-bucket-scoped S3 object read/write credentials. Inject `R2_BUCKET`,
-`R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` directly into
-Northflank. No public bucket access or production credentials belong in Git.
+R2 is enabled and private bucket `ecomsbd-production` is created. Its public
+development URL is disabled and it has no custom domains. `R2_BUCKET` and
+`R2_ENDPOINT_URL` are stored in Northflank. Cloudflare rejected scoped credential
+creation with `403` / `9109`: the deployment token lacks token-creation access.
+Either grant [Account API Tokens Write](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/)
+or create [R2 Object Read & Write credentials](https://developers.cloudflare.com/r2/api/tokens/)
+scoped only to this bucket and supply the two keys directly to Northflank.
+Never substitute the deployment-admin token as a runtime storage credential.
+
+Remaining external runtime values:
+
+- `GOOGLE_CLIENT_ID_WEB` (the server audience; register Android with `com.smply.app`)
+- `APPLE_CLIENT_ID`
+- `EMAIL_API_KEY`
+- `EMAIL_FROM_ADDRESS`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`

@@ -1,6 +1,6 @@
 {
   "name": "ecomsbd-redis",
   "type": "redis",
-  "version": "7.4-latest",
-  "billing": {"deploymentPlan": "nf-compute-20", "storage": 1024, "replicas": 1}
+  "version": "7.2.14",
+  "billing": {"deploymentPlan": "nf-compute-20", "storage": 4096, "replicas": 1}
 }
