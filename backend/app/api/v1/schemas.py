@@ -107,6 +107,16 @@ class TenantSummaryResponse(BaseModel):
     onboarding_complete: bool
 
 
+class ShopSessionResponse(BaseModel):
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    role: str | None
+    is_new_user: bool
+    needs_onboarding: bool
+    tenants: list[TenantSummaryResponse]
+
+
 class SessionResponse(BaseModel):
     """Tokens plus the state the client needs to route its next screen."""
 

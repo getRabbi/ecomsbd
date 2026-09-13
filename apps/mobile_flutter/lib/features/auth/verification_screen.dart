@@ -74,9 +74,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
           )
         else ...[
           Text(
-            state.verificationSent == false
-                ? 'We couldn’t send the verification email. Try resending it to ${email ?? 'your address'}.'
-                : 'Open the verification link sent to ${email ?? 'your email address'}. Check your spam folder too.',
+            'Check ${email ?? 'your email address'} for the confirmation link. Check your spam folder too. If it does not arrive, try resending.',
           ),
           if (email != null) ...[
             const SizedBox(height: EcomsbdSpacing.md),

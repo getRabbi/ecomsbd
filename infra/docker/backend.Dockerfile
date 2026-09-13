@@ -21,6 +21,7 @@ RUN pip install --upgrade pip && pip install .
 FROM python:3.12-slim AS runtime
 
 ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/srv/app" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=production \

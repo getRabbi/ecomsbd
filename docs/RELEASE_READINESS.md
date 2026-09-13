@@ -1,6 +1,6 @@
 # Release readiness
 
-**Last updated 2026-09-12, after Flutter seller authentication integration.**
+**Auth/deployment updated 2026-09-13.**
 
 This is the gate. Nothing below is a "nice to have": each row is something that
 must be true before ecomsbd charges a real seller or handles a real parcel.
@@ -47,9 +47,8 @@ rather than faked.
   below as a *deferred* item for future use.
 - Backend `SELLER_AUTH_IMPLEMENTATION_REQUIRED` and Flutter login integration
   are implemented. Provider credentials and platform/device checks remain.
-- `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` is **new**: email/password auth needs
-  verification and password-reset mail. The Resend adapter is implemented;
-  an account, verified sender and send-only key are still required.
+- Authentication email now requires Supabase custom SMTP; FastAPI business email is independent.
+
 - `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` and
   `REDIS_CONFIGURATION_REQUIRED` are recorded explicitly. They were always
   true; they were never written down.
@@ -124,32 +123,43 @@ rather than faked.
 | **Why it stays off** | `SteadfastWebhookVerifier.is_configured` returns `False` unconditionally. A verifier that returned `True` because there is nothing to check would not be a disabled webhook — it would be an open endpoint letting anyone mark any parcel delivered and move a seller's money. `Settings` refuses to boot a deployed environment with `STEADFAST_WEBHOOK_ENABLED=true`. |
 | **Validation** | Steadfast supplies a webhook contract; the verifier implements it; the capability moves from `unknown` to `true` with a date. |
 
-## 6. Seller authentication — backend and Flutter integration implemented
+## 6. Seller authentication — Supabase integration
 
-| | |
-|---|---|
-| **Status** | **Backend and Flutter integration implemented. External provider setup and device validation remain; Apple needs an iOS runner/provisioning for native release.** |
-| **Implemented** | Register/login, Argon2id passwords, email verification/resend, forgot/reset/change password, Google and Apple identity-token verification, shared refresh rotation, session revocation, audit events and shop onboarding. No second session architecture. |
-| **Endpoints** | `POST /v1/auth/register`, `/login`, `/email/verify`, `/email/resend`, `/password/forgot`, `/password/reset`, `/password/change`, `/oauth/google`, `/oauth/apple`. Link landing pages are served under `/auth` on `PUBLIC_BASE_URL`. |
-| **Identity safety** | Provider subject remains authoritative. Linking requires a unique existing user and verified email proof on both sides; unverified claims, Apple relay addresses, Google third-party mailboxes and ambiguous users do not automatically merge. |
-| **Production flags** | `EMAIL_PASSWORD_AUTH_ENABLED=true`, `GOOGLE_AUTH_ENABLED=true`, `APPLE_AUTH_ENABLED=true`, `PHONE_OTP_LOGIN_ENABLED=false`. No SMS gateway required. |
-| **External configuration** | Google client IDs, `APPLE_CLIENT_ID`, and Resend sender/API configuration. Apple's private key, Team ID and Key ID are optional for the implemented identity-token flow, which uses public JWKS. |
-| **Migration** | `c41f8b2ad7e5` retained; creates identities/link tokens and permits users without phone numbers. Auth fixtures apply it on SQLite; PostgreSQL SQL rendering checked without a live database. |
-| **Validation** | Targeted auth/config tests cover forged/wrong-audience/expired tokens, linking, reset replay, revocation and all three methods creating shops with the existing session system. Real provider sign-in and email delivery still require credentials. |
-| **Mobile integration** | Email login/register/verification/resend/forgot/reset screens; native Google/Apple ID tokens verified by the existing backend; nullable phone profiles; shared logout/refresh; existing shop → Home, no shop → Create Shop, multiple shops → existing tenant selection. OTP UI and routes disabled by default. |
-| **Mobile release follow-up** | Supply Google web client ID, register Android package/signing fingerprints and validate real sign-in. Apple safely reports unavailable on Android; provisioning an iOS runner with Sign in with Apple capability is required to release the native Apple flow. Existing browser email verification/reset links work without app-link registration. See [Flutter auth configuration](../apps/mobile_flutter/env/README.md). |
+Code uses `supabase_flutter` for email/password, confirmation/resend, recovery,
+Google/Apple ID-token exchange, encrypted persistence, refresh and logout.
+FastAPI accepts verified Supabase ES256/RS256 access JWTs only in production;
+legacy auth endpoints cannot issue seller sessions. Internal users are mapped
+through the existing `auth_identities` unique constraints. Tenant/RBAC remains
+server-owned and reads current membership on every request.
 
-## 6a. `TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`
+External configuration remains blocked: public Supabase URL/key, asymmetric
+signing key, Google/Apple settings, redirects and custom SMTP must be configured
+in the existing project. Backend-only service-role access is used solely by final
+account deletion. See [the exact Dashboard steps](PRODUCTION_ENV_SETUP.md#5-supabase-auth).
 
-| | |
-|---|---|
-| **Status** | **Code complete; needs an account and sender configuration** |
-| **What is missing** | A Resend account, send-only API key, and verified sending domain. |
-| **Why it is required** | Email verification and forgot-password links need deliverable mail. |
-| **Where it is configured** | `EMAIL_TRANSPORT`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `EMAIL_API_BASE_URL`, `EMAIL_API_KEY`. |
-| **What exists already** | Resend REST adapter with payload validation, idempotency headers, delivery outcomes and redacted errors; browser verification/reset pages; existing `disabled` / `console` / `mock` / `provider_api` interfaces. Contract: [Resend send email](https://resend.com/docs/api-reference/emails/send-email). |
-| **Safety already enforced** | `EMAIL_TRANSPORT=console` writes the message to the log and is **refused at startup in staging and production**: a reset link is a credential, so a transport that prints it publishes account takeovers to everyone who can read the log. `mock` is refused for the same reason. `EMAIL_PASSWORD_AUTH_ENABLED=true` with no deliverable transport is refused. |
-| **Validation** | A verification email arrives at a real inbox from the production sender, and the delivery record says `SENT` rather than `NOT_CONFIGURED`. |
+Production Alembic revision is `d73e9c5a1201`; applied once with DB connection
+and client-role isolation checks passing. Nine focused backend auth tests passed
+on isolated PostgreSQL, including concurrent first login.
+
+Focused validation also passed seven Flutter auth-flow cases and three auth-screen
+cases, changed-file Flutter analysis, Ruff and backend type checks. The backend
+image built; its API readiness passed against isolated local PostgreSQL/Redis.
+ARQ started with final source mounted, connected to Redis, and processed the
+existing outbox cron successfully. Worker settings now use concrete ARQ values
+and the configured queue. Real provider login/email and cloud activation remain
+blocked by the external configuration above. No full regression suites ran.
+
+## 6a. Production cloud activation
+
+Northflank API and worker exist at zero instances. Redis is running, but its
+free allocation is unverified: `/plans` lists priced `nf-compute-20`, while team
+and billing usage endpoints return 403. **BILLING_CONFIRMATION_REQUIRED** and
+**FREE_REDIS_SLOT_UNAVAILABLE** apply until the API confirms Sandbox coverage.
+No paid resources, scaling, DNS cutover or Worker deletion is authorized.
+
+The private `ecomsbd-production` R2 bucket exists; its public URL is disabled and
+it has no custom domains. Application access keys remain missing. The existing
+Cloudflare API Worker route is retained until Northflank readiness and HTTPS pass.
 
 ## 6b. `SMS_PROVIDER_REQUIRED` — **deferred, no longer a release blocker**
 
@@ -172,7 +182,7 @@ rather than faked.
 | **What is missing** | A production PostgreSQL connection string and a production Redis URL. |
 | **Why they are required** | Nothing runs without the database. Without Redis the API refuses to start in a deployed environment, and the worker refuses outright — a worker that cannot see the queue would report itself healthy while courier polling, payment sync, outbox dispatch, alerts and the weekly summary all silently stopped. |
 | **Where they are configured** | `DATABASE_URL`, `REDIS_URL`, plus the `DATABASE_POOL_*` settings. Supabase pooler caveats — which port, why the scheme is rewritten to `postgresql+asyncpg`, why `sslmode` is stripped — are in `docs/PRODUCTION_ENV_SETUP.md` sections 2 and 3. |
-| **Architecture note** | Supabase is managed PostgreSQL and nothing else. No Supabase Auth, no PostgREST, no Supabase client in Flutter, and **no service-role key anywhere** — the app reaches its data only through the ecomsbd backend, where the tenancy guards are. |
+| **Architecture note** | Supabase Auth handles seller identity; Supabase PostgreSQL holds business data. Flutter calls FastAPI for all business access. Service-role access stays backend-only for final account deletion. |
 | **Validation** | `alembic upgrade head` applies cleanly and `/health/ready` reports both `database` and `redis` as `ok`. |
 
 ## 7. `FCM_CREDENTIALS_REQUIRED`

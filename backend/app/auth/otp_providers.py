@@ -144,8 +144,17 @@ class SmsGatewayOtpProvider:
 
 def build_otp_provider(settings: Settings) -> OtpSender:
     """Select the configured provider, refusing unsafe combinations."""
+    if settings.supabase_auth_active or not settings.phone_otp_login_enabled:
+        return DisabledOtpProvider()
     if settings.otp_provider is OtpProvider.DEV_CONSOLE:
         if settings.app_env is AppEnv.PRODUCTION:  # pragma: no cover - config blocks this first
             raise ProductionSafetyError("OTP_PROVIDER=dev_console is not permitted in production")
         return DevConsoleOtpProvider(settings)
     return SmsGatewayOtpProvider(settings)
+
+
+class DisabledOtpProvider:
+    name = "disabled"
+
+    async def send(self, *, phone_e164: str, code: str, masked_phone: str) -> OtpDeliveryResult:
+        raise AppError("Phone login is disabled", code=ErrorCode.FEATURE_DISABLED)

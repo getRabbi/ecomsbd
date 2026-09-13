@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -9,6 +12,7 @@ enum SignInProvider { google, apple }
 
 /// Obtains provider credentials only. It cannot create an ecomsbd session.
 abstract class ProviderSignIn {
+  String? get nonce => null;
   Future<String> identityToken(SignInProvider provider);
   Future<void> signOut();
 }
@@ -26,6 +30,9 @@ ApiError providerSignInError(
 
 class NativeProviderSignIn implements ProviderSignIn {
   static Future<void>? _googleInitialization;
+  String? _nonce;
+  @override
+  String? get nonce => _nonce;
 
   bool get _isApplePlatform =>
       !kIsWeb &&
@@ -35,6 +42,7 @@ class NativeProviderSignIn implements ProviderSignIn {
   @override
   Future<String> identityToken(SignInProvider provider) async {
     try {
+      _nonce = null;
       final String? token;
       if (provider == SignInProvider.google) {
         if (kIsWeb ||
@@ -67,7 +75,9 @@ class NativeProviderSignIn implements ProviderSignIn {
         if (!_isApplePlatform || !await SignInWithApple.isAvailable()) {
           throw providerSignInError(provider);
         }
+        _nonce = Supabase.instance.client.auth.generateRawNonce();
         final credential = await SignInWithApple.getAppleIDCredential(
+          nonce: sha256.convert(utf8.encode(_nonce!)).toString(),
           scopes: const [AppleIDAuthorizationScopes.email],
         );
         token = credential.identityToken;

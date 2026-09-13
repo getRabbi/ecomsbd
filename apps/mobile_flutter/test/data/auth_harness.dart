@@ -7,6 +7,8 @@ import 'package:ecomsbd/data/auth/auth_repository.dart';
 import 'package:ecomsbd/data/auth/provider_sign_in.dart';
 
 import 'fake_api.dart';
+import 'supabase_fake.dart' show SupabaseTransport, MemoryPkce;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 class MemoryTokens extends TokenStore {
   StoredSession? session;
@@ -27,6 +29,8 @@ class MemoryTokens extends TokenStore {
 }
 
 class FakeProviderSignIn implements ProviderSignIn {
+  @override
+  String? get nonce => null;
   ApiError? error;
   bool failCleanup = false;
   final requested = <SignInProvider>[];
@@ -47,15 +51,26 @@ class FakeProviderSignIn implements ProviderSignIn {
 
 class AuthHarness {
   AuthHarness() {
-    repository = AuthRepository(tokenStore: tokens);
+    auth = sb.GoTrueClient(
+      url: 'https://project.supabase.co/auth/v1',
+      httpClient: transport,
+      autoRefreshToken: false,
+      flowType: sb.AuthFlowType.pkce,
+      asyncStorage: MemoryPkce(),
+    );
+    repository = AuthRepository(tokenStore: tokens, auth: auth);
     repository.client = ApiClient(
       sessionProvider: repository,
       dio: Dio()..httpClientAdapter = adapter,
     );
     controller = AuthController(repository, providerSignIn: provider);
     profile();
+    adapter.onJson('POST', '/auth/device', {});
+    adapter.onJson('POST', '/auth/logout', {});
   }
   final tokens = MemoryTokens();
+  final transport = SupabaseTransport();
+  late final sb.GoTrueClient auth;
   final adapter = FakeApiAdapter();
   final provider = FakeProviderSignIn();
   late final AuthRepository repository;
@@ -77,6 +92,7 @@ class AuthHarness {
   }
 
   void fail(String path, String code, {int status = 401}) {
+    transport.failCode = code.toLowerCase();
     adapter.on(
       'POST',
       path,
@@ -92,6 +108,7 @@ class AuthHarness {
   void dispose() {
     if (controller.mounted) controller.dispose();
     repository.dispose();
+    auth.dispose();
   }
 }
 

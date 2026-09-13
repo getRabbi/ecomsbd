@@ -132,7 +132,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_exception_handlers(app)
 
     app.include_router(health_router)
-    app.include_router(auth_links_router)
+    if not settings.supabase_auth_active:
+        app.include_router(auth_links_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     return app

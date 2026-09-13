@@ -74,21 +74,6 @@ def _redis_settings() -> RedisSettings:
     return RedisSettings.from_dsn(settings.redis_url)
 
 
-class _Lazy:
-    """Descriptor resolving a setting on class attribute access.
-
-    ARQ reads these as plain class attributes. Resolving them lazily keeps
-    importing this module free of side effects, so the test suite and the API
-    process can import it without a Redis connection string.
-    """
-
-    def __init__(self, resolve: Any) -> None:
-        self._resolve = resolve
-
-    def __get__(self, instance: object, owner: type | None = None) -> Any:
-        return self._resolve()
-
-
 class WorkerSettings:
     """ARQ configuration."""
 
@@ -166,5 +151,8 @@ class WorkerSettings:
     job_timeout = 120
     keep_result = 3600
 
-    redis_settings = _Lazy(_redis_settings)
-    max_jobs = _Lazy(lambda: get_settings().worker_max_jobs)
+    # ARQ reads vars(WorkerSettings), so descriptors are not evaluated.
+    # This module is the worker entrypoint; validate its configuration at import.
+    redis_settings = _redis_settings()
+    max_jobs = get_settings().worker_max_jobs
+    queue_name = get_settings().worker_queue_name

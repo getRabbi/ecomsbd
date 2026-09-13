@@ -27,6 +27,7 @@ from app.auth.oidc import IdTokenVerifier, build_apple_verifier, build_google_ve
 from app.auth.otp_providers import OtpSender, build_otp_provider
 from app.auth.passwords import PasswordHasher
 from app.auth.service import AuthService
+from app.auth.supabase import SupabaseVerifier, resolve_session, resolve_user
 from app.billing.models import DistributionChannel
 from app.billing.providers.registry import BillingProviderRegistry, build_registry, resolve_channel
 from app.billing.service import BillingService
@@ -93,6 +94,14 @@ _passwords: PasswordHasher | None = None
 _email_transport: EmailTransport | None = None
 _google_verifier: IdTokenVerifier | None = None
 _apple_verifier: IdTokenVerifier | None = None
+_supabase_verifier: SupabaseVerifier | None = None
+
+
+def get_supabase_verifier(settings: Settings) -> SupabaseVerifier:
+    global _supabase_verifier
+    if _supabase_verifier is None:
+        _supabase_verifier = SupabaseVerifier(settings)
+    return _supabase_verifier
 
 
 async def get_app_settings() -> Settings:
@@ -132,7 +141,8 @@ def get_otp_sender(settings: Settings | None = None) -> OtpSender:
 
 def reset_singletons() -> None:
     """Drop cached service instances. Used when settings change in tests."""
-    global _hasher, _vault, _tokens, _otp_sender, _registry
+    global _hasher, _vault, _tokens, _otp_sender, _registry, _supabase_verifier
+    _supabase_verifier = None
     global _passwords, _email_transport, _google_verifier, _apple_verifier
     _hasher = _vault = _tokens = _otp_sender = None
     _registry = None
@@ -219,25 +229,46 @@ async def get_optional_principal(
         yield None
         return
 
-    claims = get_token_service(settings).decode_access_token(token)
+    user: User | None
+    session_row: AuthSession | None
+    if settings.supabase_auth_active:
+        verifier = get_supabase_verifier(settings)
+        claims = await verifier.verify(token)
+        user = await resolve_user(db, verifier, token, claims)
+        session_row = await resolve_session(db, claims, user)
+        auth = await get_auth_service(db, settings, await get_rate_limiter())
+        memberships = await auth.list_memberships(user.id)
+        if session_row.tenant_id is None and len(memberships) == 1:
+            session_row.tenant_id = memberships[0].id
+        tenant_id = session_row.tenant_id
+        membership = next((m for m in memberships if m.id == tenant_id), None)
+        if tenant_id is not None and membership is None:
+            raise ForbiddenError("Shop membership is no longer active")
+        role = TenantRole(membership.role) if membership else None
+    else:
+        legacy_claims = get_token_service(settings).decode_access_token(token)
 
-    # The token being valid is not enough: a revoked session must stop working
-    # immediately, which means checking the database on every request. The
-    # access token is short-lived precisely so this stays a cheap primary-key read.
-    session_row = await db.get(AuthSession, claims.session_id)
-    if session_row is None or not session_row.is_usable():
-        raise AuthenticationError("This session is no longer valid", code=ErrorCode.SESSION_REVOKED)
-    if session_row.user_id != claims.user_id:
-        raise AuthenticationError("Token does not match its session", code=ErrorCode.INVALID_TOKEN)
+        # The token being valid is not enough: a revoked session must stop working
+        # immediately, which means checking the database on every request. The
+        # access token is short-lived precisely so this stays a cheap primary-key read.
+        session_row = await db.get(AuthSession, legacy_claims.session_id)
+        if session_row is None or not session_row.is_usable():
+            raise AuthenticationError(
+                "This session is no longer valid", code=ErrorCode.SESSION_REVOKED
+            )
+        if session_row.user_id != legacy_claims.user_id:
+            raise AuthenticationError(
+                "Token does not match its session", code=ErrorCode.INVALID_TOKEN
+            )
 
-    user = await db.get(User, claims.user_id)
-    if user is None or not user.is_active:
-        raise AuthenticationError("This account is not active", code=ErrorCode.SESSION_REVOKED)
+        user = await db.get(User, legacy_claims.user_id)
+        if user is None or not user.is_active:
+            raise AuthenticationError("This account is not active", code=ErrorCode.SESSION_REVOKED)
 
-    # The tenant comes from the session row, not the token: rebinding a session
-    # to a different shop must take effect without waiting for token expiry.
-    tenant_id = session_row.tenant_id
-    role = TenantRole(claims.role) if claims.role else None
+        # The tenant comes from the session row, not the token: rebinding a session
+        # to a different shop must take effect without waiting for token expiry.
+        tenant_id = session_row.tenant_id
+        role = TenantRole(legacy_claims.role) if legacy_claims.role else None
 
     principal = Principal(user=user, session=session_row, tenant_id=tenant_id, role=role)
 

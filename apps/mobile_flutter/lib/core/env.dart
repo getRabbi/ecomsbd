@@ -22,13 +22,14 @@ class Env {
     defaultValue: 'http://10.0.2.2:8000',
   );
 
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const authRedirectUrl = 'com.smply.app://auth/callback';
+
   static const String apiVersionPrefix = '/v1';
 
   // Keep this aligned with the backend flag. Off unless explicitly enabled.
-  static const bool phoneOtpLoginEnabled = bool.fromEnvironment(
-    'PHONE_OTP_LOGIN_ENABLED',
-    defaultValue: false,
-  );
+  static const bool phoneOtpLoginEnabled = false;
 
   // Public OAuth identifiers, never client secrets. Android uses the web
   // client id as serverClientId so the ID token is minted for the backend.

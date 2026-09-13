@@ -8,12 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/app.dart';
+import 'data/auth/supabase_bootstrap.dart';
 import 'app/providers.dart';
 import 'design/glass.dart';
 import 'design/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeSupabaseAuth();
 
   // Portrait only: every screen in the locked design is a single-column
   // seller-operations layout, and landscape would give it nothing.
@@ -36,6 +38,8 @@ Future<void> main() async {
 /// this runs, and on the low-end devices this app targets every millisecond
 /// here is visible.
 Future<void> _bootstrap(ProviderContainer container) async {
+  container.read(authControllerProvider);
+  await container.read(authRepositoryProvider).startAuthLinks();
   await _detectDeviceTier(container);
   await _readAppVersion(container);
 

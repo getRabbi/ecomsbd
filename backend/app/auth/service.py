@@ -595,6 +595,8 @@ class AuthService:
         return session_row
 
     async def _issue_tokens(self, session_row: AuthSession, *, role: str | None) -> tuple[str, str]:
+        if self._settings.supabase_auth_active:
+            raise AuthenticationError("Use Supabase Auth", code=ErrorCode.FEATURE_DISABLED)
         access_token = self._tokens.issue_access_token(
             user_id=session_row.user_id,
             session_id=session_row.id,
@@ -815,6 +817,20 @@ class AuthService:
 
         session_row.tenant_id = tenant_id
         session_row.last_seen_at = utc_now()
+
+        if self._settings.supabase_auth_active:
+            await self._db.flush()
+            return SignInResult(
+                access_token="",
+                refresh_token="",
+                expires_in_seconds=0,
+                session_id=session_row.id,
+                user_id=session_row.user_id,
+                tenant_id=tenant_id,
+                role=match.role,
+                is_new_user=False,
+                tenants=memberships,
+            )
 
         # Rotate credentials so the new tenant claim takes effect immediately
         # rather than at the next natural refresh.

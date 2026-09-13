@@ -30,6 +30,7 @@ from app.api.v1.schemas import (
     MeResponse,
     SessionResponse,
     ShopCreatePayload,
+    ShopSessionResponse,
     ShopUpdatePayload,
     TenantResponse,
     TenantSummaryResponse,
@@ -76,7 +77,7 @@ async def get_me(principal: CurrentPrincipal, auth: AuthServiceDep) -> MeRespons
 
 @router.post(
     "/tenants",
-    response_model=SessionResponse,
+    response_model=ShopSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a shop and attach the current session to it",
 )
@@ -88,8 +89,7 @@ async def create_shop(
 ) -> SessionResponse:
     """Create the seller's shop.
 
-    Returns a fresh token pair bound to the new shop, so the client moves
-    straight into the dashboard without a second sign-in round trip.
+    Returns shop routing metadata. Supabase credentials remain unchanged.
     """
     tenant = await tenants.create_shop(
         owner_user_id=principal.user_id,

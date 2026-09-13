@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../core/api/api_error.dart';
 import 'auth_models.dart';
@@ -18,6 +19,8 @@ enum AuthStage {
 
   /// No usable session.
   signedOut,
+
+  passwordRecovery,
 
   /// Several existing shops: select one before opening the home screen.
   needsShopSelection,
@@ -88,11 +91,37 @@ class AuthController extends StateNotifier<AuthState> {
     : _providerSignIn = providerSignIn ?? NativeProviderSignIn(),
       super(const AuthState.restoring()) {
     _invalidationSub = _repository.onSessionInvalid.listen(_onInvalidated);
+    _authSub = _repository.authChanges.listen(
+      (event) {
+        if (event.event == sb.AuthChangeEvent.passwordRecovery) {
+          _repository.beginRecovery();
+          state = const AuthState(stage: AuthStage.passwordRecovery);
+        } else if (event.event == sb.AuthChangeEvent.signedOut) {
+          state = const AuthState(stage: AuthStage.signedOut);
+        } else if (event.event == sb.AuthChangeEvent.signedIn &&
+            !state.isBusy &&
+            !_repository.isRecovering) {
+          unawaited(restore());
+        }
+      },
+      onError: (Object error) {
+        state = const AuthState(
+          stage: AuthStage.signedOut,
+          error: ApiError(
+            code: 'INVALID_TOKEN',
+            messageBn: '',
+            messageEn: 'Open a new sign-in link.',
+            retryable: false,
+          ),
+        );
+      },
+    );
   }
 
   final AuthRepository _repository;
   final ProviderSignIn _providerSignIn;
   late final StreamSubscription<ApiError> _invalidationSub;
+  late final StreamSubscription<sb.AuthState> _authSub;
 
   /// Restore the stored session and confirm it is still valid.
   ///
@@ -100,6 +129,10 @@ class AuthController extends StateNotifier<AuthState> {
   /// another device must not appear signed in here, so the profile is fetched
   /// before the app leaves the splash screen.
   Future<void> restore() async {
+    if (_repository.isRecovering) {
+      state = const AuthState(stage: AuthStage.passwordRecovery);
+      return;
+    }
     final stored = await _repository.currentSession();
     if (stored == null) {
       state = const AuthState(stage: AuthStage.signedOut);
@@ -107,7 +140,9 @@ class AuthController extends StateNotifier<AuthState> {
     }
     try {
       final profile = await _repository.fetchProfile();
-      state = AuthState(stage: _stageFor(profile), profile: profile);
+      if (!_repository.isRecovering) {
+        state = AuthState(stage: _stageFor(profile), profile: profile);
+      }
     } on ApiError catch (error) {
       if (error.isOffline) {
         // Offline launch: the stored session is the best information available
@@ -188,7 +223,12 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> signOut({bool allDevices = false}) async {
     state = state.copyWith(isBusy: true, clearError: true);
-    await _repository.signOut(allDevices: allDevices);
+    try {
+      await _repository.signOut(allDevices: allDevices);
+    } on ApiError catch (error) {
+      state = state.copyWith(isBusy: false, error: error);
+      return;
+    }
     await _clearProviderSession();
     state = const AuthState(stage: AuthStage.signedOut);
   }
@@ -297,18 +337,26 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<bool> register(String email, String password) => _authAction(() async {
     final result = await _repository.register(email: email, password: password);
-    await _adoptSession(
-      result.session,
-      verificationEmail: email.trim(),
-      verificationSent: result.verificationSent,
-    );
+    final session = result.session;
+    if (session == null) {
+      state = AuthState(
+        stage: AuthStage.signedOut,
+        verificationEmail: email.trim(),
+      );
+    } else {
+      await _adoptSession(session);
+    }
   });
 
   Future<bool> signInWithProvider(SignInProvider provider) =>
       _authAction(() async {
         final token = await _providerSignIn.identityToken(provider);
         await _adoptSession(
-          await _repository.signInWithProvider(provider, token),
+          await _repository.signInWithProvider(
+            provider,
+            token,
+            nonce: _providerSignIn.nonce,
+          ),
         );
       });
 
@@ -349,6 +397,7 @@ class AuthController extends StateNotifier<AuthState> {
   @override
   void dispose() {
     unawaited(_invalidationSub.cancel());
+    unawaited(_authSub.cancel());
     super.dispose();
   }
 }

@@ -14,12 +14,13 @@ silently would let a seller book against the wrong shop.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.api.deps import (
     AppleVerifierDep,
     AuthServiceDep,
     CurrentPrincipal,
+    DbSession,
     GoogleVerifierDep,
     SettingsDep,
     client_ip,
@@ -42,13 +43,42 @@ from app.api.v1.schemas import (
     RegisterResponse,
     SelectTenantPayload,
     SessionResponse,
+    ShopSessionResponse,
     TenantSummaryResponse,
 )
 from app.auth.service import DeviceInfo, SignInResult
 from app.common.phone import normalize_bd_phone
 from app.core.config import Settings
+from app.core.errors import AuthenticationError, ErrorCode
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+
+async def legacy_auth_guard(request: Request, settings: SettingsDep) -> None:
+    if settings.supabase_auth_active and request.url.path.rstrip("/").split("/")[-1] not in (
+        "logout",
+        "select-tenant",
+        "device",
+    ):
+        raise AuthenticationError(
+            "Use Supabase Auth", code=ErrorCode.FEATURE_DISABLED, http_status=410
+        )
+
+
+router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(legacy_auth_guard)])
+
+
+@router.post("/device", status_code=204, summary="Attach this installation to the verified session")
+async def attach_device(
+    payload: DevicePayload, request: Request, principal: CurrentPrincipal,
+    auth: AuthServiceDep, db: DbSession,
+) -> None:
+    import sqlalchemy as sa
+
+    from app.users.models import User
+
+    # Serialize device upserts for one user; an installation ID has no identity authority.
+    await db.execute(sa.select(User.id).where(User.id == principal.user_id).with_for_update())
+    device = await auth._upsert_device(user_id=principal.user_id, device=_device(payload, request))
+    principal.session.device_id = device.id if device else None
 
 
 def _to_session_response(result: SignInResult) -> SessionResponse:
@@ -177,7 +207,7 @@ async def logout(
 
 @router.post(
     "/select-tenant",
-    response_model=SessionResponse,
+    response_model=ShopSessionResponse,
     summary="Point this session at one of the caller's shops",
 )
 async def select_tenant(
@@ -185,7 +215,7 @@ async def select_tenant(
     principal: CurrentPrincipal,
     auth: AuthServiceDep,
 ) -> SessionResponse:
-    """Bind the session to a shop and re-issue tokens.
+    """Bind the session to a shop using server-verified membership.
 
     Membership is verified server-side; the client's claim about which shop it
     may use is never trusted.

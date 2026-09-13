@@ -1,6 +1,6 @@
 # Production environment setup
 
-**Last updated 2026-09-12.**
+**Auth/deployment updated 2026-09-13.**
 
 This is the operator's manual for `.env.production.local`. Work through it
 provider by provider: each entry says what the value is for, whether it is
@@ -58,24 +58,10 @@ release blockers and which are not.
 
 ## Read this before you start
 
-### 1. Configure the implemented backend sign-in methods
+### 1. Configure Supabase seller authentication
 
-The production auth decision is **email/password + Google + Apple**, with phone
-OTP deferred. `.env.production.example` encodes that decision.
-
-All three backend methods are implemented and use the existing session,
-refresh-token and shop onboarding system. Set `EMAIL_PASSWORD_AUTH_ENABLED`,
-`GOOGLE_AUTH_ENABLED` and `APPLE_AUTH_ENABLED` to `true`, and keep
-`PHONE_OTP_LOGIN_ENABLED=false`. No SMS provider is required.
-
-Supply the Google client IDs, Apple client ID and transactional email settings.
-Missing configuration remains a deployment blocker. Flutter's email/password,
-Google and Apple token-exchange flows now use the existing backend sessions.
-Set the Flutter build's `GOOGLE_CLIENT_ID_WEB` and keep its
-`PHONE_OTP_LOGIN_ENABLED=false`. Apple is native-only (iOS/macOS); the repository
-currently has only an Android runner, where Apple reports unavailable. See
-[`apps/mobile_flutter/env/README.md`](../apps/mobile_flutter/env/README.md) for
-platform provisioning and the existing browser email-link flow.
+Supabase Auth owns email/password, Google, Apple and sessions. FastAPI owns all
+business APIs and authorization. Phone OTP is disabled. See sections 5–8.
 
 ### 2. BOOT CONFIG is not a RUNTIME FEATURE FLAG
 
@@ -87,7 +73,7 @@ production change goes wrong here.
 | Read | once, at process start | on every request |
 | Changing it | needs a restart | takes effect immediately |
 | For | credentials, URLs, keys, and safety gates that must be settled before the process serves traffic | product rollout: turning a provider on for one shop, or off for everyone during an outage |
-| Examples | `DATABASE_URL`, `JWT_SIGNING_KEY`, `GOOGLE_AUTH_ENABLED`, `STEADFAST_WEBHOOK_ENABLED` | `steadfast_enabled`, `play_billing_enabled`, `bkash_web_billing_enabled`, `pathao_enabled`, `redx_enabled` |
+| Examples | `DATABASE_URL`, `SUPABASE_URL`, `STEADFAST_WEBHOOK_ENABLED` | `steadfast_enabled`, `play_billing_enabled`, `bkash_web_billing_enabled`, `pathao_enabled`, `redx_enabled` |
 
 **There is no `STEADFAST_ENABLED` environment variable, and there should not
 be.** Steadfast rollout is the `steadfast_enabled` runtime flag, off by
@@ -133,8 +119,8 @@ against the file the server will actually get, not a copy that has drifted.
 | Admin access | `platform_admins` rows, matched by keyed hash | a shared token, except to bootstrap the first admin |
 | `google-services.json` | `apps/mobile_flutter/android/app/` | an environment variable |
 
-The Flutter app holds **no secret at all**. It talks to the ecomsbd backend and
-nothing else — never to a courier, a payment provider, or a database. Anything
+Flutter receives public Supabase configuration and stores seller sessions securely.
+It uses Supabase Auth for identity and FastAPI for all business APIs. Anything
 passed with `--dart-define` is compiled into the APK and can be read out of it;
 see `apps/mobile_flutter/env/README.md`.
 
@@ -171,7 +157,7 @@ Must be `false`. Staging and production refuse to start otherwise. Not secret.
 
 ### `PUBLIC_WEB_URL`, `SUPPORT_EMAIL`
 
-Optional. `PUBLIC_WEB_URL` is reserved for a separate web client. Auth emails use
+Optional. `PUBLIC_WEB_URL` is reserved for a separate web client. Business email may use
 `PUBLIC_BASE_URL`, where the backend serves verification and password-reset pages.
 `SUPPORT_EMAIL` is the reply-to on outbound mail and the address shown to a
 seller who needs help. Use a mailbox a person actually reads.
@@ -185,12 +171,10 @@ are computed in it. Do not change it without reading master spec section 69.
 
 ## 2. PostgreSQL / Supabase
 
-ecomsbd's backend is authoritative. **Supabase is used as managed PostgreSQL
-and nothing else** — no Supabase Auth, no PostgREST, no Supabase client in the
-Flutter app. There is no `SUPABASE_URL`, no anon key and no service-role key in
-this configuration, and none should be added. A service-role key in a mobile
-app would let any seller read every other seller's rows, which is precisely
-what the tenancy guards in `app/db/tenancy.py` exist to make impossible.
+Supabase PostgreSQL remains the existing business database. Flutter uses only
+Supabase Auth; all business requests go to FastAPI. Migration `d73e9c5a1201`
+revokes client-role business-table privileges and enables RLS without granting
+client policies. The backend connects as the existing database owner.
 
 ### `DATABASE_URL`
 
@@ -211,7 +195,7 @@ what the tenancy guards in `app/db/tenancy.py` exist to make impossible.
    `postgresql+asyncpg://` — SQLAlchemy picks its driver from the scheme, and
    the app is async throughout.
 4. Strip any `?sslmode=require` query parameter. `asyncpg` does not accept it as
-   a URL parameter; it negotiates TLS to Supabase on its own.
+   a URL parameter; use `?ssl=require` to require TLS explicitly.
 5. URL-encode the password if it contains `@`, `:`, `/` or `#`.
 
 **Pooler modes.** Supabase offers two ports:
@@ -293,243 +277,83 @@ cd backend && arq app.worker.main.WorkerSettings  # starts and logs "ecomsbd wor
 
 ---
 
-## 4. Crypto and session secrets
+## 4. Business security keys
 
-Four independent key materials. They are separate because they protect
-different things, and a single master secret would mean one leak compromises
-sessions, the courier vault and phone lookup at once. **The config check
-refuses a configuration where any two of them hold the same value.**
+Preserve independent `CREDENTIAL_ENCRYPTION_KEY` (32 random bytes, base64) and
+`PHONE_SEARCH_HMAC_KEY` (at least 32 characters). They protect courier credentials
+and CRM/customer lookup. Preserve `JWT_SIGNING_KEY` as well: its legacy name is
+retained because existing platform-admin token hashes depend on it. It remains
+a backend-only admin requirement and cannot issue production seller sessions.
+`OTP_HASH_SECRET` is no longer required for deployed seller auth.
 
-| Variable | Protects | Generate with |
-|---|---|---|
-| `JWT_SIGNING_KEY` | seller access tokens; also derives the session-token hash | `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
-| `PHONE_SEARCH_HMAC_KEY` | keyed HMAC for exact phone lookup (master spec s133) | same |
-| `OTP_HASH_SECRET` | OTP codes at rest | same |
-| `CREDENTIAL_ENCRYPTION_KEY` | AES-256-GCM vault for courier and billing credentials | `python -c "import base64,os; print(base64.b64encode(os.urandom(32)).decode())"` |
+## 5. Supabase Auth
 
-All four are **secret** and all four are **required**. Run each command
-separately — do not generate one and paste it into two fields.
+Set `SUPABASE_URL` to the existing project's HTTPS origin and `SUPABASE_ANON_KEY`
+to its public anon/publishable key in the backend and Flutter public build config.
+FastAPI derives `<SUPABASE_URL>/auth/v1` and audience `authenticated`, verifies
+ES256/RS256 JWTs using a bounded ten-minute JWKS cache, and resolves the verified
+UUID subject through `auth_identities(provider=SUPABASE, provider_subject=sub)`.
+The existing unique constraints enforce one external identity per internal user.
+First-login linking requires both emails verified and exactly one existing owner;
+ambiguous or unverified collisions require support to verify ownership.
 
-- Minimum length for the first three: 32 characters. 64 URL-safe bytes is the
-  recommendation and what the command above produces.
-- `CREDENTIAL_ENCRYPTION_KEY` must be base64 of **exactly 32 bytes**. Anything
-  else is refused at startup with the decoded length in the message.
+Supabase Dashboard actions:
 
-**Store all four in your secret manager before pasting them here.** Losing
-`CREDENTIAL_ENCRYPTION_KEY` makes every stored courier credential permanently
-unreadable — every seller would have to reconnect their courier account.
+1. Authentication → Sign In / Providers: enable Email/password and Confirm email;
+   disable Phone, anonymous sign-ins and Facebook. Keep Google/Apple enabled once
+   their real provider configuration is supplied.
+2. Authentication → JWT Signing Keys: create/activate an asymmetric ES256 or RS256
+   key if the project still uses legacy HS256. Follow Supabase's key-rotation
+   waiting periods. The backend never accepts the legacy shared-secret algorithm.
+3. Authentication → URL Configuration: Site URL `https://scalemyprints.com`;
+   allow exactly `com.smply.app://auth/callback` as a redirect URL. Flutter uses
+   PKCE, encrypted session/code-verifier storage, and this Android intent filter.
+4. Settings → API Keys: copy the public key to the backend and Flutter. Put
+   `SUPABASE_SERVICE_ROLE_KEY` only in the backend secret group for the retryable
+   final account-deletion operation. Ordinary login/JWT verification needs no
+   admin key. Deletion preserves the existing grace period and other shops.
 
-**Rotation.** `JWT_KEY_VERSION` and `CREDENTIAL_KEY_VERSION` label which key
-produced a token or a ciphertext, so a rotation does not orphan existing rows.
-Bump the version when you change the key.
+The legacy FastAPI auth issuer endpoints return 410 in deployed environments.
+Shop selection and logout retain business routing/revocation endpoints; neither
+issues credentials. Supabase owns refresh, logout and auth email workflows.
+JWTs expire normally after Supabase logout; FastAPI logout also revokes its
+session routing row immediately. No custom production token path remains.
 
-**How to verify**
+## 6. Google via Supabase
 
-```
-CRYPTO .................. OK
-                          4 independent keys, versions jwt=v1 vault=v1
-```
+Authentication → Providers → Google: supply the Web OAuth client ID and client
+secret; include allowed native client IDs as required by Supabase. Configure
+Google's authorized redirect URI to the project's `/auth/v1/callback` URL shown
+in Supabase. Register Android `com.smply.app` and its debug/release/Play signing
+fingerprints in the same Google project. Set Flutter `GOOGLE_CLIENT_ID_WEB`
+(`serverClientId`); supply `GOOGLE_CLIENT_ID_IOS` only for a provisioned iOS app.
+Flutter exchanges the native ID token with Supabase `signInWithIdToken`.
+See [Supabase Google setup](https://supabase.com/docs/guides/auth/social-login/auth-google).
 
-No actual key is ever printed — not truncated, not fingerprinted.
+## 7. Apple via Supabase
 
----
+Authentication → Providers → Apple: register the native bundle ID in Client IDs
+for native ID-token login. A hosted OAuth flow additionally needs the Apple
+Services ID and OAuth secret (JWT generated with Team ID, Key ID and the `.p8`
+private key); configure the Supabase callback in Apple's Services ID and renew
+the OAuth secret within six months. Native Apple login uses a hashed nonce with
+the original nonce supplied to Supabase. This repository has an Android runner;
+Apple safely reports unavailable there. An iOS release still requires its native
+runner, signing and Sign in with Apple capability.
+See [Supabase Apple setup](https://supabase.com/docs/guides/auth/social-login/auth-apple).
 
-## 5. Sign-in methods
+## 8. Supabase SMTP and independent business email
 
-See the backend sign-in configuration above.
+Authentication → Email → SMTP Settings: enable custom SMTP and provide Host,
+Port, Username, Password, Sender email and Sender name. Verify the sender domain
+with the SMTP provider, save the settings, then verify confirmation and recovery
+delivery to a real inbox. No SMTP configuration or delivery is assumed here.
+Authentication → Email Templates: use the Supabase confirmation URL, preserving
+the configured redirect; do not point mail to the retired FastAPI token pages.
 
-| Variable | Required | Secret | Meaning |
-|---|---|---|---|
-| `PHONE_OTP_LOGIN_ENABLED` | Yes | No | `false` closes both OTP endpoints; they answer `FEATURE_DISABLED` |
-| `EMAIL_PASSWORD_AUTH_ENABLED` | Yes | No | Turning it on makes a deliverable email transport mandatory |
-| `GOOGLE_AUTH_ENABLED` | Yes | No | Turning it on makes at least one Google client id mandatory |
-| `APPLE_AUTH_ENABLED` | Yes | No | Requires `APPLE_CLIENT_ID`; tokens are verified with Apple's public keys |
-
-The gate for phone OTP is inside `AuthService`, not on the two routes, so a
-future endpoint that issues or verifies a challenge cannot reopen the path by
-forgetting a dependency.
-
-**Facebook/Meta login is not part of the product.** No variables exist for it
-and none should be added.
-
----
-
-## 6. Google Sign-In
-
-**The backend must verify Google's identity token itself** — signature, issuer
-(`https://accounts.google.com`), expiry, and an `aud` matching one of the
-configured client ids. A client saying "Google approved me" is not evidence;
-anyone can post that.
-
-### `GOOGLE_CLIENT_ID_ANDROID` / `_IOS` / `_WEB`
-
-| | |
-|---|---|
-| **Purpose** | The audiences an identity token may legitimately carry. |
-| **Required** | At least one, when `GOOGLE_AUTH_ENABLED=true` |
-| **Secret** | **No.** These ship inside the app; they are public identifiers. |
-| **Format** | `000000000000-xxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com` |
-
-**Where to obtain**
-
-1. [Google Cloud Console](https://console.cloud.google.com) → create or select a
-   project. If you also create the Firebase project (section 9), use the **same**
-   one — Firebase creates its OAuth clients inside the linked Cloud project.
-2. **APIs & Services → OAuth consent screen.** Configure it once: app name,
-   support email, the domain you own. External + Production for public users.
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID.**
-   - **Web application** → gives you `GOOGLE_CLIENT_ID_WEB`. Create this one
-     first; it is what a server-side verifier normally uses as its audience,
-     and it needs no package id.
-   - **Android** → needs **the package name** and **the release signing
-     SHA-1**. Gives you `GOOGLE_CLIENT_ID_ANDROID`.
-   - **iOS** → needs the bundle identifier. Only if an iOS build is planned.
-
-**Package ID resolved:** use `com.smply.app` when configuring the Android
-client later. `RELEASE_SIGNING_REQUIRED` remains: obtain the fingerprints from
-the actual release key, not the debug keystore. See section 13 for key creation.
-
-Get both release SHA-1 and SHA-256 once the keystore exists (PowerShell):
-
-```powershell
-keytool -list -v -keystore "$env:USERPROFILE\ecomsbd-upload.jks" -alias ecomsbd-upload
-```
-
-If Play App Signing is on, Google re-signs your app: register the SHA-1 from
-**Play Console → Setup → App integrity → App signing key certificate** as well,
-or Google sign-in works in internal testing and fails in production.
-
-**Where to paste.** Backend: `.env.production.local`. Android: the client id is
-carried in `google-services.json`; no `--dart-define` is needed for it.
-
-**How to verify.** `GOOGLE AUTH ..... OK` in the config check.
-`POST /v1/auth/oauth/google` accepts an `id_token` and optional `device`, and
-returns an ecomsbd session. Wrong audience, issuer, expiry or signature is refused.
-Automatic email linking requires proof on both sides; for Google, Gmail or a
-verified Workspace address is required. Third-party mailbox claims sign in by
-provider subject without automatically linking existing accounts.
-
----
-
-## 7. Sign in with Apple
-
-Required by App Store Review Guideline 4.8 for any iOS app offering a
-third-party login, so it is needed as soon as an iOS build ships — and useful
-before that for the web flow.
-
-**Where to obtain** — all from [developer.apple.com](https://developer.apple.com)
-(a paid Apple Developer Program membership, USD 99/year).
-
-| Variable | Where | Format | Secret |
-|---|---|---|---|
-| `APPLE_TEAM_ID` | Account → **Membership details** | 10 chars, e.g. `A1B2C3D4E5` | No |
-| `APPLE_CLIENT_ID` | see below | `com.yourorg.ecomsbd` | No |
-| `APPLE_KEY_ID` | Certificates, IDs & Profiles → **Keys** | 10 chars | No |
-| `APPLE_PRIVATE_KEY` | the downloaded `.p8` | PEM contents | **Yes** |
-
-**Identifier relationships.** This is where Apple setup usually goes wrong:
-
-- An **App ID** identifies the app. It must equal the iOS bundle identifier,
-  and "Sign In with Apple" must be enabled on it as a capability.
-- A **Services ID** is a *separate* identifier for the **web/redirect** flow. It
-  is configured as "primary app ID = your App ID" plus a return URL.
-- `APPLE_CLIENT_ID` is whichever of those the token was minted for:
-  - native iOS sign-in → the **bundle identifier**;
-  - web or Android-via-web → the **Services ID**.
-
-  It is the `aud` claim the backend checks. If both flows are used, the
-  verifier must accept both; only one can be configured today, so start with
-  the one the first shipping client uses.
-
-**Supported backend flow.** The client obtains an Apple identity token and posts
-it to `POST /v1/auth/oauth/apple` with optional `device` metadata. The server
-checks Apple's public JWKS, issuer, audience and expiry. An authorization-code
-exchange or redirect callback is not used by this endpoint. Returning tokens
-without email are accepted using the same provider subject.
-
-Only `APPLE_CLIENT_ID` is needed for this verification. The other three Apple
-settings remain optional interfaces for a future code-exchange flow.
-
-**The private key.** Certificates, IDs & Profiles → Keys → **+** → enable "Sign
-in with Apple" → download the `.p8`.
-
-- **It can only be downloaded once.** Put it in your secret manager immediately.
-- Paste the **contents**, not a path. One line with literal `\n` between PEM
-  lines is accepted, and so is a quoted multi-line value. Startup refuses a
-  value that looks like a path.
-- `*.p8` is gitignored. Do not commit it, and do not leave it on the production
-  host as a file.
-
-**How to verify.** `APPLE AUTH ..... OK` in the config check. An Apple
-identity token with the right `aud` produces a session,
-and one with a wrong `aud` or an expired `exp` does not.
-
----
-
-## 8. Transactional email
-
-`TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED` now means a Resend account, verified
-sending domain and API key are needed. The delivery adapter is implemented using
-the [Resend send-email contract](https://resend.com/docs/api-reference/emails/send-email).
-
-### What email/password auth needs
-
-Registration and resend send an email verification link. Forgot-password sends
-a single-use reset link. Both land on browser pages served at `PUBLIC_BASE_URL`
-(`/auth/email/verify` and `/auth/password/reset`). Tokens travel in URL fragments,
-then POST bodies, keeping them out of access logs. Password changes and resets
-are audited, and revoke other sessions or all sessions respectively.
-
-There is no SMS in any of them. Email/password auth does not depend on the
-deferred SMS gateway.
-
-### `EMAIL_TRANSPORT`
-
-| | |
-|---|---|
-| **Purpose** | Which transport sends. `disabled` \| `console` \| `mock` \| `provider_api` |
-| **Required** | Yes |
-| **Secret** | No |
-
-`console` writes the message to the log and sends nothing. **It cannot be
-selected in staging or production** — startup refuses it — because the body of
-a reset email *is* a credential, and a transport that prints it publishes
-account takeovers to everyone who can read the log. `mock` is refused for the
-same reason: it reports success without sending.
-
-### `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`
-
-Required when `EMAIL_TRANSPORT=provider_api` (and whenever email/password auth
-is on). Not secret.
-
-**Where to obtain.** You choose the address, but it must be on a domain you
-control **and have authenticated**: SPF, DKIM and DMARC records published as
-your provider instructs. Without them, verification mail lands in spam and
-locked-out sellers stay locked out — the single most common cause of "password
-reset does not work".
-
-### `EMAIL_API_BASE_URL`, `EMAIL_API_KEY`
-
-Required when `EMAIL_TRANSPORT=provider_api`. **`EMAIL_API_KEY` is secret.**
-
-**Where to obtain.** Use `EMAIL_API_BASE_URL=https://api.resend.com` (without
-`/emails`) and a send-only API key from the Resend dashboard. Other providers
-need an adapter for their own request contract; changing the URL alone is not
-enough. Production requires HTTPS.
-
-**How to verify.** With credentials present the check reports:
-
-```
-EMAIL ................... OK
-                          Resend API transport configured; verify delivery with a real inbox
-```
-
-Verify that an email arrives at a real inbox and its link completes the flow.
-Configuration checks do not send email. Registration only reports
-`email_verification_sent=true` when the transport confirms acceptance; delivery
-failures are audited. Forgot-password always gives a generic acknowledgment.
-
----
+FastAPI `EMAIL_TRANSPORT=disabled` is valid for production auth. Its optional
+`EMAIL_API_KEY`/sender settings are exclusively for independent business mail.
+Resend can also supply SMTP credentials in Supabase; do not place them in Flutter.
 
 ## 9. Steadfast
 
@@ -762,7 +586,7 @@ has been generated. Minification/resource-shrinking settings remain unchanged.
 ### Apple bundle identifier
 
 The App ID in the Apple Developer portal and the Xcode bundle identifier must
-match, and `APPLE_CLIENT_ID` must name whichever identifier the token is minted
+match, and Supabase's Apple Client IDs must include the identifier the token is minted
 for. Conventionally the same reverse-domain string as the Android id.
 
 ### Version and build number

@@ -177,6 +177,17 @@ class Settings(BaseSettings):
     # in-process implementation so the app boots with no Redis running.
     redis_url: str | None = None
 
+    # Supabase is the only deployed seller authentication authority.
+    supabase_url: str | None = None
+    supabase_anon_key: SecretStr | None = None
+    supabase_service_role_key: SecretStr | None = None
+
+    @property
+    def supabase_auth_active(self) -> bool:
+        return self.app_env.is_deployed or bool(self.supabase_url)
+
+    # Legacy seller settings remain for local fixtures. JWT_SIGNING_KEY also
+    # protects existing platform-admin token hashes in production.
     # ----------------------------------------------------------- auth/jwt ---
     jwt_signing_key: SecretStr = SecretStr(_DEV_JWT_KEY)
     jwt_key_version: str = "v1"
@@ -199,7 +210,7 @@ class Settings(BaseSettings):
     #: Deferred. The production decision is email/password + Google + Apple, and
     #: no SMS gateway has been selected, so OTP sign-in is off in production and
     #: its endpoints refuse with ``FEATURE_DISABLED``.
-    phone_otp_login_enabled: bool = True
+    phone_otp_login_enabled: bool = False
     email_password_auth_enabled: bool = False
     google_auth_enabled: bool = False
     apple_auth_enabled: bool = False
@@ -258,9 +269,9 @@ class Settings(BaseSettings):
     otp_resend_cooldown_seconds: int = 60
 
     # Second, independent guard on the development OTP provider.
-    allow_dev_otp: bool = True
+    allow_dev_otp: bool = False
     # Returns the OTP in the API response. Local convenience only.
-    otp_expose_debug_code: bool = True
+    otp_expose_debug_code: bool = False
 
     # ----------------------------------------------------------- logging ---
     log_level: str = "INFO"
@@ -440,6 +451,9 @@ class Settings(BaseSettings):
     # --------------------------------------------------------- validators ---
 
     @field_validator(
+        "supabase_url",
+        "supabase_anon_key",
+        "supabase_service_role_key",
         "redis_url",
         "public_web_url",
         "support_email",
@@ -721,8 +735,9 @@ class Settings(BaseSettings):
 
     def _insecure_placeholder_problems(self) -> list[str]:
         checks: dict[str, str] = {
+            # Existing platform_admins.token_hash values depend on this key.
+            # TokenService refuses seller issuance/verification in production.
             "JWT_SIGNING_KEY": self.jwt_signing_key.get_secret_value(),
-            "OTP_HASH_SECRET": self.otp_hash_secret.get_secret_value(),
             "PHONE_SEARCH_HMAC_KEY": self.phone_search_hmac_key.get_secret_value(),
         }
         unset = "is not set, or still holds the development placeholder value"
@@ -747,6 +762,27 @@ class Settings(BaseSettings):
         must enable at least one implemented method.
         """
         problems: list[str] = []
+
+        if self.supabase_auth_active:
+            from urllib.parse import urlsplit
+
+            url = urlsplit(self.supabase_url or "")
+            if (
+                url.scheme != "https"
+                or not url.hostname
+                or url.username
+                or url.password
+                or url.query
+                or url.fragment
+                or url.path not in ("", "/")
+                or _is_loopback(self.supabase_url or "")
+            ):
+                problems.append("SUPABASE_URL must be the HTTPS project origin")
+            if not self.supabase_anon_key or not self.supabase_anon_key.get_secret_value():
+                problems.append("SUPABASE_ANON_KEY is required")
+            if self.phone_otp_login_enabled:
+                problems.append("PHONE_OTP_LOGIN_ENABLED must be false")
+            return problems
 
         if self.google_auth_enabled and not self.google_client_ids:
             problems.append(
@@ -840,7 +876,9 @@ class Settings(BaseSettings):
             "R2_ACCESS_KEY_ID": self.r2_access_key_id,
             "R2_SECRET_ACCESS_KEY": self.r2_secret_access_key,
         }
-        if any(r2_fields.values()) and not all(r2_fields.values()):
+        # A provisioned private bucket may wait for application credentials
+        # without blocking core API/worker deployment. Partial credentials fail.
+        if (self.r2_access_key_id or self.r2_secret_access_key) and not all(r2_fields.values()):
             missing = [name for name, value in r2_fields.items() if not value]
             problems.append(f"R2 is partly configured; missing {', '.join(missing)}")
 
@@ -936,6 +974,8 @@ class Settings(BaseSettings):
     @property
     def enabled_auth_methods(self) -> frozenset[str]:
         """Sign-in methods this deployment has switched on."""
+        if self.supabase_auth_active:
+            return frozenset({"email_password", "google", "apple"})
         selected = {
             "phone_otp": self.phone_otp_login_enabled,
             "email_password": self.email_password_auth_enabled,

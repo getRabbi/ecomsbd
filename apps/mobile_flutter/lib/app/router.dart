@@ -36,6 +36,9 @@ String? authRedirect(
   String location, {
   bool phoneOtpEnabled = Env.phoneOtpLoginEnabled,
 }) {
+  if (auth.stage == AuthStage.passwordRecovery) {
+    return location == Routes.resetPassword ? null : Routes.resetPassword;
+  }
   // Emailed bearer links can be completed even without an app session.
   if (location == Routes.resetPassword || location == Routes.emailLink) {
     return null;
@@ -50,6 +53,7 @@ String? authRedirect(
   }
   return switch (auth.stage) {
     AuthStage.restoring => null,
+    AuthStage.passwordRecovery => Routes.resetPassword,
     AuthStage.signedOut =>
       {
             Routes.login,
@@ -145,7 +149,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.resetPassword,
         builder: (context, state) => EmailAuthScreen(
           mode: EmailAuthMode.resetPassword,
-          resetToken: _linkToken(state.uri),
+          resetToken:
+              ref.read(authControllerProvider).stage ==
+                  AuthStage.passwordRecovery
+              ? 'supabase-recovery'
+              : null,
           onSignIn: () {
             clearError();
             context.go(Routes.login);

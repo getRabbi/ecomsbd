@@ -119,15 +119,14 @@ def _check_redis(settings: Settings) -> CheckResult:
 
 
 def _check_crypto(settings: Settings) -> CheckResult:
-    """Presence and independence of the four key materials.
+    """Presence and independence of the three backend key materials.
 
-    Reuse is checked as well as presence. Four distinct secrets that happen to
+    Reuse is checked as well as presence. Three distinct secrets that happen to
     hold the same string are one secret, and a leak of it would compromise
-    sessions, the courier vault and phone lookup together.
+    admin tokens, the courier vault and phone lookup together.
     """
     values = {
         "JWT_SIGNING_KEY": settings.jwt_signing_key.get_secret_value(),
-        "OTP_HASH_SECRET": settings.otp_hash_secret.get_secret_value(),
         "PHONE_SEARCH_HMAC_KEY": settings.phone_search_hmac_key.get_secret_value(),
         "CREDENTIAL_ENCRYPTION_KEY": settings.credential_encryption_key.get_secret_value(),
     }
@@ -141,7 +140,7 @@ def _check_crypto(settings: Settings) -> CheckResult:
         "CRYPTO",
         Status.OK,
         f"{len(values)} independent keys, versions "
-        f"jwt={settings.jwt_key_version} vault={settings.credential_key_version}",
+        f"vault={settings.credential_key_version}; phone lookup key configured",
     )
 
 
@@ -169,6 +168,10 @@ def _check_auth(settings: Settings) -> CheckResult:
 
 
 def _check_email(settings: Settings) -> CheckResult:
+    if settings.supabase_auth_active:
+        return CheckResult(
+            "AUTH EMAIL", Status.PARTIAL, "Configure and verify Supabase SMTP in Dashboard"
+        )
     transport = settings.email_transport
     if transport == "disabled":
         status = (
@@ -194,6 +197,10 @@ def _check_email(settings: Settings) -> CheckResult:
 
 
 def _check_google_auth(settings: Settings) -> CheckResult:
+    if settings.supabase_auth_active:
+        return CheckResult(
+            "GOOGLE AUTH", Status.PARTIAL, "Supabase provider; verify Dashboard configuration"
+        )
     if not settings.google_auth_enabled:
         return CheckResult("GOOGLE AUTH", Status.DISABLED, "GOOGLE_AUTH_ENABLED=false")
     if not settings.google_client_ids:
@@ -207,6 +214,10 @@ def _check_google_auth(settings: Settings) -> CheckResult:
 
 
 def _check_apple_auth(settings: Settings) -> CheckResult:
+    if settings.supabase_auth_active:
+        return CheckResult(
+            "APPLE AUTH", Status.PARTIAL, "Supabase provider; verify Dashboard configuration"
+        )
     if not settings.apple_auth_enabled:
         return CheckResult("APPLE AUTH", Status.DISABLED, "APPLE_AUTH_ENABLED=false")
     if not settings.apple_auth_configured:

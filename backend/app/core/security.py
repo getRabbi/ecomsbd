@@ -165,7 +165,7 @@ class SecretHasher:
         """
         if not ip:
             return None
-        return self._hmac_hex(self._token_key, "ip.v1", ip)
+        return self._hmac_hex(self._phone_key, "ip.v1", ip)
 
     def verify_token(self, token: str, expected_hash: str) -> bool:
         return hmac.compare_digest(self.token_hash(token), expected_hash)
@@ -195,6 +195,7 @@ class TokenService:
     """
 
     def __init__(self, settings: Settings) -> None:
+        self._disabled = settings.supabase_auth_active
         self._key = settings.jwt_signing_key.get_secret_value()
         self._algorithm = settings.jwt_algorithm
         self._issuer = settings.jwt_issuer
@@ -213,6 +214,8 @@ class TokenService:
         tenant_id: uuid.UUID | None,
         role: str | None,
     ) -> str:
+        if self._disabled:
+            raise AppError("Use Supabase Auth", code=ErrorCode.FEATURE_DISABLED)
         now = utc_now()
         payload: dict[str, Any] = {
             "iss": self._issuer,
@@ -229,6 +232,8 @@ class TokenService:
         )
 
     def decode_access_token(self, token: str) -> AccessTokenClaims:
+        if self._disabled:
+            raise AppError("Use Supabase Auth", code=ErrorCode.INVALID_TOKEN)
         try:
             payload = jwt.decode(
                 token,

@@ -29,10 +29,13 @@ from datetime import datetime, timedelta
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.identities import AuthIdentity, AuthProvider
 from app.auth.models import AuthSession, Device, RefreshToken, RevocationReason
+from app.auth.supabase import delete_auth_identity
 from app.billing.models import BillingProviderKind
 from app.common.audit import AuditAction, record_audit
 from app.core.clock import utc_now
+from app.core.config import get_settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError
 from app.customers.models import Customer, CustomerAddress
 from app.entitlements.models import Subscription, SubscriptionStatus
@@ -439,6 +442,24 @@ class PrivacyService:
             user = await self._db.get(User, membership.user_id)
             if user is None:
                 continue
+            identities = (
+                (
+                    await self._db.execute(
+                        sa.select(AuthIdentity).where(
+                            AuthIdentity.user_id == user.id,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for identity in identities:
+                if identity.provider == AuthProvider.SUPABASE:
+                    await delete_auth_identity(identity.provider_subject, get_settings())
+                identity.normalized_email = None
+                identity.password_hash = None
+                if identity.provider != AuthProvider.SUPABASE:
+                    identity.provider_subject = f"deleted:{identity.id}"
             user.status = str(UserStatus.PENDING_DELETION)
             user.display_name = None
             user.phone_enc = ""

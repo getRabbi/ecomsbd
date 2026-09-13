@@ -52,6 +52,7 @@ MAX_EMAIL_LENGTH = 254
 class AuthProvider(StrEnum):
     """How a sign-in was proven."""
 
+    SUPABASE = "SUPABASE"
     PASSWORD = "PASSWORD"
     GOOGLE = "GOOGLE"
     APPLE = "APPLE"
