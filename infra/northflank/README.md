@@ -13,12 +13,12 @@ paid upgrade. If cost is indicated or eligibility cannot be established, stop
 with `BILLING_CONFIRMATION_REQUIRED`; if the free Redis slot cannot be verified,
 also report `FREE_REDIS_SLOT_UNAVAILABLE`. Never infer free coverage from plan size.
 
-Current inventory (2026-09-14): both services have zero instances; Redis is running.
-All three select `nf-compute-20`. `/plans` lists a nonzero price, and the supplied
-token gets 403 from team details and billing usage. Free coverage is unverified;
-no resource was created or scaled during recovery. The API has
-automatic builds enabled and commit-skip flags disabled, so pushing `main` also
-requires preventing an unverified charged build.
+The operator has activated both services at one instance; Redis has one replica.
+All three use `nf-compute-20`, with the existing 4 GiB Redis storage. Team and
+billing reads return 403, so verify free Sandbox coverage in the account before
+starting a build. Automatic builds are paused (`disabledCI=true`) so publishing
+the preserved Git commits cannot trigger an unverified charge. No compute plan,
+replica count, storage, or deployment was changed by that pause.
 
 Use the existing Dockerfile with context `backend` and Dockerfile path
 `/infra/docker/backend.Dockerfile`. FastAPI binds `0.0.0.0:$PORT`; public port and
@@ -61,11 +61,18 @@ Supabase provider, redirect and SMTP actions are listed in
 Production migration applied once on 2026-09-13: `d73e9c5a1201`.
 The post-migration database connection passed and client-role business access was denied.
 
-Recovery on 2026-09-14 verified the cloud secret group against the saved runtime
-payload and checked that `REDIS_URL` matches the existing addon credentials.
-The generated Northflank HTTPS endpoint returns 503. The custom domain still
-uses the old Cloudflare Worker route, so neither DNS nor that route was changed.
-Google and Apple remain disabled in Supabase. The local Google OAuth credentials
-exist, but a Supabase management token or Dashboard configuration is required;
-Apple Services ID/signing credentials are still absent. Do not push while the
-automatic Northflank build's free coverage remains unverified.
+Recovery verified the secret group against the saved runtime payload, matched
+`REDIS_URL` to the existing addon, and confirmed required values are available in
+both services. The initial active containers still used `888a5eb`: API startup
+failed on retired auth settings and worker startup on `_Lazy` ARQ configuration.
+The preserved Supabase migration commit already fixes both failures. Deploy current
+`main`; do not add legacy OTP/OAuth secrets to make the old image boot.
+
+Supabase Email and Google are enabled. Google redirects to its authorization
+endpoint with the expected client and Supabase callback. Apple is intentionally
+deferred until iOS; `APPLE_*` and `SUPABASE_ACCESS_TOKEN` are not Android runtime
+requirements. Phone and Facebook remain disabled.
+
+Keep the old Cloudflare API Worker until the new image is healthy and cutover
+verification passes. The registered Northflank `api` subdomain is reused; obtain
+its current CNAME target from the API rather than inventing a target.

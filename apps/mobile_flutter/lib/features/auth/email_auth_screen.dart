@@ -123,13 +123,14 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
               child: const Text('Continue with Google'),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
-            OutlinedButton.icon(
-              onPressed: state.isBusy
-                  ? null
-                  : () => _provider(SignInProvider.apple),
-              icon: const Icon(Icons.apple),
-              label: const Text('Continue with Apple'),
-            ),
+            if (Env.appleSignInEnabled)
+              OutlinedButton.icon(
+                onPressed: state.isBusy
+                    ? null
+                    : () => _provider(SignInProvider.apple),
+                icon: const Icon(Icons.apple),
+                label: const Text('Continue with Apple'),
+              ),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: EcomsbdSpacing.md),
               child: Center(child: Text('or sign in with email')),

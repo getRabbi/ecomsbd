@@ -35,7 +35,7 @@ make config-check f=.env.production.example    # or any other file
 - [ ] Redis configured
 - [ ] Email provider configured
 - [ ] Google Auth configured
-- [ ] Apple Auth configured
+- Apple Auth: deferred until iOS; not an Android launch requirement
 - [ ] Android package ID finalized
 - [ ] Android release signing configured
 - [ ] Steadfast merchant smoke test completed
@@ -332,6 +332,10 @@ See [Supabase Google setup](https://supabase.com/docs/guides/auth/social-login/a
 
 ## 7. Apple via Supabase
 
+**Deferred until iOS.** Apple credentials are not Android launch blockers. The
+implementation is retained, and the Android login UI shows Email and Google only.
+The instructions below apply when Apple sign-in is activated for a later release.
+
 Authentication → Providers → Apple: register the native bundle ID in Client IDs
 for native ID-token login. A hosted OAuth flow additionally needs the Apple
 Services ID and OAuth secret (JWT generated with Team ID, Key ID and the `.p8`
@@ -340,8 +344,8 @@ the OAuth secret within six months. Native Apple login uses a hashed nonce with
 the original nonce supplied to Supabase. Android opens Supabase's hosted Apple
 OAuth flow in the external browser and exchanges the callback through the existing
 PKCE handler. Allow `com.smply.app://auth/callback` in Supabase and put the Apple
-Services ID first in the provider Client IDs. Apple remains blocked until that
-provider configuration is supplied. An iOS release still requires its native
+Services ID first in the provider Client IDs. Apple activation for the later iOS work requires that
+provider configuration. An iOS release still requires its native
 runner, signing and Sign in with Apple capability.
 See [Supabase Apple setup](https://supabase.com/docs/guides/auth/social-login/auth-apple).
 

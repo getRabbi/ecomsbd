@@ -31,6 +31,9 @@ class Env {
   // Keep this aligned with the backend flag. Off unless explicitly enabled.
   static const bool phoneOtpLoginEnabled = false;
 
+  // Apple launch is deferred until the iOS runner/provider work is complete.
+  static const bool appleSignInEnabled = false;
+
   // Public OAuth identifiers, never client secrets. Android uses the web
   // client id as serverClientId so the ID token is minted for the backend.
   static const String googleServerClientId = String.fromEnvironment(

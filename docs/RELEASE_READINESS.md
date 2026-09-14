@@ -1,59 +1,34 @@
 # Release readiness
 
-**Auth/deployment updated 2026-09-13.**
+**Android production verification updated 2026-09-14.**
 
-This is the gate. Nothing below is a "nice to have": each row is something that
-must be true before ecomsbd charges a real seller or handles a real parcel.
+The current Android infrastructure gate is API/worker health, PostgreSQL at head,
+Redis connectivity, Supabase Email and Google, private R2, FCM, and the new API
+domain over HTTPS. Apple is intentionally deferred until iOS; `APPLE_*` credentials
+and `SUPABASE_ACCESS_TOKEN` are not Android runtime requirements. Phone is disabled
+and Facebook is absent.
 
-A blocker is listed with **what is missing, why it is required, where it is
-configured, and how to check it is done** — because a checklist that only says
-"needs credentials" gets ticked by someone who found *a* credential.
+Supabase's live settings confirm Email and Google enabled. Google authorization
+redirects to Google with the configured client and the correct Supabase callback.
+Android shows Email and Google; the prepared Apple implementation is retained for
+later work. The package remains `com.smply.app`.
 
-Every environment variable named below is defined in `.env.production.example`
-and explained, with where to obtain it, in **`docs/PRODUCTION_ENV_SETUP.md`**.
-`python -m app.check_production_config` reports which of them are set without
-printing a value.
+The production secret group already supplies both Northflank services with the
+database, Redis, Supabase, R2 and backend-only FCM values. Credentials and Android
+Firebase configuration remain ignored/untracked. The read-only PostgreSQL check
+confirmed `d73e9c5a1201` at head; no migration was rerun.
 
----
+Deploy the current `main` image to the two existing one-instance services, verify
+the direct endpoint and worker, and only then perform domain cutover. Keep the
+old API Worker until the new API is verified. Free Sandbox resource/build coverage
+must be confirmed before starting a build. Automatic Northflank builds were paused
+to allow a Git push without triggering an unverified build charge.
 
-## Summary
-
-| | Count |
-|---|---:|
-| **Blockers — must be resolved before any public release** | 13 |
-| Blockers that are an operator decision (no engineering work) | 2 — §2, §10 |
-| Blockers that need a third-party account | 9 — §3, §4, §5, §6a, §6c (×2), §7, §8, §9 |
-| Blockers waiting on provider documentation | 1 — §5a |
-| **Auth platform release follow-up** | **1 — §6 Apple platform provisioning/device validation; Flutter integration implemented** |
-| Deferred, no longer a blocker | §6b `SMS_PROVIDER_REQUIRED` |
-
-**ecomsbd cannot be released today.** The backend production sign-in model is
-implemented: **email/password + Google + Apple**, sharing existing sessions and
-shop onboarding. Phone OTP is deferred and Facebook/Meta login is excluded.
-Flutter now implements the email flows and native provider-token exchange using
-the existing session repository; OTP UI is disabled by default. Provider setup
-and device sign-in checks remain external. Apple is unavailable on the current
-Android runner; an iOS release needs its runner and Apple provisioning.
-
-The Android package ID is now fixed as `com.smply.app`. Remaining operator
-configuration includes the signing key, courier account, billing/email providers,
-push, object storage and error tracking. Each is refused honestly today
-rather than faked.
-
-**What changed on 2026-09-12**
-
-- `SMS_PROVIDER_REQUIRED` is **no longer a release blocker**. Phone OTP is
-  deferred, so an SMS gateway is not on the path to first release. It survives
-  below as a *deferred* item for future use.
-- Backend `SELLER_AUTH_IMPLEMENTATION_REQUIRED` and Flutter login integration
-  are implemented. Provider credentials and platform/device checks remain.
-- Authentication email now requires Supabase custom SMTP; FastAPI business email is independent.
-
-- `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` and
-  `REDIS_CONFIGURATION_REQUIRED` are recorded explicitly. They were always
-  true; they were never written down.
-
----
+The feature-specific sections below apply when those features are enabled; they
+are not a count of current Android infrastructure blockers. Payment activation,
+merchant onboarding, optional monitoring, and the later iOS release have their own
+conditions. This verification pass uses focused checks, not full regression suites
+or backup/restore drills.
 
 ## 1. `PACKAGE_ID_DECISION_REQUIRED` — resolved
 
@@ -133,41 +108,38 @@ through the existing `auth_identities` unique constraints. Tenant/RBAC remains
 server-owned and reads current membership on every request.
 
 Supabase configuration is supplied and synced to the production secret group.
-A temporary confirmed identity produced a real access JWT accepted by FastAPI's
-verifier, then was deleted; no business rows or auth emails were created. Auth
-and database projects match. Email/password is enabled with confirmation. The
-live settings still report Google and Apple disabled; Phone/Facebook are disabled.
-Enable the social providers in Dashboard. SMTP delivery has not been exercised.
+A previous temporary confirmed identity produced a real access JWT accepted by
+FastAPI's verifier and was deleted. Auth and database projects match. Current
+provider settings confirm Email and Google enabled; Apple, Phone and Facebook
+disabled. Apple is deferred until iOS and is not shown in the Android login UI.
+Google's authorization redirect matches the configured client and Supabase callback.
+Auth email delivery remains managed in Supabase; no management token is needed
+by the application at runtime.
 
-PostgreSQL is already at `d73e9c5a1201`; this pass ran no production migration.
-Focused FCM/R2 and affected auth/config tests passed, along with changed-file
-Flutter analysis and backend type checks. No full regression suites ran.
+PostgreSQL is at `d73e9c5a1201`; no production migration was rerun. Existing focused
+FCM/R2 and auth checks are preserved. The Android launch-method UI check and
+affected-file analysis passed. No full regression suites ran.
 
 ## 6a. Production cloud activation
 
-Application runtime configuration, including Supabase, Redis, R2 and full FCM
-service-account JSON, is stored and verified in `ecomsbd-production`. Deployment
-API tokens are excluded. No compute plan or instance count changed. API/worker
-remain at zero instances; Redis runs. Team/billing reads still return 403, so
-Sandbox coverage remains unverified (`BILLING_CONFIRMATION_REQUIRED`). Billing
-read access is required before compute activation. The old API Worker is retained
-until Northflank health and HTTPS pass.
+Use `ecomsbd-api` and `ecomsbd-worker` at one instance each, and the existing
+single-replica Redis. The production secret group is attached to both services;
+all required values were verified by presence and equality without printing them.
+The worker command remains `arq app.worker.main.WorkerSettings`, with no public
+port. The API uses the existing Dockerfile and public HTTP port 8000.
 
-Recovery on 2026-09-14 preserved local auth commit `470f36f` and the interrupted
-R2/FCM changes. Live reads confirm the secret group matches the saved payload,
-the Redis URL matches the addon, and PostgreSQL remains at head. The generated
-Northflank endpoint returns 503; the custom domain's health request returns 302
-and the old Worker route is still attached. No deployment, migration, DNS change,
-Worker deletion or push was performed. Northflank automatic builds remain enabled,
-so pushing waits for verified free Sandbox coverage.
+The initial one-instance deployment still referenced `888a5eb`. Its API failed on
+retired OTP/custom-auth configuration, and its worker failed on the old `_Lazy`
+ARQ settings. Both fixes already exist in the preserved Supabase migration commit;
+deploy current `main`, rather than adding obsolete secrets or restoring legacy auth.
+Automatic builds are paused pending verified free Sandbox coverage. A Git push
+with builds paused does not activate a new Northflank build.
 
-Android Apple sign-in now uses Supabase's hosted OAuth flow with the existing
-PKCE callback. External activation still requires Supabase management access
-and Apple Services ID/signing configuration. Supabase currently reports Google
-and Apple disabled; email enabled; Phone and Facebook disabled. Original private
-JSON files and the public Android build configuration remain ignored and untracked.
-The seven existing focused Flutter auth-flow cases passed. Two new Android Apple
-checks passed for PKCE callbacks arriving both during and after browser launch.
+For cutover, first verify `/health` on the direct Northflank endpoint reports
+PostgreSQL at head and Redis OK. Assign `api.scalemyprints.com` to its HTTP port,
+apply the Northflank-provided DNS target, stop interception by the old route,
+and verify the new health response and HTTPS before removing the obsolete Worker.
+Do not change root/www or unrelated Cloudflare resources.
 
 ## 6b. `SMS_PROVIDER_REQUIRED` — **deferred, no longer a release blocker**
 
@@ -185,7 +157,7 @@ checks passed for PKCE callbacks arriving both during and after browser launch.
 ## 6c. Database and Redis
 
 PostgreSQL connects at `d73e9c5a1201`. The generated Redis URL is in cloud runtime
-secrets. Redis free coverage and API/worker connectivity await compute activation.
+secrets. Verify Redis free coverage and API/worker connectivity with the current deployment.
 
 ## 7. Firebase / FCM
 
@@ -205,7 +177,7 @@ Export expiry removes objects; personal import/export objects follow account
 
 | | |
 |---|---|
-| **Status** | **BLOCKED — needs a Sentry project** |
+| **Status** | **OPTIONAL — not an Android infrastructure blocker** |
 | **What is missing** | A DSN for the backend and one for the mobile app. |
 | **Why it is required** | Without it a crash in a seller's hands is invisible. Section 49 requires error tracking on both. |
 | **Where it is configured** | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` on the backend; `ECOMSBD_SENTRY_DSN` as a `--dart-define` on the app. |

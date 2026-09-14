@@ -28,13 +28,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('login offers email and native providers without phone login', (
+  testWidgets('Android login offers email and Google; Apple and phone are deferred', (
     tester,
   ) async {
     await show(tester, const EmailAuthScreen());
     expect(find.byType(TextFormField), findsNWidgets(2));
     expect(find.textContaining('Google'), findsWidgets);
-    expect(find.textContaining('Apple'), findsWidgets);
+    expect(find.textContaining('Apple'), findsNothing);
     expect(find.textContaining('phone', findRichText: true), findsNothing);
   });
 
