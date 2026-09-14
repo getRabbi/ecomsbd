@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -9,6 +10,8 @@ import 'package:ecomsbd/data/auth/auth_repository.dart';
 import 'package:ecomsbd/data/auth/provider_sign_in.dart';
 import 'package:ecomsbd/data/auth/supabase_bootstrap.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import 'fake_api.dart';
@@ -147,6 +150,72 @@ void main() {
       expect(body['nonce'], 'native-apple-nonce');
       expect(api.to('POST', '/auth/oauth/${provider.name}'), isEmpty);
     });
+  }
+
+  for (final callbackDuringLaunch in [false, true]) {
+    test(
+      'Android Apple PKCE callback during launch: $callbackDuringLaunch',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        const channel = MethodChannel('plugins.flutter.io/url_launcher');
+        addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+        });
+        controller.dispose();
+        controller = AuthController(repository);
+        await controller.restore();
+        Uri? launched;
+        final callback = Uri.parse(
+          'com.smply.app://auth/callback?code=apple-code',
+        );
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              expect(call.method, 'launch');
+              final args = call.arguments as Map;
+              launched = Uri.parse(args['url'] as String);
+              expect(args['useWebView'], isFalse);
+              if (callbackDuringLaunch) {
+                await repository.handleAuthLink(callback);
+              }
+              return true;
+            });
+
+        expect(
+          await controller.signInWithProvider(SignInProvider.apple),
+          isTrue,
+        );
+        expect(launched!.host, 'project.supabase.co');
+        expect(launched!.queryParameters['provider'], 'apple');
+        expect(
+          launched!.queryParameters['redirect_to'],
+          'com.smply.app://auth/callback',
+        );
+        expect(launched!.queryParameters['code_challenge'], isNotEmpty);
+        expect(launched!.queryParameters['code_challenge_method'], 's256');
+        if (!callbackDuringLaunch) {
+          expect(controller.state.stage, AuthStage.signedOut);
+          expect(controller.state.isBusy, isFalse);
+          expect(auth.currentSession, isNull);
+          expect(api.requests, isEmpty);
+          final restored = Completer<void>();
+          final removeListener = controller.addListener((state) {
+            if (state.stage == AuthStage.ready && !restored.isCompleted) {
+              restored.complete();
+            }
+          }, fireImmediately: false);
+          addTearDown(removeListener);
+          await repository.handleAuthLink(callback);
+          await restored.future.timeout(const Duration(seconds: 5));
+        }
+        expect(controller.state.stage, AuthStage.ready);
+        final exchange = jsonDecode(transport.requests.single.body) as Map;
+        expect(exchange['auth_code'], 'apple-code');
+        expect(exchange['code_verifier'], isNotEmpty);
+        expect(api.to('POST', '/auth/oauth/apple'), isEmpty);
+      },
+    );
   }
 
   test(

@@ -14,6 +14,7 @@ import '../../core/storage/token_store.dart';
 import 'auth_models.dart';
 import 'provider_sign_in.dart';
 import 'supabase_bootstrap.dart';
+import '../notifications/push_registration.dart';
 
 /// Supabase owns credentials. FastAPI owns profiles, shops and permissions.
 class AuthRepository implements SessionProvider {
@@ -31,6 +32,7 @@ class AuthRepository implements SessionProvider {
   StreamSubscription<Uri>? _linkSubscription;
   String? _lastCallback;
   String? _deviceSessionId;
+  final _push = PushRegistration();
   bool get isRecovering => _recovering;
   final _invalidations = StreamController<ApiError>.broadcast();
   Stream<ApiError> get onSessionInvalid => _invalidations.stream;
@@ -167,6 +169,15 @@ class AuthRepository implements SessionProvider {
     return _envelope();
   }
 
+  Future<void> startAppleOAuth() => _authCall(() async {
+    final launched = await _auth.signInWithOAuth(
+      OAuthProvider.apple,
+      redirectTo: Env.authRedirectUrl,
+      authScreenLaunchMode: LaunchMode.externalApplication,
+    );
+    if (!launched) throw providerSignInError(SignInProvider.apple);
+  });
+
   Future<void> resendVerification(String email) => _authCall(() async {
     await _auth.resend(
       type: OtpType.signup,
@@ -235,8 +246,32 @@ class AuthRepository implements SessionProvider {
         },
       );
       _deviceSessionId = profile.sessionId;
+      _push.listen(_registerPush);
+      unawaited(_syncPush());
     }
     return _profile = profile;
+  }
+
+  Future<void> _syncPush() async {
+    final token = await _push.token();
+    if (token != null) await _registerPush(token);
+  }
+
+  Future<void> _registerPush(String token) async {
+    if (_auth.currentSession == null || _deviceSessionId == null) return;
+    try {
+      await api.post(
+        '/auth/device',
+        body: {
+          'install_id': await _tokens.installId(() => const Uuid().v4()),
+          'platform': 'ANDROID',
+          'push_token': token,
+        },
+      );
+    } on ApiError {
+      // Try again on the next profile refresh or token update.
+      _deviceSessionId = null;
+    }
   }
 
   Future<SessionEnvelope> _envelope() async {
@@ -276,6 +311,8 @@ class AuthRepository implements SessionProvider {
       api.get('/billing/entitlements');
 
   Future<void> signOut({bool allDevices = false}) async {
+    _deviceSessionId = null;
+    await _push.clear();
     try {
       await api.post('/auth/logout', body: {'all_devices': allDevices});
     } on ApiError {
@@ -295,6 +332,8 @@ class AuthRepository implements SessionProvider {
   }
 
   Future<void> signOutLocally() async {
+    _deviceSessionId = null;
+    await _push.clear();
     _profile = null;
     _recovering = false;
     await _auth.signOut(scope: SignOutScope.local);
@@ -302,6 +341,7 @@ class AuthRepository implements SessionProvider {
   }
 
   void dispose() {
+    _push.dispose();
     unawaited(_linkSubscription?.cancel());
     unawaited(_invalidations.close());
   }

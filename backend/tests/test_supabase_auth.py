@@ -178,6 +178,16 @@ async def test_api_mapping_onboarding_rbac_and_retired_endpoints(settings, supab
         assert response.status_code == 200, response.text
         user_id = response.json()["user_id"]
         assert (await client.get("/v1/me", headers=headers)).json()["user_id"] == user_id
+        attached = await client.post(
+            "/v1/auth/device",
+            headers=headers,
+            json={
+                "install_id": str(uuid.uuid4()),
+                "platform": "ANDROID",
+                "push_token": "test-push-registration-token",
+            },
+        )
+        assert attached.status_code == 204
         shop = await client.post(
             "/v1/tenants",
             headers=headers,
@@ -229,6 +239,13 @@ async def test_api_mapping_onboarding_rbac_and_retired_endpoints(settings, supab
             response = await client.post("/v1/auth/" + path, json={})
             assert response.status_code == 410, (path, response.text)
         assert (await client.post("/v1/auth/logout", headers=headers, json={})).status_code == 204
+        from app.auth.models import Device
+
+        async with get_sessionmaker(settings)() as db:
+            registered = (
+                await db.execute(sa.select(Device).where(Device.user_id == uuid.UUID(user_id)))
+            ).scalar_one()
+            assert registered.push_token is None
         assert (await client.get("/v1/me", headers=headers)).status_code == 401
 
 

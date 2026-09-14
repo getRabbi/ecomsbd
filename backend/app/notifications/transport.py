@@ -15,11 +15,10 @@ the *only* copy. That is why ``console`` — which writes the message to a log �
 is refused in staging and production by :class:`~app.core.config.Settings`
 rather than merely discouraged.
 
-Push and SMS still require provider wiring; transactional email uses Resend:
+Push uses FCM HTTP v1; business email uses Resend. Supabase owns auth emails.
 
-*   ``FCM_CREDENTIALS_REQUIRED`` — no Firebase project exists, so
-    :class:`FcmPushTransport` validates the payload it would send, records the
-    attempt, and reports itself unconfigured.
+*   ``FCM_CREDENTIALS_REQUIRED`` — supply a Firebase service account to enable
+    :class:`FcmPushTransport` with short-lived Google OAuth credentials.
 *   ``SMS_PROVIDER_REQUIRED`` — no Bangladeshi gateway has been chosen, and
     section 22 forbids assuming segment counting or per-segment cost that has
     not been verified against the chosen provider. So
@@ -37,12 +36,17 @@ until a provider returns its own count, which the delivery record then keeps.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
 import httpx
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import service_account
 
 from app.core.config import Settings
 from app.core.logging import get_logger
@@ -386,27 +390,53 @@ _PUSH_TOKEN_RE = re.compile(r"^[A-Za-z0-9_:.\-]{20,4096}$")
 
 
 class FcmPushTransport:
-    """Firebase Cloud Messaging.
-
-    ``FCM_CREDENTIALS_REQUIRED``. Everything except the HTTP call is here: the
-    payload is validated and the token shape is checked, so the day credentials
-    arrive the only new code is the request itself.
-
-    Validation runs *before* the configuration check on purpose. A malformed
-    payload is a bug in our code and should fail the same way whether or not
-    Firebase happens to be configured — otherwise it hides until release day.
-    """
+    """FCM HTTP v1 with scoped, cached Google OAuth and sanitized failures."""
 
     name = "fcm"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, client: httpx.AsyncClient | None = None) -> None:
         self._settings = settings
+        self._client = client
+        self._credentials: Any = None
+        self._refresh_lock = asyncio.Lock()
+        if settings.fcm_credentials_json is not None:
+            try:
+                info = json.loads(settings.fcm_credentials_json.get_secret_value())
+                if (
+                    info.get("type") != "service_account"
+                    or info.get("project_id") != settings.fcm_project_id
+                    or info.get("token_uri") != "https://oauth2.googleapis.com/token"
+                    or not re.fullmatch(r"[a-z][a-z0-9-]{4,62}", settings.fcm_project_id or "")
+                ):
+                    raise ValueError("Invalid FCM service account")
+                self._credentials = service_account.Credentials.from_service_account_info(
+                    info, scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+                )
+            except (ValueError, TypeError, KeyError, AttributeError):
+                raise ValueError(
+                    "FCM_CREDENTIALS_JSON must be a valid matching service account"
+                ) from None
+
+    async def access_token(self) -> str:
+        """Authenticate without sending a notification; also used by deployment checks."""
+        async with self._refresh_lock:
+            if self._credentials is None:
+                raise ValueError("FCM credentials are not configured")
+            if not self._credentials.valid:
+
+                def refresh() -> None:
+                    request = GoogleAuthRequest()
+                    try:
+                        self._credentials.refresh(lambda **kw: request(timeout=15, **kw))
+                    finally:
+                        request.session.close()
+
+                await asyncio.to_thread(refresh)
+            return str(self._credentials.token)
 
     @property
     def is_configured(self) -> bool:
-        return bool(
-            self._settings.fcm_project_id and self._settings.fcm_credentials_json is not None
-        )
+        return self._credentials is not None
 
     async def send(self, message: PushMessage) -> TransportResult:
         problem = self._validate(message)
@@ -418,14 +448,50 @@ class FcmPushTransport:
                 self.name,
                 detail="FCM_CREDENTIALS_REQUIRED: set FCM_PROJECT_ID and FCM_CREDENTIALS_JSON",
             )
-        # No HTTP call. The FCM HTTP v1 request shape must be confirmed against
-        # current documentation at implementation time (master spec section 140),
-        # and inventing it here would ship an integration nobody has verified.
-        return TransportResult(
-            DeliveryOutcome.NOT_CONFIGURED,
-            self.name,
-            detail="No FCM client is wired in; the payload validated successfully.",
-        )
+        data = dict(message.data)
+        if message.deep_link:
+            data["deep_link"] = message.deep_link
+        payload = {
+            "message": {
+                "token": message.token,
+                "notification": {"title": message.title, "body": message.body},
+                "data": data,
+            }
+        }
+        try:
+            token = await self.access_token()
+            url = f"https://fcm.googleapis.com/v1/projects/{self._settings.fcm_project_id}/messages:send"
+            headers = {"Authorization": f"Bearer {token}"}
+            if self._client is not None:
+                response = await self._client.post(url, json=payload, headers=headers)
+            else:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+            if response.status_code == 200:
+                reference = response.json().get("name")
+                if isinstance(reference, str) and reference.startswith("projects/"):
+                    return TransportResult(
+                        DeliveryOutcome.SENT, self.name, provider_reference=reference
+                    )
+            # Only explicit token/payload rejections are permanent. Auth/configuration
+            # and provider failures remain retryable; never persist raw response bodies.
+            code = ""
+            try:
+                for detail in response.json().get("error", {}).get("details", []):
+                    if detail.get("@type") == "type.googleapis.com/google.firebase.fcm.v1.FcmError":
+                        code = detail.get("errorCode", "")
+            except (ValueError, TypeError, AttributeError):
+                pass
+            permanent = code in {"UNREGISTERED", "INVALID_ARGUMENT", "SENDER_ID_MISMATCH"}
+            return TransportResult(
+                DeliveryOutcome.REJECTED if permanent else DeliveryOutcome.FAILED,
+                self.name,
+                detail=f"FCM request failed (HTTP {response.status_code})",
+            )
+        except (httpx.HTTPError, GoogleAuthError, ValueError, TypeError):
+            return TransportResult(
+                DeliveryOutcome.FAILED, self.name, detail="FCM request unavailable"
+            )
 
     @staticmethod
     def _validate(message: PushMessage) -> str | None:

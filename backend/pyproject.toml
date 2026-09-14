@@ -19,6 +19,8 @@ dependencies = [
     "cryptography>=44.0",
     "python-multipart>=0.0.20",
     "httpx>=0.28",
+    "google-auth[requests]>=2.40,<3",
+    "boto3>=1.40,<2",
     "pyyaml>=6.0",
     "sentry-sdk[fastapi]>=2.19",
     # Asia/Dhaka must resolve identically on every host. Windows has no system

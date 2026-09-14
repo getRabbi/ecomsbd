@@ -70,3 +70,7 @@ apps/mobile_flutter/**/*.freezed.dart
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Operator credential files identified by JSON structure.
+/client_secret_939255107253-vu8012mb328h36jjagdvbos9mjltruug.apps.googleusercontent.com.json
+/ecomsbd-11bdb-firebase-adminsdk-fbsvc-6fca2005c6.json

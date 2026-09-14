@@ -24,3 +24,9 @@ runner provisioning, signing, callback URL scheme, and Apple capability.
 Never add service-role, database, OAuth secret, R2, Cloudflare, Northflank,
 Steadfast, encryption or admin credentials to these build values.
 Phone OTP is disabled. See [Supabase setup](../../../docs/PRODUCTION_ENV_SETUP.md#5-supabase-auth).
+
+Firebase reads `android/app/google-services.json`, verified for `com.smply.app`.
+The Google Services plugin supplies Android options. Firebase initializes at
+startup; authenticated sessions register refreshed FCM tokens through FastAPI.
+Logout clears device tokens. The service account belongs only in backend cloud
+secrets and must never be copied into Flutter.

@@ -30,6 +30,8 @@ class MemoryTokens extends TokenStore {
 
 class FakeProviderSignIn implements ProviderSignIn {
   @override
+  bool get usesHostedAppleSignIn => false;
+  @override
   String? get nonce => null;
   ApiError? error;
   bool failCleanup = false;

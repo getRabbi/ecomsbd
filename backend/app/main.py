@@ -52,6 +52,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     install_tenancy_guards()
     get_engine(settings)
+    if settings.push_transport == "fcm":
+        from app.notifications.transport import FcmPushTransport
+
+        app.state.push_transport = FcmPushTransport(settings)
 
     log.info(
         "ecomsbd backend starting",

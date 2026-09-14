@@ -348,17 +348,26 @@ class AuthController extends StateNotifier<AuthState> {
     }
   });
 
-  Future<bool> signInWithProvider(SignInProvider provider) =>
-      _authAction(() async {
-        final token = await _providerSignIn.identityToken(provider);
-        await _adoptSession(
-          await _repository.signInWithProvider(
-            provider,
-            token,
-            nonce: _providerSignIn.nonce,
-          ),
-        );
-      });
+  Future<bool> signInWithProvider(
+    SignInProvider provider,
+  ) => _authAction(() async {
+    if (provider == SignInProvider.apple &&
+        _providerSignIn.usesHostedAppleSignIn) {
+      await _repository.startAppleOAuth();
+      // Normally the PKCE callback restores through authChanges later.
+      // Also handle a callback that arrives before the browser launch returns.
+      if (await _repository.currentSession() != null) await restore();
+      return;
+    }
+    final token = await _providerSignIn.identityToken(provider);
+    await _adoptSession(
+      await _repository.signInWithProvider(
+        provider,
+        token,
+        nonce: _providerSignIn.nonce,
+      ),
+    );
+  });
 
   Future<bool> forgotPassword(String email) =>
       _authAction(() => _repository.forgotPassword(email));

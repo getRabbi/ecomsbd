@@ -132,34 +132,42 @@ legacy auth endpoints cannot issue seller sessions. Internal users are mapped
 through the existing `auth_identities` unique constraints. Tenant/RBAC remains
 server-owned and reads current membership on every request.
 
-External configuration remains blocked: public Supabase URL/key, asymmetric
-signing key, Google/Apple settings, redirects and custom SMTP must be configured
-in the existing project. Backend-only service-role access is used solely by final
-account deletion. See [the exact Dashboard steps](PRODUCTION_ENV_SETUP.md#5-supabase-auth).
+Supabase configuration is supplied and synced to the production secret group.
+A temporary confirmed identity produced a real access JWT accepted by FastAPI's
+verifier, then was deleted; no business rows or auth emails were created. Auth
+and database projects match. Email/password is enabled with confirmation. The
+live settings still report Google and Apple disabled; Phone/Facebook are disabled.
+Enable the social providers in Dashboard. SMTP delivery has not been exercised.
 
-Production Alembic revision is `d73e9c5a1201`; applied once with DB connection
-and client-role isolation checks passing. Nine focused backend auth tests passed
-on isolated PostgreSQL, including concurrent first login.
-
-Focused validation also passed seven Flutter auth-flow cases and three auth-screen
-cases, changed-file Flutter analysis, Ruff and backend type checks. The backend
-image built; its API readiness passed against isolated local PostgreSQL/Redis.
-ARQ started with final source mounted, connected to Redis, and processed the
-existing outbox cron successfully. Worker settings now use concrete ARQ values
-and the configured queue. Real provider login/email and cloud activation remain
-blocked by the external configuration above. No full regression suites ran.
+PostgreSQL is already at `d73e9c5a1201`; this pass ran no production migration.
+Focused FCM/R2 and affected auth/config tests passed, along with changed-file
+Flutter analysis and backend type checks. No full regression suites ran.
 
 ## 6a. Production cloud activation
 
-Northflank API and worker exist at zero instances. Redis is running, but its
-free allocation is unverified: `/plans` lists priced `nf-compute-20`, while team
-and billing usage endpoints return 403. **BILLING_CONFIRMATION_REQUIRED** and
-**FREE_REDIS_SLOT_UNAVAILABLE** apply until the API confirms Sandbox coverage.
-No paid resources, scaling, DNS cutover or Worker deletion is authorized.
+Application runtime configuration, including Supabase, Redis, R2 and full FCM
+service-account JSON, is stored and verified in `ecomsbd-production`. Deployment
+API tokens are excluded. No compute plan or instance count changed. API/worker
+remain at zero instances; Redis runs. Team/billing reads still return 403, so
+Sandbox coverage remains unverified (`BILLING_CONFIRMATION_REQUIRED`). Billing
+read access is required before compute activation. The old API Worker is retained
+until Northflank health and HTTPS pass.
 
-The private `ecomsbd-production` R2 bucket exists; its public URL is disabled and
-it has no custom domains. Application access keys remain missing. The existing
-Cloudflare API Worker route is retained until Northflank readiness and HTTPS pass.
+Recovery on 2026-09-14 preserved local auth commit `470f36f` and the interrupted
+R2/FCM changes. Live reads confirm the secret group matches the saved payload,
+the Redis URL matches the addon, and PostgreSQL remains at head. The generated
+Northflank endpoint returns 503; the custom domain's health request returns 302
+and the old Worker route is still attached. No deployment, migration, DNS change,
+Worker deletion or push was performed. Northflank automatic builds remain enabled,
+so pushing waits for verified free Sandbox coverage.
+
+Android Apple sign-in now uses Supabase's hosted OAuth flow with the existing
+PKCE callback. External activation still requires Supabase management access
+and Apple Services ID/signing configuration. Supabase currently reports Google
+and Apple disabled; email enabled; Phone and Facebook disabled. Original private
+JSON files and the public Android build configuration remain ignored and untracked.
+The seven existing focused Flutter auth-flow cases passed. Two new Android Apple
+checks passed for PKCE callbacks arriving both during and after browser launch.
 
 ## 6b. `SMS_PROVIDER_REQUIRED` — **deferred, no longer a release blocker**
 
@@ -174,38 +182,24 @@ Cloudflare API Worker route is retained until Northflank readiness and HTTPS pas
 | **Not affected** | SMS *alerts* are a separate concern from OTP sign-in and remain `SMS_TRANSPORT=disabled`. |
 | **Validation** | With `PHONE_OTP_LOGIN_ENABLED=true`: a real OTP arrives and `notification_deliveries` records the provider's segment count. |
 
-## 6c. `PRODUCTION_DATABASE_CONFIGURATION_REQUIRED` / `REDIS_CONFIGURATION_REQUIRED`
+## 6c. Database and Redis
 
-| | |
-|---|---|
-| **Status** | **BLOCKED — needs a Supabase project and a managed Redis** |
-| **What is missing** | A production PostgreSQL connection string and a production Redis URL. |
-| **Why they are required** | Nothing runs without the database. Without Redis the API refuses to start in a deployed environment, and the worker refuses outright — a worker that cannot see the queue would report itself healthy while courier polling, payment sync, outbox dispatch, alerts and the weekly summary all silently stopped. |
-| **Where they are configured** | `DATABASE_URL`, `REDIS_URL`, plus the `DATABASE_POOL_*` settings. Supabase pooler caveats — which port, why the scheme is rewritten to `postgresql+asyncpg`, why `sslmode` is stripped — are in `docs/PRODUCTION_ENV_SETUP.md` sections 2 and 3. |
-| **Architecture note** | Supabase Auth handles seller identity; Supabase PostgreSQL holds business data. Flutter calls FastAPI for all business access. Service-role access stays backend-only for final account deletion. |
-| **Validation** | `alembic upgrade head` applies cleanly and `/health/ready` reports both `database` and `redis` as `ok`. |
+PostgreSQL connects at `d73e9c5a1201`. The generated Redis URL is in cloud runtime
+secrets. Redis free coverage and API/worker connectivity await compute activation.
 
-## 7. `FCM_CREDENTIALS_REQUIRED`
+## 7. Firebase / FCM
 
-| | |
-|---|---|
-| **Status** | **BLOCKED — needs a Firebase project** |
-| **What is missing** | A Firebase project and service credentials. |
-| **Why it is required** | Push is how a seller learns money did not arrive without opening the app. |
-| **Severity** | **Lower than the rest.** Section 94 makes push a second copy: everything is already in the notification centre, and the product works without it. |
-| **Where it is configured** | `FCM_PROJECT_ID`, `FCM_CREDENTIALS_JSON`, `PUSH_TRANSPORT=fcm`; `google-services.json` in the app; `POST_NOTIFICATIONS` in the manifest. |
-| **Validation** | A push arrives on a device and opens the exact order it names. |
+Configured: service-account parsing and scoped OAuth authentication passed.
+The FCM HTTP v1 transport handles permanent token errors and retryable provider
+failures. Android Firebase matches `com.smply.app`; initialization, permissions,
+and authenticated token registration are wired. No live notification was sent.
 
-## 8. `R2_CREDENTIALS_REQUIRED`
+## 8. Cloudflare R2
 
-| | |
-|---|---|
-| **Status** | **BLOCKED — needs a Cloudflare R2 bucket** |
-| **What is missing** | A bucket and access keys. |
-| **Why it is required** | Payout source files and generated exports currently live in database rows. That works and is correct, and it makes the database grow with every statement a seller uploads. |
-| **Where it is configured** | `R2_ENDPOINT_URL`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. |
-| **Validation** | A statement import writes a `storage_key` and the row's inline content is null; the object is retrievable. |
-| **Note** | Moving the content is a migration, not a redesign: `storage_key` already exists on both tables. |
+Connected: private `ecomsbd-production` passed one temporary PUT/GET/DELETE.
+Original import/payout files and exports use existing storage-key columns.
+Export expiry removes objects; personal import/export objects follow account
+ deletion. Historical inline data remains readable; no schema change was needed.
 
 ## 9. `SENTRY_CONFIGURATION_REQUIRED`
 

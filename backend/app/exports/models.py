@@ -98,6 +98,6 @@ class ExportJob(Base, TenantOwned, PrimaryKeyMixin):
 
     def is_downloadable(self, *, at: datetime | None = None) -> bool:
         moment = at or utc_now()
-        if self.status != ExportStatus.READY or self.content is None:
+        if self.status != ExportStatus.READY or (self.content is None and self.storage_key is None):
             return False
         return self.expires_at is None or self.expires_at > moment

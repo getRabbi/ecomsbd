@@ -19,9 +19,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.object_storage import ObjectStorage
 from app.common.outbox import OutboxTopic, enqueue
 from app.common.uploads import validate_upload
 from app.core.clock import utc_now
+from app.core.config import Settings, get_settings
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.customers.service import CustomerService
@@ -57,11 +59,13 @@ class ImportService:
         products: ProductService,
         orders: OrderService,
         customers: CustomerService,
+        settings: Settings | None = None,
     ) -> None:
         self._db = session
         self._products = products
         self._orders = orders
         self._customers = customers
+        self._settings = settings or get_settings()
 
     # ------------------------------------------------------------- upload ---
 
@@ -137,6 +141,11 @@ class ImportService:
         )
         self._db.add(batch)
         await self._db.flush()
+
+        if self._settings.r2_configured:
+            storage = ObjectStorage(self._settings)
+            batch.storage_key = storage.key(batch.tenant_id, "imports", batch.id)
+            await storage.put(batch.storage_key, content, "text/csv")
 
         for index, raw in enumerate(rows, start=1):
             self._db.add(

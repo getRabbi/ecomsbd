@@ -186,6 +186,12 @@ class PrivacyService:
         steps["sessions_revoked"] = await self._revoke_sessions(tenant_id)
         steps["devices_revoked"] = await self._revoke_devices(tenant_id)
         steps["integrations_disabled"] = await self._disable_integrations(tenant_id)
+        settings = get_settings()
+        if settings.r2_configured:
+            from app.common.object_storage import ObjectStorage
+
+            await ObjectStorage(settings).delete_tenant(tenant_id)
+            steps["personal_files_deleted"] = "R2 imports and exports; payout evidence retained"
         steps["customers_anonymised"] = await self._anonymise_customers(tenant_id)
         steps["addresses_anonymised"] = await self._anonymise_addresses(tenant_id)
         steps["owners_detached"] = await self._detach_members(tenant_id)

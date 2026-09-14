@@ -1,15 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Android permissions are minimised to what shipped features actually use
-         (master spec section 125). INTERNET is the only one required today.
+         (master spec section 125). Notifications require user permission.
 
          Deliberately absent, each with the feature that would justify it:
-           POST_NOTIFICATIONS - added with FCM push (later phase)
            CAMERA             - added with product image capture
            READ_SMS           - never. OTP uses the SMS Retriever one-time-code
                                 flow, which needs no inbox access.
            READ_CONTACTS      - never.
            location / call log - never. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="ecomsbd"

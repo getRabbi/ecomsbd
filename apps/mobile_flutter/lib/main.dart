@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/app.dart';
 import 'data/auth/supabase_bootstrap.dart';
+import 'data/notifications/push_registration.dart';
 import 'app/providers.dart';
 import 'design/glass.dart';
 import 'design/theme.dart';
@@ -16,6 +17,7 @@ import 'design/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeSupabaseAuth();
+  await initializePush();
 
   // Portrait only: every screen in the locked design is a single-column
   // seller-operations layout, and landscape would give it nothing.
@@ -38,10 +40,12 @@ Future<void> main() async {
 /// this runs, and on the low-end devices this app targets every millisecond
 /// here is visible.
 Future<void> _bootstrap(ProviderContainer container) async {
-  container.read(authControllerProvider);
-  await container.read(authRepositoryProvider).startAuthLinks();
+  // Resolve metadata before constructing repositories which watch appVersion.
+  // Otherwise that update disposes the new auth/deep-link subscription.
   await _detectDeviceTier(container);
   await _readAppVersion(container);
+  container.read(authControllerProvider);
+  await container.read(authRepositoryProvider).startAuthLinks();
 
   // Restoring the session is not awaited: the router shows the splash screen
   // while it runs and moves on by itself. Awaiting it would hold a blank frame

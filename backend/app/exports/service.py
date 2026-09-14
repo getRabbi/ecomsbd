@@ -31,6 +31,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.object_storage import ObjectStorage
 from app.common.safe_csv import SafeCsvWriter
 from app.core.clock import business_date, utc_now
 from app.core.config import Settings
@@ -220,7 +221,13 @@ class ExportService:
         content = writer.as_bytes()
 
         token = generate_opaque_token()
-        job.content = content
+        if self._settings.r2_configured:
+            storage = ObjectStorage(self._settings)
+            job.storage_key = storage.key(tenant_id, "exports", job.id)
+            await storage.put(job.storage_key, content, "text/csv; charset=utf-8")
+            job.content = None
+        else:
+            job.content = content
         job.byte_size = len(content)
         job.row_count = writer.row_count
         job.filename = f"ecomsbd-{kind.lower()}-{business_date():%Y%m%d}.csv"
@@ -276,8 +283,13 @@ class ExportService:
             context={"kind": job.kind, "rows": job.row_count, "count": job.download_count},
             tenant_id=tenant_id,
         )
-        assert job.content is not None  # noqa: S101 - is_downloadable checked it
-        return job, job.content
+        content = (
+            await ObjectStorage(self._settings).get(job.storage_key)
+            if job.storage_key
+            else job.content
+        )
+        assert content is not None  # noqa: S101 - is_downloadable checked it
+        return job, content
 
     async def expire_stale(self, *, now: datetime | None = None, limit: int = 200) -> int:
         """Drop the content of exports whose links have expired.
@@ -302,6 +314,9 @@ class ExportService:
             .all()
         )
         for job in rows:
+            if job.storage_key:
+                await ObjectStorage(self._settings).delete(job.storage_key)
+                job.storage_key = None
             job.status = str(ExportStatus.EXPIRED)
             job.content = None
             job.download_token_hash = None

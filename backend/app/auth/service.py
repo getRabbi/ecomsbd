@@ -567,6 +567,13 @@ class AuthService:
         row.last_seen_at = utc_now()
         row.revoked_at = None
         if device.push_token and device.push_token != row.push_token:
+            # An installation token must not continue notifying a previous seller
+            # after the same phone signs into a different account.
+            await self._db.execute(
+                sa.update(Device)
+                .where(Device.push_token == device.push_token, Device.id != row.id)
+                .values(push_token=None, push_token_updated_at=utc_now())
+            )
             row.push_token = device.push_token
             row.push_token_updated_at = utc_now()
         await self._db.flush()
@@ -757,6 +764,13 @@ class AuthService:
         session_row = await self._db.get(AuthSession, session_id)
         if session_row is None:
             return 0
+
+        device_filter = (
+            Device.user_id == session_row.user_id
+            if all_devices
+            else Device.id == session_row.device_id
+        )
+        await self._db.execute(sa.update(Device).where(device_filter).values(push_token=None))
 
         if not all_devices:
             await self._revoke_session(session_row, reason=RevocationReason.USER_LOGOUT)

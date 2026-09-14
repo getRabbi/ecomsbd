@@ -47,6 +47,7 @@ async def _imports(db: DbSession, settings: SettingsDep) -> ImportService:
         products=ProductService(db),
         orders=OrderService(db, customers=customers),
         customers=customers,
+        settings=settings,
     )
 
 

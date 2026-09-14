@@ -337,8 +337,11 @@ for native ID-token login. A hosted OAuth flow additionally needs the Apple
 Services ID and OAuth secret (JWT generated with Team ID, Key ID and the `.p8`
 private key); configure the Supabase callback in Apple's Services ID and renew
 the OAuth secret within six months. Native Apple login uses a hashed nonce with
-the original nonce supplied to Supabase. This repository has an Android runner;
-Apple safely reports unavailable there. An iOS release still requires its native
+the original nonce supplied to Supabase. Android opens Supabase's hosted Apple
+OAuth flow in the external browser and exchanges the callback through the existing
+PKCE handler. Allow `com.smply.app://auth/callback` in Supabase and put the Apple
+Services ID first in the provider Client IDs. Apple remains blocked until that
+provider configuration is supplied. An iOS release still requires its native
 runner, signing and Sign in with Apple capability.
 See [Supabase Apple setup](https://supabase.com/docs/guides/auth/social-login/auth-apple).
 
@@ -418,19 +421,18 @@ enable `steadfast_enabled` for one shop before enabling it globally.
 
 ## 10. Cloudflare R2
 
-`R2_CREDENTIALS_REQUIRED`. Payout source files and generated exports currently
-live in database rows. That works and is correct; it also grows the database
-with every statement a seller uploads. **No object-store client is wired in
-yet** — these four settings are the contract it will read, and the check
-reports R2 as `MISSING` until one exists.
+Private R2 stores original imports/payout files and generated exports. FastAPI
+retains tenant/token checks. The existing worker deletes expired exports; account
+deletion removes personal import/export objects while financial evidence follows
+existing retention. Historical inline records remain readable. No file uses local disk.
 
-**All four or none.** A partly-configured bucket is refused at startup, because
-otherwise it fails on the first seller who needed it instead of at deploy time.
+All four application variables are now supplied, verified with temporary
+PUT/GET/DELETE, and stored in the Northflank production secret group.
 
 **Where to obtain**
 
 1. Cloudflare dashboard → **R2 Object Storage** → **Create bucket**.
-   Name it `ecomsbd-prod`. Choose a location hint near your API.
+   Name it `ecomsbd-production`. Choose a location hint near your API.
 2. **Do not enable public access.** Nothing here is meant to be world-readable:
    exports are served through the API against a single-use, expiring token, and
    payout statements are a seller's financial records.
@@ -445,7 +447,7 @@ otherwise it fails on the first seller who needed it instead of at deploy time.
 | Variable | Format | Secret |
 |---|---|---|
 | `R2_ENDPOINT_URL` | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` | No |
-| `R2_BUCKET` | `ecomsbd-prod` | No |
+| `R2_BUCKET` | `ecomsbd-production` | No |
 | `R2_ACCESS_KEY_ID` | 32 hex characters | **Yes** |
 | `R2_SECRET_ACCESS_KEY` | 64 hex characters | **Yes** |
 
@@ -454,9 +456,8 @@ subdomain of the endpoint. There is no `R2_PUBLIC_BASE_URL` either, because
 nothing is served from a public bucket URL: `EXPORT_DOWNLOAD_TTL_SECONDS`
 governs a token the API itself checks.
 
-**How to verify** (once the client exists). A statement import writes a
-`storage_key` and leaves the row's inline content null, and the object is
-retrievable from the bucket.
+**Verification completed.** A temporary private object passed PUT/GET/DELETE.
+Exports use their existing storage-key column; historical inline exports remain readable.
 
 ---
 
@@ -500,11 +501,13 @@ transport reports itself unconfigured rather than returning success, so the
 delivery metrics stay honest.
 
 **Also required in the app** when push is enabled: the `POST_NOTIFICATIONS`
-permission in `AndroidManifest.xml`. It is deliberately absent today, because
-the manifest lists only permissions shipped features actually use.
+permission in `AndroidManifest.xml`. It is now declared and requested by Firebase Messaging. Android Firebase
+configuration matches `com.smply.app`.
 
-**How to verify.** A push arrives on a device and opens the exact order,
-payout or case it names.
+**Verification completed.** FCM parsed the supplied service account and obtained
+its scoped Google OAuth token. No notification was sent. Full credential JSON
+is stored in `ecomsbd-production`; the operator's original remains ignored and
+untracked. Device delivery is checked during the separate Android installation task.
 
 ---
 

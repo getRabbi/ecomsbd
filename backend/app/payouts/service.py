@@ -20,9 +20,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.object_storage import ObjectStorage
 from app.common.pagination import Cursor, apply_cursor
 from app.common.uploads import UploadCheck, validate_upload
 from app.core.clock import utc_now
+from app.core.config import get_settings
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.payouts.models import (
@@ -182,7 +184,7 @@ class PayoutService:
             original_filename=checked.safe_name,
             sha256=digest,
             size_bytes=len(content),
-            # R2 is not provisioned; the content lives here until it is.
+            # Retain parsed evidence; preserve the original bytes privately in R2.
             storage_key=None,
             raw_content=checked.text,
             uploaded_by=context.user_id if context else None,
@@ -191,6 +193,12 @@ class PayoutService:
         )
         self._db.add(source_file)
         await self._db.flush()
+
+        settings = get_settings()
+        if settings.r2_configured:
+            storage = ObjectStorage(settings)
+            source_file.storage_key = storage.key(source_file.tenant_id, "payouts", source_file.id)
+            await storage.put(source_file.storage_key, content, "text/csv")
 
         payout = await self._create_payout(
             provider=provider,

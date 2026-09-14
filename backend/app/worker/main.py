@@ -52,6 +52,10 @@ async def startup(ctx: dict[str, Any]) -> None:
 
     install_tenancy_guards()
     get_engine(settings)
+    if settings.push_transport == "fcm":
+        from app.notifications.transport import FcmPushTransport
+
+        ctx["push_transport"] = FcmPushTransport(settings)
     log.info("ecomsbd worker started", extra={"version": __version__})
 
 

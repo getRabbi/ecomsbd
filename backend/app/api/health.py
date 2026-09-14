@@ -14,9 +14,12 @@ affects booking.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 from fastapi import APIRouter, Response, status
 
 from app.core.config import get_settings
@@ -34,6 +37,14 @@ async def live() -> dict[str, str]:
     return {"status": "ok", "service": "ecomsbd"}
 
 
+@lru_cache(maxsize=1)
+def migration_head() -> str | None:
+    return ScriptDirectory(
+        str(Path(__file__).resolve().parents[2] / "migrations")
+    ).get_current_head()
+
+
+@router.get("", summary="Production health")
 @router.get("/ready", summary="Readiness probe")
 async def ready(response: Response) -> dict[str, Any]:
     """Report whether this instance can serve traffic."""
@@ -48,8 +59,8 @@ async def ready(response: Response) -> dict[str, Any]:
                 await session.execute(sa.text("SELECT version_num FROM alembic_version"))
             ).scalar_one_or_none()
         checks["database"] = {"status": "ok", "migration": revision}
-        if revision is None:
-            checks["database"] = {"status": "degraded", "reason": "no migration applied"}
+        if revision is None or revision != migration_head():
+            checks["database"] = {"status": "degraded", "reason": "migration is not at head"}
             healthy = False
     except Exception as exc:
         log.warning("readiness: database check failed", extra={"error_type": type(exc).__name__})

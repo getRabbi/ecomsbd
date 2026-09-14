@@ -269,7 +269,7 @@ def _check_r2(settings: Settings) -> CheckResult:
     if not settings.r2_configured:
         return CheckResult("R2", Status.MISSING, "payout files and exports stay in database rows")
     return CheckResult(
-        "R2", Status.PARTIAL, "credentials present; no object-store client is wired in"
+        "R2", Status.OK, "private R2 client configured; verify connectivity separately"
     )
 
 
@@ -280,7 +280,13 @@ def _check_fcm(settings: Settings) -> CheckResult:
         )
     if settings.fcm_credentials_json is None or not settings.fcm_project_id:
         return CheckResult("FCM", Status.BLOCKING, "PUSH_TRANSPORT=fcm with credentials missing")
-    return CheckResult("FCM", Status.PARTIAL, "credentials present; no FCM client is wired in")
+    from app.notifications.transport import FcmPushTransport
+
+    try:
+        FcmPushTransport(settings)
+    except ValueError:
+        return CheckResult("FCM", Status.BLOCKING, "invalid or mismatched FCM service account")
+    return CheckResult("FCM", Status.OK, "FCM HTTP v1 initialized; verify OAuth separately")
 
 
 def _check_sentry(settings: Settings) -> CheckResult:

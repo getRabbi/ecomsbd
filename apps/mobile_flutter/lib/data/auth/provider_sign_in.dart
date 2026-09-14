@@ -13,6 +13,7 @@ enum SignInProvider { google, apple }
 /// Obtains provider credentials only. It cannot create an ecomsbd session.
 abstract class ProviderSignIn {
   String? get nonce => null;
+  bool get usesHostedAppleSignIn => false;
   Future<String> identityToken(SignInProvider provider);
   Future<void> signOut();
 }
@@ -33,6 +34,10 @@ class NativeProviderSignIn implements ProviderSignIn {
   String? _nonce;
   @override
   String? get nonce => _nonce;
+
+  @override
+  bool get usesHostedAppleSignIn =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   bool get _isApplePlatform =>
       !kIsWeb &&
@@ -69,9 +74,7 @@ class NativeProviderSignIn implements ProviderSignIn {
         final account = await google.authenticate();
         token = account.authentication.idToken;
       } else {
-        // Android requires a hosted Apple redirect/code-exchange integration.
-        // The existing backend supports native ID tokens, so do not launch an
-        // unconfigured browser flow or assume the plugin is available.
+        // Android is handled by Supabase's hosted PKCE flow in AuthController.
         if (!_isApplePlatform || !await SignInWithApple.isAvailable()) {
           throw providerSignInError(provider);
         }
