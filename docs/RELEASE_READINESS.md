@@ -18,11 +18,12 @@ database, Redis, Supabase, R2 and backend-only FCM values. Credentials and Andro
 Firebase configuration remain ignored/untracked. The read-only PostgreSQL check
 confirmed `d73e9c5a1201` at head; no migration was rerun.
 
-Deploy the current `main` image to the two existing one-instance services, verify
-the direct endpoint and worker, and only then perform domain cutover. Keep the
-old API Worker until the new API is verified. Free Sandbox resource/build coverage
-must be confirmed before starting a build. Automatic Northflank builds were paused
-to allow a Git push without triggering an unverified build charge.
+Production verification and cutover are complete. Both existing one-instance
+services run application commit `4027329a76a38b004284930ae5c99dee99f84091`.
+The operator confirmed Developer Sandbox coverage; no resources were created or
+scaled. `https://api.scalemyprints.com/health` serves the new FastAPI with verified
+HTTPS, PostgreSQL at head and Redis healthy. The obsolete API Worker and its route
+were removed after successful custom-domain verification. Android build is next.
 
 The feature-specific sections below apply when those features are enabled; they
 are not a count of current Android infrastructure blockers. Payment activation,
@@ -128,18 +129,26 @@ all required values were verified by presence and equality without printing them
 The worker command remains `arq app.worker.main.WorkerSettings`, with no public
 port. The API uses the existing Dockerfile and public HTTP port 8000.
 
-The initial one-instance deployment still referenced `888a5eb`. Its API failed on
-retired OTP/custom-auth configuration, and its worker failed on the old `_Lazy`
-ARQ settings. Both fixes already exist in the preserved Supabase migration commit;
-deploy current `main`, rather than adding obsolete secrets or restoring legacy auth.
-Automatic builds are paused pending verified free Sandbox coverage. A Git push
-with builds paused does not activate a new Northflank build.
+The existing combined API service built application commit
+`4027329a76a38b004284930ae5c99dee99f84091` successfully as `healthy-tub-1034`.
+Both services deployed that image. FastAPI starts successfully; ARQ registers
+26 functions, connects to Redis and completes scheduled outbox database checks.
+The operator confirmed the Developer Sandbox plan. Billing metadata read access
+is not a runtime requirement, and no new resources or upgrades were requested.
 
-For cutover, first verify `/health` on the direct Northflank endpoint reports
-PostgreSQL at head and Redis OK. Assign `api.scalemyprints.com` to its HTTP port,
-apply the Northflank-provided DNS target, stop interception by the old route,
-and verify the new health response and HTTPS before removing the obsolete Worker.
-Do not change root/www or unrelated Cloudflare resources.
+The direct endpoint is
+`https://http--ecomsbd-api--gtvhzfb4xbv5.code.run`.
+Its health response and the custom-domain response both confirm PostgreSQL at
+`d73e9c5a1201` and Redis healthy. A real Supabase password-login JWT was accepted
+by live `/v1/me`; tenant access without membership was denied, and legacy login
+returned 410. The temporary identity was removed without business transactions.
+
+`api.scalemyprints.com` is verified and assigned to the existing API HTTP port.
+Its DNS CNAME targets Northflank with proxying disabled, and the managed
+Let's Encrypt certificate passed hostname and trust verification. The obsolete
+`seller-intelligence-api-production` Worker and exact API route were removed
+after the new API passed custom-domain health and authentication-guard checks.
+Root/www and unrelated Cloudflare resources were preserved.
 
 ## 6b. `SMS_PROVIDER_REQUIRED` — **deferred, no longer a release blocker**
 
