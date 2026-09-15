@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/analytics/models.dart';
@@ -57,10 +58,14 @@ class InsightsScreen extends ConsumerWidget {
           ),
           profit.when(
             loading: () => SkeletonLoader.card(height: 180),
-            error: (error, _) => Text(
-              'Could not load your profit figures.',
-              style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-            ),
+            error: (error, _) => error is ApiError && error.isPlanLimited
+                ? const GlassCard(child: PlanLockedNotice())
+                : Text(
+                    'Could not load your profit figures.',
+                    style: EcomsbdType.caption.copyWith(
+                      color: EcomsbdColors.muted,
+                    ),
+                  ),
             data: (sourced) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[

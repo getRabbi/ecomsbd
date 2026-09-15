@@ -25,6 +25,10 @@ ThemeData buildEcomsbdTheme() {
     onError: Colors.white,
     surface: EcomsbdColors.background,
     onSurface: EcomsbdColors.ink,
+    // Unset, both fall back to onSurface: outlined buttons and switched-off
+    // switches got a near-black border no other surface in the app has.
+    outline: EcomsbdColors.muted2,
+    outlineVariant: EcomsbdColors.stroke,
   );
 
   return ThemeData(

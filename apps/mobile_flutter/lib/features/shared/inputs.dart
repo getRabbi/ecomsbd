@@ -111,7 +111,12 @@ class CommerceSearchField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: EcomsbdType.body.copyWith(color: EcomsbdColors.muted2),
+          // The pill is the field. The theme's outline and fill have to be
+          // cleared too, or they draw a second box inside the pill.
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
           icon: const Icon(
             Icons.search_rounded,
             size: 19,
@@ -154,17 +159,21 @@ class FilterToggle extends StatelessWidget {
               minHeight: EcomsbdTouch.minTarget,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: EcomsbdRadii.round,
               border: Border.all(
                 color: selected ? EcomsbdColors.orange : EcomsbdColors.stroke,
               ),
             ),
-            child: Text(
-              label,
-              style: EcomsbdType.chip.copyWith(
-                color: selected ? Colors.white : EcomsbdColors.ink,
+            // widthFactor keeps the chip as wide as its label; Container's
+            // own `alignment` expanded it to the full width a Wrap offers.
+            child: Align(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: EcomsbdType.chip.copyWith(
+                  color: selected ? Colors.white : EcomsbdColors.ink,
+                ),
               ),
             ),
           ),

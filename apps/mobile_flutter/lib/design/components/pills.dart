@@ -104,9 +104,15 @@ class BrandPill extends StatelessWidget {
             ),
           ),
           const SizedBox(width: EcomsbdSpacing.sm),
-          Text(
-            label,
-            style: EcomsbdType.bodyStrong.copyWith(fontWeight: FontWeight.w800),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: EcomsbdType.bodyStrong.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
           if (showChevron) ...<Widget>[
             const SizedBox(width: 4),
@@ -176,8 +182,12 @@ class GlassTopBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Flexible(child: leading),
-          const Spacer(),
+          // Expanded, not Flexible + Spacer: those split the free space in
+          // half, which cut the brand pill's label off on a 360dp phone.
+          Expanded(
+            child: Align(alignment: Alignment.centerLeft, child: leading),
+          ),
+          const SizedBox(width: EcomsbdSpacing.sm),
           if (actions.isNotEmpty)
             GlassTopPill(
               child: Row(mainAxisSize: MainAxisSize.min, children: actions),

@@ -61,34 +61,42 @@ class HomeScreen extends ConsumerWidget {
       },
       child: CustomScrollView(
         slivers: <Widget>[
+          // Hero and body share one sliver on purpose. A viewport paints its
+          // first sliver last, so a card lifted into the hero from a separate
+          // sliver had its top edge painted over by the hero.
           SliverToBoxAdapter(
-            child: SellerHero(
-              shopName: shopName ?? 'Your shop',
-              subtitle: _heroSubtitle(home.valueOrNull?.value),
-              chips: _heroChips(home.valueOrNull?.value),
-              topInset: topInset + 56,
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              // The money card lifts out of the hero, as in the prototype.
-              offset: const Offset(0, -31),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: EcomsbdSpacing.page,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                SellerHero(
+                  shopName: shopName ?? 'Your shop',
+                  subtitle: _heroSubtitle(home.valueOrNull?.value),
+                  chips: _heroChips(home.valueOrNull?.value),
+                  topInset: topInset + 56,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    if (isOffline) ...<Widget>[
-                      OfflineBanner(pendingCount: pending),
-                      const SizedBox(height: EcomsbdSpacing.sm),
-                    ],
-                    _HomeBody(home: home, onNavigate: onNavigate),
-                    const SizedBox(height: EcomsbdSpacing.bottomNavClearance),
-                  ],
+                Transform.translate(
+                  // The money card lifts out of the hero, as in the prototype.
+                  offset: const Offset(0, -31),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: EcomsbdSpacing.page,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        if (isOffline) ...<Widget>[
+                          OfflineBanner(pendingCount: pending),
+                          const SizedBox(height: EcomsbdSpacing.sm),
+                        ],
+                        _HomeBody(home: home, onNavigate: onNavigate),
+                        const SizedBox(
+                          height: EcomsbdSpacing.bottomNavClearance,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

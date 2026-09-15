@@ -9,6 +9,7 @@ import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../billing/plans_screen.dart';
 
 /// Says that what is on screen came off the device, and when it was true.
 ///
@@ -392,15 +393,19 @@ class ChartData<T> extends StatelessWidget {
       ),
       error: (error, _) => SizedBox(
         height: height,
-        child: Center(
-          child: Text(
-            error is ApiError && error.isOffline
-                ? 'Not saved on this device yet.'
-                : 'Could not load this.',
-            textAlign: TextAlign.center,
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-        ),
+        child: error is ApiError && error.isPlanLimited
+            ? const PlanLockedNotice()
+            : Center(
+                child: Text(
+                  error is ApiError && error.isOffline
+                      ? 'Not saved on this device yet.'
+                      : 'Could not load this.',
+                  textAlign: TextAlign.center,
+                  style: EcomsbdType.caption.copyWith(
+                    color: EcomsbdColors.muted,
+                  ),
+                ),
+              ),
       ),
       data: (sourced) {
         if (isEmpty?.call(sourced.value) ?? false) {
@@ -424,6 +429,60 @@ class ChartData<T> extends StatelessWidget {
         }
         return builder(sourced.value);
       },
+    );
+  }
+}
+
+/// Shown where the server refused a read because the shop's plan does not
+/// include it (`ENTITLEMENT_REQUIRED`).
+///
+/// This is not a failure and must not read like one: "Could not load this"
+/// sends a seller on the free plan looking for a connection problem that does
+/// not exist. It says what is going on and where to change it.
+class PlanLockedNotice extends StatelessWidget {
+  const PlanLockedNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: EcomsbdSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 18,
+                  color: EcomsbdColors.muted,
+                ),
+                SizedBox(width: EcomsbdSpacing.xs),
+                Flexible(
+                  child: Text(
+                    'Not included in your plan',
+                    style: EcomsbdType.bodyStrong,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Your plan shows today’s figures. Upgrade for history and '
+              'breakdowns.',
+              textAlign: TextAlign.center,
+              style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const PlansScreen()),
+              ),
+              child: const Text('See plans'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

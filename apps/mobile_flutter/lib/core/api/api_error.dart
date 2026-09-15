@@ -121,6 +121,10 @@ class ApiError implements Exception {
 
   bool get isOffline => code == ApiErrorCode.offline;
 
+  /// The shop's plan does not include this. Not a failure: the screen should
+  /// say so and point at the plans, not offer a retry that cannot succeed.
+  bool get isPlanLimited => code == ApiErrorCode.entitlementRequired;
+
   /// Remaining OTP attempts, when the server reported them.
   int? get attemptsRemaining => details?['attempts_remaining'] as int?;
 

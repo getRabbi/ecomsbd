@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/env.dart';
@@ -34,7 +35,13 @@ class EcomsbdApp extends ConsumerWidget {
           // double-underline fallback. Explicit text decorations still win.
           child: DefaultTextStyle(
             style: Theme.of(context).textTheme.bodyMedium!,
-            child: child ?? const SizedBox.shrink(),
+            // Fallback status bar style. Pushed screens that set none kept
+            // whatever was last set, which could leave white icons on a light
+            // page. Screens that set their own (EcomsbdScaffold) still win.
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: ecomsbdLightOverlay,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },

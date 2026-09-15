@@ -33,6 +33,9 @@ class CommerceHarness {
     databaseProvider.overrideWithValue(db),
     apiClientProvider.overrideWithValue(_fake.client),
     tenantIdProvider.overrideWithValue(testTenantId),
+    // Home shows the shop name, which the real provider reads from the auth
+    // controller, and that needs a live Supabase client.
+    shopNameProvider.overrideWithValue('Test shop'),
   ];
 
   Future<void> dispose() => db.close();

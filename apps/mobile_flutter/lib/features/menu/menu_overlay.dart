@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../design/glass.dart';
 import '../../design/components/badges.dart';
+import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../billing/plans_screen.dart';
@@ -93,7 +94,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.assignment_return_outlined,
       title: 'Return center',
       subtitle: 'Loss · reasons · stock',
-      destination: InsightsScreen.new,
+      destination: _ReturnCenterPage.new,
     ),
     _MenuItem(
       icon: Icons.payments_outlined,
@@ -377,6 +378,26 @@ class _MenuTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Return center, opened from the menu.
+///
+/// Return economics live on the Insights screen, which is built as a tab body
+/// for the shell. Pushed on its own it had no scaffold or background and drew
+/// on black; this gives it the page shell and a way back.
+class _ReturnCenterPage extends StatelessWidget {
+  const _ReturnCenterPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return EcomsbdScaffold(
+      topBar: GlassTopBar(
+        leading: GlassBackPill(onPressed: () => Navigator.of(context).pop()),
+        actions: const <Widget>[],
+      ),
+      child: const InsightsScreen(),
     );
   }
 }
