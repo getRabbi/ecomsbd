@@ -50,29 +50,38 @@ class BottomGlassNavigation extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(11, 0, 11, 8 + bottomInset),
       child: SizedBox(
         height: EcomsbdTouch.bottomNavHeight,
-        child: GlassSurface(
-          borderRadius: EcomsbdRadii.round,
-          fill: const Color(0xB0FFFFFF),
-          borderColor: const Color(0xFAFFFFFF),
-          shadows: EcomsbdShadows.bottomNav,
-          blurSigma: 24,
-          // The raised item overflows the bar; clipping would cut it off.
+        child: Stack(
+          fit: StackFit.expand,
           clipBehavior: Clip.none,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-            child: Row(
-              children: <Widget>[
-                for (final destination in MainDestination.values)
-                  Expanded(
-                    child: _NavItem(
-                      destination: destination,
-                      isActive: destination == current,
-                      onTap: () => onSelected(destination),
-                    ),
-                  ),
-              ],
+          children: <Widget>[
+            // Clip the backdrop to the pill, while allowing the active item
+            // to rise above it without expanding the blur to the whole page.
+            const Positioned.fill(
+              child: GlassSurface(
+                borderRadius: EcomsbdRadii.round,
+                fill: Color(0xB0FFFFFF),
+                borderColor: Color(0xFAFFFFFF),
+                shadows: EcomsbdShadows.bottomNav,
+                blurSigma: 24,
+                child: SizedBox.expand(),
+              ),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              child: Row(
+                children: <Widget>[
+                  for (final destination in MainDestination.values)
+                    Expanded(
+                      child: _NavItem(
+                        destination: destination,
+                        isActive: destination == current,
+                        onTap: () => onSelected(destination),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

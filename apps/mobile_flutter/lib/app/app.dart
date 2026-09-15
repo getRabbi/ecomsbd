@@ -29,7 +29,13 @@ class EcomsbdApp extends ConsumerWidget {
         ).clamp(minScaleFactor: 0.85, maxScaleFactor: 1.35);
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: scale),
-          child: child ?? const SizedBox.shrink(),
+          // Custom glass routes can sit outside a Scaffold/Material. Give
+          // them the theme's text style instead of MaterialApp's yellow
+          // double-underline fallback. Explicit text decorations still win.
+          child: DefaultTextStyle(
+            style: Theme.of(context).textTheme.bodyMedium!,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );
