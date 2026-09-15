@@ -90,11 +90,15 @@ class CommerceSearchField extends StatelessWidget {
     required this.hint,
     required this.onChanged,
     super.key,
+    this.autofocus = false,
   });
 
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String> onChanged;
+
+  /// Opens the keyboard on arrival, for a screen that exists only to search.
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +109,7 @@ class CommerceSearchField extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: EcomsbdSpacing.md),
       child: TextField(
         controller: controller,
+        autofocus: autofocus,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         style: EcomsbdType.body,

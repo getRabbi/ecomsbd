@@ -13,6 +13,7 @@ import '../menu/menu_overlay.dart';
 import '../money/money_screen.dart';
 import '../notifications/notification_centre_screen.dart';
 import '../orders/orders_screen.dart';
+import '../search/search_screen.dart';
 import '../shared/responsive.dart';
 
 /// The signed-in shell: four tabs plus the menu overlay.
@@ -51,6 +52,12 @@ class MainShellState extends ConsumerState<MainShell> {
 
   Future<void> _openMenu() async {
     await MenuOverlay.show(context);
+  }
+
+  void _openSearch() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const GlobalSearchScreen()));
   }
 
   void _navigateByName(String name) {
@@ -97,7 +104,7 @@ class MainShellState extends ConsumerState<MainShell> {
           GlassIconButton(
             icon: Icons.search_rounded,
             tooltip: 'Search ecomsbd',
-            onPressed: _openMenu,
+            onPressed: _openSearch,
           ),
           _NotificationButton(
             onPressed: () => Navigator.of(context).push(
