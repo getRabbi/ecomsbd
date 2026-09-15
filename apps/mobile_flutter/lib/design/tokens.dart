@@ -165,10 +165,6 @@ class EcomsbdShadows {
   static const List<BoxShadow> bottomNav = <BoxShadow>[
     BoxShadow(color: Color(0x2B121A24), blurRadius: 52, offset: Offset(0, 18)),
   ];
-
-  static const List<BoxShadow> accent = <BoxShadow>[
-    BoxShadow(color: Color(0x33FF4500), blurRadius: 18, offset: Offset(0, 8)),
-  ];
 }
 
 /// Typography.

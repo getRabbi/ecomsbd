@@ -118,21 +118,25 @@ flutter:
 
 # Launcher icons. Regenerate with `dart run flutter_launcher_icons`.
 #
-# icon.png is the finished icon (orange tile on a near-white canvas) and is
-# used exactly as supplied. The adaptive foreground keeps the package's
-# default 16% inset, which puts the whole tile inside the 66dp safe zone, so
-# no launcher mask shape crops it. The background matches the artwork's own
-# margin (#FEFEFE, measured) so no seam shows where the two layers meet.
+# icon.png is the edge-to-edge app icon, used exactly as supplied. The adaptive
+# foreground keeps a 16% inset: the full-bleed square then covers the whole
+# visible 72dp area, and the bag's body (within a centred circle 89% of the
+# source's width) sits inside the 66dp safe zone that no launcher mask crops.
+# Keep any replacement's key artwork within a centred circle 90% wide.
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
   # The package cannot read `flutter.minSdkVersion` from build.gradle.kts;
   # this is the value the Flutter toolchain supplies.
   min_sdk_android: 24
-  adaptive_icon_background: "#FEFEFE"
+  # The artwork's edge colour (measured median); seen only if a launcher
+  # shifts the layers.
+  adaptive_icon_background: "#FD6C05"
   adaptive_icon_foreground: "assets/icon/icon.png"
-  # There is no ios/ project yet, and generating into a missing one fails.
-  # After `flutter create --platforms=ios .`, set this to true and regenerate.
+  adaptive_icon_foreground_inset: 16
+  # iOS: there is no ios/ project yet, and generating into a missing one fails.
+  # After `flutter create --platforms=ios .`, set this to true and regenerate;
+  # iOS applies its own mask to the full square, which this source suits.
   # icon.png has no alpha channel; remove_alpha_ios guards against a future
   # export that does, which the App Store would reject.
   ios: false

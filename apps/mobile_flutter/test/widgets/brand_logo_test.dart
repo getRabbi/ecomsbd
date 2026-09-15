@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsFlag;
+
 import 'package:ecomsbd/design/components/pills.dart';
 import 'package:ecomsbd/features/splash/splash_screen.dart';
 import 'package:ecomsbd/widgets/brand/ecoms_animated_logo.dart';
@@ -118,6 +120,13 @@ void main() {
       expect(find.bySemanticsLabel('ecomsbd'), findsOneWidget);
       handle.dispose();
     });
+
+    testWidgets('is hidden from screen readers by default', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpAtSize(tester, _centred(const EcomsBrandMark(size: 30)));
+      expect(find.semantics.byFlag(SemanticsFlag.isImage), findsNothing);
+      handle.dispose();
+    });
   });
 
   group('BrandPill', () {
@@ -140,6 +149,17 @@ void main() {
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('o'), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reads the product name once, with no image or letter', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pumpAtSize(tester, _centred(BrandPill(onTap: () {})));
+      expect(find.semantics.byLabel('ecomsbd'), findsOne);
+      expect(find.semantics.byLabel(RegExp(r'^e$')), findsNothing);
+      expect(find.semantics.byFlag(SemanticsFlag.isImage), findsNothing);
+      handle.dispose();
     });
   });
 
