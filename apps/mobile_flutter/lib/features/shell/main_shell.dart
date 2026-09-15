@@ -86,15 +86,7 @@ class MainShellState extends ConsumerState<MainShell> {
       topBar: GlassTopBar(
         leading: isHome
             ? BrandPill(onTap: _openMenu)
-            : BrandPill(
-                label: _current.label,
-                mark: _current.label.substring(0, 1).toLowerCase(),
-                onTap: _openMenu,
-                markColors: const <Color>[
-                  EcomsbdColors.navyLight,
-                  EcomsbdColors.navyMid,
-                ],
-              ),
+            : BrandPill(label: _current.label, onTap: _openMenu),
         actions: <Widget>[
           GlassIconButton(
             icon: Icons.add_rounded,

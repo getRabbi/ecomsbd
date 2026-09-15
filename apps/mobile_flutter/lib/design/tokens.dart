@@ -62,6 +62,11 @@ class EcomsbdColors {
   /// `--orangeSoft`
   static const Color orangeSoft = Color(0x1CFF4500);
 
+  /// Contact shadow under the animated brand mark. A deep warm brown rather
+  /// than the neutral shadow ink: the shadow of an orange object reads warm.
+  /// Its strength is set by the animation, not here.
+  static const Color brandMarkShadow = Color(0xFF5A260E);
+
   // --- semantic -------------------------------------------------------------
   // Master spec section 122: state is never communicated by colour alone; every
   // component pairing these with a status also renders an icon or a label.

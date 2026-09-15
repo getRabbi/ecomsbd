@@ -76,11 +76,19 @@ dev_dependencies:
   drift_dev: ^2.21.0
   http: ^1.6.0
 
+  # Generates the launcher icons from assets/icon/icon.png (configured at the
+  # end of this file). Build-time only; nothing from it ships in the app.
+  flutter_launcher_icons: ^0.14.4
+
 flutter:
   uses-material-design: true
 
   assets:
     - assets/fonts/
+    # The transparent brand mark, animated in-app by EcomsAnimatedLogo.
+    # assets/icon/icon.png is deliberately not bundled: it is only the launcher
+    # icon source, read when icons are generated, and would add 1 MB to the app.
+    - assets/icon/logo_mark.png
 
   fonts:
     # Reddit Sans is the product typeface (locked UI direction).
@@ -107,3 +115,25 @@ flutter:
           weight: 600
         - asset: assets/fonts/NotoSansBengali-700.ttf
           weight: 700
+
+# Launcher icons. Regenerate with `dart run flutter_launcher_icons`.
+#
+# icon.png is the finished icon (orange tile on a near-white canvas) and is
+# used exactly as supplied. The adaptive foreground keeps the package's
+# default 16% inset, which puts the whole tile inside the 66dp safe zone, so
+# no launcher mask shape crops it. The background matches the artwork's own
+# margin (#FEFEFE, measured) so no seam shows where the two layers meet.
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  # The package cannot read `flutter.minSdkVersion` from build.gradle.kts;
+  # this is the value the Flutter toolchain supplies.
+  min_sdk_android: 24
+  adaptive_icon_background: "#FEFEFE"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  # There is no ios/ project yet, and generating into a missing one fails.
+  # After `flutter create --platforms=ios .`, set this to true and regenerate.
+  # icon.png has no alpha channel; remove_alpha_ios guards against a future
+  # export that does, which the App Store would reject.
+  ios: false
+  remove_alpha_ios: true

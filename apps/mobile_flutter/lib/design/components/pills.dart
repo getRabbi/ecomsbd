@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../glass.dart';
 import '../tokens.dart';
+import '../../widgets/brand/ecoms_brand_mark.dart';
 
 /// `.glass-pill` — the floating capsule the top bar is built from.
 class GlassTopPill extends StatelessWidget {
@@ -47,7 +48,7 @@ class GlassTopPill extends StatelessWidget {
   }
 }
 
-/// The product identity pill: mark plus the `ecomsbd` wordmark.
+/// The product identity pill: the brand mark plus the `ecomsbd` wordmark.
 ///
 /// The name is fixed here rather than passed in, so no screen can render the
 /// product under a different name.
@@ -56,23 +57,14 @@ class BrandPill extends StatelessWidget {
     super.key,
     this.onTap,
     this.label = 'ecomsbd',
-    this.mark = 'e',
     this.showChevron = true,
-    this.markColors = const <Color>[
-      EcomsbdColors.orange,
-      EcomsbdColors.orangeLight,
-    ],
   });
 
   /// Displayed product name. Defaults to the locked product name.
   final String label;
 
-  /// Single character shown inside the round mark.
-  final String mark;
-
   final VoidCallback? onTap;
   final bool showChevron;
-  final List<Color> markColors;
 
   @override
   Widget build(BuildContext context) {
@@ -82,27 +74,9 @@ class BrandPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: markColors,
-              ),
-              boxShadow: EcomsbdShadows.accent,
-            ),
-            child: Text(
-              mark,
-              style: EcomsbdType.chip.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
+          // The same 30dp slot the placeholder round mark used, so the pill
+          // keeps its size on every screen.
+          const EcomsBrandMark(size: 30),
           const SizedBox(width: EcomsbdSpacing.sm),
           Flexible(
             child: Text(

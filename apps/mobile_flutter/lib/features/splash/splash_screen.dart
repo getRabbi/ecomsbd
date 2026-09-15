@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../widgets/brand/ecoms_logo_loader.dart';
 
 /// Shown while the stored session is restored and verified.
 ///
-/// Deliberately quiet: master spec section 53 asks for a fast cold start on
-/// low-end devices, and an animated splash competes with the work that actually
-/// gates the first screen.
+/// The native launch window stays static; this is the first Flutter frame, and
+/// the brand mark hops here until the router moves on. Master spec section 53
+/// asks for a fast cold start on low-end devices, so the motion is kept cheap:
+/// transforms only, on its own layer, with the mark decoded at display size.
+/// It stands still when the system has animations turned off.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key, this.message});
 
@@ -21,16 +23,7 @@ class SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const BrandPill(showChevron: false),
-            const SizedBox(height: EcomsbdSpacing.xl),
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: EcomsbdColors.orange,
-              ),
-            ),
+            const EcomsLogoLoader(size: 110),
             if (message != null) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.md),
               Text(
