@@ -12,6 +12,12 @@ import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Where the seller is in the import.
 enum _Step { choose, map, review, done }
@@ -213,12 +219,12 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
   @override
   Widget build(BuildContext context) {
     return DetailScaffold(
-      title: 'Import a file',
+      title: context.tr('imp.title'),
       subtitle: switch (_step) {
-        _Step.choose => 'Step 1 of 3 · choose',
-        _Step.map => 'Step 2 of 3 · check columns',
-        _Step.review => 'Step 3 of 3 · review',
-        _Step.done => 'Finished',
+        _Step.choose => context.tr('imp.step1'),
+        _Step.map => context.tr('imp.step2'),
+        _Step.review => context.tr('imp.step3'),
+        _Step.done => context.tr('imp.finished'),
       },
       children: <Widget>[
         if (_error != null) ...<Widget>[
@@ -242,7 +248,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('What are you importing?', style: EcomsbdType.bodyStrong),
+          Text(context.tr('imp.whatImporting'), style: EcomsbdType.bodyStrong),
           const SizedBox(height: EcomsbdSpacing.sm),
           Row(
             children: <Widget>[
@@ -250,7 +256,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
                 child: _TemplateTile(
                   icon: Icons.inventory_2_outlined,
                   title: 'Products',
-                  subtitle: 'Name, cost, price, stock',
+                  subtitle: context.tr('imp.productsSub'),
                   selected: _template == 'PRODUCTS',
                   onTap: () => setState(() => _template = 'PRODUCTS'),
                 ),
@@ -260,7 +266,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
                 child: _TemplateTile(
                   icon: Icons.receipt_long_outlined,
                   title: 'Orders',
-                  subtitle: 'Phone, product, amount',
+                  subtitle: context.tr('imp.ordersSub'),
                   selected: _template == 'ORDERS',
                   onTap: () => setState(() => _template = 'ORDERS'),
                 ),
@@ -275,18 +281,21 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('Your file', style: EcomsbdType.bodyStrong),
+          Text(context.tr('imp.yourFile'), style: EcomsbdType.bodyStrong),
           const SizedBox(height: 3),
           Text(
-            'A CSV exported from Google Sheets or Excel. Column names in Bangla '
-            'or English are both understood. Nothing is created yet.',
+            context.tr('imp.fileNote'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           FilledButton.icon(
             onPressed: _busy ? null : _chooseFile,
             icon: const Icon(Icons.upload_file_rounded, size: 18),
-            label: Text(_busy ? 'Reading…' : 'Choose a file'),
+            label: Text(
+              _busy
+                  ? context.tr('common.reading')
+                  : context.tr('imp.chooseFile'),
+            ),
             style: FilledButton.styleFrom(
               backgroundColor: EcomsbdColors.orange,
               minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
@@ -341,7 +350,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
       if (missing.isNotEmpty) ...<Widget>[
         const SizedBox(height: EcomsbdSpacing.sm),
         ProviderHealthBanner(
-          provider: 'Still needed',
+          provider: context.tr('imp.stillNeeded'),
           detail:
               'Point ${missing.join(', ')} at a column before checking the '
               'file.',
@@ -357,11 +366,11 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
           shape: const StadiumBorder(),
           textStyle: EcomsbdType.label,
         ),
-        child: Text(_busy ? 'Checking…' : 'Check every row'),
+        child: Text(_busy ? 'Checking…' : context.tr('imp.checkEveryRow')),
       ),
       const SizedBox(height: EcomsbdSpacing.xs),
       Text(
-        'This only reads your file. Nothing is created until you say so.',
+        context.tr('imp.readOnlyNote'),
         style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
         textAlign: TextAlign.center,
       ),
@@ -383,32 +392,32 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
           MetricTile(
             label: 'Ready',
             value: '${batch.readyCount}',
-            caption: 'will be created',
+            caption: context.tr('imp.willBeCreated'),
             tone: Tone.good,
           ),
           MetricTile(
-            label: 'With a warning',
+            label: context.tr('imp.withWarning'),
             value: '${batch.warningCount}',
-            caption: 'created, but check them',
+            caption: context.tr('imp.createdButCheck'),
             tone: batch.warningCount > 0 ? Tone.warning : null,
           ),
           MetricTile(
-            label: 'Already here',
+            label: context.tr('imp.alreadyHere'),
             value: '${batch.duplicateCount}',
             caption: 'skipped',
           ),
           MetricTile(
             label: 'Cannot import',
             value: '${batch.invalidCount}',
-            caption: 'fix and re-upload',
+            caption: context.tr('imp.fixAndReupload'),
             tone: batch.invalidCount > 0 ? Tone.bad : null,
           ),
         ],
       ),
       if (problems.isNotEmpty) ...<Widget>[
-        const SectionHeader(
-          title: 'Rows to look at',
-          subtitle: 'Shown with the value your file actually contained',
+        SectionHeader(
+          title: context.tr('imp.rowsToLookAt'),
+          subtitle: context.tr('imp.rowsToLookAtSub'),
         ),
         for (final row in problems.take(50))
           Padding(
@@ -432,11 +441,11 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
         ),
         child: Text(
           _busy
-              ? 'Creating…'
+              ? context.tr('imp.creating')
               : (batch.canCommit
                     ? 'Create ${batch.importableCount} record'
                           '${batch.importableCount == 1 ? '' : 's'}'
-                    : 'Nothing to create'),
+                    : context.tr('imp.nothingToCreate')),
         ),
       ),
       const SizedBox(height: EcomsbdSpacing.sm),
@@ -447,7 +456,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
           foregroundColor: EcomsbdColors.muted,
           textStyle: EcomsbdType.label,
         ),
-        child: const Text('Back to the columns'),
+        child: Text(context.tr('imp.backToColumns')),
       ),
     ];
   }
@@ -483,8 +492,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
           ],
           const SizedBox(height: EcomsbdSpacing.sm),
           Text(
-            'Uploading the same file again will not create these a second '
-            'time.',
+            context.tr('imp.reuploadNote'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
           ),
         ],
@@ -498,7 +506,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
         shape: const StadiumBorder(),
         textStyle: EcomsbdType.label,
       ),
-      child: const Text('Import another file'),
+      child: Text(context.tr('imp.importAnother')),
     ),
   ];
 }
@@ -582,21 +590,21 @@ class _ColumnMapRow extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   static String _label(String field) => switch (field) {
-    'name' => 'Product name',
-    'sku' => 'SKU / code',
-    'cost' => 'Cost',
-    'price' => 'Selling price',
-    'stock' => 'Opening stock',
-    'description' => 'Description',
-    'phone' => 'Customer phone',
-    'customer_name' => 'Customer name',
-    'product' => 'Product',
-    'quantity' => 'Quantity',
-    'amount' => 'COD amount',
-    'address' => 'Address',
-    'district' => 'District',
-    'area' => 'Area',
-    'note' => 'Note',
+    'name' => _t('imp.colProductName'),
+    'sku' => _t('imp.colSku'),
+    'cost' => _t('imp.colCost'),
+    'price' => _t('imp.colSellingPrice'),
+    'stock' => _t('imp.colOpeningStock'),
+    'description' => _t('imp.colDescription'),
+    'phone' => _t('imp.colCustomerPhone'),
+    'customer_name' => _t('imp.colCustomerName'),
+    'product' => _t('imp.colProduct'),
+    'quantity' => _t('imp.colQuantity'),
+    'amount' => _t('imp.colCodAmount'),
+    'address' => _t('common.address'),
+    'district' => _t('imp.colDistrict'),
+    'area' => _t('imp.colArea'),
+    'note' => _t('common.note'),
     _ => field,
   };
 

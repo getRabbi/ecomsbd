@@ -14,6 +14,7 @@ import '../shared/inputs.dart';
 import '../shared/responsive.dart';
 import 'product_form_screen.dart';
 import 'stock_history_screen.dart';
+import '../../l10n/app_strings.dart';
 
 /// Products and stock.
 ///
@@ -63,7 +64,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         backgroundColor: EcomsbdColors.orange,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add product'),
+        label: Text(context.tr('prod.add')),
       ),
       body: EcomsbdBackground(
         child: SafeArea(
@@ -84,15 +85,13 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Cost · margin · inventory',
-                          title: 'Products',
-                          description:
-                              'Stock changes by recording a movement, never by '
-                              'typing over a total.',
+                          eyebrow: context.tr('prod.eyebrow'),
+                          title: context.tr('entity.products'),
+                          description: context.tr('prod.description'),
                         ),
                       ),
                     ],
@@ -110,7 +109,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   ],
                   CommerceSearchField(
                     controller: _search,
-                    hint: 'Search by name or SKU',
+                    hint: context.tr('prod.searchHint'),
                     onChanged: controller.setSearch,
                   ),
                   const SizedBox(height: EcomsbdSpacing.sm),
@@ -126,11 +125,9 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.inventory_2_outlined,
-                    emptyTitle: 'No products yet',
-                    emptyMessage:
-                        'Add what you sell, with its cost, so profit can be '
-                        'worked out later from real numbers.',
-                    emptyActionLabel: 'Add your first product',
+                    emptyTitle: context.tr('prod.emptyTitle'),
+                    emptyMessage: context.tr('prod.emptyBody'),
+                    emptyActionLabel: context.tr('prod.emptyAction'),
                     onEmptyAction: _openForm,
                     itemBuilder: (context, product) => ProductRow(
                       product: product,
@@ -202,10 +199,13 @@ class ProductRow extends StatelessWidget {
               ),
               const SizedBox(width: EcomsbdSpacing.xs),
               if (product.isArchived)
-                const StatusChip(label: 'Archived', tone: Tone.neutral)
+                StatusChip(
+                  label: context.tr('common.archived'),
+                  tone: Tone.neutral,
+                )
               else if (product.isLowStock)
-                const StatusChip(
-                  label: 'Low stock',
+                StatusChip(
+                  label: context.tr('common.lowStock'),
                   tone: Tone.warning,
                   icon: Icons.trending_down_rounded,
                 ),
@@ -217,11 +217,20 @@ class ProductRow extends StatelessWidget {
             maxColumns: 4,
             spacing: EcomsbdSpacing.xs,
             children: <Widget>[
-              _Fact(label: 'In stock', value: '${product.stockOnHand}'),
-              _Fact(label: 'Cost', value: product.cost.format()),
-              _Fact(label: 'Price', value: product.sellingPrice.format()),
               _Fact(
-                label: 'Margin',
+                label: context.tr('common.inStock'),
+                value: '${product.stockOnHand}',
+              ),
+              _Fact(
+                label: context.tr('imp.colCost'),
+                value: product.cost.format(),
+              ),
+              _Fact(
+                label: context.tr('common.price'),
+                value: product.sellingPrice.format(),
+              ),
+              _Fact(
+                label: context.tr('common.margin'),
                 value: product.margin.format(),
                 tone: product.margin.isNegative ? Tone.bad : null,
               ),
@@ -234,7 +243,7 @@ class ProductRow extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onHistory,
                 icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                label: const Text('Stock history'),
+                label: Text(context.tr('sh.title')),
                 style: TextButton.styleFrom(
                   foregroundColor: EcomsbdColors.orange,
                   minimumSize: const Size(0, EcomsbdTouch.minTarget),
@@ -310,12 +319,12 @@ class _Filters extends StatelessWidget {
       runSpacing: EcomsbdSpacing.xs,
       children: <Widget>[
         FilterToggle(
-          label: 'Low stock only',
+          label: context.tr('prod.lowStockOnly'),
           selected: lowStockOnly,
           onChanged: onLowStock,
         ),
         FilterToggle(
-          label: 'Include archived',
+          label: context.tr('prod.includeArchived'),
           selected: includeArchived,
           onChanged: onArchived,
         ),

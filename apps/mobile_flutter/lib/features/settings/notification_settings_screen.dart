@@ -10,6 +10,7 @@ import '../../design/glass.dart';
 import '../../design/tokens.dart';
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
+import '../../l10n/app_strings.dart';
 
 /// What the product is allowed to interrupt the seller about.
 ///
@@ -23,17 +24,17 @@ import 'settings_screen.dart' show SettingsError;
 class NotificationSettingsScreen extends ConsumerWidget {
   const NotificationSettingsScreen({super.key});
 
-  static const List<({String kind, String label})> _kinds =
-      <({String kind, String label})>[
-        (kind: 'DELIVERED_BUT_UNPAID', label: 'Delivered but not paid'),
-        (kind: 'UNDERPAID', label: 'Paid less than expected'),
-        (kind: 'STALE_IN_TRANSIT', label: 'Parcels stuck in transit'),
-        (
-          kind: 'RETURNED_NOT_RESTOCKED',
-          label: 'Returns not put back in stock',
-        ),
-        (kind: 'RETURN_SPIKE', label: 'More returns than usual'),
-        (kind: 'WEEKLY_SUMMARY', label: 'Friday summary'),
+  /// Alert kinds with the key their wording lives under. The kind is API
+  /// contract; the label is resolved where it is rendered, because a const
+  /// list cannot hold a catalogue lookup.
+  static const List<({String kind, String labelKey})> _kinds =
+      <({String kind, String labelKey})>[
+        (kind: 'DELIVERED_BUT_UNPAID', labelKey: 'ns.deliveredNotPaid'),
+        (kind: 'UNDERPAID', labelKey: 'ns.paidLess'),
+        (kind: 'STALE_IN_TRANSIT', labelKey: 'ns.stuckInTransit'),
+        (kind: 'RETURNED_NOT_RESTOCKED', labelKey: 'ns.returnsNotRestocked'),
+        (kind: 'RETURN_SPIKE', labelKey: 'ns.moreReturns'),
+        (kind: 'WEEKLY_SUMMARY', labelKey: 'ns.fridaySummary'),
       ];
 
   @override
@@ -58,11 +59,11 @@ class NotificationSettingsScreen extends ConsumerWidget {
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
                       icon: const Icon(Icons.arrow_back_rounded),
-                      tooltip: 'Back',
+                      tooltip: context.tr('common.back'),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Notifications',
+                        context.tr('notif.title'),
                         style: EcomsbdType.pageTitle,
                       ),
                     ),
@@ -77,9 +78,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
                       const SizedBox(width: EcomsbdSpacing.sm),
                       Expanded(
                         child: Text(
-                          'Everything we raise is always in your notification '
-                          'centre, whatever you switch off here. These settings '
-                          'only decide what interrupts you.',
+                          context.tr('ns.centreNote'),
                           style: EcomsbdType.caption.copyWith(
                             color: EcomsbdColors.muted,
                           ),
@@ -114,7 +113,7 @@ class _Form extends ConsumerStatefulWidget {
   const _Form({required this.preferences, required this.kinds});
 
   final NotificationPreferences preferences;
-  final List<({String kind, String label})> kinds;
+  final List<({String kind, String labelKey})> kinds;
 
   @override
   ConsumerState<_Form> createState() => _FormState();
@@ -129,25 +128,25 @@ class _FormState extends ConsumerState<_Form> {
 
     return Column(
       children: <Widget>[
-        const SectionHeader(title: 'Channels'),
+        SectionHeader(title: context.tr('ns.channels')),
         GlassCard(
           child: Column(
             children: <Widget>[
               _ChannelSwitch(
-                title: 'Push notifications',
+                title: context.tr('ns.push'),
                 subtitle: preferences.pushTransportAvailable
-                    ? 'Money alerts on this phone'
-                    : 'Not switched on yet in this app',
+                    ? context.tr('ns.pushSub')
+                    : context.tr('ns.notOnYet'),
                 value: preferences.pushEnabled,
                 enabled: preferences.pushTransportAvailable && !_busy,
                 onChanged: (value) => _save(pushEnabled: value),
               ),
               const Divider(height: EcomsbdSpacing.lg),
               _ChannelSwitch(
-                title: 'SMS to customers',
+                title: context.tr('ns.sms'),
                 subtitle: preferences.smsTransportAvailable
-                    ? 'Order and delivery updates. Uses your SMS allowance.'
-                    : 'Not switched on yet — no SMS provider is connected',
+                    ? context.tr('ns.smsSub')
+                    : context.tr('ns.smsNotOnYet'),
                 value: preferences.smsEnabled,
                 enabled: preferences.smsTransportAvailable && !_busy,
                 onChanged: (value) => _save(smsEnabled: value),
@@ -156,30 +155,28 @@ class _FormState extends ConsumerState<_Form> {
           ),
         ),
 
-        const SectionHeader(
-          title: 'Parcel tracking',
-          subtitle: 'Off by design — one push per scan is noise',
+        SectionHeader(
+          title: context.tr('ns.parcelTracking'),
+          subtitle: context.tr('ns.trackingOffNote'),
         ),
         GlassCard(
           child: _ChannelSwitch(
-            title: 'Every tracking update',
-            subtitle:
-                'Sends a notification each time a parcel moves. Most sellers '
-                'find this too much; the alerts that need you are always sent.',
+            title: context.tr('ns.everyUpdate'),
+            subtitle: context.tr('ns.everyUpdateSub'),
             value: preferences.routineTrackingPush,
             enabled: preferences.pushTransportAvailable && !_busy,
             onChanged: (value) => _save(routineTrackingPush: value),
           ),
         ),
 
-        const SectionHeader(title: 'What we tell you about'),
+        SectionHeader(title: context.tr('ns.whatWeTell')),
         GlassCard(
           child: Column(
             children: <Widget>[
               for (var index = 0; index < widget.kinds.length; index++) ...[
                 if (index > 0) const Divider(height: EcomsbdSpacing.lg),
                 _ChannelSwitch(
-                  title: widget.kinds[index].label,
+                  title: context.tr(widget.kinds[index].labelKey),
                   subtitle: null,
                   value: !preferences.mutedKinds.contains(
                     widget.kinds[index].kind,

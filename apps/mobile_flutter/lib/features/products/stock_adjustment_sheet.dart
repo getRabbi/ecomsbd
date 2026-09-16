@@ -9,6 +9,7 @@ import '../../data/commerce/models.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
 import '../shared/inputs.dart';
+import '../../l10n/app_strings.dart';
 
 /// Reasons a seller may choose by hand.
 ///
@@ -16,24 +17,19 @@ import '../shared/inputs.dart';
 /// `RETURN_RESTORE`, `CANCEL_RESTORE` — are written by the system when an order
 /// moves, and offering them here would let a seller record a return that never
 /// happened (master spec section 10.4).
-const List<({String code, String label, String help})> sellerStockReasons =
-    <({String code, String label, String help})>[
-      (
-        code: 'MANUAL_ADJUSTMENT',
-        label: 'Correction',
-        help: 'The count on the shelf does not match the app.',
-      ),
-      (
-        code: 'OPENING',
-        label: 'New stock',
-        help: 'You received more of this product.',
-      ),
-      (
-        code: 'DAMAGED_WRITE_OFF',
-        label: 'Damaged',
-        help: 'Written off and cannot be sold.',
-      ),
-    ];
+/// The reason codes a seller may pick, with the keys their wording lives
+/// under. Codes are API contract; the words are resolved where rendered,
+/// because a const list cannot hold a catalogue lookup.
+const List<({String code, String labelKey, String helpKey})>
+sellerStockReasons = <({String code, String labelKey, String helpKey})>[
+  (
+    code: 'MANUAL_ADJUSTMENT',
+    labelKey: 'sa.correction',
+    helpKey: 'sa.correctionSub',
+  ),
+  (code: 'OPENING', labelKey: 'sa.newStock', helpKey: 'sa.newStockSub'),
+  (code: 'DAMAGED_WRITE_OFF', labelKey: 'sa.damaged', helpKey: 'sa.damagedSub'),
+];
 
 /// Record a stock movement.
 ///
@@ -152,7 +148,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                 ),
               ),
               const SizedBox(height: EcomsbdSpacing.md),
-              const Text('Adjust stock', style: EcomsbdType.sectionTitle),
+              Text(context.tr('sa.title'), style: EcomsbdType.sectionTitle),
               const SizedBox(height: 2),
               Text(
                 '${widget.product.name} · ${widget.product.stockOnHand} in stock',
@@ -163,7 +159,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                 children: <Widget>[
                   Expanded(
                     child: _DirectionButton(
-                      label: 'Add',
+                      label: context.tr('common.add'),
                       icon: Icons.add_rounded,
                       selected: _isIncrease,
                       tone: Tone.good,
@@ -173,7 +169,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                   const SizedBox(width: EcomsbdSpacing.sm),
                   Expanded(
                     child: _DirectionButton(
-                      label: 'Remove',
+                      label: context.tr('common.remove'),
                       icon: Icons.remove_rounded,
                       selected: !_isIncrease,
                       tone: Tone.bad,
@@ -184,7 +180,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               LabelledField(
-                label: 'How many',
+                label: context.tr('sa.howMany'),
                 controller: _quantity,
                 keyboardType: TextInputType.number,
                 inputFormatters: <TextInputFormatter>[
@@ -206,7 +202,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                 children: <Widget>[
                   for (final reason in sellerStockReasons)
                     FilterToggle(
-                      label: reason.label,
+                      label: context.tr(reason.labelKey),
                       selected: _reason == reason.code,
                       onChanged: (_) => setState(() => _reason = reason.code),
                     ),
@@ -214,16 +210,18 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                sellerStockReasons
-                    .firstWhere((reason) => reason.code == _reason)
-                    .help,
+                context.tr(
+                  sellerStockReasons
+                      .firstWhere((reason) => reason.code == _reason)
+                      .helpKey,
+                ),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               LabelledField(
-                label: 'Note',
+                label: context.tr('common.note'),
                 controller: _note,
-                hint: 'Optional — what happened',
+                hint: context.tr('sa.noteHint'),
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               if (_amount > 0)
@@ -231,7 +229,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        'After this change',
+                        context.tr('sa.afterChange'),
                         style: EcomsbdType.caption.copyWith(
                           color: EcomsbdColors.muted,
                         ),
@@ -270,7 +268,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                     shape: const StadiumBorder(),
                     textStyle: EcomsbdType.label,
                   ),
-                  child: const Text('Record it anyway, stock goes negative'),
+                  child: Text(context.tr('sa.recordNegative')),
                 )
               else
                 FilledButton(
@@ -281,7 +279,11 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                     shape: const StadiumBorder(),
                     textStyle: EcomsbdType.label,
                   ),
-                  child: Text(_saving ? 'Recording…' : 'Record movement'),
+                  child: Text(
+                    _saving
+                        ? context.tr('common.recording')
+                        : context.tr('sa.record'),
+                  ),
                 ),
             ],
           ),

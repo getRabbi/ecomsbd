@@ -9,6 +9,12 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/inputs.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// A parcel's courier state, on the order detail screen.
 ///
@@ -71,13 +77,16 @@ class CourierStatusCard extends ConsumerWidget {
           ),
           if (trackingCode != null) ...<Widget>[
             const SizedBox(height: 6),
-            _KeyValue(label: 'Tracking code', value: trackingCode!),
+            _KeyValue(
+              label: context.tr('common.trackingCode'),
+              value: trackingCode!,
+            ),
           ],
           if (providerRawStatus != null) ...<Widget>[
             const SizedBox(height: 6),
             // The courier's own word, so a support call can quote it.
             _KeyValue(
-              label: 'Steadfast says',
+              label: context.tr('csc.steadfastSays'),
               value: providerRawStatus!.replaceAll('_', ' '),
             ),
           ],
@@ -90,7 +99,7 @@ class CourierStatusCard extends ConsumerWidget {
             loading: () => const SkeletonLoader(height: 48),
             error: (error, _) => error is ApiError && error.isOffline
                 ? Text(
-                    'Timeline unavailable offline.',
+                    context.tr('csc.offlineTimeline'),
                     style: EcomsbdType.caption.copyWith(
                       color: EcomsbdColors.muted2,
                     ),
@@ -125,16 +134,11 @@ class _NeedsQuantities extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Partly delivered — how many arrived?',
+            context.tr('csc.partialTitle'),
             style: EcomsbdType.label.copyWith(color: Tone.warning.ink),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'Steadfast says part of this parcel was delivered but does not say '
-            'how much. Record the quantities on the parcel and the money will '
-            'follow. Nothing is settled until you do.',
-            style: EcomsbdType.caption,
-          ),
+          Text(context.tr('csc.partialBody'), style: EcomsbdType.caption),
         ],
       ),
     );
@@ -160,12 +164,12 @@ class _Timeline extends StatelessWidget {
         ],
         if (events.isEmpty)
           Text(
-            'No courier updates yet.',
+            context.tr('csc.noUpdates'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
           )
         else ...<Widget>[
           Text(
-            'COURIER UPDATES',
+            context.tr('csc.updatesCaps'),
             style: EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
           ),
           const SizedBox(height: 4),
@@ -237,8 +241,8 @@ class _UnresolvedBooking extends StatelessWidget {
         children: <Widget>[
           Text(
             attempt.needsAPerson
-                ? 'We could not confirm this booking'
-                : 'Checking this booking with Steadfast',
+                ? context.tr('csc.unconfirmedTitle')
+                : context.tr('csc.checkingTitle'),
             style: EcomsbdType.label.copyWith(color: Tone.warning.ink),
           ),
           const SizedBox(height: 2),
@@ -367,21 +371,17 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
       children: <Widget>[
         const _Grip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const Text(
-          'Ask Steadfast to return it',
-          style: EcomsbdType.sectionTitle,
-        ),
+        Text(context.tr('csc.returnTitle'), style: EcomsbdType.sectionTitle),
         const SizedBox(height: 3),
         Text(
-          'The courier will collect the parcel and bring it back. They usually '
-          'charge for this, and the request cannot be undone from here.',
+          context.tr('csc.returnBody'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
         LabelledField(
-          label: 'Why is it coming back',
+          label: context.tr('csc.whyBack'),
           controller: _reason,
-          hint: 'Optional — skip it rather than guess',
+          hint: context.tr('csc.whyBackHint'),
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
         // An explicit confirmation, because this costs money at the courier
@@ -393,9 +393,9 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
               value: _confirmed,
               onChanged: (value) => setState(() => _confirmed = value ?? false),
             ),
-            const Expanded(
+            Expanded(
               child: Text(
-                'I want Steadfast to collect this parcel',
+                context.tr('csc.confirmReturn'),
                 style: EcomsbdType.caption,
               ),
             ),
@@ -414,7 +414,7 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.tr('common.cancel')),
               ),
             ),
             const SizedBox(width: EcomsbdSpacing.xs),
@@ -423,7 +423,11 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
               child: FilledButton(
                 onPressed: _busy || !_confirmed ? null : _submit,
                 style: _primaryButton,
-                child: Text(_busy ? 'Sending…' : 'Request return'),
+                child: Text(
+                  _busy
+                      ? context.tr('csc.sending')
+                      : context.tr('csc.requestReturn'),
+                ),
               ),
             ),
           ],
@@ -448,8 +452,7 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
         if (result.isAmbiguous) ...<Widget>[
           const SizedBox(height: EcomsbdSpacing.xs),
           Text(
-            'Do not send another request. A repeat could have the parcel '
-            'collected twice, and you would be charged twice.',
+            context.tr('csc.dupWarn'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
         ],
@@ -457,7 +460,7 @@ class _CourierReturnSheetState extends ConsumerState<CourierReturnSheet> {
         FilledButton(
           onPressed: () => Navigator.of(context).pop(result),
           style: _primaryButton,
-          child: const Text('Got it'),
+          child: Text(context.tr('common.gotIt')),
         ),
       ],
     );
@@ -506,7 +509,7 @@ class _Grip extends StatelessWidget {
 
 String _providerName(String provider) => switch (provider) {
   'steadfast' => 'Steadfast',
-  'manual' => 'Recorded by hand',
+  'manual' => _t('csc.recordedByHand'),
   _ => provider,
 };
 
@@ -515,22 +518,22 @@ String _providerName(String provider) => switch (provider) {
 /// Deliberately not the enum name: a seller should never have to read
 /// `OUT_FOR_DELIVERY`.
 String _plainLabel(String status) => switch (status) {
-  'NOT_BOOKED' => 'Not booked',
-  'BOOKING' => 'Booking…',
-  'BOOKING_UNKNOWN' => 'Booking result uncertain',
-  'BOOKED' => 'With the courier',
-  'PICKED_UP' => 'Picked up',
-  'IN_TRANSIT' => 'On its way',
-  'OUT_FOR_DELIVERY' => 'Out for delivery',
-  'DELIVERED' => 'Delivered',
-  'PARTIAL_DELIVERED' => 'Partly delivered',
-  'RETURN_REQUESTED' => 'Return requested',
-  'RETURNING' => 'Coming back',
-  'RETURNED' => 'Returned',
-  'CANCELLED' => 'Cancelled',
-  'LOST' => 'Lost',
-  'DAMAGED' => 'Damaged',
-  'FAILED' => 'Failed',
+  'NOT_BOOKED' => _t('status.notBooked'),
+  'BOOKING' => _t('status.booking'),
+  'BOOKING_UNKNOWN' => _t('book.uncertain'),
+  'BOOKED' => _t('cst.withCourier'),
+  'PICKED_UP' => _t('csc.pickedUp'),
+  'IN_TRANSIT' => _t('rst.onItsWay'),
+  'OUT_FOR_DELIVERY' => _t('csc.outForDelivery'),
+  'DELIVERED' => _t('status.delivered'),
+  'PARTIAL_DELIVERED' => _t('csc.partlyDelivered'),
+  'RETURN_REQUESTED' => _t('csc.returnRequested'),
+  'RETURNING' => _t('csc.comingBack'),
+  'RETURNED' => _t('status.returned'),
+  'CANCELLED' => _t('ost.cancelled'),
+  'LOST' => _t('csc.lost'),
+  'DAMAGED' => _t('sa.damaged'),
+  'FAILED' => _t('csc.failed'),
   _ => status.replaceAll('_', ' ').toLowerCase(),
 };
 

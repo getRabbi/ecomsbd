@@ -17,6 +17,7 @@ import '../shared/data_state.dart';
 import 'courier_booking_sheet.dart';
 import 'dispatch_sheet.dart';
 import 'order_status.dart';
+import '../../l10n/app_strings.dart';
 
 /// One order in full.
 ///
@@ -107,7 +108,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           else
             EmptyState(
               icon: Icons.error_outline,
-              title: 'Could not load',
+              title: context.tr('common.couldNotLoad'),
               message: '$error',
             ),
         ],
@@ -148,21 +149,16 @@ class _OrderBody extends ConsumerWidget {
       actions: <Widget>[SyncBadge(state: syncState)],
       children: <Widget>[
         if (syncState == LocalSyncState.conflict) ...<Widget>[
-          const ProviderHealthBanner(
-            provider: 'Changed in two places',
-            detail:
-                'This order was edited somewhere else while your change was '
-                'waiting. Nothing was overwritten — open it again once you are '
-                'online to choose which version to keep.',
+          ProviderHealthBanner(
+            provider: context.tr('od.conflictTitle'),
+            detail: context.tr('od.conflictBody'),
             tone: Tone.bad,
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
         ] else if (syncState == LocalSyncState.localOnly) ...<Widget>[
-          const ProviderHealthBanner(
-            provider: 'Not on the server yet',
-            detail:
-                'Saved on this phone. It will sync when you are back online, '
-                'and it will keep the same order.',
+          ProviderHealthBanner(
+            provider: context.tr('od.notSyncedTitle'),
+            detail: context.tr('od.notSyncedBody'),
             tone: Tone.warning,
             actionLabel: null,
           ),
@@ -178,7 +174,8 @@ class _OrderBody extends ConsumerWidget {
                     child: Text(
                       order.customerName?.isNotEmpty == true
                           ? order.customerName!
-                          : (order.customerPhoneMasked ?? 'Customer'),
+                          : (order.customerPhoneMasked ??
+                                context.tr('common.customer')),
                       style: EcomsbdType.sectionTitle,
                     ),
                   ),
@@ -222,7 +219,7 @@ class _OrderBody extends ConsumerWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
         // Four separate facts. None of them is a guess.
         OrderStateGrid(order: order),
-        const SectionHeader(title: 'Items'),
+        SectionHeader(title: context.tr('od.items')),
         GlassCard(
           child: Column(
             children: <Widget>[
@@ -232,14 +229,23 @@ class _OrderBody extends ConsumerWidget {
                   const Divider(height: EcomsbdSpacing.lg),
               ],
               const Divider(height: EcomsbdSpacing.lg),
-              _MoneyLine(label: 'Items total', amount: order.subtotal),
+              _MoneyLine(
+                label: context.tr('od.itemsTotal'),
+                amount: order.subtotal,
+              ),
               if (!order.discount.isZero)
-                _MoneyLine(label: 'Discount', amount: -order.discount),
+                _MoneyLine(
+                  label: context.tr('od.discount'),
+                  amount: -order.discount,
+                ),
               if (!order.deliveryFee.isZero)
-                _MoneyLine(label: 'Delivery fee', amount: order.deliveryFee),
+                _MoneyLine(
+                  label: context.tr('od.deliveryFee'),
+                  amount: order.deliveryFee,
+                ),
               const SizedBox(height: EcomsbdSpacing.xs),
               _MoneyLine(
-                label: 'COD to collect',
+                label: context.tr('od.codToCollect'),
                 amount: order.codAmount,
                 strong: true,
               ),
@@ -247,13 +253,13 @@ class _OrderBody extends ConsumerWidget {
           ),
         ),
         if (order.note?.isNotEmpty == true) ...<Widget>[
-          const SectionHeader(title: 'Note'),
+          SectionHeader(title: context.tr('common.note')),
           GlassCard(child: Text(order.note!, style: EcomsbdType.body)),
         ],
         if (order.sourceText?.isNotEmpty == true) ...<Widget>[
-          const SectionHeader(
-            title: 'Original message',
-            subtitle: 'Kept exactly as it was pasted',
+          SectionHeader(
+            title: context.tr('od.originalMessage'),
+            subtitle: context.tr('od.originalMessageSub'),
           ),
           GlassCard(
             child: Text(
@@ -263,11 +269,11 @@ class _OrderBody extends ConsumerWidget {
           ),
         ],
         if (history != null) ...<Widget>[
-          const SectionHeader(title: 'This customer’s other orders'),
+          SectionHeader(title: context.tr('od.otherOrders')),
           history.when(
             loading: () => SkeletonLoader.card(height: 60),
             error: (_, __) => Text(
-              'Could not load their history.',
+              context.tr('od.otherOrdersError'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             data: (orders) {
@@ -276,7 +282,7 @@ class _OrderBody extends ConsumerWidget {
                   .toList();
               if (others.isEmpty) {
                 return Text(
-                  'This is their first order with you.',
+                  context.tr('od.firstOrder'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),
@@ -297,7 +303,7 @@ class _OrderBody extends ConsumerWidget {
           ),
         ],
         if (next.isNotEmpty) ...<Widget>[
-          const SectionHeader(title: 'Move this order on'),
+          SectionHeader(title: context.tr('od.moveOn')),
           Wrap(
             spacing: EcomsbdSpacing.xs,
             runSpacing: EcomsbdSpacing.xs,
@@ -319,7 +325,7 @@ class _OrderBody extends ConsumerWidget {
           ),
           const SizedBox(height: EcomsbdSpacing.xs),
           Text(
-            'None of these contacts a courier.',
+            context.tr('od.noCourierContact'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
           ),
         ],
@@ -348,21 +354,21 @@ class OrderStateGrid extends StatelessWidget {
         children: <Widget>[
           _StateLine(
             icon: Icons.local_shipping_outlined,
-            label: 'Courier',
+            label: context.tr('orders.fact.courier'),
             value: fulfillmentLabel(order.fulfillmentState),
             tone: Tone.neutral,
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
           _StateLine(
             icon: Icons.shield_outlined,
-            label: 'Delivery risk',
+            label: context.tr('od.deliveryRisk'),
             value: riskLabel(order.riskState),
             tone: Tone.neutral,
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
           _StateLine(
             icon: Icons.savings_outlined,
-            label: 'Profit',
+            label: context.tr('orders.fact.profit'),
             value: profitLabel(order.profitState),
             tone: Tone.neutral,
           ),
@@ -493,22 +499,21 @@ class _CancelDialogState extends State<_CancelDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Cancel this order?'),
+      title: Text(context.tr('od.cancelTitle')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Any stock reserved for it goes back. The order stays in your '
-            'records with the reason.',
+            context.tr('od.cancelBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           TextField(
             controller: _reason,
-            decoration: const InputDecoration(
-              labelText: 'Reason',
-              hintText: 'Customer changed their mind',
+            decoration: InputDecoration(
+              labelText: context.tr('common.reason'),
+              hintText: context.tr('od.cancelReasonHint'),
             ),
           ),
         ],
@@ -516,15 +521,15 @@ class _CancelDialogState extends State<_CancelDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Keep it'),
+          child: Text(context.tr('od.keepIt')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(
             _reason.text.trim().isEmpty
-                ? 'Cancelled by seller'
+                ? context.tr('od.cancelledBySeller')
                 : _reason.text.trim(),
           ),
-          child: const Text('Cancel order'),
+          child: Text(context.tr('status.cancelOrder')),
         ),
       ],
     );
@@ -555,10 +560,10 @@ class _SendItSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(
-          title: 'Send it',
+          title: context.tr('od.sendIt'),
           subtitle: courierReady
-              ? 'Book with Steadfast, or record a courier by hand'
-              : 'Manual courier mode — nothing is sent to a provider',
+              ? context.tr('od.sendItSub')
+              : context.tr('od.manualMode'),
         ),
         if (courierReady) ...<Widget>[
           FilledButton.icon(
@@ -574,7 +579,7 @@ class _SendItSection extends ConsumerWidget {
                     }
                   },
             icon: const Icon(Icons.local_shipping_outlined, size: 18),
-            label: const Text('Book with Steadfast'),
+            label: Text(context.tr('book.title')),
             style: FilledButton.styleFrom(
               backgroundColor: EcomsbdColors.orange,
               minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
@@ -596,7 +601,7 @@ class _SendItSection extends ConsumerWidget {
                     }
                   },
             icon: const Icon(Icons.edit_note_rounded, size: 18),
-            label: const Text('Record a courier by hand'),
+            label: Text(context.tr('od.recordByHand')),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
               shape: const StadiumBorder(),
@@ -617,7 +622,7 @@ class _SendItSection extends ConsumerWidget {
                     }
                   },
             icon: const Icon(Icons.local_shipping_outlined, size: 18),
-            label: const Text('Hand to a courier'),
+            label: Text(context.tr('od.handToCourier')),
             style: FilledButton.styleFrom(
               backgroundColor: EcomsbdColors.orange,
               minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),

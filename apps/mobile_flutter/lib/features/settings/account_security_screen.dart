@@ -10,6 +10,7 @@ import '../../design/glass.dart';
 import '../../design/tokens.dart';
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
+import '../../l10n/app_strings.dart';
 
 /// Devices and sessions (master spec section 89).
 ///
@@ -44,10 +45,13 @@ class AccountSecurityScreen extends ConsumerWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
-                        child: Text('Devices', style: EcomsbdType.pageTitle),
+                      Expanded(
+                        child: Text(
+                          context.tr('as.devices'),
+                          style: EcomsbdType.pageTitle,
+                        ),
                       ),
                     ],
                   ),
@@ -57,8 +61,7 @@ class AccountSecurityScreen extends ConsumerWidget {
                       bottom: EcomsbdSpacing.md,
                     ),
                     child: Text(
-                      'Every phone or tablet signed in to this shop. Signing '
-                      'one out takes effect immediately.',
+                      context.tr('as.devicesBody'),
                       style: EcomsbdType.caption.copyWith(
                         color: EcomsbdColors.muted,
                       ),
@@ -128,11 +131,17 @@ class _DeviceCard extends ConsumerWidget {
                     ),
                     if (device.isCurrent) ...<Widget>[
                       const SizedBox(width: EcomsbdSpacing.xs),
-                      const StatusChip(label: 'This device', tone: Tone.good),
+                      StatusChip(
+                        label: context.tr('as.thisDevice'),
+                        tone: Tone.good,
+                      ),
                     ],
                     if (device.revoked) ...<Widget>[
                       const SizedBox(width: EcomsbdSpacing.xs),
-                      const StatusChip(label: 'Signed out', tone: Tone.neutral),
+                      StatusChip(
+                        label: context.tr('as.signedOut'),
+                        tone: Tone.neutral,
+                      ),
                     ],
                   ],
                 ),
@@ -147,7 +156,7 @@ class _DeviceCard extends ConsumerWidget {
                 if (device.pushEnabled) ...<Widget>[
                   const SizedBox(height: 2),
                   Text(
-                    'Receives notifications',
+                    context.tr('as.receivesNotifications'),
                     style: EcomsbdType.caption.copyWith(
                       color: EcomsbdColors.muted2,
                     ),
@@ -176,11 +185,7 @@ class _DeviceCard extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Sign out ${device.displayName}?'),
-        content: const Text(
-          'That device will be signed out straight away and will stop '
-          'receiving notifications. Anything it had not synced yet stays on '
-          'it until someone signs in again.',
-        ),
+        content: Text(context.tr('as.signOutOneBody')),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -199,7 +204,7 @@ class _DeviceCard extends ConsumerWidget {
       await ref.read(accountRepositoryProvider).revokeDevice(device.id);
       ref.invalidate(devicesProvider);
       messenger.showSnackBar(
-        const SnackBar(content: Text('That device has been signed out.')),
+        SnackBar(content: Text(context.tr('as.signedOutDone'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));
@@ -223,7 +228,9 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
       child: OutlinedButton.icon(
         onPressed: _busy ? null : _run,
         icon: const Icon(Icons.logout_rounded, size: 18),
-        label: Text(_busy ? 'Signing out…' : 'Sign out every other device'),
+        label: Text(
+          _busy ? context.tr('as.signingOut') : context.tr('as.signOutOthers'),
+        ),
         style: OutlinedButton.styleFrom(
           foregroundColor: Tone.bad.ink,
           minimumSize: const Size(0, EcomsbdTouch.minTarget),
@@ -238,13 +245,10 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sign out every other device?'),
+        title: Text(context.tr('as.signOutOthersTitle')),
         // The reassurance a seller needs before tapping the scary button:
         // this device keeps working.
-        content: const Text(
-          'This phone stays signed in. Every other device will need to sign '
-          'in again with your number.',
-        ),
+        content: Text(context.tr('as.signOutOthersBody')),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -252,7 +256,7 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign them out'),
+            child: Text(context.tr('as.signThemOut')),
           ),
         ],
       ),
@@ -264,9 +268,7 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
       await ref.read(accountRepositoryProvider).logoutOtherDevices();
       ref.invalidate(devicesProvider);
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Every other device has been signed out.'),
-        ),
+        SnackBar(content: Text(context.tr('as.othersSignedOut'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));

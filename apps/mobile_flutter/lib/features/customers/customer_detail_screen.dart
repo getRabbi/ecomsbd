@@ -15,6 +15,7 @@ import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
 
 /// One customer: history, private notes, and the audited phone reveal.
 class CustomerDetailScreen extends ConsumerStatefulWidget {
@@ -115,7 +116,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           else
             EmptyState(
               icon: Icons.error_outline,
-              title: 'Could not load',
+              title: context.tr('common.couldNotLoad'),
               message: '$error',
             ),
         ],
@@ -156,11 +157,10 @@ class _CustomerBody extends ConsumerWidget {
       children: <Widget>[
         if (customer.isBlocked) ...<Widget>[
           ProviderHealthBanner(
-            provider: 'Blocked for this shop',
+            provider: context.tr('cd.blockedTitle'),
             detail: customer.flagReason?.isNotEmpty == true
                 ? customer.flagReason!
-                : 'You marked this customer blocked. Orders can still be '
-                      'created; nothing is enforced automatically.',
+                : context.tr('cd.blockedBody'),
             tone: Tone.bad,
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
@@ -181,7 +181,7 @@ class _CustomerBody extends ConsumerWidget {
                     TextButton.icon(
                       onPressed: onReveal,
                       icon: const Icon(Icons.visibility_outlined, size: 17),
-                      label: const Text('Show number'),
+                      label: Text(context.tr('common.show')),
                       style: TextButton.styleFrom(
                         foregroundColor: EcomsbdColors.orange,
                         minimumSize: const Size(0, EcomsbdTouch.minTarget),
@@ -189,8 +189,8 @@ class _CustomerBody extends ConsumerWidget {
                       ),
                     )
                   else
-                    const StatusChip(
-                      label: 'Revealed · recorded',
+                    StatusChip(
+                      label: context.tr('cd.revealed'),
                       tone: Tone.info,
                       icon: Icons.receipt_long_outlined,
                     ),
@@ -199,9 +199,8 @@ class _CustomerBody extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 revealedPhone == null
-                    ? 'Numbers stay masked. Showing one asks for a reason and '
-                          'is written to your shop’s audit log.'
-                    : 'This reveal was recorded with your reason.',
+                    ? context.tr('cd.maskNote')
+                    : context.tr('cd.revealRecorded'),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
             ],
@@ -214,12 +213,14 @@ class _CustomerBody extends ConsumerWidget {
           spacing: EcomsbdSpacing.xs,
           children: <Widget>[
             MetricTile(
-              label: 'Orders',
+              label: context.tr('orders.title'),
               value: '${customer.orderCount}',
-              caption: customer.isRepeatBuyer ? 'Repeat buyer' : 'First-time',
+              caption: customer.isRepeatBuyer
+                  ? context.tr('cd.repeatBuyer')
+                  : context.tr('cd.firstTime'),
             ),
             MetricTile(
-              label: 'Delivered',
+              label: context.tr('status.delivered'),
               value: '${customer.deliveredCount}',
               caption: customer.successRateLabel,
               tone: customer.successRateBasisPoints == null
@@ -229,15 +230,15 @@ class _CustomerBody extends ConsumerWidget {
                         : Tone.warning),
             ),
             MetricTile(
-              label: 'Returned',
+              label: context.tr('status.returned'),
               value: '${customer.returnedCount}',
               caption: 'parcels',
               tone: customer.returnedCount > 0 ? Tone.bad : null,
             ),
             MetricTile(
-              label: 'Revenue',
+              label: context.tr('cd.revenue'),
               value: customer.realizedRevenue.formatCompact(),
-              caption: 'settled only',
+              caption: context.tr('cd.settledOnly'),
             ),
           ],
         ),
@@ -248,8 +249,11 @@ class _CustomerBody extends ConsumerWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  const Expanded(
-                    child: Text('Your note', style: EcomsbdType.bodyStrong),
+                  Expanded(
+                    child: Text(
+                      context.tr('cd.yourNote'),
+                      style: EcomsbdType.bodyStrong,
+                    ),
                   ),
                   TextButton(
                     onPressed: onEditNotes,
@@ -258,14 +262,18 @@ class _CustomerBody extends ConsumerWidget {
                       minimumSize: const Size(0, EcomsbdTouch.minTarget),
                       textStyle: EcomsbdType.chip,
                     ),
-                    child: Text(customer.notes == null ? 'Add' : 'Edit'),
+                    child: Text(
+                      customer.notes == null
+                          ? context.tr('common.add')
+                          : context.tr('common.edit'),
+                    ),
                   ),
                 ],
               ),
               Text(
                 customer.notes?.isNotEmpty == true
                     ? customer.notes!
-                    : 'Private to your shop. Nobody else sees it.',
+                    : context.tr('cd.notePrivate'),
                 style: EcomsbdType.caption.copyWith(
                   color: customer.notes?.isNotEmpty == true
                       ? EcomsbdColors.ink
@@ -280,7 +288,9 @@ class _CustomerBody extends ConsumerWidget {
           children: <Widget>[
             Expanded(
               child: FilterToggle(
-                label: customer.isStarred ? 'Starred' : 'Star',
+                label: customer.isStarred
+                    ? context.tr('common.starred')
+                    : context.tr('common.star'),
                 selected: customer.isStarred,
                 onChanged: (selected) => onFlag(selected ? 'STARRED' : 'NONE'),
               ),
@@ -288,7 +298,9 @@ class _CustomerBody extends ConsumerWidget {
             const SizedBox(width: EcomsbdSpacing.sm),
             Expanded(
               child: FilterToggle(
-                label: customer.isBlocked ? 'Blocked' : 'Block',
+                label: customer.isBlocked
+                    ? context.tr('common.blocked')
+                    : context.tr('common.block'),
                 selected: customer.isBlocked,
                 onChanged: (selected) => onFlag(selected ? 'BLOCKED' : 'NONE'),
               ),
@@ -296,7 +308,7 @@ class _CustomerBody extends ConsumerWidget {
           ],
         ),
         if (customer.addresses.isNotEmpty) ...<Widget>[
-          const SectionHeader(title: 'Addresses'),
+          SectionHeader(title: context.tr('cd.addresses')),
           for (final address in customer.addresses)
             Padding(
               padding: const EdgeInsets.only(bottom: EcomsbdSpacing.xs),
@@ -327,17 +339,17 @@ class _CustomerBody extends ConsumerWidget {
               ),
             ),
         ],
-        const SectionHeader(title: 'Recent orders'),
+        SectionHeader(title: context.tr('cd.recentOrders')),
         history.when(
           loading: () => SkeletonLoader.card(height: 80),
           error: (error, _) => Text(
-            'Could not load this customer’s orders.',
+            context.tr('cd.ordersError'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           data: (orders) {
             if (orders.isEmpty) {
               return Text(
-                'No orders yet.',
+                context.tr('cd.noOrders'),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               );
             }
@@ -389,21 +401,20 @@ class _RevealReasonDialogState extends State<_RevealReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Why do you need the number?'),
+      title: Text(context.tr('cd.whyNumberTitle')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'This is written to your shop’s audit log with your name and the '
-            'time.',
+            context.tr('cd.whyNumberBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
             label: 'Reason',
             controller: _reason,
-            hint: 'Calling about a failed delivery',
+            hint: context.tr('cd.whyNumberHint'),
           ),
         ],
       ),
@@ -422,7 +433,7 @@ class _RevealReasonDialogState extends State<_RevealReasonDialog> {
             }
             Navigator.of(context).pop(reason);
           },
-          child: const Text('Show number'),
+          child: Text(context.tr('common.show')),
         ),
       ],
     );
@@ -453,21 +464,20 @@ class _FlagReasonDialogState extends State<_FlagReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Block for your shop'),
+      title: Text(context.tr('cd.blockTitle')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'This is a note to yourself. It is private to this shop, it is not '
-            'shared with anyone, and it does not stop an order being created.',
+            context.tr('cd.blockBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
             label: 'Reason',
             controller: _reason,
-            hint: 'Three parcels refused at the door',
+            hint: context.tr('cd.blockHint'),
           ),
         ],
       ),
@@ -478,7 +488,7 @@ class _FlagReasonDialogState extends State<_FlagReasonDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_reason.text.trim()),
-          child: const Text('Block'),
+          child: Text(context.tr('common.block')),
         ),
       ],
     );
@@ -514,12 +524,12 @@ class _NotesDialogState extends State<_NotesDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Your note'),
+      title: Text(context.tr('cd.yourNote')),
       content: LabelledField(
-        label: 'Note',
+        label: context.tr('common.note'),
         controller: _notes,
         maxLines: 4,
-        hint: 'Prefers delivery after 6pm',
+        hint: context.tr('cd.noteHint'),
       ),
       actions: <Widget>[
         TextButton(
@@ -528,7 +538,7 @@ class _NotesDialogState extends State<_NotesDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_notes.text.trim()),
-          child: const Text('Save'),
+          child: Text(context.tr('common.save')),
         ),
       ],
     );

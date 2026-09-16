@@ -1,4 +1,12 @@
 import '../../core/money.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Seller-facing labels below are read where no `BuildContext` exists, so
+/// they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. A language change rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Billing, as the app sees it.
 ///
@@ -323,13 +331,13 @@ class BillingEvent {
   /// Why a refusal happened, in the seller's terms. The machine codes are
   /// stable; these sentences are the app's job.
   String get outcomeLabel => switch (verificationResult) {
-    'VERIFIED' => 'Confirmed',
-    'REJECTED' => 'The store did not confirm this payment',
-    'UNAVAILABLE' => 'We could not reach the store — nothing changed',
-    'NOT_CONFIGURED' => 'Payments are not switched on yet',
-    'WRONG_TENANT' => 'This purchase belongs to another shop',
-    'UNKNOWN_PRODUCT' => 'That product is not one we sell',
-    'WRONG_PACKAGE' => 'That purchase is from a different app',
+    'VERIFIED' => _t('vo.confirmed'),
+    'REJECTED' => _t('vo.rejected'),
+    'UNAVAILABLE' => _t('vo.unavailable'),
+    'NOT_CONFIGURED' => _t('vo.notConfigured'),
+    'WRONG_TENANT' => _t('vo.wrongTenant'),
+    'UNKNOWN_PRODUCT' => _t('vo.unknownProduct'),
+    'WRONG_PACKAGE' => _t('vo.wrongPackage'),
     _ => verificationResult,
   };
 }

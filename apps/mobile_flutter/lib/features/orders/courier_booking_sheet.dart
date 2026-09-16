@@ -154,41 +154,46 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const Text('Book with Steadfast', style: EcomsbdType.sectionTitle),
+        Text(context.tr('book.title'), style: EcomsbdType.sectionTitle),
         const SizedBox(height: 3),
         Text(
-          'Check the details Steadfast will receive. Once booked, the parcel '
-          'leaves your stock and the COD becomes expected.',
+          context.tr('book.body'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
-        _ReviewRow(label: 'Order', value: order.orderNumber),
-        _ReviewRow(label: 'Recipient', value: order.customerName ?? 'Customer'),
+        _ReviewRow(label: context.tr('book.order'), value: order.orderNumber),
+        _ReviewRow(
+          label: context.tr('book.recipient'),
+          value: order.customerName ?? context.tr('common.customer'),
+        ),
         // Masked, as everywhere else in the app. The courier gets the full
         // number; this screen does not need to show it (master spec 101).
-        _ReviewRow(label: 'Phone', value: order.customerPhoneMasked ?? '—'),
         _ReviewRow(
-          label: 'Address',
-          value: order.deliveryAddress ?? 'No address',
+          label: context.tr('common.phone'),
+          value: order.customerPhoneMasked ?? '—',
         ),
         _ReviewRow(
-          label: 'Collect (COD)',
+          label: context.tr('common.address'),
+          value: order.deliveryAddress ?? context.tr('book.noAddress'),
+        ),
+        _ReviewRow(
+          label: context.tr('book.collectCod'),
           value: order.codAmount.format(),
           emphasis: true,
         ),
         const SizedBox(height: EcomsbdSpacing.md),
-        const Text('Delivery type', style: EcomsbdType.label),
+        Text(context.tr('book.deliveryType'), style: EcomsbdType.label),
         const SizedBox(height: EcomsbdSpacing.xs),
         Wrap(
           spacing: EcomsbdSpacing.xs,
           children: <Widget>[
             FilterToggle(
-              label: 'Home delivery',
+              label: context.tr('book.homeDelivery'),
               selected: _deliveryType == 0,
               onChanged: (_) => setState(() => _deliveryType = 0),
             ),
             FilterToggle(
-              label: 'Steadfast hub pick-up',
+              label: context.tr('book.hubPickup'),
               selected: _deliveryType == 1,
               onChanged: (_) => setState(() => _deliveryType = 1),
             ),
@@ -196,15 +201,15 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         ),
         const SizedBox(height: EcomsbdSpacing.md),
         LabelledField(
-          label: 'What is in the parcel',
+          label: context.tr('book.contents'),
           controller: _description,
-          hint: 'Optional — helps the rider',
+          hint: context.tr('book.contentsHint'),
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
         LabelledField(
-          label: 'Note for the courier',
+          label: context.tr('book.noteForCourier'),
           controller: _note,
-          hint: 'Optional — e.g. deliver before 3 PM',
+          hint: context.tr('book.noteHint'),
         ),
         if (_error != null) ...<Widget>[
           const SizedBox(height: EcomsbdSpacing.sm),
@@ -228,7 +233,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
               child: FilledButton(
                 onPressed: _confirm,
                 style: _primaryButton,
-                child: const Text('Confirm booking'),
+                child: Text(context.tr('book.confirm')),
               ),
             ),
           ],
@@ -244,7 +249,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.lg),
-        const Row(
+        Row(
           children: <Widget>[
             SizedBox(
               width: 18,
@@ -252,13 +257,12 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: EcomsbdSpacing.sm),
-            Text('Booking…', style: EcomsbdType.sectionTitle),
+            Text(context.tr('status.booking'), style: EcomsbdType.sectionTitle),
           ],
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          'Talking to Steadfast. Please do not close this — we will tell you '
-          'exactly what happened.',
+          context.tr('book.waiting'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.xl),
@@ -290,7 +294,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       message:
           result?.message ??
           _error?.displayMessage ??
-          'Steadfast did not accept this order.',
+          context.tr('book.rejected'),
       onRetry: () => setState(() => _stage = _Stage.review),
       onClose: () => Navigator.of(context).pop(result),
     );
@@ -317,7 +321,7 @@ class _AmbiguousOutcome extends StatelessWidget {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const StatusChip(label: 'Booking result uncertain', tone: Tone.warning),
+        StatusChip(label: context.tr('book.uncertain'), tone: Tone.warning),
         const SizedBox(height: EcomsbdSpacing.sm),
         // The server owns the wording of a money-adjacent message (master spec
         // section 46), so its copy is the headline when it sent one. The
@@ -329,9 +333,7 @@ class _AmbiguousOutcome extends StatelessWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
         // Explains *why*, without repeating the sentence above it.
         Text(
-          'Steadfast did not answer in time, so we cannot say yet whether the '
-          'parcel was created. We are checking with them using the same '
-          'reference. Nothing has left your stock and no money has moved.',
+          context.tr('book.uncertainBody'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
@@ -339,7 +341,7 @@ class _AmbiguousOutcome extends StatelessWidget {
         FilledButton(
           onPressed: onClose,
           style: _primaryButton,
-          child: const Text('Got it'),
+          child: Text(context.tr('common.gotIt')),
         ),
       ],
     );
@@ -360,24 +362,29 @@ class _BookedOutcome extends StatelessWidget {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const StatusChip(label: 'Booked', tone: Tone.good),
+        StatusChip(label: context.tr('status.booked'), tone: Tone.good),
         const SizedBox(height: EcomsbdSpacing.sm),
-        const Text('Steadfast has the parcel', style: EcomsbdType.sectionTitle),
+        Text(context.tr('book.hasParcel'), style: EcomsbdType.sectionTitle),
         const SizedBox(height: EcomsbdSpacing.sm),
-        _ReviewRow(label: 'Reference', value: item.merchantReference),
+        _ReviewRow(
+          label: context.tr('common.reference'),
+          value: item.merchantReference,
+        ),
         if (item.trackingCode != null)
-          _ReviewRow(label: 'Tracking code', value: item.trackingCode!),
+          _ReviewRow(
+            label: context.tr('common.trackingCode'),
+            value: item.trackingCode!,
+          ),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          'The items are off your stock and the COD is now expected. We will '
-          'keep the status up to date for you.',
+          context.tr('book.doneBody'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
         FilledButton(
           onPressed: onClose,
           style: _primaryButton,
-          child: const Text('Done'),
+          child: Text(context.tr('common.done')),
         ),
       ],
     );
@@ -407,9 +414,9 @@ class _FailedOutcome extends StatelessWidget {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const StatusChip(label: 'Not booked', tone: Tone.bad),
+        StatusChip(label: context.tr('status.notBooked'), tone: Tone.bad),
         const SizedBox(height: EcomsbdSpacing.sm),
-        const Text('Steadfast did not accept it', style: EcomsbdType.body),
+        Text(context.tr('book.notAccepted'), style: EcomsbdType.body),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
           message,
@@ -417,7 +424,7 @@ class _FailedOutcome extends StatelessWidget {
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
-          'Nothing was created, so it is safe to fix the details and try again.',
+          context.tr('book.safeToRetry'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
@@ -426,7 +433,7 @@ class _FailedOutcome extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: onClose,
-                child: const Text('Close'),
+                child: Text(context.tr('common.close')),
               ),
             ),
             const SizedBox(width: EcomsbdSpacing.xs),
@@ -435,7 +442,7 @@ class _FailedOutcome extends StatelessWidget {
               child: FilledButton(
                 onPressed: onRetry,
                 style: _primaryButton,
-                child: const Text('Change and try again'),
+                child: Text(context.tr('book.changeAndRetry')),
               ),
             ),
           ],

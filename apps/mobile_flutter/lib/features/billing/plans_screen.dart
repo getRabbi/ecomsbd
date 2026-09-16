@@ -10,6 +10,12 @@ import '../../design/glass.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Plan, usage and what happens next.
 ///
@@ -92,10 +98,13 @@ class _Header extends StatelessWidget {
         IconButton(
           onPressed: () => Navigator.of(context).maybePop(),
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: 'Back',
+          tooltip: context.tr('common.back'),
         ),
-        const Expanded(
-          child: Text('Subscription', style: EcomsbdType.pageTitle),
+        Expanded(
+          child: Text(
+            context.tr('settings.subscription'),
+            style: EcomsbdType.pageTitle,
+          ),
         ),
       ],
     );
@@ -135,13 +144,13 @@ class _Content extends ConsumerWidget {
 
         _CurrentPlanCard(data: data),
 
-        const SectionHeader(
-          title: 'What you have used',
-          subtitle: 'Counted on the server, not on this phone',
+        SectionHeader(
+          title: context.tr('pl.usage'),
+          subtitle: context.tr('pl.usageSub'),
         ),
         _UsageCard(usage: data.usage),
 
-        const SectionHeader(title: 'Plans'),
+        SectionHeader(title: context.tr('pl.plans')),
         for (final plan in data.plans)
           _PlanCard(
             plan: plan,
@@ -175,15 +184,13 @@ class _DowngradeNotice extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'Your records stay yours',
+                Text(
+                  context.tr('pl.recordsTitle'),
                   style: EcomsbdType.sectionTitle,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'If your plan ends, every order, customer, payout and profit '
-                  'figure stays readable. What stops is automation, bulk '
-                  'actions and the monthly order allowance — never your history.',
+                  context.tr('pl.recordsBody'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),
@@ -209,16 +216,16 @@ class _CurrentPlanCard extends StatelessWidget {
     final plan = data.currentPlan;
 
     final (label, tone) = switch (entitlements.status) {
-      'ACTIVE' => ('Active', Tone.good),
-      'TRIAL' => ('Trial', Tone.info),
-      'GRACE' => ('Payment retrying', Tone.warning),
-      'PAST_DUE' => ('Payment failed', Tone.bad),
-      'CANCEL_AT_PERIOD_END' => ('Ends soon', Tone.warning),
-      'CANCELLED' => ('Cancelled', Tone.neutral),
-      'EXPIRED' => ('Ended', Tone.neutral),
-      'REFUNDED' => ('Refunded', Tone.neutral),
-      'SUSPENDED' => ('Suspended', Tone.bad),
-      _ => ('Free plan', Tone.neutral),
+      'ACTIVE' => (context.tr('pl.active'), Tone.good),
+      'TRIAL' => (context.tr('pl.trial'), Tone.info),
+      'GRACE' => (context.tr('pl.retrying'), Tone.warning),
+      'PAST_DUE' => (context.tr('pl.failed'), Tone.bad),
+      'CANCEL_AT_PERIOD_END' => (context.tr('settings.endsSoon'), Tone.warning),
+      'CANCELLED' => (context.tr('ost.cancelled'), Tone.neutral),
+      'EXPIRED' => (context.tr('pl.ended'), Tone.neutral),
+      'REFUNDED' => (context.tr('pl.refunded'), Tone.neutral),
+      'SUSPENDED' => (context.tr('pl.suspended'), Tone.bad),
+      _ => (context.tr('pl.freePlan'), Tone.neutral),
     };
 
     return StrongGlassCard(
@@ -298,8 +305,8 @@ class _PaymentFailedCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   inGrace
-                      ? 'We could not take your payment'
-                      : 'Your plan has stopped',
+                      ? context.tr('pl.paymentProblemTitle')
+                      : context.tr('pl.stoppedTitle'),
                   style: EcomsbdType.sectionTitle,
                 ),
               ),
@@ -311,8 +318,7 @@ class _PaymentFailedCard extends StatelessWidget {
                 ? 'Everything still works until '
                       '${formatDay(subscription.graceUntil!)} while we try '
                       'again. Check your payment method to keep it running.'
-                : 'You are on the Free plan for now. Your orders, customers '
-                      'and money records are all still here.',
+                : context.tr('pl.freeBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
         ],
@@ -342,7 +348,7 @@ class _EndingCard extends StatelessWidget {
           Expanded(
             child: Text(
               subscription.currentPeriodEnd == null
-                  ? 'This plan will not renew.'
+                  ? context.tr('pl.noRenew')
                   : 'This plan will not renew. You keep everything until '
                         '${formatDay(subscription.currentPeriodEnd!)} — you '
                         'have already paid for it.',
@@ -373,8 +379,7 @@ class _SupportCreditNotice extends StatelessWidget {
           const SizedBox(width: EcomsbdSpacing.sm),
           Expanded(
             child: Text(
-              'This plan was given to you by our support team. It will not '
-              'renew or charge you.',
+              context.tr('pl.grantedBody'),
               style: EcomsbdType.caption.copyWith(color: Tone.good.ink),
             ),
           ),
@@ -398,7 +403,7 @@ class _UsageCard extends StatelessWidget {
     if (usage.isEmpty) {
       return GlassCard(
         child: Text(
-          'Nothing metered on this plan.',
+          context.tr('pl.noMeter'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
       );
@@ -470,8 +475,7 @@ class _UsageRow extends StatelessWidget {
             if (line.isExhausted) ...<Widget>[
               const SizedBox(height: 6),
               Text(
-                'You have used this month’s allowance. Upgrading raises it '
-                'straight away, and what you have already recorded stays.',
+                context.tr('pl.allowanceUsed'),
                 style: EcomsbdType.caption.copyWith(color: tone.ink),
               ),
             ],
@@ -504,10 +508,10 @@ class _PlanCard extends ConsumerWidget {
             children: <Widget>[
               Expanded(child: Text(plan.name, style: EcomsbdType.sectionTitle)),
               if (isCurrent)
-                const StatusChip(label: 'Your plan', tone: Tone.good)
+                StatusChip(label: context.tr('pl.yourPlan'), tone: Tone.good)
               else
                 Text(
-                  plan.isFree ? 'Free' : plan.price.format(),
+                  plan.isFree ? context.tr('pl.free') : plan.price.format(),
                   style: EcomsbdType.bodyStrong,
                 ),
             ],
@@ -551,10 +555,10 @@ class _PlanCard extends ConsumerWidget {
   /// without a release.
   List<String> _features(Plan plan) {
     final orders = plan.isUnlimited('orders_monthly_limit')
-        ? 'Unlimited orders'
+        ? _t('pl.unlimitedOrders')
         : '${plan.limit('orders_monthly_limit') ?? 0} orders a month';
     final couriers = plan.isUnlimited('courier_account_limit')
-        ? 'Unlimited courier accounts'
+        ? _t('pl.unlimitedCouriers')
         : '${plan.limit('courier_account_limit') ?? 0} courier account'
               '${(plan.limit('courier_account_limit') ?? 0) == 1 ? '' : 's'}';
 
@@ -562,16 +566,16 @@ class _PlanCard extends ConsumerWidget {
       orders,
       couriers,
       if (plan.allows('reconciliation'))
-        'Full COD reconciliation'
+        _t('pl.fullRecon')
       else
-        'View reconciliation results',
+        _t('pl.viewRecon'),
       if (plan.isUnlimited('profit_history_days'))
-        'Full profit history'
+        _t('pl.fullProfit')
       else
-        'Today’s profit only',
-      if (plan.allows('bulk_booking')) 'Bulk booking',
-      if (plan.allows('advanced_profit')) 'Advanced profit analysis',
-      if (plan.allows('csv_export')) 'CSV export of your own data',
+        _t('pl.todayProfitOnly'),
+      if (plan.allows('bulk_booking')) _t('pl.bulkBooking'),
+      if (plan.allows('advanced_profit')) _t('pl.advancedProfit'),
+      if (plan.allows('csv_export')) _t('pl.csvExport'),
       if ((plan.limit('team_member_limit') ?? 1) > 1)
         '${plan.limit('team_member_limit')} team members',
     ];
@@ -610,8 +614,8 @@ class _PurchaseButton extends ConsumerWidget {
           Expanded(
             child: Text(
               channel.channel == 'PLAY'
-                  ? 'In-app purchase is not switched on yet.'
-                  : 'Payments are not switched on yet.',
+                  ? context.tr('pl.iapOff')
+                  : context.tr('pl.paymentsOff'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ),
@@ -645,9 +649,7 @@ class _PurchaseButton extends ConsumerWidget {
         // returns goes to `verifyPlayPurchase` and the *server* decides what
         // the seller gets.
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Google Play purchase is not switched on yet.'),
-          ),
+          SnackBar(content: Text(context.tr('pl.playOff'))),
         );
         return;
       }
@@ -660,8 +662,8 @@ class _PurchaseButton extends ConsumerWidget {
         SnackBar(
           content: Text(
             url == null
-                ? 'Checkout could not be started.'
-                : 'Continue in your browser to finish paying.',
+                ? context.tr('pl.checkoutFailed')
+                : context.tr('pl.continueBrowser'),
           ),
         ),
       );
@@ -693,10 +695,13 @@ class _RestoreRowState extends ConsumerState<_RestoreRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('Already paid?', style: EcomsbdType.bodyStrong),
+                Text(
+                  context.tr('pl.alreadyPaid'),
+                  style: EcomsbdType.bodyStrong,
+                ),
                 const SizedBox(height: 2),
                 Text(
-                  'If you bought a plan on another phone, restore it here.',
+                  context.tr('pl.restoreBody'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),
@@ -709,7 +714,11 @@ class _RestoreRowState extends ConsumerState<_RestoreRow> {
             style: TextButton.styleFrom(
               minimumSize: const Size(0, EcomsbdTouch.minTarget),
             ),
-            child: Text(_busy ? 'Checking…' : 'Restore'),
+            child: Text(
+              _busy
+                  ? context.tr('settings.checking')
+                  : context.tr('pl.restore'),
+            ),
           ),
         ],
       ),
@@ -734,7 +743,7 @@ class _RestoreRowState extends ConsumerState<_RestoreRow> {
           content: Text(
             restored > 0
                 ? 'Restored $restored purchase${restored == 1 ? '' : 's'}.'
-                : 'No purchases were found on this device.',
+                : context.tr('pl.noPurchases'),
           ),
         ),
       );

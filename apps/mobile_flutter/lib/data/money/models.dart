@@ -1,6 +1,14 @@
 import 'package:meta/meta.dart';
 
 import '../../core/money.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Seller-facing labels below are read where no `BuildContext` exists, so
+/// they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. A language change rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Wire models for the money core.
 ///
@@ -195,15 +203,15 @@ class Receivable {
   final String? orderNumber;
 
   String get statusLabel => switch (status) {
-    'NOT_DUE' => 'Not due',
-    'EXPECTED' => 'On its way',
-    'ELIGIBLE' => 'Waiting for payment',
-    'PAYOUT_IDENTIFIED' => 'Payment identified',
-    'PARTIALLY_SETTLED' => 'Part paid',
-    'SETTLED' => 'Paid',
-    'MISMATCHED' => 'Amount does not match',
-    'DISPUTED' => 'Disputed',
-    'WRITTEN_OFF' => 'Written off',
+    'NOT_DUE' => _t('rst.notDue'),
+    'EXPECTED' => _t('rst.onItsWay'),
+    'ELIGIBLE' => _t('rst.waitingForPayment'),
+    'PAYOUT_IDENTIFIED' => _t('rst.paymentIdentified'),
+    'PARTIALLY_SETTLED' => _t('rst.partPaid'),
+    'SETTLED' => _t('rst.paid'),
+    'MISMATCHED' => _t('rst.amountMismatch'),
+    'DISPUTED' => _t('rst.disputed'),
+    'WRITTEN_OFF' => _t('rst.writtenOff'),
     _ => status,
   };
 
@@ -283,13 +291,13 @@ class PayoutLine {
       'Row $rowNumber';
 
   String get statusLabel => switch (status) {
-    'UNMATCHED' => 'Not matched',
-    'SUGGESTED' => 'Check this',
-    'MATCHED' => 'Matched',
-    'MANUAL_MATCHED' => 'Matched by you',
-    'DUPLICATE' => 'Repeated line',
-    'UNMAPPABLE' => 'Could not read',
-    'REVERSED' => 'Undone',
+    'UNMATCHED' => _t('pls.notMatched'),
+    'SUGGESTED' => _t('pls.checkThis'),
+    'MATCHED' => _t('pls.matched'),
+    'MANUAL_MATCHED' => _t('pls.matchedByYou'),
+    'DUPLICATE' => _t('pls.repeatedLine'),
+    'UNMAPPABLE' => _t('pls.couldNotRead'),
+    'REVERSED' => _t('pls.undone'),
     _ => status,
   };
 
@@ -391,14 +399,14 @@ class PayoutAdjustment {
   bool get isUnknown => type == 'UNKNOWN_DEDUCTION';
 
   String get typeLabel => switch (type) {
-    'COD_FEE' => 'COD fee',
-    'DELIVERY_FEE' => 'Delivery charge',
-    'RETURN_FEE' => 'Return charge',
-    'TAX' => 'Tax',
-    'BONUS' => 'Bonus',
-    'PENALTY' => 'Penalty',
-    'MANUAL_ADJUSTMENT' => 'Adjustment',
-    'UNKNOWN_DEDUCTION' => 'Unexplained deduction',
+    'COD_FEE' => _t('ded.codFee'),
+    'DELIVERY_FEE' => _t('ded.deliveryCharge'),
+    'RETURN_FEE' => _t('ded.returnCharge'),
+    'TAX' => _t('ded.tax'),
+    'BONUS' => _t('ded.bonus'),
+    'PENALTY' => _t('ded.penalty'),
+    'MANUAL_ADJUSTMENT' => _t('ded.adjustment'),
+    'UNKNOWN_DEDUCTION' => _t('ded.unexplained'),
     _ => type,
   };
 }
@@ -475,16 +483,16 @@ class Payout {
   final List<PayoutAdjustment> adjustments;
 
   String get statusLabel => switch (status) {
-    'RECEIVED' => 'Not matched yet',
-    'PARTIALLY_RECONCILED' => 'Partly matched',
-    'RECONCILED' => 'Fully matched',
+    'RECEIVED' => _t('pst.notMatchedYet'),
+    'PARTIALLY_RECONCILED' => _t('pst.partlyMatched'),
+    'RECONCILED' => _t('pst.fullyMatched'),
     _ => status,
   };
 
   String get sourceLabel => switch (source) {
-    'API' => 'From the courier',
-    'STATEMENT' => 'From a statement',
-    'MANUAL' => 'Entered by hand',
+    'API' => _t('psr.fromCourier'),
+    'STATEMENT' => _t('psr.fromStatement'),
+    'MANUAL' => _t('psr.enteredByHand'),
     _ => source,
   };
 
@@ -687,22 +695,22 @@ class ReconciliationCase {
   bool get isHighPriority => priority == 'HIGH';
 
   String get kindLabel => switch (kind) {
-    'DELIVERED_BUT_UNPAID' => 'Delivered, not paid',
-    'UNDERPAID' => 'Paid short',
-    'OVERPAID' => 'Paid too much',
-    'UNKNOWN_DEDUCTION' => 'Unexplained deduction',
-    'DUPLICATE_PAYOUT_LINE' => 'Repeated payment line',
-    'UNMAPPABLE_PAYOUT' => 'Payment we could not place',
-    'STALE_IN_TRANSIT' => 'Stuck in transit',
-    'RETURNED_NOT_RESTOCKED' => 'Return not back in stock',
+    'DELIVERED_BUT_UNPAID' => _t('ck.deliveredUnpaid'),
+    'UNDERPAID' => _t('ck.underpaid'),
+    'OVERPAID' => _t('ck.overpaid'),
+    'UNKNOWN_DEDUCTION' => _t('ded.unexplained'),
+    'DUPLICATE_PAYOUT_LINE' => _t('ck.duplicateLine'),
+    'UNMAPPABLE_PAYOUT' => _t('ck.unmappable'),
+    'STALE_IN_TRANSIT' => _t('ck.staleInTransit'),
+    'RETURNED_NOT_RESTOCKED' => _t('ck.returnNotRestocked'),
     _ => kind,
   };
 
   String get statusLabel => switch (status) {
-    'OPEN' => 'Open',
-    'IN_PROGRESS' => 'With the courier',
-    'RESOLVED' => 'Sorted',
-    'DISMISSED' => 'Not a problem',
+    'OPEN' => _t('cst.open'),
+    'IN_PROGRESS' => _t('cst.withCourier'),
+    'RESOLVED' => _t('cst.resolved'),
+    'DISMISSED' => _t('cst.dismissed'),
     _ => status,
   };
 }

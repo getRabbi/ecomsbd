@@ -11,6 +11,7 @@ import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
 
 /// The things that need a person.
 ///
@@ -39,7 +40,7 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
           SnackBar(
             content: Text(
               opened == 0
-                  ? 'Nothing new to worry about.'
+                  ? context.tr('case.nothingNew')
                   : '$opened new thing${opened == 1 ? '' : 's'} to look at.',
             ),
           ),
@@ -117,21 +118,19 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Money that needs a person',
-                          title: 'Needs you',
-                          description:
-                              'Money that did not arrive, arrived short, or '
-                              'could not be placed.',
+                          eyebrow: context.tr('case.eyebrow'),
+                          title: context.tr('money.needsYou'),
+                          description: context.tr('case.description'),
                         ),
                       ),
                       IconButton(
                         onPressed: _busy ? null : _scan,
                         icon: const Icon(Icons.refresh_rounded),
-                        tooltip: 'Check again',
+                        tooltip: context.tr('case.checkAgain'),
                       ),
                     ],
                   ),
@@ -147,19 +146,19 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
                       FilterToggle(
-                        label: 'Open',
+                        label: context.tr('common.open'),
                         selected: controller.status == 'OPEN',
                         onChanged: (selected) =>
                             controller.setStatus(selected ? 'OPEN' : null),
                       ),
                       FilterToggle(
-                        label: 'Sorted',
+                        label: context.tr('case.sorted'),
                         selected: controller.status == 'RESOLVED',
                         onChanged: (selected) =>
                             controller.setStatus(selected ? 'RESOLVED' : null),
                       ),
                       FilterToggle(
-                        label: 'All',
+                        label: context.tr('common.all'),
                         selected: controller.status == null,
                         onChanged: (_) => controller.setStatus(null),
                       ),
@@ -171,10 +170,8 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.check_circle_outline,
-                    emptyTitle: 'Nothing needs you',
-                    emptyMessage:
-                        'Every parcel that was delivered has been paid for, and '
-                        'every payment has been placed.',
+                    emptyTitle: context.tr('case.emptyTitle'),
+                    emptyMessage: context.tr('case.emptyBody'),
                     itemBuilder: (context, item) => CaseCard(
                       item: item,
                       busy: _busy,
@@ -263,7 +260,7 @@ class CaseCard extends StatelessWidget {
                       foregroundColor: EcomsbdColors.muted,
                       textStyle: EcomsbdType.label,
                     ),
-                    child: const Text('Not a problem'),
+                    child: Text(context.tr('case.notAProblem')),
                   ),
                 ),
                 const SizedBox(width: EcomsbdSpacing.sm),
@@ -278,7 +275,7 @@ class CaseCard extends StatelessWidget {
                       shape: const StadiumBorder(),
                       textStyle: EcomsbdType.label,
                     ),
-                    child: const Text('Sorted'),
+                    child: Text(context.tr('case.sorted')),
                   ),
                 ),
               ],
@@ -321,7 +318,11 @@ class _ResolutionDialogState extends State<_ResolutionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.dismiss ? 'Not a problem?' : 'What happened?'),
+      title: Text(
+        widget.dismiss
+            ? context.tr('case.dismissTitle')
+            : context.tr('common.whatHappened'),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,19 +333,19 @@ class _ResolutionDialogState extends State<_ResolutionDialog> {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
-            label: 'Note',
+            label: context.tr('common.note'),
             controller: _resolution,
             maxLines: 2,
             hint: widget.dismiss
-                ? 'The courier had already paid it separately'
-                : 'Courier paid the balance on the 12th',
+                ? context.tr('case.noteHint1')
+                : context.tr('case.noteHint2'),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: EcomsbdSpacing.xs),
           Text(
             // Closing a case with no explanation teaches nobody anything, and
             // the same problem comes back next month.
-            'A note is needed so you know what happened if this comes up again.',
+            context.tr('case.noteRequired'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
           ),
         ],
@@ -352,13 +353,17 @@ class _ResolutionDialogState extends State<_ResolutionDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: _resolution.text.trim().isNotEmpty
               ? () => Navigator.of(context).pop(_resolution.text.trim())
               : null,
-          child: Text(widget.dismiss ? 'Dismiss' : 'Mark sorted'),
+          child: Text(
+            widget.dismiss
+                ? context.tr('case.dismiss')
+                : context.tr('case.markSorted'),
+          ),
         ),
       ],
     );

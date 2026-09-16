@@ -49,15 +49,13 @@ class ReceivablesScreen extends ConsumerWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Delivered is not paid',
-                          title: 'Receivables',
-                          description:
-                              'What each courier still owes you, parcel by '
-                              'parcel.',
+                          eyebrow: context.tr('recv.eyebrow'),
+                          title: context.tr('recv.title'),
+                          description: context.tr('recv.description'),
                         ),
                       ),
                     ],
@@ -74,18 +72,18 @@ class ReceivablesScreen extends ConsumerWidget {
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
                       FilterToggle(
-                        label: 'Still owed',
+                        label: context.tr('recv.filterStillOwed'),
                         selected: controller.status == null,
                         onChanged: (_) => controller.setStatus(null),
                       ),
                       FilterToggle(
-                        label: 'Paid',
+                        label: context.tr('recv.filterPaid'),
                         selected: controller.status == 'SETTLED',
                         onChanged: (selected) =>
                             controller.setStatus(selected ? 'SETTLED' : null),
                       ),
                       FilterToggle(
-                        label: 'Amount wrong',
+                        label: context.tr('recv.filterAmountWrong'),
                         selected: controller.status == 'MISMATCHED',
                         onChanged: (selected) => controller.setStatus(
                           selected ? 'MISMATCHED' : null,
@@ -99,10 +97,8 @@ class ReceivablesScreen extends ConsumerWidget {
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.check_circle_outline,
-                    emptyTitle: 'Nothing outstanding',
-                    emptyMessage:
-                        'Every delivered parcel has been paid for. Receivables '
-                        'appear here as soon as a parcel is delivered.',
+                    emptyTitle: context.tr('recv.emptyTitle'),
+                    emptyMessage: context.tr('recv.emptyBody'),
                     itemBuilder: (context, receivable) => ReceivableRow(
                       receivable: receivable,
                       onTap: () => Navigator.of(context).push(
@@ -143,7 +139,7 @@ class ReceivableRow extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  receivable.orderNumber ?? 'Parcel',
+                  receivable.orderNumber ?? context.tr('common.parcel'),
                   style: EcomsbdType.bodyStrong,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -261,10 +257,8 @@ class _ReceivableDetailScreenState
   Future<void> _writeOff() async {
     final reason = await _ReasonDialog.show(
       context,
-      title: 'Write this off?',
-      body:
-          'The money stops counting as owed, and the loss is recorded so you '
-          'can see it later. This cannot be undone from here.',
+      title: context.tr('recv.writeOffTitle'),
+      body: context.tr('recv.writeOffBody'),
       action: 'Write off',
     );
     if (reason == null) {
@@ -280,11 +274,9 @@ class _ReceivableDetailScreenState
   Future<void> _dispute() async {
     final reason = await _ReasonDialog.show(
       context,
-      title: 'Raise this with the courier',
-      body:
-          'The money stays counted as owed. This just records that you have '
-          'queried it.',
-      action: 'Mark disputed',
+      title: context.tr('recv.disputeTitle'),
+      body: context.tr('recv.disputeBody'),
+      action: context.tr('recv.markDisputed'),
     );
     if (reason == null) {
       return;
@@ -325,7 +317,7 @@ class _ReceivableDetailScreenState
     final ledger = ref.watch(receivableLedgerProvider(receivable.id));
 
     return DetailScaffold(
-      title: receivable.orderNumber ?? 'Receivable',
+      title: receivable.orderNumber ?? context.tr('recv.one'),
       subtitle: '${receivable.provider} · ${receivable.statusLabel}',
       children: <Widget>[
         GlassCard(
@@ -341,13 +333,22 @@ class _ReceivableDetailScreenState
               MoneyText(receivable.outstanding, style: EcomsbdType.heroMoney),
               const SizedBox(height: EcomsbdSpacing.md),
               _Line(
-                label: 'Collected by courier',
+                label: context.tr('recv.collectedByCourier'),
                 amount: receivable.collectible,
               ),
               if (!receivable.adjustment.isZero)
-                _Line(label: 'Your correction', amount: receivable.adjustment),
-              _Line(label: 'Paid to you', amount: receivable.settled),
-              _Line(label: 'Courier deductions', amount: receivable.deduction),
+                _Line(
+                  label: context.tr('recv.yourCorrection'),
+                  amount: receivable.adjustment,
+                ),
+              _Line(
+                label: context.tr('recv.paidToYou'),
+                amount: receivable.settled,
+              ),
+              _Line(
+                label: context.tr('recv.courierDeductions'),
+                amount: receivable.deduction,
+              ),
             ],
           ),
         ),
@@ -360,14 +361,14 @@ class _ReceivableDetailScreenState
             ),
           ),
         ],
-        const SectionHeader(
-          title: 'What happened',
-          subtitle: 'Every money event behind this parcel',
+        SectionHeader(
+          title: context.tr('recv.historyTitle'),
+          subtitle: context.tr('recv.historySub'),
         ),
         ledger.when(
           loading: () => SkeletonLoader.card(height: 120),
           error: (error, _) => Text(
-            'Could not load the history.',
+            context.tr('recv.historyError'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           data: (entries) => Column(
@@ -380,7 +381,7 @@ class _ReceivableDetailScreenState
             ],
           ),
         ),
-        const SectionHeader(title: 'Fix this'),
+        SectionHeader(title: context.tr('recv.fixThis')),
         Wrap(
           spacing: EcomsbdSpacing.xs,
           runSpacing: EcomsbdSpacing.xs,
@@ -388,13 +389,13 @@ class _ReceivableDetailScreenState
             OutlinedButton.icon(
               onPressed: _busy ? null : _correct,
               icon: const Icon(Icons.tune_rounded, size: 17),
-              label: const Text('Correct the amount'),
+              label: Text(context.tr('recv.correctAmount')),
               style: _buttonStyle(),
             ),
             OutlinedButton.icon(
               onPressed: _busy ? null : _dispute,
               icon: const Icon(Icons.flag_outlined, size: 17),
-              label: const Text('Raise with courier'),
+              label: Text(context.tr('recv.raiseWithCourier')),
               style: _buttonStyle(),
             ),
             OutlinedButton.icon(
@@ -407,8 +408,7 @@ class _ReceivableDetailScreenState
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
-          'A correction records the change and your reason. It never quietly '
-          'rewrites what was already settled.',
+          context.tr('recv.correctionNote'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
         ),
       ],
@@ -569,15 +569,14 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Correct this amount'),
+      title: Text(context.tr('recv.correctTitle')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Say how much to change it by and why. What has already been '
-              'settled is not touched.',
+              context.tr('recv.correctBody'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
@@ -585,7 +584,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
               children: <Widget>[
                 Expanded(
                   child: FilterToggle(
-                    label: 'Owe me less',
+                    label: context.tr('recv.oweLess'),
                     selected: !_increases,
                     onChanged: (_) => setState(() => _increases = false),
                   ),
@@ -593,7 +592,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
                 const SizedBox(width: EcomsbdSpacing.xs),
                 Expanded(
                   child: FilterToggle(
-                    label: 'Owe me more',
+                    label: context.tr('recv.oweMore'),
                     selected: _increases,
                     onChanged: (_) => setState(() => _increases = true),
                   ),
@@ -614,7 +613,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
               label: 'Reason',
               controller: _reason,
               maxLines: 2,
-              hint: 'Courier confirmed a discount at the door',
+              hint: context.tr('recv.reasonHint'),
             ),
           ],
         ),
@@ -634,7 +633,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
                   ),
                 )
               : null,
-          child: const Text('Apply'),
+          child: Text(context.tr('common.apply')),
         ),
       ],
     );

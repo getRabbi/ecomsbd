@@ -132,7 +132,7 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
       children: <Widget>[
         const _Grip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const Text('Book with Steadfast', style: EcomsbdType.sectionTitle),
+        Text(context.tr('book.title'), style: EcomsbdType.sectionTitle),
         const SizedBox(height: 3),
         Text(
           '${_bookable.length} of ${widget.orders.length} selected orders can '
@@ -156,9 +156,8 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
                   style: EcomsbdType.label.copyWith(color: Tone.warning.ink),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'These are missing an address, already have a parcel, or are '
-                  'finished. They are left exactly as they are.',
+                Text(
+                  context.tr('bulk.heldBackNote'),
                   style: EcomsbdType.caption,
                 ),
               ],
@@ -178,7 +177,7 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.tr('common.cancel')),
               ),
             ),
             const SizedBox(width: EcomsbdSpacing.xs),
@@ -188,7 +187,9 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
                 onPressed: _busy || _bookable.isEmpty ? null : _submit,
                 style: _primaryButton,
                 child: Text(
-                  _busy ? 'Booking…' : 'Book ${_bookable.length} orders',
+                  _busy
+                      ? context.tr('status.booking')
+                      : 'Book ${_bookable.length} orders',
                 ),
               ),
             ),
@@ -205,7 +206,7 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
       children: <Widget>[
         const _Grip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        const Text('Booking results', style: EcomsbdType.sectionTitle),
+        Text(context.tr('bulk.results'), style: EcomsbdType.sectionTitle),
         const SizedBox(height: EcomsbdSpacing.sm),
         Wrap(
           spacing: EcomsbdSpacing.xs,
@@ -252,7 +253,7 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
         FilledButton(
           onPressed: () => Navigator.of(context).pop(report),
           style: _primaryButton,
-          child: const Text('Done'),
+          child: Text(context.tr('common.done')),
         ),
       ],
     );
@@ -283,7 +284,7 @@ class _ResultRow extends StatelessWidget {
               children: <Widget>[
                 Text(
                   item.merchantReference.isEmpty
-                      ? 'Order'
+                      ? context.tr('book.order')
                       : item.merchantReference,
                   style: EcomsbdType.label,
                 ),

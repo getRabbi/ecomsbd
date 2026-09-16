@@ -167,15 +167,13 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Statement → matched → settled',
-                          title: 'Payouts',
-                          description:
-                              'What the courier says it sent, and what we could '
-                              'tie to a parcel.',
+                          eyebrow: context.tr('pay.eyebrow'),
+                          title: context.tr('money.payouts'),
+                          description: context.tr('pay.description'),
                         ),
                       ),
                     ],
@@ -187,15 +185,15 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                     children: <Widget>[
                       QuickActionTile(
                         icon: Icons.upload_file_rounded,
-                        title: 'Upload statement',
-                        subtitle: 'CSV from the courier',
+                        title: context.tr('pay.uploadStatement'),
+                        subtitle: context.tr('pay.uploadSub'),
                         onTap: _busy ? null : _import,
                         enabled: !_busy,
                       ),
                       QuickActionTile(
                         icon: Icons.edit_note_rounded,
-                        title: 'Enter by hand',
-                        subtitle: 'A lump sum that arrived',
+                        title: context.tr('pay.enterByHand'),
+                        subtitle: context.tr('pay.enterByHandSub'),
                         onTap: _busy ? null : _recordManual,
                         enabled: !_busy,
                       ),
@@ -209,16 +207,14 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
                     ),
                   ],
                   const _SteadfastPaymentsSection(),
-                  const SectionHeader(title: 'Received'),
+                  SectionHeader(title: context.tr('common.received')),
                   PagedListBody<Payout>(
                     state: state,
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.account_balance_wallet_outlined,
-                    emptyTitle: 'No payouts yet',
-                    emptyMessage:
-                        'Upload a courier statement, or enter what arrived by '
-                        'hand. Nothing is matched until you look at it.',
+                    emptyTitle: context.tr('pay.emptyTitle'),
+                    emptyMessage: context.tr('pay.emptyBody'),
                     itemBuilder: (context, payout) => PayoutRow(
                       payout: payout,
                       onTap: () => Navigator.of(context).push(
@@ -347,7 +343,7 @@ class _StatementPreviewSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
-          const Text('Before we save this', style: EcomsbdType.sectionTitle),
+          Text(context.tr('pay.beforeSave'), style: EcomsbdType.sectionTitle),
           const SizedBox(height: 3),
           Text(
             '${preview.rowCount} row${preview.rowCount == 1 ? '' : 's'}, '
@@ -360,9 +356,7 @@ class _StatementPreviewSheet extends StatelessWidget {
               provider:
                   '${preview.invalidRowCount} row'
                   '${preview.invalidRowCount == 1 ? '' : 's'} we could not read',
-              detail:
-                  'They are imported with the text the file contained, so you '
-                  'can see what went wrong rather than losing the money.',
+              detail: context.tr('pay.unreadableNote'),
               tone: Tone.warning,
             ),
           const SizedBox(height: EcomsbdSpacing.sm),
@@ -412,7 +406,7 @@ class _StatementPreviewSheet extends StatelessWidget {
                     shape: const StadiumBorder(),
                     textStyle: EcomsbdType.label,
                   ),
-                  child: const Text('Import it'),
+                  child: Text(context.tr('pay.importIt')),
                 ),
               ),
             ],
@@ -528,15 +522,13 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Money that arrived'),
+      title: Text(context.tr('pay.moneyArrived')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'A lump sum with no breakdown cannot be matched automatically — '
-            'there is nothing to match on but the number. You will choose which '
-            'parcels it covers.',
+            context.tr('pay.lumpSumNote'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
@@ -548,9 +540,9 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
-            label: 'Note',
+            label: context.tr('common.note'),
             controller: _note,
-            hint: 'Optional — bKash from Steadfast',
+            hint: context.tr('pay.noteHint'),
           ),
         ],
       ),
@@ -568,7 +560,7 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
                   ),
                 )
               : null,
-          child: const Text('Record'),
+          child: Text(context.tr('pay.record')),
         ),
       ],
     );
@@ -640,9 +632,11 @@ class _SteadfastPaymentsSectionState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(
-          title: 'From Steadfast',
-          subtitle: 'Payments the courier says it has sent',
-          actionLabel: _syncing ? 'Syncing…' : 'Sync now',
+          title: context.tr('pay.fromSteadfast'),
+          subtitle: context.tr('pay.fromSteadfastSub'),
+          actionLabel: _syncing
+              ? context.tr('pay.syncing')
+              : context.tr('pay.syncNow'),
           onAction: _syncing ? null : _sync,
         ),
         payments.when(
@@ -650,7 +644,7 @@ class _SteadfastPaymentsSectionState
           error: (_, __) => const SizedBox.shrink(),
           data: (rows) => rows.isEmpty
               ? Text(
-                  'No payments synced yet.',
+                  context.tr('pay.noneSynced'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted2,
                   ),
@@ -722,18 +716,14 @@ class _ProviderPaymentRow extends StatelessWidget {
             if (payment.needsAttention) ...<Widget>[
               const SizedBox(height: 4),
               Text(
-                payment.errorMessage ??
-                    'Steadfast changed its copy of this payment after we '
-                        'imported it. Nothing already settled has been '
-                        'rewritten — someone needs to look.',
+                payment.errorMessage ?? context.tr('pay.driftNote'),
                 style: EcomsbdType.caption.copyWith(color: Tone.warning.ink),
               ),
             ],
             if (payment.schemaUnverified) ...<Widget>[
               const SizedBox(height: 4),
               Text(
-                'Steadfast does not publish the format of this response, so '
-                'these field names are our best reading of it.',
+                context.tr('pay.fieldNamesNote'),
                 style: EcomsbdType.caption.copyWith(
                   color: EcomsbdColors.muted2,
                 ),

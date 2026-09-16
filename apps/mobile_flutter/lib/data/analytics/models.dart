@@ -1,6 +1,12 @@
 import 'package:meta/meta.dart';
 
 import '../../core/money.dart';
+import '../../l10n/app_locale.dart';
+import '../../l10n/app_strings.dart';
+
+/// These labels are read from const enums, so they resolve against the active
+/// locale when asked rather than when constructed.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Wire models for Home, Insights, expenses and the notification centre.
 ///
@@ -448,14 +454,18 @@ class ProductLine {
 // --------------------------------------------------------------------------- //
 
 enum ExpenseKind {
-  adSpend('AD_SPEND', 'Ad spend'),
-  fixed('FIXED', 'Fixed cost'),
-  other('OTHER', 'Other');
+  adSpend('AD_SPEND', 'ek.adSpend'),
+  fixed('FIXED', 'ek.fixed'),
+  other('OTHER', 'ek.other');
 
-  const ExpenseKind(this.wire, this.label);
+  const ExpenseKind(this.wire, this._labelKey);
 
   final String wire;
-  final String label;
+  final String _labelKey;
+
+  /// Resolved when read, not when constructed: an enum constructor has to be
+  /// const, so only the key can live there. The wording follows the language.
+  String get label => _t(_labelKey);
 
   static ExpenseKind parse(String value) => ExpenseKind.values.firstWhere(
     (kind) => kind.wire == value,
@@ -469,17 +479,16 @@ enum ExpenseKind {
 }
 
 enum AllocationMethod {
-  equalPerDeliveredOrder(
-    'EQUAL_PER_DELIVERED_ORDER',
-    'Equally per delivered order',
-  ),
-  proportionalToRevenue('PROPORTIONAL_TO_REVENUE', 'By order value'),
-  productTaggedPerUnit('PRODUCT_TAGGED_PER_UNIT', 'Per unit of one product');
+  equalPerDeliveredOrder('EQUAL_PER_DELIVERED_ORDER', 'am.equalPerDelivered'),
+  proportionalToRevenue('PROPORTIONAL_TO_REVENUE', 'am.byOrderValue'),
+  productTaggedPerUnit('PRODUCT_TAGGED_PER_UNIT', 'am.perUnit');
 
-  const AllocationMethod(this.wire, this.label);
+  const AllocationMethod(this.wire, this._labelKey);
 
   final String wire;
-  final String label;
+  final String _labelKey;
+
+  String get label => _t(_labelKey);
 
   static AllocationMethod parse(String value) =>
       AllocationMethod.values.firstWhere(
@@ -832,22 +841,24 @@ class ConsignmentCharge {
 /// "Risk" wording, never a defamatory label about a person — section 19 is
 /// explicit about that, and `fakeOrderSuspicion` is worded accordingly.
 enum ReturnReason {
-  customerUnreachable('CUSTOMER_UNREACHABLE', 'Customer unreachable'),
-  customerRefused('CUSTOMER_REFUSED', 'Customer refused'),
-  wrongProduct('WRONG_PRODUCT', 'Wrong product'),
-  wrongSize('WRONG_SIZE', 'Wrong size'),
-  damaged('DAMAGED', 'Damaged'),
-  delayedDelivery('DELAYED_DELIVERY', 'Delivered too late'),
-  changedMind('CHANGED_MIND', 'Changed mind'),
-  fakeOrderSuspicion('FAKE_ORDER_SUSPICION', 'Suspected invalid order'),
-  courierIssue('COURIER_ISSUE', 'Courier issue'),
-  merchantIssue('MERCHANT_ISSUE', 'Our mistake'),
-  other('OTHER', 'Other');
+  customerUnreachable('CUSTOMER_UNREACHABLE', 'rr.unreachable'),
+  customerRefused('CUSTOMER_REFUSED', 'rr.refused'),
+  wrongProduct('WRONG_PRODUCT', 'rr.wrongProduct'),
+  wrongSize('WRONG_SIZE', 'rr.wrongSize'),
+  damaged('DAMAGED', 'rr.damaged'),
+  delayedDelivery('DELAYED_DELIVERY', 'rr.tooLate'),
+  changedMind('CHANGED_MIND', 'rr.changedMind'),
+  fakeOrderSuspicion('FAKE_ORDER_SUSPICION', 'rr.suspectedInvalid'),
+  courierIssue('COURIER_ISSUE', 'rr.courierIssue'),
+  merchantIssue('MERCHANT_ISSUE', 'rr.ourMistake'),
+  other('OTHER', 'rr.other');
 
-  const ReturnReason(this.wire, this.label);
+  const ReturnReason(this.wire, this._labelKey);
 
   final String wire;
-  final String label;
+  final String _labelKey;
+
+  String get label => _t(_labelKey);
 
   static ReturnReason? tryParse(String? value) {
     if (value == null) return null;

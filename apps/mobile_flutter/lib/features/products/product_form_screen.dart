@@ -167,7 +167,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     final margin = (_paisa(_price.text) ?? 0) - (_paisa(_cost.text) ?? 0);
 
     return DetailScaffold(
-      title: widget.isEditing ? 'Edit product' : 'New product',
+      title: widget.isEditing ? context.tr('pf.edit') : context.tr('pf.new'),
       subtitle: product?.sku,
       children: <Widget>[
         Form(
@@ -184,19 +184,19 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     LabelledField(
-                      label: 'Product name',
+                      label: context.tr('imp.colProductName'),
                       controller: _name,
-                      hint: 'Cotton Abaya',
+                      hint: context.tr('pf.nameHint'),
                       validator: (value) =>
                           (value == null || value.trim().isEmpty)
-                          ? 'A name is required'
+                          ? context.tr('pf.nameRequired')
                           : null,
                     ),
                     const SizedBox(height: EcomsbdSpacing.md),
                     LabelledField(
-                      label: 'SKU or code',
+                      label: context.tr('pf.sku'),
                       controller: _sku,
-                      hint: 'Optional',
+                      hint: context.tr('common.optional'),
                     ),
                   ],
                 ),
@@ -206,11 +206,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Text('Money', style: EcomsbdType.bodyStrong),
+                    Text(
+                      context.tr('money.title'),
+                      style: EcomsbdType.bodyStrong,
+                    ),
                     const SizedBox(height: 3),
                     Text(
-                      'Cost is what you pay. Without it, no profit figure this '
-                      'app shows can be trusted.',
+                      context.tr('pf.costNote'),
                       style: EcomsbdType.caption.copyWith(
                         color: EcomsbdColors.muted,
                       ),
@@ -228,7 +230,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                             inputFormatters: _moneyFormatters,
                             onChanged: (_) => setState(() {}),
                             validator: (value) => _paisa(value ?? '') == null
-                                ? 'Enter an amount like 350 or 350.50'
+                                ? context.tr('pf.amountError')
                                 : null,
                           ),
                         ),
@@ -243,7 +245,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                             inputFormatters: _moneyFormatters,
                             onChanged: (_) => setState(() {}),
                             validator: (value) => _paisa(value ?? '') == null
-                                ? 'Enter an amount like 350 or 350.50'
+                                ? context.tr('pf.amountError')
                                 : null,
                           ),
                         ),
@@ -254,7 +256,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            'Margin per unit',
+                            context.tr('pf.marginPerUnit'),
                             style: EcomsbdType.caption.copyWith(
                               color: EcomsbdColors.muted,
                             ),
@@ -274,8 +276,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          'Selling below cost. Usually a swapped column — check '
-                          'before saving.',
+                          context.tr('pf.belowCost'),
                           style: EcomsbdType.caption.copyWith(
                             color: EcomsbdColors.red,
                           ),
@@ -289,14 +290,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Text('Stock', style: EcomsbdType.bodyStrong),
+                    Text(context.tr('pf.stock'), style: EcomsbdType.bodyStrong),
                     const SizedBox(height: 3),
                     Text(
                       widget.isEditing
-                          ? 'Stock changes by recording a movement, so there is '
-                                'always a reason behind the number.'
-                          : 'Your opening count. Every later change is recorded '
-                                'as a movement.',
+                          ? context.tr('pf.stockMovementNote')
+                          : context.tr('pf.openingNote'),
                       style: EcomsbdType.caption.copyWith(
                         color: EcomsbdColors.muted,
                       ),
@@ -311,7 +310,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
                                 Text(
-                                  'IN STOCK',
+                                  context.tr('pf.inStockCaps'),
                                   style: EcomsbdType.eyebrow.copyWith(
                                     color: EcomsbdColors.muted2,
                                   ),
@@ -326,7 +325,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                           FilledButton.tonalIcon(
                             onPressed: _adjustStock,
                             icon: const Icon(Icons.tune_rounded, size: 18),
-                            label: const Text('Adjust'),
+                            label: Text(context.tr('pf.adjust')),
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(
                                 0,
@@ -340,19 +339,19 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       )
                     else
                       LabelledField(
-                        label: 'Opening stock',
+                        label: context.tr('imp.colOpeningStock'),
                         controller: _opening,
                         keyboardType: TextInputType.number,
                         inputFormatters: _countFormatters,
                         validator: (value) => _count(value ?? '') == null
-                            ? 'Enter a whole number'
+                            ? context.tr('pf.wholeNumber')
                             : null,
                       ),
                     const SizedBox(height: EcomsbdSpacing.md),
                     LabelledField(
-                      label: 'Warn me below',
+                      label: context.tr('pf.warnBelow'),
                       controller: _threshold,
-                      hint: 'Optional',
+                      hint: context.tr('common.optional'),
                       keyboardType: TextInputType.number,
                       inputFormatters: _countFormatters,
                     ),
@@ -370,8 +369,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 ),
                 child: Text(
                   _saving
-                      ? 'Saving…'
-                      : (widget.isEditing ? 'Save changes' : 'Add product'),
+                      ? context.tr('common.saving')
+                      : (widget.isEditing
+                            ? context.tr('pf.saveChanges')
+                            : 'Add product'),
                 ),
               ),
             ],

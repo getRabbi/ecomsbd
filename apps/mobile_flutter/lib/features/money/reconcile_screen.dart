@@ -12,6 +12,7 @@ import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
 
 /// One payout, line by line, with what the engine decided.
 ///
@@ -99,11 +100,9 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
     final reason = await _MatchReasonDialog.show(
       context,
       reference: null,
-      title: 'Undo this match',
-      body:
-          'The payment goes back to unmatched and the parcel is owed again. '
-          'Nothing is deleted — the history keeps both.',
-      action: 'Undo',
+      title: context.tr('rec.undoTitle'),
+      body: context.tr('rec.undoBody'),
+      action: context.tr('common.undo'),
     );
     if (reason == null) {
       return;
@@ -136,11 +135,11 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
 
     return async.when(
       loading: () => DetailScaffold(
-        title: 'Payout',
+        title: context.tr('rec.payout'),
         children: <Widget>[SkeletonLoader.card(height: 200)],
       ),
       error: (error, _) => DetailScaffold(
-        title: 'Payout',
+        title: context.tr('rec.payout'),
         children: <Widget>[
           if (error is ApiError)
             ErrorStateCard(
@@ -150,7 +149,7 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
           else
             EmptyState(
               icon: Icons.error_outline,
-              title: 'Could not load',
+              title: context.tr('common.couldNotLoad'),
               message: '$error',
             ),
         ],
@@ -172,17 +171,17 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
           spacing: EcomsbdSpacing.xs,
           children: <Widget>[
             MetricTile(
-              label: 'Arrived',
+              label: context.tr('rec.arrived'),
               value: payout.total.formatCompact(),
               caption: payout.paidOn == null
                   ? formatRelative(payout.receivedAt)
                   : 'paid ${formatRelative(payout.paidOn)}',
             ),
             MetricTile(
-              label: 'Tied to parcels',
+              label: context.tr('rec.tied'),
               value: payout.applied.formatCompact(),
               caption: payout.isFullyExplained
-                  ? 'all of it'
+                  ? context.tr('rec.allOfIt')
                   : '${payout.unexplained.format()} left',
               tone: payout.isFullyExplained ? Tone.good : Tone.warning,
             ),
@@ -199,7 +198,7 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
               child: OutlinedButton.icon(
                 onPressed: _busy ? null : () => _reconcile(shadow: true),
                 icon: const Icon(Icons.visibility_outlined, size: 17),
-                label: const Text('Preview'),
+                label: Text(context.tr('rec.preview')),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
                   shape: const StadiumBorder(),
@@ -212,7 +211,7 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
               child: FilledButton.icon(
                 onPressed: _busy ? null : () => _reconcile(shadow: false),
                 icon: const Icon(Icons.auto_awesome_outlined, size: 17),
-                label: const Text('Match'),
+                label: Text(context.tr('rec.match')),
                 style: FilledButton.styleFrom(
                   backgroundColor: EcomsbdColors.orange,
                   minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
@@ -225,12 +224,11 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
-          'Preview shows what would be matched without changing anything. '
-          'Only lines with an exact courier reference are settled on their own.',
+          context.tr('rec.previewNote'),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
         ),
         if (payout.adjustments.isNotEmpty) ...<Widget>[
-          const SectionHeader(title: 'What the courier deducted'),
+          SectionHeader(title: context.tr('rec.deducted')),
           GlassCard(
             child: Column(
               children: <Widget>[
@@ -277,9 +275,9 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
           ),
         ],
         SectionHeader(
-          title: 'Lines',
+          title: context.tr('rec.lines'),
           subtitle: payout.linesNeedingAttention == 0
-              ? 'All settled'
+              ? context.tr('rec.allSettled')
               : '${payout.linesNeedingAttention} need you',
         ),
         for (final line in payout.lines)
@@ -321,7 +319,9 @@ class _ReportCard extends StatelessWidget {
               const SizedBox(width: EcomsbdSpacing.sm),
               Expanded(
                 child: Text(
-                  report.shadow ? 'Preview only' : 'Matched',
+                  report.shadow
+                      ? context.tr('rec.previewOnly')
+                      : context.tr('rec.matched'),
                   style: EcomsbdType.bodyStrong,
                 ),
               ),
@@ -335,7 +335,7 @@ class _ReportCard extends StatelessWidget {
           ),
           if (report.shadow)
             Text(
-              'Nothing was changed.',
+              context.tr('rec.nothingChanged'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.blue),
             )
           else if (!report.applied.isZero)
@@ -399,7 +399,7 @@ class _LineCard extends StatelessWidget {
                     minimumSize: const Size(0, EcomsbdTouch.minTarget),
                     textStyle: EcomsbdType.chip,
                   ),
-                  child: const Text('Undo'),
+                  child: Text(context.tr('common.undo')),
                 ),
               ],
             ],
@@ -422,7 +422,7 @@ class _LineCard extends StatelessWidget {
             const SizedBox(height: EcomsbdSpacing.sm),
             Text(
               eligible.length == 1
-                  ? 'One parcel could be this'
+                  ? context.tr('rec.oneCandidate')
                   : '${eligible.length} parcels could be this',
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
@@ -438,7 +438,7 @@ class _LineCard extends StatelessWidget {
           ] else if (line.needsAttention) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.xs),
             Text(
-              'Nothing in your shop matches this line.',
+              context.tr('rec.noMatch'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ],
@@ -509,7 +509,7 @@ class _CandidateRow extends StatelessWidget {
               minimumSize: const Size(0, EcomsbdTouch.minTarget),
               textStyle: EcomsbdType.chip,
             ),
-            child: const Text('This one'),
+            child: Text(context.tr('rec.thisOne')),
           ),
         ],
       ),
@@ -537,12 +537,12 @@ class _MatchReasonDialog extends StatefulWidget {
   }) => showDialog<String>(
     context: context,
     builder: (_) => _MatchReasonDialog(
-      title: title ?? 'Match this payment',
+      title: title ?? context.tr('rec.matchTitle'),
       body:
           body ??
           'Say why this payment is for ${reference ?? 'this parcel'}. It is '
               'stored with your name, so the decision can be traced later.',
-      action: action ?? 'Match',
+      action: action ?? context.tr('rec.match'),
     ),
   );
 
@@ -573,10 +573,10 @@ class _MatchReasonDialogState extends State<_MatchReasonDialog> {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
-            label: 'Reason',
+            label: context.tr('common.reason'),
             controller: _reason,
             maxLines: 2,
-            hint: 'Courier confirmed by phone',
+            hint: context.tr('rec.reasonHint'),
             onChanged: (_) => setState(() {}),
           ),
         ],
@@ -584,7 +584,7 @@ class _MatchReasonDialogState extends State<_MatchReasonDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: _reason.text.trim().length >= 3

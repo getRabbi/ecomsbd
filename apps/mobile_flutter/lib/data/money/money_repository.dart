@@ -3,6 +3,14 @@ import '../../core/money.dart';
 import '../commerce/models.dart' show PagedResult;
 import '../commerce/repository_support.dart';
 import 'models.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Seller-facing labels below are read where no `BuildContext` exists, so
+/// they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. A language change rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// The money core.
 ///
@@ -421,18 +429,18 @@ class LedgerEntry {
   bool get isReversal => reversalOf != null;
 
   String get eventLabel => switch (eventType) {
-    'DELIVERY_CONFIRMED' => 'Delivered — money owed',
-    'PARTIAL_DELIVERY_CONFIRMED' => 'Part delivered — money owed',
-    'RETURN_CONFIRMED' => 'Returned — nothing owed',
-    'PAYOUT_APPLIED' => 'Payment applied',
-    'PAYOUT_REVERSED' => 'Payment undone',
-    'PROVIDER_DEDUCTION' => 'Courier deduction',
-    'COURIER_CHARGE_APPLIED' => 'Delivery charge',
-    'RETURN_FEE_APPLIED' => 'Return charge',
-    'COD_FEE_APPLIED' => 'COD fee',
-    'MANUAL_ADJUSTMENT' => 'Your correction',
-    'WRITE_OFF' => 'Written off',
-    'REVERSAL' => 'Undone',
+    'DELIVERY_CONFIRMED' => _t('ev.deliveredOwed'),
+    'PARTIAL_DELIVERY_CONFIRMED' => _t('ev.partDeliveredOwed'),
+    'RETURN_CONFIRMED' => _t('ev.returnedNothingOwed'),
+    'PAYOUT_APPLIED' => _t('ev.payoutApplied'),
+    'PAYOUT_REVERSED' => _t('ev.payoutReversed'),
+    'PROVIDER_DEDUCTION' => _t('ev.providerDeduction'),
+    'COURIER_CHARGE_APPLIED' => _t('ev.courierCharge'),
+    'RETURN_FEE_APPLIED' => _t('ev.returnFee'),
+    'COD_FEE_APPLIED' => _t('ev.codFee'),
+    'MANUAL_ADJUSTMENT' => _t('ev.yourCorrection'),
+    'WRITE_OFF' => _t('ev.writeOff'),
+    'REVERSAL' => _t('ev.reversal'),
     _ => eventType,
   };
 }

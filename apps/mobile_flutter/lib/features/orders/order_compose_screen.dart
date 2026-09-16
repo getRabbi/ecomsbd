@@ -316,8 +316,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
   @override
   Widget build(BuildContext context) {
     return DetailScaffold(
-      title: _pasting ? 'Paste an order' : 'New order',
-      subtitle: _pasting ? 'Messenger, WhatsApp, anywhere' : null,
+      title: _pasting
+          ? context.tr('oc.pasteTitle')
+          : context.tr('orders.newOrder'),
+      subtitle: _pasting ? context.tr('oc.pasteSub') : null,
       children: _pasting ? _pasteStep() : _reviewStep(),
     );
   }
@@ -328,19 +330,15 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text(
-              'Paste the customer’s message',
-              style: EcomsbdType.bodyStrong,
-            ),
+            Text(context.tr('oc.pasteLabel'), style: EcomsbdType.bodyStrong),
             const SizedBox(height: 3),
             Text(
-              'Nothing is saved yet. You will see every field before anything '
-              'is created, and anything unclear is left blank for you.',
+              context.tr('oc.pasteNote'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
             LabelledField(
-              label: 'Message',
+              label: context.tr('oc.message'),
               controller: _paste,
               maxLines: 8,
               hint:
@@ -363,7 +361,11 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
           shape: const StadiumBorder(),
           textStyle: EcomsbdType.label,
         ),
-        child: Text(_parsing ? 'Reading…' : 'Read the message'),
+        child: Text(
+          _parsing
+              ? context.tr('common.reading')
+              : context.tr('oc.readMessage'),
+        ),
       ),
       const SizedBox(height: EcomsbdSpacing.sm),
       TextButton(
@@ -373,7 +375,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
           foregroundColor: EcomsbdColors.muted,
           textStyle: EcomsbdType.label,
         ),
-        child: const Text('Type it in instead'),
+        child: Text(context.tr('oc.typeInstead')),
       ),
     ];
   }
@@ -413,12 +415,15 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text('Customer', style: EcomsbdType.bodyStrong),
+                  Text(
+                    context.tr('common.customer'),
+                    style: EcomsbdType.bodyStrong,
+                  ),
                   const SizedBox(height: EcomsbdSpacing.md),
                   _CheckThis(
                     show: _uncertain.contains('phone'),
                     child: LabelledField(
-                      label: 'Phone',
+                      label: context.tr('common.phone'),
                       controller: _phone,
                       keyboardType: TextInputType.phone,
                       inputFormatters: <TextInputFormatter>[
@@ -431,7 +436,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                           : setState(() => _knownCustomer = null),
                       validator: (value) =>
                           (value == null || value.trim().length < 6)
-                          ? 'A phone number is required'
+                          ? context.tr('oc.phoneRequired')
                           : null,
                     ),
                   ),
@@ -443,16 +448,16 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                   _CheckThis(
                     show: _uncertain.contains('name'),
                     child: LabelledField(
-                      label: 'Name',
+                      label: context.tr('oc.name'),
                       controller: _name,
-                      hint: 'Optional',
+                      hint: context.tr('common.optional'),
                     ),
                   ),
                   const SizedBox(height: EcomsbdSpacing.md),
                   _CheckThis(
                     show: _uncertain.contains('address'),
                     child: LabelledField(
-                      label: 'Delivery address',
+                      label: context.tr('oc.deliveryAddress'),
                       controller: _address,
                       maxLines: 3,
                     ),
@@ -462,17 +467,17 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                     children: <Widget>[
                       Expanded(
                         child: LabelledField(
-                          label: 'District',
+                          label: context.tr('imp.colDistrict'),
                           controller: _district,
-                          hint: 'Optional',
+                          hint: context.tr('common.optional'),
                         ),
                       ),
                       const SizedBox(width: EcomsbdSpacing.sm),
                       Expanded(
                         child: LabelledField(
-                          label: 'Area',
+                          label: context.tr('imp.colArea'),
                           controller: _area,
-                          hint: 'Optional',
+                          hint: context.tr('common.optional'),
                         ),
                       ),
                     ],
@@ -487,14 +492,17 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      const Expanded(
-                        child: Text('Items', style: EcomsbdType.bodyStrong),
+                      Expanded(
+                        child: Text(
+                          context.tr('od.items'),
+                          style: EcomsbdType.bodyStrong,
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: () =>
                             setState(() => _items.add(_DraftItem())),
                         icon: const Icon(Icons.add_rounded, size: 17),
-                        label: const Text('Add item'),
+                        label: Text(context.tr('oc.addItem')),
                         style: TextButton.styleFrom(
                           foregroundColor: EcomsbdColors.orange,
                           minimumSize: const Size(0, EcomsbdTouch.minTarget),
@@ -523,7 +531,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text('Money', style: EcomsbdType.bodyStrong),
+                  Text(
+                    context.tr('money.title'),
+                    style: EcomsbdType.bodyStrong,
+                  ),
                   const SizedBox(height: EcomsbdSpacing.md),
                   Row(
                     children: <Widget>[
@@ -545,7 +556,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                                 ? null
                                 : Money(_subtotal).format(),
                             validator: (value) => _paisa(value ?? '') == null
-                                ? 'Enter an amount like 1250'
+                                ? context.tr('oc.amountError')
                                 : null,
                           ),
                         ),
@@ -563,7 +574,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                               RegExp(r'[0-9০-৯.]'),
                             ),
                           ],
-                          hint: 'Optional',
+                          hint: context.tr('common.optional'),
                         ),
                       ),
                     ],
@@ -573,7 +584,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          'Items total',
+                          context.tr('od.itemsTotal'),
                           style: EcomsbdType.caption.copyWith(
                             color: EcomsbdColors.muted,
                           ),
@@ -594,10 +605,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
             const SizedBox(height: EcomsbdSpacing.sm),
             GlassCard(
               child: LabelledField(
-                label: 'Note',
+                label: context.tr('common.note'),
                 controller: _note,
                 maxLines: 3,
-                hint: 'Optional — anything the courier should know',
+                hint: context.tr('oc.noteHint'),
               ),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
@@ -611,14 +622,18 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                 shape: const StadiumBorder(),
                 textStyle: EcomsbdType.label,
               ),
-              child: Text(_saving ? 'Saving…' : 'Save order'),
+              child: Text(
+                _saving
+                    ? context.tr('common.saving')
+                    : context.tr('oc.saveOrder'),
+              ),
             ),
             if (parsed == null) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.sm),
               TextButton.icon(
                 onPressed: () => setState(() => _pasting = true),
                 icon: const Icon(Icons.content_paste_rounded, size: 17),
-                label: const Text('Paste a message instead'),
+                label: Text(context.tr('oc.pasteInstead')),
                 style: TextButton.styleFrom(
                   minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
                   foregroundColor: EcomsbdColors.muted,
@@ -658,9 +673,9 @@ class _ParseSummary extends StatelessWidget {
                     : EcomsbdColors.blue,
               ),
               const SizedBox(width: EcomsbdSpacing.sm),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Check before saving',
+                  context.tr('oc.checkTitle'),
                   style: EcomsbdType.bodyStrong,
                 ),
               ),
@@ -671,17 +686,15 @@ class _ParseSummary extends StatelessWidget {
                   minimumSize: const Size(0, EcomsbdTouch.minTarget),
                   textStyle: EcomsbdType.chip,
                 ),
-                child: const Text('Edit text'),
+                child: Text(context.tr('oc.editText')),
               ),
             ],
           ),
           const SizedBox(height: 3),
           Text(
             parsed.isLowConfidence
-                ? 'Not much could be read from that message. Fill in what is '
-                      'missing — nothing has been guessed.'
-                : 'Everything below came from your message. Anything unclear '
-                      'was left blank rather than guessed.',
+                ? context.tr('oc.lowConfidence')
+                : context.tr('oc.fromMessage'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           if (parsed.warnings.isNotEmpty) ...<Widget>[
@@ -734,14 +747,13 @@ class _PhoneChoice extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Which number is the customer?',
+          Text(
+            context.tr('oc.whichNumberTitle'),
             style: EcomsbdType.bodyStrong,
           ),
           const SizedBox(height: 3),
           Text(
-            'The message had more than one. Picking the wrong one sends the '
-            'parcel to the wrong person, so this is your call.',
+            context.tr('oc.whichNumberBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
@@ -780,10 +792,10 @@ class _CheckThis extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         child,
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 4),
           child: StatusChip(
-            label: 'Check this',
+            label: context.tr('imp.checkThis'),
             tone: Tone.warning,
             icon: Icons.edit_outlined,
           ),
@@ -849,8 +861,7 @@ class _NoCourierNote extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'Saving records the order. It does not book a courier — that is a '
-            'separate step you take when you are ready to ship.',
+            context.tr('oc.saveNote'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
           ),
         ),
@@ -904,7 +915,7 @@ class _ItemRow extends StatelessWidget {
             SizedBox(
               width: 92,
               child: LabelledField(
-                label: 'Qty',
+                label: context.tr('oc.qty'),
                 controller: item.quantity,
                 keyboardType: TextInputType.number,
                 inputFormatters: <TextInputFormatter>[

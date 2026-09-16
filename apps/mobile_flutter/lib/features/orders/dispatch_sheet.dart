@@ -8,6 +8,7 @@ import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
 import '../shared/inputs.dart';
+import '../../l10n/app_strings.dart';
 
 /// Hand a parcel to a courier.
 ///
@@ -97,30 +98,30 @@ class _DispatchSheetState extends ConsumerState<DispatchSheet> {
           children: <Widget>[
             const _SheetGrip(),
             const SizedBox(height: EcomsbdSpacing.md),
-            const Text('Hand to a courier', style: EcomsbdType.sectionTitle),
+            Text(
+              context.tr('od.handToCourier'),
+              style: EcomsbdType.sectionTitle,
+            ),
             const SizedBox(height: 3),
             Text(
-              'Records that this parcel has gone out and takes the items off '
-              'your stock. Nothing is sent to a courier — this is your own '
-              'record until a courier account is connected.',
+              context.tr('disp.body'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
             LabelledField(
-              label: 'Tracking code',
+              label: context.tr('common.trackingCode'),
               controller: _tracking,
-              hint: 'Optional — helps match the payment later',
+              hint: context.tr('disp.trackingHint'),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Icon(Icons.info_outline, size: 15, color: EcomsbdColors.muted2),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'The money is not owed to you yet. It becomes owed when you '
-                    'record the delivery.',
+                    context.tr('disp.notOwedYet'),
                     style: EcomsbdType.caption,
                   ),
                 ),
@@ -137,7 +138,11 @@ class _DispatchSheetState extends ConsumerState<DispatchSheet> {
             FilledButton(
               onPressed: _busy ? null : _dispatch,
               style: _primaryButton,
-              child: Text(_busy ? 'Recording…' : 'Parcel has gone out'),
+              child: Text(
+                _busy
+                    ? context.tr('common.recording')
+                    : context.tr('disp.gone'),
+              ),
             ),
           ],
         ),
@@ -251,19 +256,22 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
           children: <Widget>[
             const _SheetGrip(),
             const SizedBox(height: EcomsbdSpacing.md),
-            const Text('What happened?', style: EcomsbdType.sectionTitle),
+            Text(
+              context.tr('common.whatHappened'),
+              style: EcomsbdType.sectionTitle,
+            ),
             const SizedBox(height: EcomsbdSpacing.md),
             Wrap(
               spacing: EcomsbdSpacing.xs,
               runSpacing: EcomsbdSpacing.xs,
               children: <Widget>[
                 FilterToggle(
-                  label: 'Delivered',
+                  label: context.tr('status.delivered'),
                   selected: _status == 'DELIVERED',
                   onChanged: (_) => setState(() => _status = 'DELIVERED'),
                 ),
                 FilterToggle(
-                  label: 'Came back',
+                  label: context.tr('disp.cameBack'),
                   selected: _status == 'RETURNED',
                   onChanged: (_) => setState(() => _status = 'RETURNED'),
                 ),
@@ -272,18 +280,16 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
             const SizedBox(height: EcomsbdSpacing.sm),
             Text(
               _status == 'DELIVERED'
-                  ? 'The courier now owes you the COD. It shows on the Money '
-                        'screen until a payment is matched to it.'
-                  : 'Nothing is owed, and the items go back on your shelf.',
+                  ? context.tr('disp.deliveredNote')
+                  : context.tr('disp.returnedNote'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             if (_status == 'RETURNED') ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.md),
-              const Text('Why did it come back?', style: EcomsbdType.label),
+              Text(context.tr('disp.whyBack'), style: EcomsbdType.label),
               const SizedBox(height: 3),
               Text(
-                'Optional. Skip it rather than guess — the return report is '
-                'only worth acting on if the reasons in it are real.',
+                context.tr('disp.whyBackHint'),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
               const SizedBox(height: EcomsbdSpacing.xs),
@@ -303,17 +309,17 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
             ],
             if (widget.itemCount > 1) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.sm),
-              const StatusChip(
-                label: 'Only part delivered? Record it on the parcel',
+              StatusChip(
+                label: context.tr('disp.partial'),
                 tone: Tone.info,
                 showIcon: false,
               ),
             ],
             const SizedBox(height: EcomsbdSpacing.md),
             LabelledField(
-              label: 'Note',
+              label: context.tr('common.note'),
               controller: _note,
-              hint: 'Optional — what the courier said',
+              hint: context.tr('disp.noteHint'),
             ),
             if (_error != null) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.sm),
@@ -326,7 +332,9 @@ class _OutcomeSheetState extends ConsumerState<OutcomeSheet> {
             FilledButton(
               onPressed: _busy ? null : _save,
               style: _primaryButton,
-              child: Text(_busy ? 'Saving…' : 'Record it'),
+              child: Text(
+                _busy ? context.tr('common.saving') : context.tr('disp.record'),
+              ),
             ),
           ],
         ),

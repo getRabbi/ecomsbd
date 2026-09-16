@@ -1,4 +1,12 @@
 import 'package:flutter/foundation.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Seller-facing labels below are read where no `BuildContext` exists, so
+/// they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. A language change rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Courier integration models.
 ///
@@ -577,11 +585,11 @@ class ProviderPayment {
   bool get needsAttention => syncState == 'CHANGED' || syncState == 'FAILED';
 
   String get stateLabel => switch (syncState) {
-    'SEEN' => 'Seen',
-    'DETAILED' => 'Read',
-    'IMPORTED' => 'Imported',
-    'CHANGED' => 'Changed at the courier',
-    'FAILED' => 'Could not read',
+    'SEEN' => _t('sst.seen'),
+    'DETAILED' => _t('sst.read'),
+    'IMPORTED' => _t('sst.imported'),
+    'CHANGED' => _t('sst.changedAtCourier'),
+    'FAILED' => _t('sst.couldNotRead'),
     _ => syncState,
   };
 }

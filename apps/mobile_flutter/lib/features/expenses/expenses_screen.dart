@@ -11,6 +11,12 @@ import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Money the seller spent that no parcel carries by itself.
 ///
@@ -33,7 +39,7 @@ class ExpensesScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => ExpenseSheet.show(context),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add expense'),
+        label: Text(context.tr('exp.add')),
       ),
       body: EcomsbdBackground(
         child: SafeArea(
@@ -54,16 +60,13 @@ class ExpensesScreen extends ConsumerWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Costs no single parcel carries',
-                          title: 'Expenses',
-                          description:
-                              'Recording an expense changes no profit figure. '
-                              'It reaches your orders only when you allocate '
-                              'it.',
+                          eyebrow: context.tr('exp.eyebrow'),
+                          title: context.tr('exp.title'),
+                          description: context.tr('exp.description'),
                         ),
                       ),
                     ],
@@ -80,7 +83,7 @@ class ExpensesScreen extends ConsumerWidget {
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
                       FilterToggle(
-                        label: 'All',
+                        label: context.tr('common.all'),
                         selected: controller.kind == null,
                         onChanged: (_) => controller.setKind(null),
                       ),
@@ -99,12 +102,8 @@ class ExpensesScreen extends ConsumerWidget {
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.receipt_long_outlined,
-                    emptyTitle: 'No expenses yet',
-                    emptyMessage:
-                        'Ad spend, packaging and rent live here. Until you '
-                        'add them, your profit figure is contribution profit '
-                        'only — what each parcel earned before the costs of '
-                        'running the shop.',
+                    emptyTitle: context.tr('exp.emptyTitle'),
+                    emptyMessage: context.tr('exp.emptyBody'),
                     itemBuilder: (context, expense) => Padding(
                       padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
                       child: ExpenseCard(expense: expense),
@@ -158,8 +157,7 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
           SnackBar(
             content: Text(
               result.reachedNothing
-                  ? 'Nothing was delivered in that period, so this cost '
-                        'reached no parcel. It stays visible as unallocated.'
+                  ? context.tr('exp.reachedNoParcelNote')
                   : 'Spread ${result.allocated.format()} across '
                         '${result.parcelCount} parcel'
                         '${result.parcelCount == 1 ? '' : 's'}.',
@@ -183,14 +181,13 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Why re-allocate?'),
+        title: Text(context.tr('exp.reallocateTitle')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'This changes profit figures you have already seen. The old '
-              'ones stay readable, with your reason next to them.',
+              context.tr('exp.reallocateBody'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
@@ -198,8 +195,8 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
               controller: controller,
               autofocus: true,
               maxLength: 200,
-              decoration: const InputDecoration(
-                hintText: 'Equal split was misleading for these order sizes',
+              decoration: InputDecoration(
+                hintText: context.tr('exp.reallocateHint'),
               ),
             ),
           ],
@@ -207,14 +204,14 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(context.tr('common.cancel')),
           ),
           TextButton(
             onPressed: () {
               final text = controller.text.trim();
               if (text.isNotEmpty) Navigator.of(context).pop(text);
             },
-            child: const Text('Re-allocate'),
+            child: Text(context.tr('exp.reallocate')),
           ),
         ],
       ),
@@ -282,8 +279,8 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
                     : const Icon(Icons.call_split_rounded, size: 18),
                 label: Text(
                   expense.isAllocated
-                      ? 'Allocate again'
-                      : 'Allocate to parcels',
+                      ? context.tr('exp.allocateAgain')
+                      : context.tr('exp.allocateToParcels'),
                 ),
               ),
             ),
@@ -292,8 +289,7 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
             Text(
               // Section 86 warns against pretending fixed-cost allocation is
               // accounting-grade, so this app does not spread rent per parcel.
-              'Fixed costs are not spread across parcels. They come off '
-              'below contribution profit, where they belong.',
+              context.tr('exp.fixedCostNote'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ],
@@ -304,10 +300,10 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
 
   static Widget _statusChip(Expense expense) {
     if (!expense.kind.isAllocatable) {
-      return const StatusChip(label: 'Below the line', tone: Tone.neutral);
+      return StatusChip(label: _t('exp.belowTheLine'), tone: Tone.neutral);
     }
     if (expense.reachedNothing) {
-      return const StatusChip(label: 'Reached no parcel', tone: Tone.warning);
+      return StatusChip(label: _t('exp.reachedNoParcel'), tone: Tone.warning);
     }
     if (expense.isAllocated) {
       return StatusChip(
@@ -315,7 +311,7 @@ class _ExpenseCardState extends ConsumerState<ExpenseCard> {
         tone: Tone.good,
       );
     }
-    return const StatusChip(label: 'Not allocated', tone: Tone.info);
+    return StatusChip(label: _t('exp.notAllocated'), tone: Tone.info);
   }
 
   static String _period(Expense expense) {
@@ -433,11 +429,10 @@ class _ExpenseSheetState extends ConsumerState<ExpenseSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Text('Add an expense', style: EcomsbdType.sectionTitle),
+              Text(context.tr('exp.addTitle'), style: EcomsbdType.sectionTitle),
               const SizedBox(height: 3),
               Text(
-                'This is recorded, not applied. Nothing on your Insights '
-                'screen moves until you allocate it.',
+                context.tr('exp.addBody'),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
               const SizedBox(height: EcomsbdSpacing.md),
@@ -455,18 +450,18 @@ class _ExpenseSheetState extends ConsumerState<ExpenseSheet> {
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               LabelledField(
-                label: 'Amount',
+                label: context.tr('common.amount'),
                 controller: _amount,
-                hint: 'Taka, e.g. 5000',
+                hint: context.tr('exp.amountHint'),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
               LabelledField(
-                label: 'What was it for',
+                label: context.tr('exp.whatFor'),
                 controller: _description,
-                hint: 'Facebook boost, poly bags, shop rent',
+                hint: context.tr('exp.whatForHint'),
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
               _PeriodField(
@@ -475,7 +470,7 @@ class _ExpenseSheetState extends ConsumerState<ExpenseSheet> {
               ),
               if (_kind.isAllocatable) ...<Widget>[
                 const SizedBox(height: EcomsbdSpacing.md),
-                const Text('How should it be split?', style: EcomsbdType.label),
+                Text(context.tr('exp.howSplit'), style: EcomsbdType.label),
                 const SizedBox(height: EcomsbdSpacing.xs),
                 Wrap(
                   spacing: EcomsbdSpacing.xs,
@@ -505,7 +500,11 @@ class _ExpenseSheetState extends ConsumerState<ExpenseSheet> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _busy || _amountPaisa == null ? null : _save,
-                  child: Text(_busy ? 'Saving…' : 'Record expense'),
+                  child: Text(
+                    _busy
+                        ? context.tr('common.saving')
+                        : context.tr('exp.record'),
+                  ),
                 ),
               ),
             ],
@@ -530,13 +529,13 @@ class _PeriodField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = period == null
-        ? 'Today'
+        ? context.tr('common.today')
         : '${_day(period!.start)} to ${_day(period!.end)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text('Period it covers', style: EcomsbdType.label),
+        Text(context.tr('exp.periodItCovers'), style: EcomsbdType.label),
         const SizedBox(height: EcomsbdSpacing.xs),
         OutlinedButton.icon(
           onPressed: () async {

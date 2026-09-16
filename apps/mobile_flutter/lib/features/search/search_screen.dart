@@ -18,6 +18,7 @@ import '../products/products_screen.dart';
 import '../products/stock_history_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import '../../l10n/app_strings.dart';
 
 /// One search box for the whole shop: orders, customers and products at once.
 ///
@@ -130,11 +131,11 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return DetailScaffold(
-      title: 'Search',
+      title: context.tr('srch.title'),
       children: <Widget>[
         CommerceSearchField(
           controller: _search,
-          hint: 'Order number, name, phone or product',
+          hint: context.tr('srch.hint'),
           onChanged: _onChanged,
           autofocus: true,
         ),
@@ -155,13 +156,11 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
           ],
         ];
       }
-      return const <Widget>[
+      return <Widget>[
         EmptyState(
           icon: Icons.search_rounded,
-          title: 'Search your shop',
-          message:
-              'Find an order by its number, a customer by name or phone — '
-              'the last 4 digits are enough — or a product by name or SKU.',
+          title: context.tr('srch.emptyTitle'),
+          message: context.tr('srch.emptyBody'),
         ),
       ];
     }
@@ -192,9 +191,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         EmptyState(
           icon: Icons.search_off_rounded,
           title: 'Nothing matches “$_query”',
-          message:
-              'Check the spelling, or try the last 4 digits of the phone '
-              'number.',
+          message: context.tr('srch.noMatchBody'),
         ),
       ];
     }
@@ -216,7 +213,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         const SizedBox(height: EcomsbdSpacing.sm),
       ],
       if (orders.isNotEmpty) ...<Widget>[
-        const SectionHeader(title: 'Orders'),
+        SectionHeader(title: context.tr('orders.title')),
         const SizedBox(height: EcomsbdSpacing.xs),
         for (final order in orders) ...<Widget>[
           SellerOrderCard(
@@ -227,7 +224,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         ],
       ],
       if (customers.isNotEmpty) ...<Widget>[
-        const SectionHeader(title: 'Customers'),
+        SectionHeader(title: context.tr('entity.customers')),
         const SizedBox(height: EcomsbdSpacing.xs),
         for (final customer in customers) ...<Widget>[
           CustomerRow(
@@ -238,7 +235,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         ],
       ],
       if (products.isNotEmpty) ...<Widget>[
-        const SectionHeader(title: 'Products'),
+        SectionHeader(title: context.tr('entity.products')),
         const SizedBox(height: EcomsbdSpacing.xs),
         for (final product in products) ...<Widget>[
           ProductRow(

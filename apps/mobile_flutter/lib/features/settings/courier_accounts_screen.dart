@@ -11,6 +11,12 @@ import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Courier accounts.
 ///
@@ -36,7 +42,7 @@ class CourierAccountsScreen extends ConsumerWidget {
     final evidence = ref.watch(providerEvidenceProvider(steadfast));
 
     return DetailScaffold(
-      title: 'Courier accounts',
+      title: context.tr('ca.title'),
       children: <Widget>[
         account.when(
           loading: () => SkeletonLoader.card(height: 180),
@@ -48,7 +54,7 @@ class CourierAccountsScreen extends ConsumerWidget {
                 )
               : EmptyState(
                   icon: Icons.error_outline,
-                  title: 'Could not load',
+                  title: context.tr('common.couldNotLoad'),
                   message: '$error',
                 ),
           data: (value) => _SteadfastCard(account: value),
@@ -109,19 +115,16 @@ class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Disconnect Steadfast?'),
-        content: const Text(
-          'Your API key and secret key are erased. Parcels already booked keep '
-          'their tracking, and you can still record couriers by hand.',
-        ),
+        title: Text(context.tr('ca.disconnectTitle')),
+        content: Text(context.tr('ca.disconnectBody')),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep it'),
+            child: Text(context.tr('common.keepIt')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Disconnect'),
+            child: Text(context.tr('common.disconnect')),
           ),
         ],
       ),
@@ -185,7 +188,7 @@ class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
           if (account?.maskedIdentifier != null) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.sm),
             _DetailRow(
-              label: 'API key',
+              label: context.tr('ca.apiKeyLabel'),
               // The only credential-derived value that ever reaches this
               // device, and it is not reversible.
               value: account!.maskedIdentifier!,
@@ -193,7 +196,7 @@ class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
           ],
           if (account?.lastVerifiedAt != null)
             _DetailRow(
-              label: 'Last checked',
+              label: context.tr('ca.lastChecked'),
               value: _relative(account!.lastVerifiedAt!),
             ),
           if (account?.reportedBalancePaisa != null)
@@ -201,7 +204,7 @@ class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
               // Labelled as the courier's number, never merged with the COD
               // outstanding total on the Money screen: they measure different
               // things (brief section 19).
-              label: 'Steadfast reported balance',
+              label: context.tr('ca.reportedBalance'),
               value: Money(account!.reportedBalancePaisa!).format(),
             ),
           if (_lastCheck != null) ...<Widget>[
@@ -217,21 +220,29 @@ class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
                 onPressed: _busy ? null : _connect,
                 style: _primaryButton,
                 child: Text(switch (status) {
-                  CourierAccountStatus.connected => 'Replace keys',
-                  CourierAccountStatus.needsReconnect => 'Reconnect',
-                  _ => 'Connect',
+                  CourierAccountStatus.connected => context.tr(
+                    'ca.replaceKeys',
+                  ),
+                  CourierAccountStatus.needsReconnect => context.tr(
+                    'ca.reconnect',
+                  ),
+                  _ => context.tr('common.connect'),
                 }),
               ),
               if (account != null && account.connected)
                 OutlinedButton(
                   onPressed: _busy ? null : _test,
-                  child: Text(_busy ? 'Checking…' : 'Test connection'),
+                  child: Text(
+                    _busy
+                        ? context.tr('settings.checking')
+                        : context.tr('ca.testConnection'),
+                  ),
                 ),
               if (account != null &&
                   status != CourierAccountStatus.disconnected)
                 TextButton(
                   onPressed: _busy ? null : _disconnect,
-                  child: const Text('Disconnect'),
+                  child: Text(context.tr('common.disconnect')),
                 ),
             ],
           ),
@@ -249,13 +260,10 @@ Tone _toneFor(CourierAccountStatus status) => switch (status) {
 };
 
 String _subtitleFor(CourierAccountStatus status) => switch (status) {
-  CourierAccountStatus.connected =>
-    'Book parcels, sync their status and import payments automatically.',
-  CourierAccountStatus.needsReconnect =>
-    'Steadfast stopped accepting these keys. Enter them again to keep booking.',
-  CourierAccountStatus.disconnected =>
-    'Connect your merchant API key to book parcels from ecomsbd.',
-  CourierAccountStatus.unknown => 'We could not read this account.',
+  CourierAccountStatus.connected => _t('ca.connectedSub'),
+  CourierAccountStatus.needsReconnect => _t('ca.needsReconnectSub'),
+  CourierAccountStatus.disconnected => _t('ca.notConnectedSub'),
+  CourierAccountStatus.unknown => _t('ca.unreadable'),
 };
 
 /// The four validation outcomes, rendered as four different things.
@@ -271,13 +279,13 @@ class _CheckResultBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (tone, title) = switch (result.result) {
-      CredentialCheck.valid => (Tone.good, 'Connected'),
-      CredentialCheck.invalid => (Tone.bad, 'Steadfast rejected these keys'),
+      CredentialCheck.valid => (Tone.good, context.tr('provider.connected')),
+      CredentialCheck.invalid => (Tone.bad, context.tr('ca.rejectedKeys')),
       CredentialCheck.providerUnavailable => (
         Tone.warning,
-        'Steadfast did not answer',
+        context.tr('ca.noAnswer'),
       ),
-      CredentialCheck.unknown => (Tone.warning, 'Could not check'),
+      CredentialCheck.unknown => (Tone.warning, context.tr('ca.couldNotCheck')),
     };
 
     return Container(
@@ -311,7 +319,7 @@ class _WhatThisCourierSupports extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('What Steadfast supports', style: EcomsbdType.label),
+          Text(context.tr('ca.supportsTitle'), style: EcomsbdType.label),
           const SizedBox(height: 3),
           Text(
             'Read from Steadfast API documentation '
@@ -326,21 +334,19 @@ class _WhatThisCourierSupports extends StatelessWidget {
             children: <Widget>[
               for (final entry in _shownCapabilities)
                 if (evidence.capabilities[entry.$1] == 'true')
-                  StatusChip(label: entry.$2, tone: Tone.good),
+                  StatusChip(label: context.tr(entry.$2), tone: Tone.good),
             ],
           ),
           if (evidence.hasNoWebhook) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.sm),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Icon(Icons.sync_rounded, size: 15, color: EcomsbdColors.muted2),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Steadfast does not publish a callback, so ecomsbd checks '
-                    'each parcel on a schedule instead. Status still stays up '
-                    'to date — it just arrives a few minutes later.',
+                    context.tr('ca.pollingNote'),
                     style: EcomsbdType.caption,
                   ),
                 ),
@@ -353,13 +359,15 @@ class _WhatThisCourierSupports extends StatelessWidget {
   }
 }
 
+/// Capability flag from the provider manifest, paired with the key its label
+/// lives under. Resolved where rendered: a const list cannot hold a lookup.
 const List<(String, String)> _shownCapabilities = <(String, String)>[
-  ('create_single', 'Book parcels'),
-  ('create_bulk', 'Book in bulk'),
-  ('status_lookup', 'Track status'),
-  ('returns', 'Request returns'),
-  ('payments', 'Import payments'),
-  ('balance', 'Account balance'),
+  ('create_single', 'ca.capBookParcels'),
+  ('create_bulk', 'ca.capBookBulk'),
+  ('status_lookup', 'ca.capTrackStatus'),
+  ('returns', 'ca.capRequestReturns'),
+  ('payments', 'ca.capImportPayments'),
+  ('balance', 'ca.capAccountBalance'),
 ];
 
 class _ManualModeAlwaysWorks extends StatelessWidget {
@@ -371,12 +379,10 @@ class _ManualModeAlwaysWorks extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text('Manual courier mode', style: EcomsbdType.label),
+          Text(context.tr('ca.manualTitle'), style: EcomsbdType.label),
           const SizedBox(height: 3),
           Text(
-            'Whether or not a courier is connected, you can record a parcel and '
-            'its tracking code by hand and upload the courier payout statement. '
-            'Connecting Steadfast adds to that — it never replaces it.',
+            context.tr('ca.manualBody'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
         ],
@@ -486,27 +492,28 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
             const _SheetGrip(),
             const SizedBox(height: EcomsbdSpacing.md),
             Text(
-              widget.isReconnect ? 'Reconnect Steadfast' : 'Connect Steadfast',
+              widget.isReconnect
+                  ? context.tr('ca.reconnectSteadfast')
+                  : context.tr('ca.connectSteadfast'),
               style: EcomsbdType.sectionTitle,
             ),
             const SizedBox(height: 3),
             Text(
-              'Find these in your Steadfast merchant panel. They are stored '
-              'encrypted and are never shown again after you save them.',
+              context.tr('ca.keysNote'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
             LabelledField(
-              label: 'API Key',
+              label: context.tr('ca.apiKeyField'),
               controller: _apiKey,
-              hint: 'From the Steadfast merchant panel',
+              hint: context.tr('ca.apiKeyHint'),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
             LabelledField(
-              label: 'Secret Key',
+              label: context.tr('ca.secretKeyField'),
               controller: _secretKey,
-              hint: 'Kept encrypted, never displayed again',
+              hint: context.tr('ca.secretKeyHint'),
               onChanged: (_) => setState(() {}),
             ),
             if (_error != null) ...<Widget>[
@@ -521,19 +528,20 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
               onPressed: _busy || !canSubmit ? null : _submit,
               style: _primaryButton,
               child: Text(
-                _busy ? 'Checking with Steadfast…' : 'Save and check',
+                _busy
+                    ? context.tr('ca.checkingWith')
+                    : context.tr('ca.saveAndCheck'),
               ),
             ),
             const SizedBox(height: EcomsbdSpacing.xs),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Icon(Icons.lock_outline, size: 14, color: EcomsbdColors.muted2),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'We check the keys with Steadfast before saving them, using '
-                    'a read-only call. No parcel is created.',
+                    context.tr('ca.readOnlyNote'),
                     style: EcomsbdType.caption,
                   ),
                 ),

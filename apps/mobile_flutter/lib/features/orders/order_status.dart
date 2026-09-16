@@ -1,4 +1,12 @@
 import '../../design/components/badges.dart';
+import '../../l10n/app_locale.dart';
+import '../../l10n/app_strings.dart';
+
+/// These labels are produced by top-level functions with no `BuildContext`,
+/// so they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. Changing language rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Seller-facing wording for the order state machine.
 ///
@@ -20,10 +28,10 @@ List<String> nextStatuses(String status) =>
     orderTransitions[status] ?? const <String>[];
 
 String statusActionLabel(String status) => switch (status) {
-  'CONFIRMED' => 'Confirm',
-  'PACKED' => 'Mark packed',
-  'FULFILLMENT_STARTED' => 'Hand to courier',
-  'CANCELLED' => 'Cancel order',
+  'CONFIRMED' => _t('status.confirm'),
+  'PACKED' => _t('status.markPacked'),
+  'FULFILLMENT_STARTED' => _t('status.handToCourier'),
+  'CANCELLED' => _t('status.cancelOrder'),
   _ => status,
 };
 
@@ -43,13 +51,13 @@ Tone orderStatusTone(String status) => switch (status) {
 /// Inventing a courier state for an order nobody has booked would be a lie the
 /// seller could act on (master spec section 62.17).
 String fulfillmentLabel(String state) => switch (state) {
-  'NOT_BOOKED' => 'Not booked',
-  'BOOKING' => 'Booking…',
-  'BOOKING_UNKNOWN' => 'Unconfirmed — checking',
-  'BOOKED' => 'Booked',
-  'IN_TRANSIT' => 'In transit',
-  'DELIVERED' => 'Delivered',
-  'RETURNED' => 'Returned',
+  'NOT_BOOKED' => _t('status.notBooked'),
+  'BOOKING' => _t('status.booking'),
+  'BOOKING_UNKNOWN' => _t('status.unconfirmedChecking'),
+  'BOOKED' => _t('status.booked'),
+  'IN_TRANSIT' => _t('status.inTransit'),
+  'DELIVERED' => _t('status.delivered'),
+  'RETURNED' => _t('status.returned'),
   _ => state,
 };
 
@@ -58,11 +66,11 @@ String fulfillmentLabel(String state) => switch (state) {
 /// "Not checked" is honest; a default of "Low risk" would read as a
 /// reassurance nobody computed.
 String riskLabel(String state) => switch (state) {
-  'NOT_CHECKED' => 'Not checked',
-  'LOW' => 'Low risk',
-  'MEDIUM' => 'Medium risk',
-  'HIGH' => 'High risk',
-  'NO_HISTORY' => 'No history',
+  'NOT_CHECKED' => _t('status.notChecked'),
+  'LOW' => _t('risk.low'),
+  'MEDIUM' => _t('risk.medium'),
+  'HIGH' => _t('risk.high'),
+  'NO_HISTORY' => _t('risk.unknown'),
   _ => state,
 };
 
@@ -71,9 +79,9 @@ String riskLabel(String state) => switch (state) {
 /// Profit needs a settled delivery, a courier fee and a return outcome. Until
 /// those exist the app says so rather than showing a number (sections 85, 135).
 String profitLabel(String state) => switch (state) {
-  'PENDING_CALCULATION' => 'Pending',
-  'ESTIMATED' => 'Estimated',
-  'ACTUAL' => 'Actual',
-  'MISSING_COST' => 'Cost missing',
+  'PENDING_CALCULATION' => _t('status.pending'),
+  'ESTIMATED' => _t('status.estimated'),
+  'ACTUAL' => _t('status.actual'),
+  'MISSING_COST' => _t('status.costMissing'),
   _ => state,
 };

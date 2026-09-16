@@ -11,6 +11,7 @@ import '../../design/tokens.dart';
 import '../billing/plans_screen.dart' show formatDay;
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
+import '../../l10n/app_strings.dart';
 
 /// Export your data, or close your account.
 ///
@@ -22,14 +23,16 @@ import 'settings_screen.dart' show SettingsError;
 class DataPrivacyScreen extends ConsumerWidget {
   const DataPrivacyScreen({super.key});
 
-  static const List<({String kind, String label})> _exports =
-      <({String kind, String label})>[
-        (kind: 'ORDERS', label: 'Orders'),
-        (kind: 'CUSTOMERS', label: 'Customers'),
-        (kind: 'PRODUCTS', label: 'Products'),
-        (kind: 'PAYOUTS', label: 'Payouts'),
-        (kind: 'RECONCILIATION', label: 'COD reconciliation'),
-        (kind: 'PROFIT_SUMMARY', label: 'Profit summary'),
+  /// Export kinds with the key their wording lives under; the kind itself is
+  /// API contract. Resolved where rendered -- a const list cannot look up.
+  static const List<({String kind, String labelKey})> _exports =
+      <({String kind, String labelKey})>[
+        (kind: 'ORDERS', labelKey: 'orders.title'),
+        (kind: 'CUSTOMERS', labelKey: 'entity.customers'),
+        (kind: 'PRODUCTS', labelKey: 'entity.products'),
+        (kind: 'PAYOUTS', labelKey: 'money.payouts'),
+        (kind: 'RECONCILIATION', labelKey: 'priv.codReconciliation'),
+        (kind: 'PROFIT_SUMMARY', labelKey: 'priv.profitSummary'),
       ];
 
   @override
@@ -54,21 +57,24 @@ class DataPrivacyScreen extends ConsumerWidget {
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
                       icon: const Icon(Icons.arrow_back_rounded),
-                      tooltip: 'Back',
+                      tooltip: context.tr('common.back'),
                     ),
-                    const Expanded(
-                      child: Text('Your data', style: EcomsbdType.pageTitle),
+                    Expanded(
+                      child: Text(
+                        context.tr('priv.title'),
+                        style: EcomsbdType.pageTitle,
+                      ),
                     ),
                   ],
                 ),
 
-                const SectionHeader(
+                SectionHeader(
                   title: 'Export',
-                  subtitle: 'A CSV of your own records, ready to download',
+                  subtitle: context.tr('priv.exportSub'),
                 ),
                 const _ExportSection(kinds: _exports),
 
-                const SectionHeader(title: 'Closing your account'),
+                SectionHeader(title: context.tr('priv.closingAccount')),
                 privacy.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(EcomsbdSpacing.lg),
@@ -92,7 +98,7 @@ class DataPrivacyScreen extends ConsumerWidget {
 class _ExportSection extends ConsumerStatefulWidget {
   const _ExportSection({required this.kinds});
 
-  final List<({String kind, String label})> kinds;
+  final List<({String kind, String labelKey})> kinds;
 
   @override
   ConsumerState<_ExportSection> createState() => _ExportSectionState();
@@ -116,7 +122,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        widget.kinds[index].label,
+                        context.tr(widget.kinds[index].labelKey),
                         style: EcomsbdType.bodyStrong,
                       ),
                     ),
@@ -129,7 +135,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                       ),
                       child: Text(
                         _busyKind == widget.kinds[index].kind
-                            ? 'Preparing…'
+                            ? context.tr('priv.preparing')
                             : 'Export',
                       ),
                     ),
@@ -148,8 +154,8 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        const Text(
-                          'Recent exports',
+                        Text(
+                          context.tr('priv.recentExports'),
                           style: EcomsbdType.sectionTitle,
                         ),
                         const SizedBox(height: EcomsbdSpacing.sm),
@@ -168,9 +174,9 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                                 ),
                                 StatusChip(
                                   label: job.hasExpired
-                                      ? 'Link expired'
+                                      ? context.tr('priv.linkExpired')
                                       : job.isReady
-                                      ? 'Ready'
+                                      ? context.tr('priv.ready')
                                       : job.status,
                                   tone: job.hasExpired
                                       ? Tone.neutral
@@ -181,8 +187,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                           ),
                         const SizedBox(height: 4),
                         Text(
-                          'Download links expire quickly on purpose — an '
-                          'export is a copy of your shop behind a link.',
+                          context.tr('priv.linkNote'),
                           style: EcomsbdType.caption.copyWith(
                             color: EcomsbdColors.muted2,
                           ),
@@ -251,14 +256,11 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text(
-              'Your account will close',
-              style: EcomsbdType.sectionTitle,
-            ),
+            Text(context.tr('priv.willClose'), style: EcomsbdType.sectionTitle),
             const SizedBox(height: 6),
             Text(
               status.scheduledFor == null
-                  ? 'Deletion is scheduled.'
+                  ? context.tr('priv.deletionScheduled')
                   : 'On ${formatDay(status.scheduledFor!)}. Everything works '
                         'normally until then, and you can change your mind.',
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
@@ -272,7 +274,11 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
                   minimumSize: const Size(0, EcomsbdTouch.minTarget),
                   shape: const StadiumBorder(),
                 ),
-                child: Text(_busy ? 'Cancelling…' : 'Keep my account'),
+                child: Text(
+                  _busy
+                      ? context.tr('priv.cancelling')
+                      : context.tr('priv.keepAccount'),
+                ),
               ),
             ),
           ],
@@ -289,13 +295,13 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
               Text(status.retentionNote, style: EcomsbdType.caption),
               const SizedBox(height: EcomsbdSpacing.md),
               _List(
-                title: 'Permanently removed',
+                title: context.tr('priv.removedPermanently'),
                 items: status.anonymisedOnDeletion,
                 tone: Tone.bad,
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
               _List(
-                title: 'Kept, with names and numbers removed',
+                title: context.tr('priv.keptAnonymised'),
                 items: status.retainedAfterDeletion,
                 tone: Tone.info,
               ),
@@ -333,15 +339,12 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Close this shop?'),
+        title: Text(context.tr('priv.closeShopTitle')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text(
-              'Type CLOSE to confirm. Nothing happens immediately — you will '
-              'have time to change your mind.',
-            ),
+            Text(context.tr('priv.closeShopBody')),
             const SizedBox(height: EcomsbdSpacing.md),
             TextField(
               controller: controller,
@@ -354,7 +357,7 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('common.cancel')),
           ),
           // Typed confirmation, not a checkbox. This is the one action in the
           // product a seller cannot undo by tapping again.
@@ -400,7 +403,7 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
       await ref.read(accountRepositoryProvider).cancelDeletion();
       ref.invalidate(privacyStatusProvider);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Your account will stay open.')),
+        SnackBar(content: Text(context.tr('priv.stayOpen'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));

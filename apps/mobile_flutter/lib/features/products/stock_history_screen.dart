@@ -8,6 +8,7 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
+import '../../l10n/app_strings.dart';
 
 /// A product's stock movements, newest first.
 ///
@@ -25,7 +26,7 @@ class StockHistoryScreen extends ConsumerWidget {
     final history = ref.watch(stockMovementsProvider(product.id));
 
     return DetailScaffold(
-      title: 'Stock history',
+      title: context.tr('sh.title'),
       subtitle: '${product.name} · ${product.stockOnHand} in stock',
       children: <Widget>[
         history.when(
@@ -40,17 +41,15 @@ class StockHistoryScreen extends ConsumerWidget {
           ),
           error: (error, _) => EmptyState(
             icon: Icons.error_outline,
-            title: 'Could not load the history',
+            title: context.tr('sh.error'),
             message: '$error',
           ),
           data: (page) {
             if (page.value.items.isEmpty) {
-              return const EmptyState(
+              return EmptyState(
                 icon: Icons.receipt_long_outlined,
-                title: 'No movements yet',
-                message:
-                    'Every change to this product’s stock will be listed '
-                    'here with its reason.',
+                title: context.tr('sh.emptyTitle'),
+                message: context.tr('sh.emptyBody'),
               );
             }
             return Column(

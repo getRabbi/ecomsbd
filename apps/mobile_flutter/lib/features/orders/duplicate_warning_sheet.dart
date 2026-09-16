@@ -3,14 +3,20 @@ import 'package:flutter/material.dart';
 import '../../data/commerce/models.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Read where no `BuildContext` exists, so the active locale is resolved
+/// directly -- the same approach `formatRelative` and `order_status.dart` use.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Seller-facing wording for a duplicate signal.
 String duplicateReasonLabel(String reason) => switch (reason) {
-  'SAME_PHONE' => 'Same number',
-  'SAME_CUSTOMER' => 'Same customer',
-  'IDENTICAL_AMOUNT' => 'Same amount',
-  'SIMILAR_AMOUNT' => 'Similar amount',
-  'SIMILAR_ITEMS' => 'Same items',
+  'SAME_PHONE' => _t('dup.sameNumber'),
+  'SAME_CUSTOMER' => _t('dup.sameCustomer'),
+  'IDENTICAL_AMOUNT' => _t('dup.sameAmount'),
+  'SIMILAR_AMOUNT' => _t('dup.similarAmount'),
+  'SIMILAR_ITEMS' => _t('dup.sameItems'),
   _ => reason,
 };
 
@@ -67,7 +73,7 @@ class DuplicateWarningSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
-            const Row(
+            Row(
               children: <Widget>[
                 Icon(
                   Icons.copy_all_outlined,
@@ -77,7 +83,7 @@ class DuplicateWarningSheet extends StatelessWidget {
                 SizedBox(width: EcomsbdSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Possible repeat order',
+                    context.tr('dup.title'),
                     style: EcomsbdType.sectionTitle,
                   ),
                 ),
@@ -85,9 +91,7 @@ class DuplicateWarningSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              check.message.isNotEmpty
-                  ? check.message
-                  : 'A similar order was created recently.',
+              check.message.isNotEmpty ? check.message : context.tr('dup.body'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
@@ -98,7 +102,7 @@ class DuplicateWarningSheet extends StatelessWidget {
               ),
             const SizedBox(height: EcomsbdSpacing.md),
             Text(
-              'You know your customers. If this is a real second order, keep it.',
+              context.tr('dup.note'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
@@ -114,7 +118,7 @@ class DuplicateWarningSheet extends StatelessWidget {
                       shape: const StadiumBorder(),
                       textStyle: EcomsbdType.label,
                     ),
-                    child: const Text('Let me check'),
+                    child: Text(context.tr('dup.letMeCheck')),
                   ),
                 ),
                 const SizedBox(width: EcomsbdSpacing.sm),
@@ -129,7 +133,7 @@ class DuplicateWarningSheet extends StatelessWidget {
                       shape: const StadiumBorder(),
                       textStyle: EcomsbdType.label,
                     ),
-                    child: const Text('Keep this order'),
+                    child: Text(context.tr('dup.keep')),
                   ),
                 ),
               ],

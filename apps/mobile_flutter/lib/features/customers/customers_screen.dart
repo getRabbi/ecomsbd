@@ -13,6 +13,7 @@ import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
 import 'customer_detail_screen.dart';
+import '../../l10n/app_strings.dart';
 
 /// The seller's own customer list.
 ///
@@ -66,15 +67,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Private to your shop',
-                          title: 'Customers',
-                          description:
-                              'Repeat buyers, delivery history and your own '
-                              'notes. Numbers stay masked.',
+                          eyebrow: context.tr('cust.eyebrow'),
+                          title: context.tr('entity.customers'),
+                          description: context.tr('cust.description'),
                         ),
                       ),
                     ],
@@ -92,7 +91,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ],
                   CommerceSearchField(
                     controller: _search,
-                    hint: 'Name, full number, or last 4 digits',
+                    hint: context.tr('cust.searchHint'),
                     onChanged: controller.setSearch,
                   ),
                   const SizedBox(height: EcomsbdSpacing.sm),
@@ -101,18 +100,18 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
                       FilterToggle(
-                        label: 'Repeat buyers',
+                        label: context.tr('cust.filterRepeat'),
                         selected: controller.repeatOnly,
                         onChanged: controller.setRepeatOnly,
                       ),
                       FilterToggle(
-                        label: 'Starred',
+                        label: context.tr('common.starred'),
                         selected: controller.flag == 'STARRED',
                         onChanged: (selected) =>
                             controller.setFlag(selected ? 'STARRED' : null),
                       ),
                       FilterToggle(
-                        label: 'Blocked',
+                        label: context.tr('common.blocked'),
                         selected: controller.flag == 'BLOCKED',
                         onChanged: (selected) =>
                             controller.setFlag(selected ? 'BLOCKED' : null),
@@ -125,10 +124,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.people_outline,
-                    emptyTitle: 'No customers yet',
-                    emptyMessage:
-                        'Customers appear here as soon as you take your first '
-                        'order.',
+                    emptyTitle: context.tr('cust.emptyTitle'),
+                    emptyMessage: context.tr('cust.emptyBody'),
                     itemBuilder: (context, customer) => CustomerRow(
                       customer: customer,
                       onTap: () => Navigator.of(context).push(
@@ -203,8 +200,8 @@ class CustomerRow extends StatelessWidget {
                     ),
                     if (customer.isRepeatBuyer) ...<Widget>[
                       const SizedBox(width: EcomsbdSpacing.xs),
-                      const StatusChip(
-                        label: 'Repeat',
+                      StatusChip(
+                        label: context.tr('cust.repeatChip'),
                         tone: Tone.good,
                         icon: Icons.autorenew_rounded,
                       ),

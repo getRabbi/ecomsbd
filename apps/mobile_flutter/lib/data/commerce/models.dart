@@ -1,6 +1,14 @@
 import 'package:meta/meta.dart';
 
 import '../../core/money.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
+
+/// Seller-facing labels below are read where no `BuildContext` exists, so
+/// they resolve against the active locale directly — the same approach
+/// `formatRelative` uses. A language change rebuilds the tree, so the next
+/// paint is already in the new language.
+String _t(String key) => AppStrings(activeAppLocale).t(key);
 
 /// Wire models for the commerce core.
 ///
@@ -95,15 +103,15 @@ class StockMovement {
 
   /// Seller-facing wording for a reason code.
   String get reasonLabel => switch (reason) {
-    'OPENING' => 'Opening stock',
-    'MANUAL_ADJUSTMENT' => 'Manual adjustment',
-    'BOOKED_RESERVE' => 'Reserved for an order',
-    'BOOKED_DECREMENT' => 'Booked with courier',
-    'CANCEL_RESTORE' => 'Order cancelled',
-    'RETURN_RESTORE' => 'Returned to stock',
-    'PARTIAL_RETURN_RESTORE' => 'Partial return',
-    'DAMAGED_WRITE_OFF' => 'Damaged write-off',
-    'IMPORT_ADJUSTMENT' => 'From an import',
+    'OPENING' => _t('mv.opening'),
+    'MANUAL_ADJUSTMENT' => _t('mv.manual'),
+    'BOOKED_RESERVE' => _t('mv.reserved'),
+    'BOOKED_DECREMENT' => _t('mv.bookedCourier'),
+    'CANCEL_RESTORE' => _t('mv.orderCancelled'),
+    'RETURN_RESTORE' => _t('mv.returnedToStock'),
+    'PARTIAL_RETURN_RESTORE' => _t('mv.partialReturn'),
+    'DAMAGED_WRITE_OFF' => _t('mv.damagedWriteOff'),
+    'IMPORT_ADJUSTMENT' => _t('mv.fromImport'),
     _ => reason,
   };
 }
@@ -383,12 +391,12 @@ class SellerOrder {
   final String profitState;
 
   String get statusLabel => switch (status) {
-    'DRAFT' => 'Draft',
-    'CONFIRMED' => 'Confirmed',
-    'PACKED' => 'Packed',
-    'FULFILLMENT_STARTED' => 'With courier',
-    'COMPLETED' => 'Completed',
-    'CANCELLED' => 'Cancelled',
+    'DRAFT' => _t('ost.draft'),
+    'CONFIRMED' => _t('ost.confirmed'),
+    'PACKED' => _t('ost.packed'),
+    'FULFILLMENT_STARTED' => _t('ost.withCourier'),
+    'COMPLETED' => _t('ost.completed'),
+    'CANCELLED' => _t('ost.cancelled'),
     _ => status,
   };
 
