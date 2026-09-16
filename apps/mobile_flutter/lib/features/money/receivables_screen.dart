@@ -621,7 +621,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: (_paisa ?? 0) > 0 && _reason.text.trim().length >= 5
@@ -698,7 +698,7 @@ class _ReasonDialogState extends State<_ReasonDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: _reason.text.trim().length >= 5

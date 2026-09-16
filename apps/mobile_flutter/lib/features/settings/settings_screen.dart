@@ -83,12 +83,12 @@ class SettingsScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              context.tr(
-                                'settings.signedInAs',
-                                <String, Object?>{
-                                  'role': auth.profile?.role ?? 'OWNER',
-                                },
-                              ),
+                              context
+                                  .tr('settings.signedInAs', <String, Object?>{
+                                    'role': context.strings.role(
+                                      auth.profile?.role ?? 'OWNER',
+                                    ),
+                                  }),
                               style: EcomsbdType.caption.copyWith(
                                 color: EcomsbdColors.muted,
                               ),

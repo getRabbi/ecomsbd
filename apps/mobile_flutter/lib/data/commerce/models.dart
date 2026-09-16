@@ -8,7 +8,8 @@ import '../../l10n/app_locale.dart';
 /// they resolve against the active locale directly — the same approach
 /// `formatRelative` uses. A language change rebuilds the tree, so the next
 /// paint is already in the new language.
-String _t(String key) => AppStrings(activeAppLocale).t(key);
+String _t(String key, [Map<String, Object?>? vars]) =>
+    AppStrings(activeAppLocale).t(key, vars);
 
 /// Wire models for the commerce core.
 ///
@@ -205,9 +206,11 @@ class Customer {
   String get successRateLabel {
     final rate = successRateBasisPoints;
     if (rate == null) {
-      return 'No history yet';
+      return _t('cust.noHistory');
     }
-    return '${(rate / 100).toStringAsFixed(1)}% delivered';
+    return _t('cust.deliveredPct', <String, Object?>{
+      'pct': (rate / 100).toStringAsFixed(1),
+    });
   }
 
   CustomerAddress? get defaultAddress {

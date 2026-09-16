@@ -69,7 +69,7 @@ class DataPrivacyScreen extends ConsumerWidget {
                 ),
 
                 SectionHeader(
-                  title: 'Export',
+                  title: context.tr('priv.export'),
                   subtitle: context.tr('priv.exportSub'),
                 ),
                 const _ExportSection(kinds: _exports),
@@ -136,7 +136,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
                       child: Text(
                         _busyKind == widget.kinds[index].kind
                             ? context.tr('priv.preparing')
-                            : 'Export',
+                            : context.tr('priv.export'),
                       ),
                     ),
                   ],
@@ -205,6 +205,9 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
   Future<void> _request(String kind) async {
     setState(() => _busyKind = kind);
     final messenger = ScaffoldMessenger.of(context);
+    // Resolved before the await: the copy is locale-bound, not
+    // context-bound, so it outlives the gap.
+    final strings = context.strings;
     try {
       final job = await ref
           .read(accountRepositoryProvider)
@@ -217,9 +220,13 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
         SnackBar(
           content: Text(
             job.rowCount == 0
-                ? 'Nothing to export yet for ${job.label.toLowerCase()}.'
-                : '${job.label}: ${job.rowCount} rows ready. '
-                      'The download link works for a short time only.',
+                ? strings.t('priv.exportEmpty', <String, Object?>{
+                    'kind': job.label.toLowerCase(),
+                  })
+                : strings.t('priv.exportReady', <String, Object?>{
+                    'kind': job.label,
+                    'rows': job.rowCount,
+                  }),
           ),
         ),
       );
@@ -261,8 +268,9 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
             Text(
               status.scheduledFor == null
                   ? context.tr('priv.deletionScheduled')
-                  : 'On ${formatDay(status.scheduledFor!)}. Everything works '
-                        'normally until then, and you can change your mind.',
+                  : context.tr('priv.closesOn', <String, Object?>{
+                      'date': formatDay(status.scheduledFor!),
+                    }),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.md),
@@ -323,8 +331,9 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
-          'You will have ${status.graceDays} days to change your mind, and '
-          'everything keeps working during them.',
+          context.tr('priv.graceDays', <String, Object?>{
+            'days': status.graceDays,
+          }),
           textAlign: TextAlign.center,
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
         ),
@@ -335,6 +344,7 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
   Future<void> _requestDeletion() async {
     final controller = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -385,7 +395,9 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Your account will close on ${formatDay(schedule.scheduledFor)}.',
+            strings.t('priv.willCloseOn', <String, Object?>{
+              'date': formatDay(schedule.scheduledFor),
+            }),
           ),
         ),
       );
@@ -399,11 +411,12 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
   Future<void> _cancel() async {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     try {
       await ref.read(accountRepositoryProvider).cancelDeletion();
       ref.invalidate(privacyStatusProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text(context.tr('priv.stayOpen'))),
+        SnackBar(content: Text(strings.t('priv.stayOpen'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));

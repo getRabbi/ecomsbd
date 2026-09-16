@@ -210,8 +210,8 @@ class CustomerRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${customer.phoneMasked} · ${customer.orderCount} order'
-                  '${customer.orderCount == 1 ? '' : 's'}',
+                  '${customer.phoneMasked} · '
+                  '${context.trPlural('cust.orders', customer.orderCount)}',
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),

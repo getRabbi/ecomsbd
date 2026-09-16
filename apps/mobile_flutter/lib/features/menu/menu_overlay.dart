@@ -239,7 +239,7 @@ class MenuOverlay extends ConsumerWidget {
                           Text(shopName, style: EcomsbdType.sectionTitle),
                           const SizedBox(height: 2),
                           Text(
-                            '$role · ${profile?.maskedPhone ?? ''}',
+                            '${context.strings.role(role)} · ${profile?.maskedPhone ?? ''}',
                             style: EcomsbdType.caption.copyWith(
                               color: EcomsbdColors.muted,
                             ),

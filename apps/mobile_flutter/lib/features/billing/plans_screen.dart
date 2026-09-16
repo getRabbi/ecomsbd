@@ -631,7 +631,11 @@ class _PurchaseButton extends ConsumerWidget {
           minimumSize: const Size(0, EcomsbdTouch.minTarget),
           shape: const StadiumBorder(),
         ),
-        child: Text('Upgrade with ${provider.displayName}'),
+        child: Text(
+          context.tr('plans.upgradeWith', <String, Object?>{
+            'provider': provider.displayName,
+          }),
+        ),
       ),
     );
   }
@@ -642,6 +646,7 @@ class _PurchaseButton extends ConsumerWidget {
     BillingProviderState provider,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     try {
       if (provider.provider == 'play') {
         // The Play purchase itself happens through the platform billing
@@ -662,8 +667,8 @@ class _PurchaseButton extends ConsumerWidget {
         SnackBar(
           content: Text(
             url == null
-                ? context.tr('pl.checkoutFailed')
-                : context.tr('pl.continueBrowser'),
+                ? strings.t('pl.checkoutFailed')
+                : strings.t('pl.continueBrowser'),
           ),
         ),
       );
@@ -728,6 +733,7 @@ class _RestoreRowState extends ConsumerState<_RestoreRow> {
   Future<void> _restore() async {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     try {
       // No platform billing library is wired in, so there are no local
       // purchases to send. The call still runs: the server re-reads the
@@ -742,8 +748,8 @@ class _RestoreRowState extends ConsumerState<_RestoreRow> {
         SnackBar(
           content: Text(
             restored > 0
-                ? 'Restored $restored purchase${restored == 1 ? '' : 's'}.'
-                : context.tr('pl.noPurchases'),
+                ? strings.plural('pl.restored', restored)
+                : strings.t('pl.noPurchases'),
           ),
         ),
       );

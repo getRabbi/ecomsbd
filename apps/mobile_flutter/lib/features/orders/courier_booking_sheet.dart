@@ -224,7 +224,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
             Expanded(
               child: OutlinedButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.tr('common.cancel')),
               ),
             ),
             const SizedBox(width: EcomsbdSpacing.xs),
@@ -251,12 +251,12 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         const SizedBox(height: EcomsbdSpacing.lg),
         Row(
           children: <Widget>[
-            SizedBox(
+            const SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: EcomsbdSpacing.sm),
+            const SizedBox(width: EcomsbdSpacing.sm),
             Text(context.tr('status.booking'), style: EcomsbdType.sectionTitle),
           ],
         ),

@@ -181,15 +181,20 @@ class _DeviceCard extends ConsumerWidget {
 
   Future<void> _revoke(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Sign out ${device.displayName}?'),
+        title: Text(
+          context.tr('sec.signOutDevice', <String, Object?>{
+            'device': device.displayName,
+          }),
+        ),
         content: Text(context.tr('as.signOutOneBody')),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -204,7 +209,7 @@ class _DeviceCard extends ConsumerWidget {
       await ref.read(accountRepositoryProvider).revokeDevice(device.id);
       ref.invalidate(devicesProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text(context.tr('as.signedOutDone'))),
+        SnackBar(content: Text(strings.t('as.signedOutDone'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));
@@ -242,6 +247,7 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
 
   Future<void> _run() async {
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -252,7 +258,7 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -268,7 +274,7 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
       await ref.read(accountRepositoryProvider).logoutOtherDevices();
       ref.invalidate(devicesProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text(context.tr('as.othersSignedOut'))),
+        SnackBar(content: Text(strings.t('as.othersSignedOut'))),
       );
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));

@@ -57,6 +57,11 @@ const Map<String, String> _commonEn = <String, String>{
   'common.tryAgain': 'Try again',
   'common.retry': 'Retry',
   'common.cancel': 'Cancel',
+  'plans.upgradeWith': 'Upgrade with {provider}',
+  'pl.restored.one': 'Restored {count} purchase.',
+  'pl.restored.other': 'Restored {count} purchases.',
+  'imp.rowNumber': 'Row {n}',
+  'sec.signOutDevice': 'Sign out {device}?',
   'common.close': 'Close',
   'common.back': 'Back',
   'common.open': 'Open',
@@ -155,6 +160,11 @@ const Map<String, String> _commonBn = <String, String>{
   'common.tryAgain': 'আবার চেষ্টা করুন',
   'common.retry': 'আবার',
   'common.cancel': 'বাতিল',
+  'plans.upgradeWith': '{provider} দিয়ে আপগ্রেড করুন',
+  'pl.restored.one': '{count}টি কেনা ফিরিয়ে আনা হয়েছে।',
+  'pl.restored.other': '{count}টি কেনা ফিরিয়ে আনা হয়েছে।',
+  'imp.rowNumber': 'সারি {n}',
+  'sec.signOutDevice': '{device} থেকে সাইন আউট করবেন?',
   'common.close': 'বন্ধ করুন',
   'common.back': 'পেছনে',
   'common.open': 'খুলুন',
@@ -1049,7 +1059,6 @@ const Map<String, String> _settingsEn = <String, String>{
   'settings.checking': 'Checking…',
   'settings.couldNotReadQueue': 'Could not read the queue.',
   'settings.appVersion': 'App version',
-  'settings.server': 'Server',
   'settings.signOutTitle': 'Sign out of this device?',
   'settings.signOutBody':
       'Anything waiting to sync will be sent first. You can sign back in with '
@@ -1094,7 +1103,6 @@ const Map<String, String> _settingsBn = <String, String>{
   'settings.checking': 'দেখা হচ্ছে…',
   'settings.couldNotReadQueue': 'অপেক্ষমাণ তালিকা পড়া যায়নি।',
   'settings.appVersion': 'অ্যাপ ভার্সন',
-  'settings.server': 'সার্ভার',
   'settings.signOutTitle': 'এই ডিভাইস থেকে সাইন আউট করবেন?',
   'settings.signOutBody':
       'সিঙ্কের অপেক্ষায় থাকা সবকিছু আগে পাঠিয়ে দেওয়া হবে। একই নম্বর দিয়ে '
@@ -1255,8 +1263,17 @@ const Map<String, String> _componentsEn = <String, String>{
   'risk.mediumShort': 'Medium',
   'risk.highShort': 'High',
   'risk.unknownShort': 'None',
+  'cust.noHistory': 'No history yet',
+  'cust.deliveredPct': '{pct}% delivered',
+  'cust.orders.one': '{count} order',
+  'cust.orders.other': '{count} orders',
+  'role.owner': 'Owner',
+  'role.staff': 'Staff',
+  'role.manager': 'Manager',
   'provider.connected': 'Connected',
   'provider.notConnected': 'Not connected',
+  'provider.needsReconnect': 'Needs reconnect',
+  'provider.unknown': 'Unknown',
   'provider.manualOnly': 'Manual only',
   'provider.degraded': 'Degraded',
   'quality.actual': 'Actual',
@@ -1278,8 +1295,17 @@ const Map<String, String> _componentsBn = <String, String>{
   'risk.mediumShort': 'মাঝারি',
   'risk.highShort': 'বেশি',
   'risk.unknownShort': 'নেই',
+  'cust.noHistory': 'এখনও কোনো রেকর্ড নেই',
+  'cust.deliveredPct': '{pct}% ডেলিভারি হয়েছে',
+  'cust.orders.one': '{count}টি অর্ডার',
+  'cust.orders.other': '{count}টি অর্ডার',
+  'role.owner': 'মালিক',
+  'role.staff': 'স্টাফ',
+  'role.manager': 'ম্যানেজার',
   'provider.connected': 'যুক্ত আছে',
   'provider.notConnected': 'যুক্ত নেই',
+  'provider.needsReconnect': 'আবার যুক্ত করতে হবে',
+  'provider.unknown': 'অজানা',
   'provider.manualOnly': 'শুধু ম্যানুয়াল',
   'provider.degraded': 'সমস্যা চলছে',
   'quality.actual': 'পাক্কা হিসাব',
@@ -1849,6 +1875,17 @@ const Map<String, String> _secEn = <String, String>{
   'priv.codReconciliation': 'COD reconciliation',
   'priv.deletionScheduled': 'Deletion is scheduled.',
   'priv.export': 'Export',
+  'priv.exportEmpty': 'Nothing to export yet for {kind}.',
+  'priv.exportReady':
+      '{kind}: {rows} rows ready. The download link works for a short '
+      'time only.',
+  'priv.closesOn':
+      'On {date}. Everything works normally until then, and you can '
+      'change your mind.',
+  'priv.graceDays':
+      'You will have {days} days to change your mind, and everything '
+      'keeps working during them.',
+  'priv.willCloseOn': 'Your account will close on {date}.',
   'priv.exportSub': 'A CSV of your own records, ready to download',
   'priv.keepAccount': 'Keep my account',
   'priv.keptAnonymised': 'Kept, with names and numbers removed',
@@ -2563,6 +2600,17 @@ const Map<String, String> _secBn = <String, String>{
   'priv.codReconciliation': 'COD হিসাব মেলানো',
   'priv.deletionScheduled': 'মুছে ফেলার সময় ঠিক করা আছে।',
   'priv.export': 'ডাউনলোড করুন',
+  'priv.exportEmpty': '{kind} এর জন্য এখনও ডাউনলোড করার কিছু নেই।',
+  'priv.exportReady':
+      '{kind}: {rows}টি সারি তৈরি। ডাউনলোডের লিংক অল্প সময়ের জন্যই কাজ '
+      'করবে।',
+  'priv.closesOn':
+      '{date} তারিখে। তার আগ পর্যন্ত সব স্বাভাবিক চলবে, আর আপনি মত '
+      'বদলাতে পারবেন।',
+  'priv.graceDays':
+      'মত বদলানোর জন্য {days} দিন সময় পাবেন, ওই দিনগুলোতে সব কাজ চলতেই '
+      'থাকবে।',
+  'priv.willCloseOn': 'আপনার অ্যাকাউন্ট {date} তারিখে বন্ধ হয়ে যাবে।',
   'priv.exportSub': 'আপনার নিজের রেকর্ডের CSV, ডাউনলোডের জন্য তৈরি',
   'priv.keepAccount': 'অ্যাকাউন্ট রেখে দিন',
   'priv.keptAnonymised': 'নাম আর নম্বর বাদ দিয়ে রাখা হবে',

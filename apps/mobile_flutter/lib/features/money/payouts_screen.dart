@@ -393,7 +393,7 @@ class _StatementPreviewSheet extends StatelessWidget {
                     shape: const StadiumBorder(),
                     textStyle: EcomsbdType.label,
                   ),
-                  child: const Text('Cancel'),
+                  child: Text(context.tr('common.cancel')),
                 ),
               ),
               const SizedBox(width: EcomsbdSpacing.sm),
@@ -549,7 +549,7 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: (_paisa ?? 0) > 0

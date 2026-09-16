@@ -686,7 +686,12 @@ class _ProblemRow extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text('Row ${row.rowNumber}', style: EcomsbdType.bodyStrong),
+              Text(
+                context.tr('imp.rowNumber', <String, Object?>{
+                  'n': row.rowNumber,
+                }),
+                style: EcomsbdType.bodyStrong,
+              ),
               const Spacer(),
               StatusChip(
                 label: isError

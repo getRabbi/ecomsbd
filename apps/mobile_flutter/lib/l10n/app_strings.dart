@@ -46,6 +46,15 @@ class AppStrings {
     return value!;
   }
 
+  /// The membership role as the seller reads it.
+  ///
+  /// Falls back to the raw API value, so a role added on the server renders
+  /// as-is instead of tripping the missing-key assert.
+  String role(String raw) {
+    final key = 'role.${raw.toLowerCase()}';
+    return englishStrings.containsKey(key) ? t(key) : raw;
+  }
+
   /// Count-aware lookup: `<key>.one` when [count] is 1, else `<key>.other`.
   ///
   /// Bangla does not inflect these the way English does, so both forms usually

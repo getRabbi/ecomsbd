@@ -30,10 +30,10 @@ enum CourierAccountStatus {
   };
 
   String get label => switch (this) {
-    CourierAccountStatus.connected => 'Connected',
-    CourierAccountStatus.needsReconnect => 'Needs reconnect',
-    CourierAccountStatus.disconnected => 'Not connected',
-    CourierAccountStatus.unknown => 'Unknown',
+    CourierAccountStatus.connected => _t('provider.connected'),
+    CourierAccountStatus.needsReconnect => _t('provider.needsReconnect'),
+    CourierAccountStatus.disconnected => _t('provider.notConnected'),
+    CourierAccountStatus.unknown => _t('provider.unknown'),
   };
 
   bool get canBook => this == CourierAccountStatus.connected;

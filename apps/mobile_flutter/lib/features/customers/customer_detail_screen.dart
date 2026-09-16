@@ -421,7 +421,7 @@ class _RevealReasonDialogState extends State<_RevealReasonDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: () {
@@ -484,7 +484,7 @@ class _FlagReasonDialogState extends State<_FlagReasonDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_reason.text.trim()),
@@ -534,7 +534,7 @@ class _NotesDialogState extends State<_NotesDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_notes.text.trim()),
