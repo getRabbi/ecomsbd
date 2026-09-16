@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
-import '../../core/env.dart';
 import '../../data/billing/billing_providers.dart';
 import '../../data/couriers/courier_providers.dart';
 import '../../data/couriers/models.dart';
@@ -232,14 +231,6 @@ class SettingsScreen extends ConsumerWidget {
                       _AboutRow(
                         label: context.tr('settings.appVersion'),
                         value: version ?? '—',
-                      ),
-                      const SizedBox(height: 6),
-                      // Named so a support conversation can start with "which
-                      // server are you on?" rather than guessing. The URL
-                      // itself is a technical identifier, never translated.
-                      _AboutRow(
-                        label: context.tr('settings.server'),
-                        value: Env.apiBaseUrl,
                       ),
                     ],
                   ),
