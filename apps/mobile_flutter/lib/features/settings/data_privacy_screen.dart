@@ -318,7 +318,7 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
               minimumSize: const Size(0, EcomsbdTouch.minTarget),
               shape: const StadiumBorder(),
             ),
-            child: const Text('Close my account'),
+            child: Text(context.tr('priv.closeAccount')),
           ),
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
@@ -367,7 +367,7 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
               onPressed: value.text.trim().toUpperCase() == 'CLOSE'
                   ? () => Navigator.of(context).pop(true)
                   : null,
-              child: const Text('Close my account'),
+              child: Text(context.tr('priv.closeAccount')),
             ),
           ),
         ],

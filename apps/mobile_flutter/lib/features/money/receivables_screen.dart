@@ -259,7 +259,7 @@ class _ReceivableDetailScreenState
       context,
       title: context.tr('recv.writeOffTitle'),
       body: context.tr('recv.writeOffBody'),
-      action: 'Write off',
+      action: context.tr('recv.writeOff'),
     );
     if (reason == null) {
       return;
@@ -401,7 +401,7 @@ class _ReceivableDetailScreenState
             OutlinedButton.icon(
               onPressed: _busy ? null : _writeOff,
               icon: const Icon(Icons.money_off_rounded, size: 17),
-              label: const Text('Write off'),
+              label: Text(context.tr('recv.writeOff')),
               style: _buttonStyle(danger: true),
             ),
           ],

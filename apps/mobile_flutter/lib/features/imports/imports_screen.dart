@@ -407,7 +407,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
             caption: 'skipped',
           ),
           MetricTile(
-            label: 'Cannot import',
+            label: context.tr('imp.cannotImport'),
             value: '${batch.invalidCount}',
             caption: context.tr('imp.fixAndReupload'),
             tone: batch.invalidCount > 0 ? Tone.bad : null,
@@ -637,13 +637,15 @@ class _ColumnMapRow extends StatelessWidget {
                 value: selected,
                 isExpanded: true,
                 hint: Text(
-                  'Not used',
+                  context.tr('imp.notUsed'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted2,
                   ),
                 ),
                 items: <DropdownMenuItem<String?>>[
-                  const DropdownMenuItem<String?>(child: Text('Not used')),
+                  DropdownMenuItem<String?>(
+                    child: Text(context.tr('imp.notUsed')),
+                  ),
                   for (final header in headers)
                     DropdownMenuItem<String?>(
                       value: header,
@@ -687,7 +689,9 @@ class _ProblemRow extends StatelessWidget {
               Text('Row ${row.rowNumber}', style: EcomsbdType.bodyStrong),
               const Spacer(),
               StatusChip(
-                label: isError ? 'Cannot import' : 'Check this',
+                label: isError
+                    ? context.tr('imp.cannotImport')
+                    : context.tr('imp.checkThis'),
                 tone: tone,
               ),
             ],

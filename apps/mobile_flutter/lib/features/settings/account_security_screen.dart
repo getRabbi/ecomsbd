@@ -172,7 +172,7 @@ class _DeviceCard extends ConsumerWidget {
                 foregroundColor: Tone.bad.ink,
                 minimumSize: const Size(0, EcomsbdTouch.minTarget),
               ),
-              child: const Text('Sign out'),
+              child: Text(context.tr('common.signOut')),
             ),
         ],
       ),
@@ -193,7 +193,7 @@ class _DeviceCard extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
+            child: Text(context.tr('common.signOut')),
           ),
         ],
       ),
