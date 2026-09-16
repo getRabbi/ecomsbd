@@ -42,7 +42,16 @@ dependencies:
   uuid: ^4.5.1
 
   # Bangla/English numeral and date formatting.
-  intl: ^0.19.0
+  intl: ^0.20.2
+
+  # Material/Cupertino strings for the two supported locales. Ships with
+  # the SDK, so adding it downloads nothing.
+  flutter_localizations:
+    sdk: flutter
+
+  # The selected language, persisted across restarts. Not secret, so it
+  # does not belong in the keystore-backed token store.
+  shared_preferences: ^2.3.3
 
   # The system file browser, for choosing a CSV to import (master spec
   # section 7.3). Android has no way to open a document picker without a

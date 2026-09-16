@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_strings.dart';
 import '../glass.dart';
 import '../tokens.dart';
 import 'badges.dart';
@@ -21,16 +22,15 @@ class OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final detail = pendingCount > 0
-        ? '$pendingCount change${pendingCount == 1 ? '' : 's'} will sync when you are back online. '
-              'Courier booking needs a connection.'
-        : 'You can still create and edit orders. Courier booking needs a connection.';
+        ? context.trPlural('offline.detail', pendingCount)
+        : context.tr('offline.detailPlain');
 
     return _Banner(
       tone: Tone.warning,
       icon: Icons.cloud_off_rounded,
-      title: 'Offline',
+      title: context.tr('common.offline'),
       detail: detail,
-      actionLabel: onRetry == null ? null : 'Retry',
+      actionLabel: onRetry == null ? null : context.tr('common.retry'),
       onAction: onRetry,
     );
   }
@@ -246,22 +246,26 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return Container(
-          width: widget.width,
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: Color.lerp(
-              const Color(0xFFE7ECF0),
-              const Color(0xFFF3F6F8),
-              _controller.value,
+    // The shimmer runs at 60fps for as long as the screen is loading. Its own
+    // layer keeps that repaint from marking the whole page dirty each frame.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return Container(
+            width: widget.width,
+            height: widget.height,
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                const Color(0xFFE7ECF0),
+                const Color(0xFFF3F6F8),
+                _controller.value,
+              ),
+              borderRadius: widget.borderRadius ?? EcomsbdRadii.cardSmall,
             ),
-            borderRadius: widget.borderRadius ?? EcomsbdRadii.cardSmall,
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -289,6 +293,51 @@ class DashboardSkeleton extends StatelessWidget {
           const SizedBox(height: EcomsbdSpacing.md),
           SkeletonLoader.card(height: 200),
         ],
+      ),
+    );
+  }
+}
+
+/// A spinner centred in the usable content area.
+///
+/// A bare `Center(child: CircularProgressIndicator())` inside a scroll view
+/// collapses to the top of the page, which put the app's first-load spinner
+/// under the floating top bar. This reserves a slice of the viewport and
+/// centres in it, so an initial load reads as "this area is loading" wherever
+/// it is used.
+class ContentLoader extends StatelessWidget {
+  const ContentLoader({super.key, this.minHeight, this.message});
+
+  /// Defaults to a little under half the viewport, so the spinner lands in the
+  /// optical centre of the content rather than against the header.
+  final double? minHeight;
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = MediaQuery.sizeOf(context).height * 0.42;
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: minHeight ?? fallback),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            if (message != null) ...<Widget>[
+              const SizedBox(height: EcomsbdSpacing.md),
+              Text(
+                message!,
+                textAlign: TextAlign.center,
+                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

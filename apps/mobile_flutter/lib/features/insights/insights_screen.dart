@@ -11,6 +11,7 @@ import '../../design/components/cards.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../expenses/expenses_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
@@ -31,12 +32,12 @@ class InsightsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final topInset = MediaQuery.viewPaddingOf(context).top;
     final profit = ref.watch(profitReportProvider);
     final returns = ref.watch(returnReportProvider);
     final products = ref.watch(productProfitProvider);
 
     return RefreshIndicator(
+      edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
       onRefresh: () async {
         ref.invalidate(profitReportProvider);
         ref.invalidate(returnReportProvider);
@@ -46,22 +47,22 @@ class InsightsScreen extends ConsumerWidget {
       child: ListView(
         padding: EdgeInsets.fromLTRB(
           EcomsbdSpacing.page,
-          topInset + EcomsbdTouch.minTarget + EcomsbdSpacing.lg,
+          EcomsbdLayout.shellTopPadding(context),
           EcomsbdSpacing.page,
           EcomsbdSpacing.bottomNavClearance,
         ),
         children: <Widget>[
-          const PageHeader(
-            eyebrow: 'Accumulated-history advantage',
-            title: 'Profit & business intelligence',
-            description: 'Only insights that your own data can support.',
+          PageHeader(
+            eyebrow: context.tr('insights.eyebrow'),
+            title: context.tr('insights.title'),
+            description: context.tr('insights.description'),
           ),
           profit.when(
             loading: () => SkeletonLoader.card(height: 180),
             error: (error, _) => error is ApiError && error.isPlanLimited
                 ? const GlassCard(child: PlanLockedNotice())
                 : Text(
-                    'Could not load your profit figures.',
+                    context.tr('insights.couldNotLoadProfit'),
                     style: EcomsbdType.caption.copyWith(
                       color: EcomsbdColors.muted,
                     ),
@@ -87,9 +88,9 @@ class InsightsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           SectionHeader(
-            title: 'Costs you enter yourself',
-            subtitle: 'Ad spend, packaging, rent',
-            actionLabel: 'Expenses',
+            title: context.tr('insights.ownCosts'),
+            subtitle: context.tr('insights.ownCostsSub'),
+            actionLabel: context.tr('insights.expenses'),
             onAction: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ExpensesScreen()),
             ),
@@ -100,26 +101,26 @@ class InsightsScreen extends ConsumerWidget {
             spacing: EcomsbdSpacing.sm,
             children: <Widget>[
               PremiumChartCard(
-                title: 'Revenue → profit bridge',
-                subtitle: 'Where the money goes',
-                trailing: const StatusChip(
-                  label: 'Last 30 days',
+                title: context.tr('insights.bridge'),
+                subtitle: context.tr('insights.bridgeSub'),
+                trailing: StatusChip(
+                  label: context.tr('chart.last30'),
                   tone: Tone.info,
                 ),
                 child: ChartData<ProfitReport>(
                   value: profit,
-                  emptyMessage: 'No settled parcels in the last 30 days yet.',
+                  emptyMessage: context.tr('chart.emptyNoSettled'),
                   isEmpty: (report) => report.parcelCount == 0,
                   builder: (report) =>
-                      HorizontalBarChart(data: _bridge(report)),
+                      HorizontalBarChart(data: _bridge(context, report)),
                 ),
               ),
               PremiumChartCard(
-                title: 'Profit by product',
-                subtitle: 'Contribution profit · ranked',
+                title: context.tr('insights.profitByProduct'),
+                subtitle: context.tr('insights.profitByProductSub'),
                 child: ChartData<List<ProductLine>>(
                   value: products,
-                  emptyMessage: 'No delivered products in the last 30 days.',
+                  emptyMessage: context.tr('chart.emptyNoDelivered'),
                   isEmpty: (rows) => rows.isEmpty,
                   builder: (rows) => HorizontalBarChart(
                     data: <HorizontalBarDatum>[
@@ -129,7 +130,8 @@ class InsightsScreen extends ConsumerWidget {
                           value: row.profit.paisa.abs(),
                           displayValue: row.hasEnoughSample
                               ? row.profit.formatCompact()
-                              : '${row.profit.formatCompact()} · thin',
+                              : '${row.profit.formatCompact()} · '
+                                    '${context.tr('insights.thin')}',
                         ),
                     ],
                   ),
@@ -144,20 +146,21 @@ class InsightsScreen extends ConsumerWidget {
             spacing: EcomsbdSpacing.sm,
             children: <Widget>[
               PremiumChartCard(
-                title: 'Courier scorecard',
-                subtitle: 'Own history · visible sample size',
+                title: context.tr('insights.courierScorecard'),
+                subtitle: context.tr('insights.courierScorecardSub'),
                 child: ChartData<ReturnReport>(
                   value: returns,
-                  emptyMessage:
-                      'No finished parcels to judge a courier on yet.',
+                  emptyMessage: context.tr('chart.emptyNoCourierSample'),
                   isEmpty: (report) => report.byCourier.isEmpty,
-                  builder: (report) =>
-                      _RateRows(lines: report.byCourier, unit: 'finished'),
+                  builder: (report) => _RateRows(
+                    lines: report.byCourier,
+                    unit: context.tr('insights.finishedUnit'),
+                  ),
                 ),
               ),
               PremiumChartCard(
-                title: 'Return loss map',
-                subtitle: 'By product and area',
+                title: context.tr('insights.returnLossMap'),
+                subtitle: context.tr('insights.returnLossMapSub'),
                 trailing: returns.valueOrNull == null
                     ? null
                     : StatusChip(
@@ -168,7 +171,7 @@ class InsightsScreen extends ConsumerWidget {
                       ),
                 child: ChartData<ReturnReport>(
                   value: returns,
-                  emptyMessage: 'No returns in the last 30 days.',
+                  emptyMessage: context.tr('chart.emptyNoReturns'),
                   isEmpty: (report) => report.returnCount == 0,
                   builder: (report) => HorizontalBarChart(
                     accent: BarAccent.red,
@@ -187,7 +190,10 @@ class InsightsScreen extends ConsumerWidget {
                               ? line.returnCount
                               : line.loss.paisa,
                           displayValue: line.loss.paisa == 0
-                              ? '${line.returnCount} back'
+                              ? context.tr(
+                                  'courier.backRate',
+                                  <String, Object?>{'rate': line.returnCount},
+                                )
                               : line.loss.formatCompact(),
                         ),
                     ],
@@ -208,17 +214,20 @@ class InsightsScreen extends ConsumerWidget {
   /// Item cost first because it is almost always the largest, and a seller
   /// looking at this wants to know whether the courier or the supplier is
   /// eating the margin.
-  static List<HorizontalBarDatum> _bridge(ProfitReport report) {
+  static List<HorizontalBarDatum> _bridge(
+    BuildContext context,
+    ProfitReport report,
+  ) {
     final parts = <(String, Money)>[
-      ('Revenue', report.realizedRevenue),
-      ('Goods', report.itemCost),
-      ('Delivery', report.deliveryCharge),
-      ('COD fee', report.codFee),
-      ('Returns', report.returnCharge),
-      ('Packaging', report.packaging),
-      ('Ads', report.adCost),
-      ('Write-offs', report.writeOffCost),
-      ('Profit', report.contributionProfit),
+      (context.tr('bridge.revenue'), report.realizedRevenue),
+      (context.tr('bridge.goods'), report.itemCost),
+      (context.tr('bridge.delivery'), report.deliveryCharge),
+      (context.tr('bridge.codFee'), report.codFee),
+      (context.tr('bridge.returns'), report.returnCharge),
+      (context.tr('bridge.packaging'), report.packaging),
+      (context.tr('bridge.ads'), report.adCost),
+      (context.tr('bridge.writeOffs'), report.writeOffCost),
+      (context.tr('bridge.profit'), report.contributionProfit),
     ];
     return <HorizontalBarDatum>[
       for (final (label, amount) in parts)
@@ -244,12 +253,13 @@ class _ProfitHero extends StatelessWidget {
     final total = report.parcelCount;
 
     return HeroMoneyCard(
-      eyebrow: 'Contribution profit · last 30 days',
+      eyebrow: context.tr('insights.profitEyebrow'),
       amount: report.contributionProfit,
       subtitle: total == 0
-          ? 'No parcels have finished in this window yet.'
-          : '$measured of $total parcel${total == 1 ? '' : 's'} settled. '
-                'Estimated inputs are marked, never blended in.',
+          ? context.tr('insights.noParcelsWindow')
+          : context.trPlural('insights.settledOf', total, <String, Object?>{
+              'measured': measured,
+            }),
       quality: _quality(report),
       trailing: report.marginLabel == null
           ? null
@@ -259,20 +269,22 @@ class _ProfitHero extends StatelessWidget {
             ),
       kpis: <HeroKpi>[
         HeroKpi(
-          label: 'Delivered sales',
+          label: context.tr('insights.deliveredSales'),
           value: report.realizedRevenue.formatCompact(),
-          caption: 'realized',
+          caption: context.tr('insights.realized'),
         ),
         HeroKpi(
-          label: 'Return loss',
+          label: context.tr('insights.returnLoss'),
           value: (returns?.directLoss ?? const Money(0)).formatCompact(),
-          caption: '${returns?.returnCount ?? 0} returns',
+          caption: context.tr('insights.returnsCaption', <String, Object?>{
+            'count': returns?.returnCount ?? 0,
+          }),
           tone: (returns?.directLoss.paisa ?? 0) > 0 ? Tone.bad : null,
         ),
         HeroKpi(
-          label: 'After fixed costs',
+          label: context.tr('insights.afterFixed'),
           value: report.operatingProfit.formatCompact(),
-          caption: 'operating',
+          caption: context.tr('insights.operating'),
           tone: report.operatingProfit.paisa < 0 ? Tone.bad : null,
         ),
       ],
@@ -304,21 +316,20 @@ class _ProfitQualityNote extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: DataQualityBadge(
               quality: _ProfitHero._quality(report),
-              detail: _detail,
+              detail: _detailFor(context),
             ),
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
           Text(
-            'Estimated inputs are marked rather than blended in. '
-            'A profit figure the app is not sure about never prints as exact.',
+            context.tr('insights.qualityNote'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           if (report.unallocatedAdSpend.paisa > 0) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.sm),
             Text(
-              '${report.unallocatedAdSpend.format()} of ad spend has not been '
-              'allocated to any parcel, so it sits below contribution profit '
-              'rather than being spread across unrelated orders.',
+              context.tr('insights.unallocatedAds', <String, Object?>{
+                'amount': report.unallocatedAdSpend.format(),
+              }),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ],
@@ -327,16 +338,17 @@ class _ProfitQualityNote extends StatelessWidget {
     );
   }
 
-  String get _detail {
+  String _detailFor(BuildContext context) {
     if (report.missingCount > 0) {
-      return 'a cost is missing on ${report.missingCount} '
-          'parcel${report.missingCount == 1 ? '' : 's'}';
+      return context.trPlural('insights.detailMissing', report.missingCount);
     }
     if (report.estimatedCount > 0) {
-      return '${report.estimatedCount} '
-          'parcel${report.estimatedCount == 1 ? '' : 's'} not settled yet';
+      return context.trPlural(
+        'insights.detailEstimated',
+        report.estimatedCount,
+      );
     }
-    return 'every input settled';
+    return context.tr('insights.detailAllSettled');
   }
 }
 
@@ -357,12 +369,24 @@ class _RateRows extends StatelessWidget {
             child: GlassListRow(
               leading: RowIcon(label: line.label.substring(0, 1).toUpperCase()),
               title: line.label,
-              subtitle: '${line.parcelCount} $unit · ${line.returnCount} back',
+              subtitle: context.tr('insights.rateRowSub', <String, Object?>{
+                'count': line.parcelCount,
+                'unit': unit,
+                'returned': line.returnCount,
+              }),
               trailing: line.hasEnoughSample
-                  ? Text('${line.rateLabel} back', style: EcomsbdType.money)
+                  ? Text(
+                      context.tr('courier.backRate', <String, Object?>{
+                        'rate': line.rateLabel,
+                      }),
+                      style: EcomsbdType.money,
+                    )
                   // Master spec section 24: a ranking is not shown before the
                   // sample supports it, and the reason is stated.
-                  : const StatusChip(label: 'No rank yet', tone: Tone.neutral),
+                  : StatusChip(
+                      label: context.tr('common.noRankYet'),
+                      tone: Tone.neutral,
+                    ),
             ),
           ),
       ],
@@ -391,8 +415,10 @@ class _ReturnReasons extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return PremiumChartCard(
-      title: 'Why parcels came back',
-      subtitle: '${report.returnCount} returns in the last 30 days',
+      title: context.tr('insights.whyBack'),
+      subtitle: context.tr('insights.returnsInWindow', <String, Object?>{
+        'count': report.returnCount,
+      }),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -415,10 +441,10 @@ class _ReturnReasons extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: EcomsbdSpacing.xs),
               child: Text(
-                '${report.unknownReasonCount} return'
-                '${report.unknownReasonCount == 1 ? '' : 's'} with no reason '
-                'recorded. Adding one when you log a return makes this list '
-                'worth acting on.',
+                context.trPlural(
+                  'insights.noReasonRecorded',
+                  report.unknownReasonCount,
+                ),
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
             ),

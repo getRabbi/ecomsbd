@@ -10,6 +10,7 @@ import '../../data/couriers/models.dart';
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/inputs.dart';
 
 /// Book a parcel with a courier.
@@ -322,9 +323,7 @@ class _AmbiguousOutcome extends StatelessWidget {
         // section 46), so its copy is the headline when it sent one. The
         // fallback is the same sentence, for the case where it did not.
         Text(
-          message ??
-              'Booking result নিশ্চিত হয়নি — আবার বুক করবেন না। '
-                  'আগের চেষ্টা যাচাই করা হচ্ছে।',
+          message ?? context.tr('booking.ambiguousFallback'),
           style: EcomsbdType.body,
         ),
         const SizedBox(height: EcomsbdSpacing.sm),

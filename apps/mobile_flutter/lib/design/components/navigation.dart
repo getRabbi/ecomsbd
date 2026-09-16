@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_strings.dart';
 import '../glass.dart';
 import '../tokens.dart';
 
@@ -10,13 +11,11 @@ import '../tokens.dart';
 enum MainDestination { home, orders, money, insights, menu }
 
 extension MainDestinationLabel on MainDestination {
-  String get label => switch (this) {
-    MainDestination.home => 'Home',
-    MainDestination.orders => 'Orders',
-    MainDestination.money => 'Money',
-    MainDestination.insights => 'Insights',
-    MainDestination.menu => 'Menu',
-  };
+  /// The tab's name in the selected language.
+  ///
+  /// The enum name is the translation key, so adding a destination cannot
+  /// leave its label behind: `nav.orders` is looked up from `name`.
+  String labelIn(BuildContext context) => context.tr('nav.$name');
 
   IconData get icon => switch (this) {
     MainDestination.home => Icons.home_rounded,
@@ -46,42 +45,47 @@ class BottomGlassNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(11, 0, 11, 8 + bottomInset),
-      child: SizedBox(
-        height: EcomsbdTouch.bottomNavHeight,
-        child: Stack(
-          fit: StackFit.expand,
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            // Clip the backdrop to the pill, while allowing the active item
-            // to rise above it without expanding the blur to the whole page.
-            const Positioned.fill(
-              child: GlassSurface(
-                borderRadius: EcomsbdRadii.round,
-                fill: Color(0xB0FFFFFF),
-                borderColor: Color(0xFAFFFFFF),
-                shadows: EcomsbdShadows.bottomNav,
-                blurSigma: 24,
-                child: SizedBox.expand(),
+    // The bar is fixed while the page scrolls beneath it, and it still carries
+    // a live blur. Its own layer keeps every scroll frame from repainting the
+    // raised active item and its shadows along with the content.
+    return RepaintBoundary(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(11, 0, 11, 8 + bottomInset),
+        child: SizedBox(
+          height: EcomsbdTouch.bottomNavHeight,
+          child: Stack(
+            fit: StackFit.expand,
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              // Clip the backdrop to the pill, while allowing the active item
+              // to rise above it without expanding the blur to the whole page.
+              const Positioned.fill(
+                child: GlassSurface(
+                  borderRadius: EcomsbdRadii.round,
+                  fill: Color(0xB0FFFFFF),
+                  borderColor: Color(0xFAFFFFFF),
+                  shadows: EcomsbdShadows.bottomNav,
+                  blurSigma: 24,
+                  child: SizedBox.expand(),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-              child: Row(
-                children: <Widget>[
-                  for (final destination in MainDestination.values)
-                    Expanded(
-                      child: _NavItem(
-                        destination: destination,
-                        isActive: destination == current,
-                        onTap: () => onSelected(destination),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                child: Row(
+                  children: <Widget>[
+                    for (final destination in MainDestination.values)
+                      Expanded(
+                        child: _NavItem(
+                          destination: destination,
+                          isActive: destination == current,
+                          onTap: () => onSelected(destination),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -104,7 +108,7 @@ class _NavItem extends StatelessWidget {
     return Semantics(
       selected: isActive,
       button: true,
-      label: destination.label,
+      label: destination.labelIn(context),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
@@ -140,7 +144,7 @@ class _NavItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    destination.label,
+                    destination.labelIn(context),
                     style: EcomsbdType.eyebrow.copyWith(
                       letterSpacing: 0,
                       color: isActive
@@ -243,7 +247,7 @@ class GlassBottomSheet extends StatelessWidget {
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Close',
+                    tooltip: context.tr('common.close'),
                     constraints: const BoxConstraints(
                       minWidth: EcomsbdTouch.minTarget,
                       minHeight: EcomsbdTouch.minTarget,

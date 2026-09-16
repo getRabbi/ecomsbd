@@ -93,6 +93,9 @@ class GlassCard extends StatelessWidget {
     return GlassSurface(
       margin: margin,
       borderRadius: borderRadius,
+      // This is the card that appears a dozen times in a scrolling list, so
+      // it takes the thickened fill rather than a live blur. See GlassSurface.
+      blurSigma: 0,
       child: _Tappable(
         onTap: onTap,
         borderRadius: borderRadius,
@@ -127,6 +130,9 @@ class StrongGlassCard extends StatelessWidget {
       shadows: EcomsbdShadows.strong,
       margin: margin,
       borderRadius: borderRadius,
+      // Already near-opaque at 0xE0, so the live blur behind it was paying for
+      // almost nothing. See GlassSurface.
+      blurSigma: 0,
       child: _Tappable(
         onTap: onTap,
         borderRadius: borderRadius,
@@ -237,9 +243,11 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
+      // A page title sat directly against the header above it. The top inset
+      // is part of the header rhythm rather than a per-screen adjustment.
       padding: const EdgeInsets.fromLTRB(
         EcomsbdSpacing.lg,
-        0,
+        EcomsbdSpacing.xs,
         EcomsbdSpacing.lg,
         EcomsbdSpacing.md,
       ),

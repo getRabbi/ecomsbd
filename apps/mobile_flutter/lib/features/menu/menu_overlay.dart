@@ -7,6 +7,7 @@ import '../../design/components/badges.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../billing/plans_screen.dart';
 import '../customers/customers_screen.dart';
 import '../expenses/expenses_screen.dart';
@@ -23,15 +24,18 @@ import '../shared/responsive.dart';
 class _MenuItem {
   const _MenuItem({
     required this.icon,
-    required this.title,
-    required this.subtitle,
+    required this.titleKey,
+    required this.subtitleKey,
     this.phase,
     this.destination,
   });
 
   final IconData icon;
-  final String title;
-  final String subtitle;
+
+  /// Translation keys rather than copy: these lists are `const`, so there is
+  /// no context here to resolve them with. `_MenuTile` does that.
+  final String titleKey;
+  final String subtitleKey;
 
   /// The phase that ships this destination. Present means "not built yet",
   /// and the tile says so rather than opening an empty screen.
@@ -68,38 +72,38 @@ class MenuOverlay extends ConsumerWidget {
   static const List<_MenuItem> _operations = <_MenuItem>[
     _MenuItem(
       icon: Icons.inventory_2_outlined,
-      title: 'Products & stock',
-      subtitle: 'Cost · margin · inventory',
+      titleKey: 'menu.products',
+      subtitleKey: 'menu.productsSub',
       destination: ProductsScreen.new,
     ),
     _MenuItem(
       icon: Icons.people_outline,
-      title: 'Customers',
-      subtitle: 'Private CRM · repeat buyers',
+      titleKey: 'menu.customers',
+      subtitleKey: 'menu.customersSub',
       destination: CustomersScreen.new,
     ),
     _MenuItem(
       icon: Icons.shield_outlined,
-      title: 'Risk check',
-      subtitle: 'Delivery history signal',
+      titleKey: 'menu.riskCheck',
+      subtitleKey: 'menu.riskCheckSub',
       phase: 'Phase C',
     ),
     _MenuItem(
       icon: Icons.local_shipping_outlined,
-      title: 'Courier accounts',
-      subtitle: 'BYOC · provider health',
+      titleKey: 'menu.courierAccounts',
+      subtitleKey: 'menu.courierAccountsSub',
       phase: 'Phase C',
     ),
     _MenuItem(
       icon: Icons.assignment_return_outlined,
-      title: 'Return center',
-      subtitle: 'Loss · reasons · stock',
+      titleKey: 'menu.returnCenter',
+      subtitleKey: 'menu.returnCenterSub',
       destination: _ReturnCenterPage.new,
     ),
     _MenuItem(
       icon: Icons.payments_outlined,
-      title: 'Expenses & ads',
-      subtitle: 'Profit inputs · allocation',
+      titleKey: 'menu.expenses',
+      subtitleKey: 'menu.expensesSub',
       destination: ExpensesScreen.new,
     ),
   ];
@@ -107,26 +111,26 @@ class MenuOverlay extends ConsumerWidget {
   static const List<_MenuItem> _money = <_MenuItem>[
     _MenuItem(
       icon: Icons.rule_folder_outlined,
-      title: 'Reconciliation',
-      subtitle: 'Match · mismatch · dispute',
+      titleKey: 'menu.reconciliation',
+      subtitleKey: 'menu.reconciliationSub',
       destination: CasesScreen.new,
     ),
     _MenuItem(
       icon: Icons.receipt_long_outlined,
-      title: 'Payouts',
-      subtitle: 'API · CSV · manual',
+      titleKey: 'menu.payouts',
+      subtitleKey: 'menu.payoutsSub',
       destination: PayoutsScreen.new,
     ),
     _MenuItem(
       icon: Icons.file_download_outlined,
-      title: 'Imports / exports',
-      subtitle: 'Sheets · statements · own data',
+      titleKey: 'menu.imports',
+      subtitleKey: 'menu.importsSub',
       destination: ImportsScreen.new,
     ),
     _MenuItem(
       icon: Icons.notifications_none_rounded,
-      title: 'Notifications',
-      subtitle: 'Actionable alerts',
+      titleKey: 'menu.notifications',
+      subtitleKey: 'menu.notificationsSub',
       destination: NotificationCentreScreen.new,
     ),
   ];
@@ -134,26 +138,26 @@ class MenuOverlay extends ConsumerWidget {
   static const List<_MenuItem> _account = <_MenuItem>[
     _MenuItem(
       icon: Icons.groups_outlined,
-      title: 'Team',
-      subtitle: 'Roles · activity',
+      titleKey: 'menu.team',
+      subtitleKey: 'menu.teamSub',
       phase: 'V1.1',
     ),
     _MenuItem(
       icon: Icons.star_outline_rounded,
-      title: 'Subscription',
-      subtitle: 'Plan · usage · billing',
+      titleKey: 'menu.subscription',
+      subtitleKey: 'menu.subscriptionSub',
       destination: PlansScreen.new,
     ),
     _MenuItem(
       icon: Icons.settings_outlined,
-      title: 'Settings',
-      subtitle: 'Devices · notifications · privacy',
+      titleKey: 'menu.settings',
+      subtitleKey: 'menu.settingsSub',
       destination: SettingsScreen.new,
     ),
     _MenuItem(
       icon: Icons.help_outline_rounded,
-      title: 'Support',
-      subtitle: 'Case + WhatsApp',
+      titleKey: 'menu.support',
+      subtitleKey: 'menu.supportSub',
       phase: 'V1.1',
     ),
   ];
@@ -161,7 +165,8 @@ class MenuOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(authControllerProvider).profile;
-    final shopName = profile?.activeTenant?.name ?? 'Your shop';
+    final shopName =
+        profile?.activeTenant?.name ?? context.tr('common.yourShop');
     final role = profile?.role ?? 'OWNER';
 
     return GlassSurface(
@@ -190,7 +195,7 @@ class MenuOverlay extends ConsumerWidget {
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Close menu',
+                    tooltip: context.tr('menu.closeMenu'),
                     iconSize: 22,
                     constraints: const BoxConstraints(
                       minWidth: EcomsbdTouch.minTarget,
@@ -245,9 +250,15 @@ class MenuOverlay extends ConsumerWidget {
                   ],
                 ),
               ),
-              const _MenuSection(title: 'Operations', items: _operations),
-              const _MenuSection(title: 'Money & data', items: _money),
-              const _MenuSection(title: 'Account & growth', items: _account),
+              const _MenuSection(
+                titleKey: 'menu.operations',
+                items: _operations,
+              ),
+              const _MenuSection(titleKey: 'menu.moneyData', items: _money),
+              const _MenuSection(
+                titleKey: 'menu.accountGrowth',
+                items: _account,
+              ),
               const SizedBox(height: EcomsbdSpacing.lg),
               OutlinedButton.icon(
                 onPressed: () async {
@@ -256,7 +267,7 @@ class MenuOverlay extends ConsumerWidget {
                   navigator.pop();
                 },
                 icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Sign out'),
+                label: Text(context.tr('common.signOut')),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
                   foregroundColor: EcomsbdColors.red,
@@ -285,9 +296,9 @@ class MenuOverlay extends ConsumerWidget {
 }
 
 class _MenuSection extends StatelessWidget {
-  const _MenuSection({required this.title, required this.items});
+  const _MenuSection({required this.titleKey, required this.items});
 
-  final String title;
+  final String titleKey;
   final List<_MenuItem> items;
 
   @override
@@ -303,7 +314,7 @@ class _MenuSection extends StatelessWidget {
             EcomsbdSpacing.sm,
           ),
           child: Text(
-            title,
+            context.tr(titleKey),
             style: EcomsbdType.bodyStrong.copyWith(color: EcomsbdColors.muted),
           ),
         ),
@@ -355,14 +366,14 @@ class _MenuTile extends StatelessWidget {
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
             Text(
-              item.title,
+              context.tr(item.titleKey),
               style: EcomsbdType.bodyStrong,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 3),
             Text(
-              item.subtitle,
+              context.tr(item.subtitleKey),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

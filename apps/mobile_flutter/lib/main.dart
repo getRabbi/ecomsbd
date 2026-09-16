@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/app.dart';
+import 'l10n/app_locale.dart';
 import 'data/auth/supabase_bootstrap.dart';
 import 'data/notifications/push_registration.dart';
 import 'app/providers.dart';
@@ -26,7 +27,15 @@ Future<void> main() async {
   ]);
   SystemChrome.setSystemUIOverlayStyle(ecomsbdLightOverlay);
 
-  final container = ProviderContainer();
+  // Read before the container is built so the first frame is already in the
+  // seller's language instead of flipping to it a frame later.
+  final savedLocale = await loadSavedLocale();
+
+  final container = ProviderContainer(
+    overrides: <Override>[
+      localeProvider.overrideWith((ref) => LocaleController(savedLocale)),
+    ],
+  );
   await _bootstrap(container);
 
   runApp(

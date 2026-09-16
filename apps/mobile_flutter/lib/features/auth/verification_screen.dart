@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import 'auth_error.dart';
 import 'email_auth_screen.dart';
 
@@ -61,20 +62,22 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
     final state = ref.watch(authControllerProvider);
     final email = state.verificationEmail;
     return AuthPage(
-      title: _verified ? 'Email verified' : 'Verify your email',
+      title: _verified
+          ? context.tr('auth.verifiedTitle')
+          : context.tr('auth.verifyTitle'),
       children: [
         if (_verified)
-          const Text(
-            'Your email address is verified. You can continue to ecomsbd.',
-          )
+          Text(context.tr('auth.verifiedBody'))
         else if (widget.token != null)
           FilledButton(
             onPressed: state.isBusy ? null : _verify,
-            child: const Text('Verify email'),
+            child: Text(context.tr('auth.verifyButton')),
           )
         else ...[
           Text(
-            'Check ${email ?? 'your email address'} for the confirmation link. Check your spam folder too. If it does not arrive, try resending.',
+            context.tr('auth.verifyCheckBody', <String, Object?>{
+              'email': email ?? context.tr('auth.yourEmailAddress'),
+            }),
           ),
           if (email != null) ...[
             const SizedBox(height: EcomsbdSpacing.md),
@@ -84,19 +87,15 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                   : () => _resend(email),
               child: Text(
                 _remaining > 0
-                    ? 'Resend in $_remaining seconds'
-                    : 'Resend verification email',
+                    ? context.tr('auth.resendIn', <String, Object?>{
+                        'count': _remaining,
+                      })
+                    : context.tr('auth.resendVerification'),
               ),
             ),
           ],
-          if (_resent)
-            const Text(
-              'If verification is still pending, a new link will arrive in your inbox.',
-            ),
-          if (state.isSignedIn)
-            const Text(
-              'You can continue setting up your shop while you verify your email.',
-            ),
+          if (_resent) Text(context.tr('auth.resentNote')),
+          if (state.isSignedIn) Text(context.tr('auth.continueSetupNote')),
         ],
         if (state.error != null) ...[
           const SizedBox(height: EcomsbdSpacing.md),
@@ -119,7 +118,9 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                   widget.onContinue();
                 },
           child: Text(
-            state.isSignedIn ? 'Continue to shop' : 'Back to Sign In',
+            state.isSignedIn
+                ? context.tr('auth.continueToShop')
+                : context.tr('auth.backToSignIn'),
           ),
         ),
       ],
@@ -134,7 +135,7 @@ class SelectShopScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(authControllerProvider);
     return AuthPage(
-      title: 'Choose your shop',
+      title: context.tr('auth.chooseShop'),
       children: [
         for (final shop in state.profile?.tenants ?? [])
           ListTile(
@@ -154,7 +155,7 @@ class SelectShopScreen extends ConsumerWidget {
               : () async {
                   await ref.read(authControllerProvider.notifier).signOut();
                 },
-          child: const Text('Sign out'),
+          child: Text(context.tr('common.signOut')),
         ),
       ],
     );

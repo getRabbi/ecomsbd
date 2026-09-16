@@ -17,6 +17,7 @@ import '../../design/components/cards.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../notifications/notification_centre_screen.dart';
 import '../orders/order_compose_screen.dart';
 import '../products/products_screen.dart';
@@ -51,6 +52,7 @@ class HomeScreen extends ConsumerWidget {
     final shopName = ref.watch(shopNameProvider);
 
     return RefreshIndicator(
+      edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
       onRefresh: () async {
         ref.invalidate(homeMetricsProvider);
         ref.invalidate(profitReportProvider);
@@ -69,10 +71,10 @@ class HomeScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 SellerHero(
-                  shopName: shopName ?? 'Your shop',
-                  subtitle: _heroSubtitle(home.valueOrNull?.value),
-                  chips: _heroChips(home.valueOrNull?.value),
-                  topInset: topInset + 56,
+                  shopName: shopName ?? context.tr('common.yourShop'),
+                  subtitle: _heroSubtitle(context, home.valueOrNull?.value),
+                  chips: _heroChips(context, home.valueOrNull?.value),
+                  topInset: topInset + EcomsbdLayout.topBarHeight,
                 ),
                 Transform.translate(
                   // The money card lifts out of the hero, as in the prototype.
@@ -104,21 +106,28 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  static String _heroSubtitle(HomeMetrics? metrics) {
-    if (metrics == null) return 'Loading today';
-    return '${metrics.ordersToday} order${metrics.ordersToday == 1 ? '' : 's'} '
-        'today · ${metrics.deliveredToday} delivered';
+  static String _heroSubtitle(BuildContext context, HomeMetrics? metrics) {
+    if (metrics == null) return context.tr('home.loadingToday');
+    return context.trPlural(
+      'home.heroSubtitle',
+      metrics.ordersToday,
+      <String, Object?>{'delivered': metrics.deliveredToday},
+    );
   }
 
-  static List<String> _heroChips(HomeMetrics? metrics) {
+  static List<String> _heroChips(BuildContext context, HomeMetrics? metrics) {
     if (metrics == null) return const <String>[];
     return <String>[
       if (metrics.codOverdue.paisa > 0)
-        '${metrics.codOverdue.format()} overdue',
+        context.tr('home.chipOverdue', <String, Object?>{
+          'amount': metrics.codOverdue.format(),
+        }),
       if (metrics.mismatchCount > 0)
-        '${metrics.mismatchCount} mismatch'
-            '${metrics.mismatchCount == 1 ? '' : 'es'}',
-      if (metrics.returnedToday > 0) '${metrics.returnedToday} returned today',
+        context.trPlural('home.chipMismatch', metrics.mismatchCount),
+      if (metrics.returnedToday > 0)
+        context.tr('home.chipReturned', <String, Object?>{
+          'count': metrics.returnedToday,
+        }),
     ];
   }
 }
@@ -132,10 +141,7 @@ class _HomeBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return home.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: EcomsbdSpacing.xl),
-        child: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () => const ContentLoader(minHeight: 260),
       error: (error, _) => ErrorStateCard(
         // Only ApiError reaches here: the repositories translate everything
         // they raise, and anything else is a bug worth seeing as a crash
@@ -161,9 +167,9 @@ class _HomeBody extends ConsumerWidget {
             const SizedBox(height: EcomsbdSpacing.md),
             _NeedsAttention(metrics: metrics, onNavigate: onNavigate),
             SectionHeader(
-              title: 'Business pulse',
-              subtitle: '30-day profit, COD and delivery quality',
-              actionLabel: 'Full analytics',
+              title: context.tr('home.businessPulse'),
+              subtitle: context.tr('home.businessPulseSub'),
+              actionLabel: context.tr('home.fullAnalytics'),
               onAction: () => onNavigate?.call('insights'),
             ),
             const _PulseCharts(),
@@ -172,9 +178,9 @@ class _HomeBody extends ConsumerWidget {
             const SizedBox(height: EcomsbdSpacing.md),
             const _ProductCharts(),
             SectionHeader(
-              title: 'Live activity',
-              subtitle: 'Money and operational events only',
-              actionLabel: 'All activity',
+              title: context.tr('home.liveActivity'),
+              subtitle: context.tr('home.liveActivitySub'),
+              actionLabel: context.tr('home.allActivity'),
               onAction: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const NotificationCentreScreen(),
@@ -197,34 +203,40 @@ class _CodOutstandingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HeroMoneyCard(
-      eyebrow: 'COD outstanding · with couriers right now',
+      eyebrow: context.tr('home.codEyebrow'),
       amount: metrics.codOutstanding,
-      subtitle: _subtitle,
+      subtitle: _subtitleFor(context),
       quality: metrics.hasEstimates
           ? DataQuality.estimated
           : DataQuality.actual,
       trailing: metrics.codOverdue.paisa > 0
           ? StatusChip(
-              label: '${metrics.codOverdue.format()} overdue',
+              label: context.tr('home.chipOverdue', <String, Object?>{
+                'amount': metrics.codOverdue.format(),
+              }),
               tone: Tone.bad,
             )
           : null,
       kpis: <HeroKpi>[
         HeroKpi(
-          label: 'Realized today',
+          label: context.tr('home.realizedToday'),
           value: metrics.realizedRevenue.formatCompact(),
-          caption: '${metrics.deliveredToday} delivered',
+          caption: context.tr('home.deliveredCaption', <String, Object?>{
+            'count': metrics.deliveredToday,
+          }),
         ),
         HeroKpi(
-          label: 'Profit today',
+          label: context.tr('home.profitToday'),
           value: metrics.contributionProfit.formatCompact(),
-          caption: 'contribution',
+          caption: context.tr('home.contribution'),
           tone: metrics.contributionProfit.paisa < 0 ? Tone.bad : null,
         ),
         HeroKpi(
-          label: 'Mismatch',
+          label: context.tr('home.mismatch'),
           value: metrics.mismatch.formatCompact(),
-          caption: '${metrics.mismatchCount} open',
+          caption: context.tr('home.openCaption', <String, Object?>{
+            'count': metrics.mismatchCount,
+          }),
           tone: metrics.mismatchCount > 0 ? Tone.bad : null,
         ),
       ],
@@ -234,19 +246,19 @@ class _CodOutstandingCard extends StatelessWidget {
   /// Says what is known about *when* the money lands, and admits when nothing
   /// is known. Master spec section 140: courier settlement timing is never
   /// invented, so unforecast money is called that rather than shown as due.
-  String get _subtitle {
+  String _subtitleFor(BuildContext context) {
     if (metrics.codOutstanding.paisa == 0) {
-      return 'Nothing with couriers.';
+      return context.tr('home.codNothing');
     }
     if (metrics.codExpectedToday.paisa > 0) {
-      return '${metrics.codExpectedToday.format()} expected today, '
-          'from your own settlement history.';
+      return context.tr('home.codExpectedToday', <String, Object?>{
+        'amount': metrics.codExpectedToday.format(),
+      });
     }
     if (metrics.codUnforecast.paisa > 0) {
-      return 'No arrival date yet — not enough settlement history with these '
-          'couriers to say when it lands.';
+      return context.tr('home.codNoDate');
     }
-    return 'Nothing expected to land today.';
+    return context.tr('home.codNothingToday');
   }
 }
 
@@ -264,30 +276,30 @@ class _QuickActions extends StatelessWidget {
       children: <Widget>[
         QuickActionTile(
           icon: Icons.add_rounded,
-          title: 'New order',
-          subtitle: 'Paste or manual',
+          title: context.tr('home.quick.newOrder'),
+          subtitle: context.tr('home.quick.newOrderSub'),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const OrderComposeScreen()),
           ),
         ),
-        const QuickActionTile(
+        QuickActionTile(
           icon: Icons.shield_outlined,
-          title: 'Risk check',
-          subtitle: 'Phone history',
+          title: context.tr('home.quick.riskCheck'),
+          subtitle: context.tr('home.quick.riskCheckSub'),
           // Risk lookup needs a provider data path that is not verified yet;
           // showing it as available would promise something the app cannot do.
           enabled: false,
         ),
         QuickActionTile(
           icon: Icons.receipt_long_outlined,
-          title: 'Add payout',
-          subtitle: 'API · CSV · manual',
+          title: context.tr('home.quick.addPayout'),
+          subtitle: context.tr('home.quick.addPayoutSub'),
           onTap: () => onNavigate?.call('money'),
         ),
         QuickActionTile(
           icon: Icons.inventory_2_outlined,
-          title: 'Products',
-          subtitle: 'Cost · stock · margin',
+          title: context.tr('home.quick.products'),
+          subtitle: context.tr('home.quick.productsSub'),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const ProductsScreen()),
           ),
@@ -315,13 +327,13 @@ class _NeedsAttention extends StatelessWidget {
             onTap: () => onNavigate?.call('money'),
           ),
       ],
-      actionLabel: metrics.alerts.isEmpty ? null : 'Review all',
+      actionLabel: metrics.alerts.isEmpty ? null : context.tr('home.reviewAll'),
       onAction: metrics.alerts.isEmpty ? null : () => onNavigate?.call('money'),
       side: DarkHighlightPanel(
-        label: "Today's contribution profit",
+        label: context.tr('home.todaysContribution'),
         value: metrics.contributionProfit.format(),
         description: metrics.profitCaveat,
-        actionLabel: 'Open profit breakdown',
+        actionLabel: context.tr('home.openProfitBreakdown'),
         onAction: () => onNavigate?.call('insights'),
       ),
     );
@@ -349,8 +361,8 @@ class _PulseCharts extends ConsumerWidget {
       spacing: EcomsbdSpacing.sm,
       children: <Widget>[
         PremiumChartCard(
-          title: 'Contribution profit',
-          subtitle: 'Last 30 days · estimated inputs marked, not blended',
+          title: context.tr('chart.contributionProfit'),
+          subtitle: context.tr('chart.contributionProfitSub'),
           trailing: profit.valueOrNull == null
               ? null
               : Column(
@@ -373,20 +385,20 @@ class _PulseCharts extends ConsumerWidget {
                 ),
           child: ChartData<ProfitReport>(
             value: profit,
-            emptyMessage: 'No settled parcels in the last 30 days yet.',
+            emptyMessage: context.tr('chart.emptyNoSettled'),
             isEmpty: (report) => report.parcelCount == 0,
             builder: (report) =>
-                ProfitTrendChart(points: _trendPoints(report.series)),
+                ProfitTrendChart(points: _trendPoints(context, report.series)),
           ),
         ),
         PremiumChartCard(
-          title: 'COD position',
-          subtitle: 'Current collectible pipeline, by age',
+          title: context.tr('chart.codPosition'),
+          subtitle: context.tr('chart.codPositionSub'),
           child: ChartData<List<AgingBand>>(
             value: money.whenData(
               (sourced) => sourced.map((summary) => summary.aging),
             ),
-            emptyMessage: 'No money with couriers right now.',
+            emptyMessage: context.tr('chart.emptyNoCod'),
             isEmpty: (bands) =>
                 bands.every((band) => band.outstanding.paisa == 0),
             builder: (bands) => Center(
@@ -402,7 +414,10 @@ class _PulseCharts extends ConsumerWidget {
     );
   }
 
-  static List<TrendPoint> _trendPoints(List<DayPoint> series) {
+  static List<TrendPoint> _trendPoints(
+    BuildContext context,
+    List<DayPoint> series,
+  ) {
     // Last fourteen days: a month of daily points on a 360dp card is a
     // smear, and the seller reads this for direction rather than for
     // individual days.
@@ -412,7 +427,7 @@ class _PulseCharts extends ConsumerWidget {
     return <TrendPoint>[
       for (final point in window)
         TrendPoint(
-          label: _weekday(point.businessDate),
+          label: _weekday(context, point.businessDate),
           value: point.contributionProfit.paisa,
         ),
     ];
@@ -440,15 +455,16 @@ class _PulseCharts extends ConsumerWidget {
     return slices;
   }
 
-  static String _weekday(DateTime date) => switch (date.weekday) {
-    DateTime.monday => 'Mon',
-    DateTime.tuesday => 'Tue',
-    DateTime.wednesday => 'Wed',
-    DateTime.thursday => 'Thu',
-    DateTime.friday => 'Fri',
-    DateTime.saturday => 'Sat',
-    _ => 'Sun',
-  };
+  static String _weekday(BuildContext context, DateTime date) =>
+      switch (date.weekday) {
+        DateTime.monday => context.tr('weekday.mon'),
+        DateTime.tuesday => context.tr('weekday.tue'),
+        DateTime.wednesday => context.tr('weekday.wed'),
+        DateTime.thursday => context.tr('weekday.thu'),
+        DateTime.friday => context.tr('weekday.fri'),
+        DateTime.saturday => context.tr('weekday.sat'),
+        _ => context.tr('weekday.sun'),
+      };
 }
 
 class _PerformanceCharts extends ConsumerWidget {
@@ -465,12 +481,12 @@ class _PerformanceCharts extends ConsumerWidget {
       spacing: EcomsbdSpacing.sm,
       children: <Widget>[
         PremiumChartCard(
-          title: 'Delivery funnel',
-          subtitle: 'Last 30 days',
-          trailing: _successChip(profit.valueOrNull?.value),
+          title: context.tr('chart.deliveryFunnel'),
+          subtitle: context.tr('chart.last30'),
+          trailing: _successChip(context, profit.valueOrNull?.value),
           child: ChartData<ProfitReport>(
             value: profit,
-            emptyMessage: 'No parcels dispatched in the last 30 days.',
+            emptyMessage: context.tr('chart.emptyNoDispatched'),
             isEmpty: (report) =>
                 report.funnel.isEmpty || report.funnel.first.count == 0,
             builder: (report) => charts.DeliveryFunnelChart(
@@ -482,11 +498,11 @@ class _PerformanceCharts extends ConsumerWidget {
           ),
         ),
         PremiumChartCard(
-          title: 'Courier health',
-          subtitle: 'Your own history only · sample-aware',
+          title: context.tr('chart.courierHealth'),
+          subtitle: context.tr('chart.courierHealthSub'),
           child: ChartData<ReturnReport>(
             value: returns,
-            emptyMessage: 'No finished parcels to judge a courier on yet.',
+            emptyMessage: context.tr('chart.emptyNoCourierSample'),
             isEmpty: (report) => report.byCourier.isEmpty,
             builder: (report) => _CourierRows(lines: report.byCourier),
           ),
@@ -495,7 +511,7 @@ class _PerformanceCharts extends ConsumerWidget {
     );
   }
 
-  static Widget? _successChip(ProfitReport? report) {
+  static Widget? _successChip(BuildContext context, ProfitReport? report) {
     if (report == null || report.funnel.isEmpty) return null;
     final dispatched = report.funnel.first.count;
     if (dispatched == 0) return null;
@@ -507,7 +523,9 @@ class _PerformanceCharts extends ConsumerWidget {
         .count;
     final rate = delivered * 100 / dispatched;
     return StatusChip(
-      label: '${rate.toStringAsFixed(1)}% delivered',
+      label: context.tr('home.deliveredRate', <String, Object?>{
+        'rate': rate.toStringAsFixed(1),
+      }),
       tone: rate >= 85 ? Tone.good : Tone.warning,
     );
   }
@@ -533,13 +551,22 @@ class _CourierRows extends StatelessWidget {
             child: GlassListRow(
               leading: RowIcon(label: line.label.substring(0, 1).toUpperCase()),
               title: line.label,
-              subtitle:
-                  '${line.parcelCount} finished · '
-                  '${line.returnCount} returned',
+              subtitle: context.tr(
+                'courier.finishedReturned',
+                <String, Object?>{
+                  'finished': line.parcelCount,
+                  'returned': line.returnCount,
+                },
+              ),
               trailing: line.hasEnoughSample
-                  ? Text('${line.rateLabel} back', style: EcomsbdType.money)
-                  : const StatusChip(
-                      label: 'Not enough data',
+                  ? Text(
+                      context.tr('courier.backRate', <String, Object?>{
+                        'rate': line.rateLabel,
+                      }),
+                      style: EcomsbdType.money,
+                    )
+                  : StatusChip(
+                      label: context.tr('common.notEnoughData'),
                       tone: Tone.neutral,
                     ),
             ),
@@ -563,11 +590,11 @@ class _ProductCharts extends ConsumerWidget {
       spacing: EcomsbdSpacing.sm,
       children: <Widget>[
         PremiumChartCard(
-          title: 'Top products by profit',
-          subtitle: 'Not revenue · contribution profit',
+          title: context.tr('chart.topProducts'),
+          subtitle: context.tr('chart.topProductsSub'),
           child: ChartData<List<ProductLine>>(
             value: products,
-            emptyMessage: 'No delivered products in the last 30 days.',
+            emptyMessage: context.tr('chart.emptyNoDelivered'),
             isEmpty: (rows) => rows.isEmpty,
             builder: (rows) => charts.HorizontalBarChart(
               data: <charts.HorizontalBarDatum>[
@@ -582,8 +609,8 @@ class _ProductCharts extends ConsumerWidget {
           ),
         ),
         PremiumChartCard(
-          title: 'Return pressure',
-          subtitle: 'Where returns actually cost money',
+          title: context.tr('chart.returnPressure'),
+          subtitle: context.tr('chart.returnPressureSub'),
           trailing: returns.valueOrNull == null
               ? null
               : StatusChip(
@@ -594,7 +621,7 @@ class _ProductCharts extends ConsumerWidget {
                 ),
           child: ChartData<ReturnReport>(
             value: returns,
-            emptyMessage: 'No returns in the last 30 days.',
+            emptyMessage: context.tr('chart.emptyNoReturns'),
             isEmpty: (report) => report.returnCount == 0,
             builder: (report) => charts.HorizontalBarChart(
               accent: charts.BarAccent.red,
@@ -629,19 +656,13 @@ class _ActivityFeed extends ConsumerWidget {
     final items = notifications.items.take(3).toList();
 
     if (notifications.isLoading && items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: EcomsbdSpacing.lg),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const ContentLoader(minHeight: 150);
     }
     if (items.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.notifications_none_rounded,
-        title: 'Nothing needs you right now',
-        message:
-            'Alerts appear here when money is at risk — delivered parcels '
-            'that were never paid for, payments that came up short, parcels '
-            'stuck with a courier.',
+        title: context.tr('activity.nothingTitle'),
+        message: context.tr('activity.nothingBody'),
       );
     }
 
@@ -657,7 +678,7 @@ class _ActivityFeed extends ConsumerWidget {
               body: item.body,
               avatarLabel: _avatarFor(item.severity),
               status: StatusChip(
-                label: _severityLabel(item.severity),
+                label: _severityLabel(context, item.severity),
                 tone: _severityTone(item.severity),
               ),
             ),
@@ -673,13 +694,15 @@ class _ActivityFeed extends ConsumerWidget {
     NotificationSeverity.info => 'i',
   };
 
-  static String _severityLabel(NotificationSeverity severity) =>
-      switch (severity) {
-        NotificationSeverity.critical => 'Losing money',
-        NotificationSeverity.warning => 'At risk',
-        NotificationSeverity.action => 'Needs you',
-        NotificationSeverity.info => 'For info',
-      };
+  static String _severityLabel(
+    BuildContext context,
+    NotificationSeverity severity,
+  ) => switch (severity) {
+    NotificationSeverity.critical => context.tr('severity.critical'),
+    NotificationSeverity.warning => context.tr('severity.warning'),
+    NotificationSeverity.action => context.tr('severity.action'),
+    NotificationSeverity.info => context.tr('severity.info'),
+  };
 
   static Tone _severityTone(NotificationSeverity severity) =>
       switch (severity) {

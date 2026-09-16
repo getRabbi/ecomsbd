@@ -51,11 +51,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         child: SafeArea(
           child: ContentWidthLimit(
             child: RefreshIndicator(
+              edgeOffset: EcomsbdLayout.pushedRefreshOffset,
               onRefresh: controller.refresh,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   EcomsbdSpacing.page,
-                  0,
+                  EcomsbdLayout.pushedTopPadding,
                   EcomsbdSpacing.page,
                   EcomsbdSpacing.xxl,
                 ),

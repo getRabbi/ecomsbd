@@ -9,6 +9,8 @@ import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_locale.dart';
+import '../../l10n/app_strings.dart';
 import '../billing/plans_screen.dart';
 
 /// Says that what is on screen came off the device, and when it was true.
@@ -36,8 +38,9 @@ class StaleDataNotice extends StatelessWidget {
           const SizedBox(width: EcomsbdSpacing.sm),
           Expanded(
             child: Text(
-              'Saved data from ${formatRelative(fetchedAt)}. '
-              'It will refresh when you are back online.',
+              context.tr('stale.notice', <String, Object?>{
+                'when': formatRelative(fetchedAt),
+              }),
               style: EcomsbdType.caption.copyWith(color: Tone.info.ink),
             ),
           ),
@@ -49,7 +52,7 @@ class StaleDataNotice extends StatelessWidget {
                 minimumSize: const Size(0, EcomsbdTouch.minTarget),
                 textStyle: EcomsbdType.chip,
               ),
-              child: const Text('Retry'),
+              child: Text(context.tr('common.retry')),
             ),
         ],
       ),
@@ -71,23 +74,23 @@ class SyncBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (state) {
       LocalSyncState.synced => const SizedBox.shrink(),
-      LocalSyncState.localOnly => const StatusChip(
-        label: 'Not synced',
+      LocalSyncState.localOnly => StatusChip(
+        label: context.tr('sync.notSynced'),
         tone: Tone.warning,
         icon: Icons.cloud_upload_outlined,
       ),
-      LocalSyncState.syncing => const StatusChip(
-        label: 'Sending',
+      LocalSyncState.syncing => StatusChip(
+        label: context.tr('sync.sending'),
         tone: Tone.info,
         icon: Icons.sync_rounded,
       ),
-      LocalSyncState.conflict => const StatusChip(
-        label: 'Needs a choice',
+      LocalSyncState.conflict => StatusChip(
+        label: context.tr('sync.needsChoice'),
         tone: Tone.bad,
         icon: Icons.call_split_rounded,
       ),
-      LocalSyncState.failedValidation => const StatusChip(
-        label: 'Needs fixing',
+      LocalSyncState.failedValidation => StatusChip(
+        label: context.tr('sync.needsFixing'),
         tone: Tone.bad,
         icon: Icons.error_outline,
       ),
@@ -111,22 +114,22 @@ class ErrorStateCard extends StatelessWidget {
     if (error.isOffline) {
       return EmptyState(
         icon: Icons.cloud_off_rounded,
-        title: 'No connection',
-        message:
-            'Nothing is saved on this device for this list yet. '
-            'You can still create and edit — it will sync when you are online.',
-        actionLabel: onRetry == null ? null : 'Try again',
+        title: context.tr('common.noConnectionTitle'),
+        message: context.tr('error.offlineListBody'),
+        actionLabel: onRetry == null ? null : context.tr('common.tryAgain'),
         onAction: onRetry,
       );
     }
     return EmptyState(
       icon: Icons.error_outline,
-      title: 'Could not load',
+      title: context.tr('common.couldNotLoad'),
       message: error.displayMessage,
       // A retry is offered only when the server said one is safe. For anything
       // that could duplicate money or external work it says so, and the UI
       // respects that rather than deciding for itself (section 62).
-      actionLabel: error.retryable && onRetry != null ? 'Try again' : null,
+      actionLabel: error.retryable && onRetry != null
+          ? context.tr('common.tryAgain')
+          : null,
       onAction: error.retryable ? onRetry : null,
     );
   }
@@ -218,7 +221,7 @@ class PagedListBody<T> extends StatelessWidget {
                       foregroundColor: EcomsbdColors.ink,
                       textStyle: EcomsbdType.label,
                     ),
-                    child: const Text('Load more'),
+                    child: Text(context.tr('common.loadMore')),
                   ),
           ),
       ],
@@ -227,42 +230,33 @@ class PagedListBody<T> extends StatelessWidget {
 }
 
 /// `2 minutes ago`, `3 hours ago`, `10 Sep`.
+///
+/// Reads the selected language from [activeAppLocale] rather than taking a
+/// `BuildContext`: this is called from row builders and string interpolations
+/// across the app, and threading a context through all of them buys nothing.
+/// Changing language rebuilds the tree, so the next paint is already correct.
 String formatRelative(DateTime? timestamp) {
+  final strings = AppStrings(activeAppLocale);
   if (timestamp == null) {
-    return 'an unknown time';
+    return strings.t('common.unknownTime');
   }
   final delta = DateTime.now().toUtc().difference(timestamp.toUtc());
   if (delta.inMinutes < 1) {
-    return 'just now';
+    return strings.t('common.justNow');
   }
   if (delta.inMinutes < 60) {
-    return '${delta.inMinutes} minute${delta.inMinutes == 1 ? '' : 's'} ago';
+    return strings.plural('common.minutesAgo', delta.inMinutes);
   }
   if (delta.inHours < 24) {
-    return '${delta.inHours} hour${delta.inHours == 1 ? '' : 's'} ago';
+    return strings.plural('common.hoursAgo', delta.inHours);
   }
   if (delta.inDays < 7) {
-    return '${delta.inDays} day${delta.inDays == 1 ? '' : 's'} ago';
+    return strings.plural('common.daysAgo', delta.inDays);
   }
   // Dhaka time, so a seller reading "10 Sep" sees their own day.
   final dhaka = timestamp.toUtc().add(const Duration(hours: 6));
-  return '${dhaka.day} ${_months[dhaka.month - 1]}';
+  return '${dhaka.day} ${strings.t('month.${dhaka.month}')}';
 }
-
-const List<String> _months = <String>[
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
 
 /// The standard detail-screen chrome: a back pill and a title over the app's
 /// gradient, with content beneath.
@@ -293,7 +287,7 @@ class DetailScaffold extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   EcomsbdSpacing.md,
-                  EcomsbdSpacing.sm,
+                  EcomsbdLayout.pushedTopPadding,
                   EcomsbdSpacing.md,
                   EcomsbdSpacing.xs,
                 ),
@@ -302,7 +296,7 @@ class DetailScaffold extends StatelessWidget {
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
                       icon: const Icon(Icons.arrow_back_rounded),
-                      tooltip: 'Back',
+                      tooltip: context.tr('common.back'),
                       constraints: const BoxConstraints(
                         minWidth: EcomsbdTouch.minTarget,
                         minHeight: EcomsbdTouch.minTarget,
@@ -398,8 +392,8 @@ class ChartData<T> extends StatelessWidget {
             : Center(
                 child: Text(
                   error is ApiError && error.isOffline
-                      ? 'Not saved on this device yet.'
-                      : 'Could not load this.',
+                      ? context.tr('common.notSavedOnDevice')
+                      : context.tr('common.couldNotLoadThis'),
                   textAlign: TextAlign.center,
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
@@ -450,18 +444,18 @@ class PlanLockedNotice extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Row(
+            Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Icon(
+                const Icon(
                   Icons.lock_outline_rounded,
                   size: 18,
                   color: EcomsbdColors.muted,
                 ),
-                SizedBox(width: EcomsbdSpacing.xs),
+                const SizedBox(width: EcomsbdSpacing.xs),
                 Flexible(
                   child: Text(
-                    'Not included in your plan',
+                    context.tr('plan.lockedTitle'),
                     style: EcomsbdType.bodyStrong,
                   ),
                 ),
@@ -469,8 +463,7 @@ class PlanLockedNotice extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              'Your plan shows today’s figures. Upgrade for history and '
-              'breakdowns.',
+              context.tr('plan.lockedBody'),
               textAlign: TextAlign.center,
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
@@ -478,7 +471,7 @@ class PlanLockedNotice extends StatelessWidget {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const PlansScreen()),
               ),
-              child: const Text('See plans'),
+              child: Text(context.tr('plan.seePlans')),
             ),
           ],
         ),

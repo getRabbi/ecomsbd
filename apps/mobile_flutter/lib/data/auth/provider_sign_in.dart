@@ -21,12 +21,21 @@ abstract class ProviderSignIn {
 ApiError providerSignInError(
   SignInProvider provider, {
   bool cancelled = false,
+  String? detail,
 }) => ApiError(
   code:
       '${provider.name.toUpperCase()}_${cancelled ? 'CANCELLED' : 'UNAVAILABLE'}',
   messageBn: '',
-  messageEn: cancelled ? 'Sign-in cancelled.' : 'Sign-in unavailable.',
+  // Only a genuine user dismissal says "cancelled". Anything else keeps the
+  // provider's own words: a configuration rejection reported as a cancellation
+  // sends everyone looking at the wrong thing.
+  messageEn: cancelled
+      ? 'Sign-in cancelled.'
+      : detail == null || detail.isEmpty
+      ? 'Sign-in unavailable.'
+      : 'Google sign-in failed: $detail',
   retryable: true,
+  details: detail == null ? null : <String, dynamic>{'provider_error': detail},
 );
 
 class NativeProviderSignIn implements ProviderSignIn {
@@ -90,9 +99,13 @@ class NativeProviderSignIn implements ProviderSignIn {
       }
       return token;
     } on GoogleSignInException catch (error) {
+      final cancelled = error.code == GoogleSignInExceptionCode.canceled;
       throw providerSignInError(
         provider,
-        cancelled: error.code == GoogleSignInExceptionCode.canceled,
+        cancelled: cancelled,
+        detail: cancelled
+            ? null
+            : '${error.code.name}: ${error.description ?? ''}'.trim(),
       );
     } on SignInWithAppleAuthorizationException catch (error) {
       throw providerSignInError(

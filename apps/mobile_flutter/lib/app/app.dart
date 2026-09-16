@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/env.dart';
 import '../design/theme.dart';
+import '../l10n/app_locale.dart';
+import '../l10n/app_strings.dart';
 import 'router.dart';
 
 /// The application root.
@@ -12,11 +15,24 @@ class EcomsbdApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+
     return MaterialApp.router(
       // The locked product name. Shown in the Android task switcher.
       title: Env.appName,
       debugShowCheckedModeBanner: false,
       theme: buildEcomsbdTheme(),
+      // One selected language for the whole app, onboarding and auth included.
+      // Driven by the seller's choice rather than the system locale, so
+      // changing it takes effect on the next frame with no restart.
+      locale: locale.locale,
+      supportedLocales: const <Locale>[Locale('bn'), Locale('en')],
+      localizationsDelegates: const <LocalizationsDelegate<Object>>[
+        AppStrings.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // Master spec section 57 lists a dark-mode project as a V1 non-goal, so
       // the single light theme is used regardless of the system setting.
       themeMode: ThemeMode.light,

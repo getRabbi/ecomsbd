@@ -11,6 +11,7 @@ import '../../design/components/order_card.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import 'order_compose_screen.dart';
@@ -39,14 +40,16 @@ class OrdersScreen extends ConsumerStatefulWidget {
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   final TextEditingController _search = TextEditingController();
 
-  static const List<({String? status, String label})> _filters =
-      <({String? status, String label})>[
-        (status: null, label: 'All'),
-        (status: 'DRAFT', label: 'Draft'),
-        (status: 'CONFIRMED', label: 'Confirmed'),
-        (status: 'PACKED', label: 'Packed'),
-        (status: 'FULFILLMENT_STARTED', label: 'With courier'),
-        (status: 'COMPLETED', label: 'Completed'),
+  /// The status values are API contract and are never translated; only the
+  /// chip label the seller reads is.
+  static const List<({String? status, String labelKey})> _filters =
+      <({String? status, String labelKey})>[
+        (status: null, labelKey: 'orders.filter.all'),
+        (status: 'DRAFT', labelKey: 'orders.filter.draft'),
+        (status: 'CONFIRMED', labelKey: 'orders.filter.confirmed'),
+        (status: 'PACKED', labelKey: 'orders.filter.packed'),
+        (status: 'FULFILLMENT_STARTED', labelKey: 'orders.filter.withCourier'),
+        (status: 'COMPLETED', labelKey: 'orders.filter.completed'),
       ];
 
   @override
@@ -74,8 +77,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           saved.isQueued
               // Said plainly, because the seller cannot quote a number that
               // does not exist yet to a courier.
-              ? 'Saved on this phone. It will sync when you are back online.'
-              : 'Order ${saved.order.orderNumber} saved.',
+              ? context.tr('orders.savedOffline')
+              : context.tr('orders.savedNumber', <String, Object?>{
+                  'number': saved.order.orderNumber,
+                }),
         ),
       ),
     );
@@ -105,24 +110,26 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final controller = ref.read(orderListProvider.notifier);
     final pending = ref.watch(pendingMutationCountProvider).valueOrNull ?? 0;
     final isOffline = ref.watch(isOfflineProvider);
-    final topInset = MediaQuery.viewPaddingOf(context).top;
 
     return Stack(
       children: <Widget>[
         RefreshIndicator(
+          // Without this the spinner lands at y=0, behind the floating glass
+          // top bar, where the seller never sees it.
+          edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
           onRefresh: _sync,
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               EcomsbdSpacing.page,
-              topInset + EcomsbdTouch.minTarget + EcomsbdSpacing.lg,
+              EcomsbdLayout.shellTopPadding(context),
               EcomsbdSpacing.page,
               EcomsbdSpacing.bottomNavClearance,
             ),
             children: <Widget>[
-              const PageHeader(
-                eyebrow: 'Order → courier → COD → profit',
-                title: 'Orders',
-                description: 'Fast seller workflow, not an ERP table.',
+              PageHeader(
+                eyebrow: context.tr('orders.eyebrow'),
+                title: context.tr('orders.title'),
+                description: context.tr('orders.description'),
               ),
               if (isOffline) ...<Widget>[
                 OfflineBanner(pendingCount: pending, onRetry: _sync),
@@ -140,7 +147,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               ],
               CommerceSearchField(
                 controller: _search,
-                hint: 'Order number, name, or full number',
+                hint: context.tr('orders.searchHint'),
                 onChanged: controller.setSearch,
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
@@ -154,7 +161,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   itemBuilder: (context, index) {
                     final filter = _filters[index];
                     return FilterToggle(
-                      label: filter.label,
+                      label: context.tr(filter.labelKey),
                       selected: controller.status == filter.status,
                       onChanged: (_) => controller.setStatus(filter.status),
                     );
@@ -167,11 +174,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 onRetry: controller.refresh,
                 onLoadMore: controller.loadMore,
                 emptyIcon: Icons.receipt_long_outlined,
-                emptyTitle: 'No orders yet',
-                emptyMessage:
-                    'Type one in, or paste a message from Messenger and check '
-                    'what it found.',
-                emptyActionLabel: 'Add your first order',
+                emptyTitle: context.tr('orders.emptyTitle'),
+                emptyMessage: context.tr('orders.emptyBody'),
+                emptyActionLabel: context.tr('orders.emptyAction'),
                 onEmptyAction: _compose,
                 itemBuilder: (context, order) => SellerOrderCard(
                   order: order,
@@ -193,7 +198,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 onPressed: () => _compose(paste: true),
                 backgroundColor: Colors.white,
                 foregroundColor: EcomsbdColors.ink,
-                tooltip: 'Paste an order',
+                tooltip: context.tr('orders.pasteTooltip'),
                 child: const Icon(Icons.content_paste_rounded),
               ),
               const SizedBox(height: EcomsbdSpacing.xs),
@@ -203,7 +208,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 backgroundColor: EcomsbdColors.orange,
                 foregroundColor: Colors.white,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('New order'),
+                label: Text(context.tr('orders.newOrder')),
               ),
             ],
           ),
@@ -224,11 +229,11 @@ class SellerOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return OrderCard(
       reference: order.orderNumber == 'PENDING'
-          ? 'Not yet numbered'
+          ? context.tr('orders.notNumbered')
           : order.orderNumber,
       customerName: order.customerName?.isNotEmpty == true
           ? order.customerName!
-          : (order.customerPhoneMasked ?? 'Customer'),
+          : (order.customerPhoneMasked ?? context.tr('common.customer')),
       status: StatusChip(
         label: order.statusLabel,
         tone: orderStatusTone(order.status),
@@ -238,13 +243,22 @@ class SellerOrderCard extends StatelessWidget {
       itemSummary: order.itemSummary,
       onTap: onTap,
       facts: <OrderFact>[
-        OrderFact(label: 'COD', value: order.codAmount.format()),
         OrderFact(
-          label: 'Courier',
+          label: context.tr('orders.fact.cod'),
+          value: order.codAmount.format(),
+        ),
+        OrderFact(
+          label: context.tr('orders.fact.courier'),
           value: fulfillmentLabel(order.fulfillmentState),
         ),
-        OrderFact(label: 'Risk', value: riskLabel(order.riskState)),
-        OrderFact(label: 'Profit', value: profitLabel(order.profitState)),
+        OrderFact(
+          label: context.tr('orders.fact.risk'),
+          value: riskLabel(order.riskState),
+        ),
+        OrderFact(
+          label: context.tr('orders.fact.profit'),
+          value: profitLabel(order.profitState),
+        ),
       ],
     );
   }
@@ -260,10 +274,10 @@ class _PendingBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ProviderHealthBanner(
-      provider: '$count change${count == 1 ? '' : 's'} waiting',
-      detail: 'Saved on this phone and not on the server yet.',
+      provider: context.trPlural('orders.pendingWaiting', count),
+      detail: context.tr('orders.pendingDetail'),
       tone: Tone.warning,
-      actionLabel: 'Sync now',
+      actionLabel: context.tr('orders.syncNow'),
       onAction: onSync,
     );
   }

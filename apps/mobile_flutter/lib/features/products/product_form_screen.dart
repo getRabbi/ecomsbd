@@ -9,6 +9,7 @@ import '../../data/commerce/models.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import 'stock_adjustment_sheet.dart';
@@ -219,7 +220,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       children: <Widget>[
                         Expanded(
                           child: LabelledField(
-                            label: 'Cost (৳)',
+                            label: context.tr('field.cost'),
                             controller: _cost,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -234,7 +235,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         const SizedBox(width: EcomsbdSpacing.sm),
                         Expanded(
                           child: LabelledField(
-                            label: 'Selling price (৳)',
+                            label: context.tr('field.sellingPrice'),
                             controller: _price,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,

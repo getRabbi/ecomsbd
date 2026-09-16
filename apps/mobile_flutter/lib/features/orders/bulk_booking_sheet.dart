@@ -10,6 +10,7 @@ import '../../data/couriers/models.dart';
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 
 /// Book several orders at once.
 ///
@@ -232,9 +233,8 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
               color: Tone.warning.surface,
               borderRadius: BorderRadius.circular(EcomsbdRadii.sm),
             ),
-            child: const Text(
-              'Booking result নিশ্চিত হয়নি — আবার বুক করবেন না। '
-              'আগের চেষ্টা যাচাই করা হচ্ছে।',
+            child: Text(
+              context.tr('booking.ambiguousFallback'),
               style: EcomsbdType.caption,
             ),
           ),

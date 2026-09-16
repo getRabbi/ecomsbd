@@ -8,6 +8,8 @@ import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/language_picker.dart';
 import '../shared/responsive.dart';
 
 /// Phone sign-in.
@@ -46,10 +48,10 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
         ? '0${digits.substring(3)}'
         : digits;
     if (national.isEmpty) {
-      return 'মোবাইল নম্বর দিন';
+      return context.tr('auth.phoneRequired');
     }
     if (!RegExp(r'^01[3-9]\d{8}$').hasMatch(national)) {
-      return 'সঠিক বাংলাদেশি নম্বর দিন। যেমন: 01712345678';
+      return context.tr('auth.phoneInvalid');
     }
     return null;
   }
@@ -85,19 +87,21 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
             EcomsbdSpacing.xl,
           ),
           children: <Widget>[
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: BrandPill(showChevron: false),
+            const Row(
+              children: <Widget>[
+                BrandPill(showChevron: false),
+                Spacer(),
+                LanguageTogglePill(),
+              ],
             ),
             const SizedBox(height: EcomsbdSpacing.xxl),
-            const Text(
-              'আপনার COD-এর টাকা\nএক জায়গায়',
+            Text(
+              context.tr('auth.phoneHeadline'),
               style: EcomsbdType.pageTitle,
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
             Text(
-              'কুরিয়ারের কাছে কত টাকা আছে, কোনটা মেলেনি, আর প্রতিটি অর্ডারে '
-              'আসলে কত লাভ — সব এক অ্যাপে।',
+              context.tr('auth.phoneSubhead'),
               style: EcomsbdType.body.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.xl),
@@ -107,7 +111,10 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Text('মোবাইল নম্বর', style: EcomsbdType.label),
+                    Text(
+                      context.tr('auth.mobileNumber'),
+                      style: EcomsbdType.label,
+                    ),
                     const SizedBox(height: EcomsbdSpacing.xs),
                     TextFormField(
                       controller: _controller,
@@ -130,7 +137,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                     ),
                     const SizedBox(height: EcomsbdSpacing.sm),
                     Text(
-                      'বাংলা সংখ্যাও চলবে — ০১৭১২৩৪৫৬৭৮',
+                      context.tr('auth.banglaDigitsOk'),
                       style: EcomsbdType.caption.copyWith(
                         color: EcomsbdColors.muted,
                       ),
@@ -159,7 +166,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('কোড পাঠান'),
+                            : Text(context.tr('auth.sendCode')),
                       ),
                     ),
                   ],
@@ -168,7 +175,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
             ),
             const SizedBox(height: EcomsbdSpacing.lg),
             Text(
-              'কোড পাঠাতে আপনার নম্বর ব্যবহার করা হবে। কোনো পাসওয়ার্ড লাগবে না।',
+              context.tr('auth.phoneFooter'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               textAlign: TextAlign.center,
             ),

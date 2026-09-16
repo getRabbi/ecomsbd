@@ -11,6 +11,8 @@ import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/language_picker.dart';
 import '../billing/plans_screen.dart';
 import '../shared/responsive.dart';
 import 'account_security_screen.dart';
@@ -46,7 +48,7 @@ class SettingsScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
                 EcomsbdSpacing.page,
-                0,
+                EcomsbdLayout.pushedTopPadding,
                 EcomsbdSpacing.page,
                 EcomsbdSpacing.xxl,
               ),
@@ -56,10 +58,13 @@ class SettingsScreen extends ConsumerWidget {
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
                       icon: const Icon(Icons.arrow_back_rounded),
-                      tooltip: 'Back',
+                      tooltip: context.tr('common.back'),
                     ),
-                    const Expanded(
-                      child: Text('Settings', style: EcomsbdType.pageTitle),
+                    Expanded(
+                      child: Text(
+                        context.tr('settings.title'),
+                        style: EcomsbdType.pageTitle,
+                      ),
                     ),
                   ],
                 ),
@@ -74,12 +79,17 @@ class SettingsScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              shop?.name ?? 'Your shop',
+                              shop?.name ?? context.tr('common.yourShop'),
                               style: EcomsbdType.sectionTitle,
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Signed in as ${auth.profile?.role ?? 'OWNER'}',
+                              context.tr(
+                                'settings.signedInAs',
+                                <String, Object?>{
+                                  'role': auth.profile?.role ?? 'OWNER',
+                                },
+                              ),
                               style: EcomsbdType.caption.copyWith(
                                 color: EcomsbdColors.muted,
                               ),
@@ -91,10 +101,13 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
 
-                const SectionHeader(title: 'Plan'),
+                SectionHeader(title: context.tr('settings.sectionLanguage')),
+                const LanguageSettingRow(),
+
+                SectionHeader(title: context.tr('settings.sectionPlan')),
                 const _SubscriptionRow(),
 
-                const SectionHeader(title: 'Couriers'),
+                SectionHeader(title: context.tr('settings.sectionCouriers')),
                 Consumer(
                   builder: (context, ref, _) {
                     final account = ref.watch(
@@ -102,21 +115,27 @@ class SettingsScreen extends ConsumerWidget {
                     );
                     return _SettingsRow(
                       icon: Icons.local_shipping_outlined,
-                      title: 'Courier accounts',
+                      title: context.tr('settings.courierAccounts'),
                       // The subtitle carries the state rather than a generic
                       // label: "needs reconnect" is something a seller has to
                       // act on, and burying it one tap deeper means booking
                       // fails before they find out.
                       subtitle: account.maybeWhen(
                         data: (value) => switch (value?.status) {
-                          CourierAccountStatus.connected =>
-                            'Steadfast connected ${value?.maskedIdentifier ?? ''}'
-                                .trim(),
-                          CourierAccountStatus.needsReconnect =>
-                            'Steadfast needs reconnecting',
-                          _ => 'Connect Steadfast to book from ecomsbd',
+                          // "Steadfast" is a brand name and stays as it is in
+                          // both languages.
+                          CourierAccountStatus.connected => context.tr(
+                            'settings.steadfastConnected',
+                            <String, Object?>{
+                              'identifier': value?.maskedIdentifier ?? '',
+                            },
+                          ).trim(),
+                          CourierAccountStatus.needsReconnect => context.tr(
+                            'settings.steadfastReconnect',
+                          ),
+                          _ => context.tr('settings.connectSteadfast'),
                         },
-                        orElse: () => 'Book, track and reconcile automatically',
+                        orElse: () => context.tr('settings.courierDefault'),
                       ),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -127,11 +146,11 @@ class SettingsScreen extends ConsumerWidget {
                   },
                 ),
 
-                const SectionHeader(title: 'Account'),
+                SectionHeader(title: context.tr('settings.sectionAccount')),
                 _SettingsRow(
                   icon: Icons.devices_rounded,
-                  title: 'Devices and sessions',
-                  subtitle: 'See where you are signed in, and sign out',
+                  title: context.tr('settings.devices'),
+                  subtitle: context.tr('settings.devicesSub'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const AccountSecurityScreen(),
@@ -140,8 +159,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 _SettingsRow(
                   icon: Icons.notifications_none_rounded,
-                  title: 'Notifications',
-                  subtitle: 'What we interrupt you about',
+                  title: context.tr('settings.notifications'),
+                  subtitle: context.tr('settings.notificationsSub'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const NotificationSettingsScreen(),
@@ -150,8 +169,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 _SettingsRow(
                   icon: Icons.shield_outlined,
-                  title: 'Your data and privacy',
-                  subtitle: 'Export everything, or close your account',
+                  title: context.tr('settings.privacy'),
+                  subtitle: context.tr('settings.privacySub'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const DataPrivacyScreen(),
@@ -159,7 +178,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
 
-                const SectionHeader(title: 'Sync'),
+                SectionHeader(title: context.tr('settings.sectionSync')),
                 GlassCard(
                   child: Row(
                     children: <Widget>[
@@ -176,18 +195,23 @@ class SettingsScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              isOffline ? 'Offline' : 'Up to date',
+                              isOffline
+                                  ? context.tr('common.offline')
+                                  : context.tr('common.upToDate'),
                               style: EcomsbdType.bodyStrong,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               pending.when(
                                 data: (count) => count == 0
-                                    ? 'Everything on this phone has reached the server.'
-                                    : '$count change${count == 1 ? '' : 's'} '
-                                          'waiting to sync. Nothing is lost.',
-                                loading: () => 'Checking…',
-                                error: (_, __) => 'Could not read the queue.',
+                                    ? context.tr('settings.everythingSynced')
+                                    : context.trPlural(
+                                        'settings.changesWaiting',
+                                        count,
+                                      ),
+                                loading: () => context.tr('settings.checking'),
+                                error: (_, __) =>
+                                    context.tr('settings.couldNotReadQueue'),
                               ),
                               style: EcomsbdType.caption.copyWith(
                                 color: EcomsbdColors.muted,
@@ -200,16 +224,23 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
 
-                const SectionHeader(title: 'About'),
+                SectionHeader(title: context.tr('settings.sectionAbout')),
                 GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _AboutRow(label: 'App version', value: version ?? '—'),
+                      _AboutRow(
+                        label: context.tr('settings.appVersion'),
+                        value: version ?? '—',
+                      ),
                       const SizedBox(height: 6),
                       // Named so a support conversation can start with "which
-                      // server are you on?" rather than guessing.
-                      const _AboutRow(label: 'Server', value: Env.apiBaseUrl),
+                      // server are you on?" rather than guessing. The URL
+                      // itself is a technical identifier, never translated.
+                      _AboutRow(
+                        label: context.tr('settings.server'),
+                        value: Env.apiBaseUrl,
+                      ),
                     ],
                   ),
                 ),
@@ -234,21 +265,27 @@ class _SubscriptionRow extends ConsumerWidget {
 
     return _SettingsRow(
       icon: Icons.star_outline_rounded,
-      title: 'Subscription',
+      title: context.tr('settings.subscription'),
       subtitle: entitlements.when(
         data: (value) => switch (value.status) {
-          'GRACE' || 'PAST_DUE' => 'Payment problem — tap to fix',
-          'CANCEL_AT_PERIOD_END' => 'Ends soon',
-          _ => '${value.plan[0].toUpperCase()}${value.plan.substring(1)} plan',
+          // The status codes are API values and are matched, never shown.
+          'GRACE' || 'PAST_DUE' => context.tr('settings.paymentProblem'),
+          'CANCEL_AT_PERIOD_END' => context.tr('settings.endsSoon'),
+          _ => context.tr('settings.planName', <String, Object?>{
+            'plan': '${value.plan[0].toUpperCase()}${value.plan.substring(1)}',
+          }),
         },
-        loading: () => 'Loading…',
+        loading: () => context.tr('common.loading'),
         // Never guess. A screen that says "Free" because the network failed is
         // telling the seller something that may not be true.
-        error: (_, __) => 'Could not check your plan',
+        error: (_, __) => context.tr('settings.couldNotCheckPlan'),
       ),
       trailing: entitlements.maybeWhen(
         data: (value) => value.status == 'GRACE' || value.status == 'PAST_DUE'
-            ? const StatusChip(label: 'Action needed', tone: Tone.bad)
+            ? StatusChip(
+                label: context.tr('settings.actionNeeded'),
+                tone: Tone.bad,
+              )
             : null,
         orElse: () => null,
       ),
@@ -353,21 +390,18 @@ class _SignOutButton extends ConsumerWidget {
           final confirmed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Sign out of this device?'),
+              title: Text(context.tr('settings.signOutTitle')),
               // Said plainly: offline work is not lost, and a seller who has
               // just packed twelve parcels needs to know that before tapping.
-              content: const Text(
-                'Anything waiting to sync will be sent first. You can sign '
-                'back in with the same number.',
-              ),
+              content: Text(context.tr('settings.signOutBody')),
               actions: <Widget>[
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(context.tr('common.cancel')),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Sign out'),
+                  child: Text(context.tr('common.signOut')),
                 ),
               ],
             ),
@@ -377,7 +411,7 @@ class _SignOutButton extends ConsumerWidget {
           }
         },
         icon: const Icon(Icons.logout_rounded, size: 18),
-        label: const Text('Sign out'),
+        label: Text(context.tr('common.signOut')),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(0, EcomsbdTouch.minTarget),
           shape: const StadiumBorder(),
@@ -403,8 +437,9 @@ class ConnectionRequiredNotice extends StatelessWidget {
           const SizedBox(width: EcomsbdSpacing.sm),
           Expanded(
             child: Text(
-              '$what needs a connection. Nothing is saved on this phone for '
-              'it, because a stale answer here could be wrong.',
+              context.tr('settings.needsConnection', <String, Object?>{
+                'what': what,
+              }),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ),
@@ -424,7 +459,7 @@ class SettingsError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (error is ApiError && (error as ApiError).isOffline) {
-      return const ConnectionRequiredNotice(what: 'This');
+      return ConnectionRequiredNotice(what: context.tr('settings.thisWord'));
     }
     return GlassCard(
       child: Column(
@@ -433,12 +468,15 @@ class SettingsError extends StatelessWidget {
           Text(
             error is ApiError
                 ? (error as ApiError).displayMessage
-                : 'Could not load this.',
+                : context.tr('common.couldNotLoadThis'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           if (onRetry != null) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.sm),
-            TextButton(onPressed: onRetry, child: const Text('Try again')),
+            TextButton(
+              onPressed: onRetry,
+              child: Text(context.tr('common.tryAgain')),
+            ),
           ],
         ],
       ),

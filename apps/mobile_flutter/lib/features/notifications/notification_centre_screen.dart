@@ -10,6 +10,7 @@ import '../../design/components/cards.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
@@ -39,11 +40,12 @@ class NotificationCentreScreen extends ConsumerWidget {
         child: SafeArea(
           child: ContentWidthLimit(
             child: RefreshIndicator(
+              edgeOffset: EcomsbdLayout.pushedRefreshOffset,
               onRefresh: controller.refresh,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   EcomsbdSpacing.page,
-                  0,
+                  EcomsbdLayout.pushedTopPadding,
                   EcomsbdSpacing.page,
                   EcomsbdSpacing.xxl,
                 ),
@@ -53,16 +55,13 @@ class NotificationCentreScreen extends ConsumerWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(Icons.arrow_back_rounded),
-                        tooltip: 'Back',
+                        tooltip: context.tr('common.back'),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: PageHeader(
-                          eyebrow: 'Everything the app has told you',
-                          title: 'Notifications',
-                          description:
-                              'Kept here whether or not a push arrived, so '
-                              'nothing about your money depends on catching '
-                              'one.',
+                          eyebrow: context.tr('notif.eyebrow'),
+                          title: context.tr('notif.title'),
+                          description: context.tr('notif.description'),
                         ),
                       ),
                       if (unread > 0)
@@ -71,7 +70,7 @@ class NotificationCentreScreen extends ConsumerWidget {
                             await controller.markAllRead();
                             ref.invalidate(unreadNotificationCountProvider);
                           },
-                          child: const Text('Mark read'),
+                          child: Text(context.tr('common.markRead')),
                         ),
                     ],
                   ),
@@ -87,12 +86,12 @@ class NotificationCentreScreen extends ConsumerWidget {
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
                       FilterToggle(
-                        label: 'Everything',
+                        label: context.tr('notif.everything'),
                         selected: !controller.unreadOnly,
                         onChanged: (_) => controller.setUnreadOnly(false),
                       ),
                       FilterToggle(
-                        label: 'Unread',
+                        label: context.tr('notif.unread'),
                         selected: controller.unreadOnly,
                         onChanged: (selected) =>
                             controller.setUnreadOnly(selected),
@@ -106,12 +105,9 @@ class NotificationCentreScreen extends ConsumerWidget {
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.notifications_none_rounded,
                     emptyTitle: controller.unreadOnly
-                        ? 'Nothing unread'
-                        : 'Nothing needs you right now',
-                    emptyMessage:
-                        'Alerts appear here when money is at risk — delivered '
-                        'parcels that were never paid for, payments that came '
-                        'up short, parcels stuck with a courier.',
+                        ? context.tr('notif.nothingUnread')
+                        : context.tr('activity.nothingTitle'),
+                    emptyMessage: context.tr('activity.nothingBody'),
                     itemBuilder: (context, notification) => Padding(
                       padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
                       child: NotificationRow(
@@ -199,7 +195,7 @@ class NotificationRow extends StatelessWidget {
               const SizedBox(width: EcomsbdSpacing.xs),
               Flexible(
                 child: StatusChip(
-                  label: severityLabel(notification.severity),
+                  label: severityLabel(context, notification.severity),
                   tone: tone,
                 ),
               ),
@@ -236,12 +232,13 @@ Tone severityTone(NotificationSeverity severity) => switch (severity) {
   NotificationSeverity.info => Tone.neutral,
 };
 
-String severityLabel(NotificationSeverity severity) => switch (severity) {
-  NotificationSeverity.critical => 'Losing money',
-  NotificationSeverity.warning => 'At risk',
-  NotificationSeverity.action => 'Needs you',
-  NotificationSeverity.info => 'For info',
-};
+String severityLabel(BuildContext context, NotificationSeverity severity) =>
+    switch (severity) {
+      NotificationSeverity.critical => context.tr('severity.critical'),
+      NotificationSeverity.warning => context.tr('severity.warning'),
+      NotificationSeverity.action => context.tr('severity.action'),
+      NotificationSeverity.info => context.tr('severity.info'),
+    };
 
 /// The Friday summary, opened from its notification.
 ///
@@ -257,16 +254,22 @@ class WeeklySummarySheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = <(String, String)>[
-      ('Orders', '${payload['order_count'] ?? 0}'),
-      ('Delivered', '${payload['delivered_count'] ?? 0}'),
-      ('Returned', '${payload['return_count'] ?? 0}'),
-      ('Sales', _money(payload['sales_paisa'])),
-      ('Contribution profit', _money(payload['contribution_profit_paisa'])),
-      ('Return loss', _money(payload['return_loss_paisa'])),
-      ('Ad spend', _money(payload['ad_spend_paisa'])),
-      ('COD outstanding', _money(payload['cod_outstanding_paisa'])),
-      ('Overdue', _money(payload['overdue_paisa'])),
-      ('Open mismatches', '${payload['mismatch_count'] ?? 0}'),
+      (context.tr('week.orders'), '${payload['order_count'] ?? 0}'),
+      (context.tr('week.delivered'), '${payload['delivered_count'] ?? 0}'),
+      (context.tr('week.returned'), '${payload['return_count'] ?? 0}'),
+      (context.tr('week.sales'), _money(payload['sales_paisa'])),
+      (
+        context.tr('week.contributionProfit'),
+        _money(payload['contribution_profit_paisa']),
+      ),
+      (context.tr('week.returnLoss'), _money(payload['return_loss_paisa'])),
+      (context.tr('week.adSpend'), _money(payload['ad_spend_paisa'])),
+      (
+        context.tr('week.codOutstanding'),
+        _money(payload['cod_outstanding_paisa']),
+      ),
+      (context.tr('week.overdue'), _money(payload['overdue_paisa'])),
+      (context.tr('week.openMismatches'), '${payload['mismatch_count'] ?? 0}'),
     ];
 
     return Container(
@@ -287,7 +290,7 @@ class WeeklySummarySheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Text('Your week', style: EcomsbdType.sectionTitle),
+            Text(context.tr('notif.yourWeek'), style: EcomsbdType.sectionTitle),
             const SizedBox(height: 3),
             Text(
               '${payload['week_start'] ?? ''} to ${payload['week_end'] ?? ''}',
@@ -313,23 +316,23 @@ class WeeklySummarySheet extends StatelessWidget {
               ),
             const SizedBox(height: EcomsbdSpacing.sm),
             _Ranking(
-              title: 'Best product',
+              title: context.tr('week.bestProduct'),
               entry: payload['best_product'],
               note: payload['ranking_note'] as String?,
             ),
             _Ranking(
-              title: 'Worst product',
+              title: context.tr('week.worstProduct'),
               entry: payload['worst_product'],
               note: payload['ranking_note'] as String?,
             ),
             _Ranking(
-              title: 'Best courier',
+              title: context.tr('week.bestCourier'),
               entry: payload['best_courier'],
               note: payload['courier_note'] as String?,
               isRate: true,
             ),
             _Ranking(
-              title: 'Worst courier',
+              title: context.tr('week.worstCourier'),
               entry: payload['worst_courier'],
               note: payload['courier_note'] as String?,
               isRate: true,
@@ -373,9 +376,13 @@ class _Ranking extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: EcomsbdSpacing.xs),
       child: GlassListRow(
         title: title,
-        subtitle: parsed?.label ?? (note ?? 'Not enough data yet'),
+        subtitle:
+            parsed?.label ?? (note ?? context.tr('common.notEnoughDataYet')),
         trailing: parsed == null
-            ? const StatusChip(label: 'No rank yet', tone: Tone.neutral)
+            ? StatusChip(
+                label: context.tr('common.noRankYet'),
+                tone: Tone.neutral,
+              )
             : Text(
                 isRate
                     ? '${(parsed.value / 100).toStringAsFixed(1)}%'

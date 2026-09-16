@@ -10,6 +10,7 @@ import '../../data/commerce/orders_repository.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import 'duplicate_warning_sheet.dart';
@@ -530,7 +531,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                         child: _CheckThis(
                           show: _uncertain.contains('amount'),
                           child: LabelledField(
-                            label: 'COD to collect (৳)',
+                            label: context.tr('field.codToCollect'),
                             controller: _cod,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -552,7 +553,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                       const SizedBox(width: EcomsbdSpacing.sm),
                       Expanded(
                         child: LabelledField(
-                          label: 'Delivery fee (৳)',
+                          label: context.tr('field.deliveryFee'),
                           controller: _delivery,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
@@ -915,7 +916,7 @@ class _ItemRow extends StatelessWidget {
             const SizedBox(width: EcomsbdSpacing.sm),
             Expanded(
               child: LabelledField(
-                label: 'Unit price (৳)',
+                label: context.tr('field.unitPrice'),
                 controller: item.price,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,

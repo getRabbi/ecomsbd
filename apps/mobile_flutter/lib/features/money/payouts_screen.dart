@@ -14,6 +14,7 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
@@ -151,11 +152,12 @@ class _PayoutsScreenState extends ConsumerState<PayoutsScreen> {
         child: SafeArea(
           child: ContentWidthLimit(
             child: RefreshIndicator(
+              edgeOffset: EcomsbdLayout.pushedRefreshOffset,
               onRefresh: controller.refresh,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   EcomsbdSpacing.page,
-                  0,
+                  EcomsbdLayout.pushedTopPadding,
                   EcomsbdSpacing.page,
                   EcomsbdSpacing.xxl,
                 ),
@@ -539,7 +541,7 @@ class _ManualPayoutDialogState extends State<_ManualPayoutDialog> {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
-            label: 'Amount (৳)',
+            label: context.tr('field.amountTaka'),
             controller: _amount,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),

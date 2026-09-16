@@ -74,7 +74,13 @@ class GlassSurface extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(effectsModeProvider);
-    final blurred = mode == EffectsMode.full;
+    // A [blurSigma] of zero is a caller opting out of live blur for this
+    // surface. `GlassCard` does exactly that: it is the card used inside
+    // scrolling lists, and each BackdropFilter there forces a saveLayer and
+    // re-blurs everything behind it on every frame, which is the difference
+    // between a smooth scroll and a stuttering one. The fill is thickened
+    // instead, the same way the low-end fallback already does it.
+    final blurred = mode == EffectsMode.full && blurSigma > 0;
 
     // Without a live blur the surface has nothing behind it to pick up, so it
     // is made a little more opaque to keep the same perceived density.
@@ -92,9 +98,14 @@ class GlassSurface extends ConsumerWidget {
     );
 
     if (blurred) {
-      surface = BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: surface,
+      // The chrome that keeps its blur — top bar, bottom nav, sheets — gets a
+      // layer of its own so content scrolling past it does not drag the whole
+      // page into the blurred repaint.
+      surface = RepaintBoundary(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: surface,
+        ),
       );
     }
 

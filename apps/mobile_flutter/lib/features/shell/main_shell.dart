@@ -7,6 +7,7 @@ import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../home/home_screen.dart';
 import '../insights/insights_screen.dart';
 import '../menu/menu_overlay.dart';
@@ -33,6 +34,16 @@ class MainShell extends ConsumerStatefulWidget {
 class MainShellState extends ConsumerState<MainShell> {
   late MainDestination _current = widget.initialTab;
 
+  /// Tabs the seller has actually opened.
+  ///
+  /// An [IndexedStack] builds every child eagerly, so all four tabs used to
+  /// load their data during launch. Unopened tabs are a placeholder until
+  /// first use; opened ones stay mounted, which is what keeps scroll position
+  /// and half-entered forms alive across a tab switch.
+  late final Set<MainDestination> _opened = <MainDestination>{
+    widget.initialTab,
+  };
+
   static const List<MainDestination> _tabs = <MainDestination>[
     MainDestination.home,
     MainDestination.orders,
@@ -47,7 +58,10 @@ class MainShellState extends ConsumerState<MainShell> {
       _openMenu();
       return;
     }
-    setState(() => _current = destination);
+    setState(() {
+      _current = destination;
+      _opened.add(destination);
+    });
   }
 
   Future<void> _openMenu() async {
@@ -75,6 +89,24 @@ class MainShellState extends ConsumerState<MainShell> {
     }
   }
 
+  /// The body for one tab, or a placeholder if it has never been opened.
+  Widget _tabBody(MainDestination tab) {
+    if (!_opened.contains(tab)) {
+      return const SizedBox.shrink();
+    }
+    return switch (tab) {
+      MainDestination.home => HomeScreen(
+        onOpenMenu: _openMenu,
+        onNavigate: _navigateByName,
+      ),
+      MainDestination.orders => OrdersScreen(onNavigate: _navigateByName),
+      MainDestination.money => MoneyScreen(onNavigate: _navigateByName),
+      MainDestination.insights => const InsightsScreen(),
+      // Menu is an overlay, never a tab body.
+      MainDestination.menu => const SizedBox.shrink(),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final isHome = _current == MainDestination.home;
@@ -86,16 +118,16 @@ class MainShellState extends ConsumerState<MainShell> {
       topBar: GlassTopBar(
         leading: isHome
             ? BrandPill(onTap: _openMenu)
-            : BrandPill(label: _current.label, onTap: _openMenu),
+            : BrandPill(label: _current.labelIn(context), onTap: _openMenu),
         actions: <Widget>[
           GlassIconButton(
             icon: Icons.add_rounded,
-            tooltip: 'New order',
+            tooltip: context.tr('nav.newOrderTooltip'),
             onPressed: () => _select(MainDestination.orders),
           ),
           GlassIconButton(
             icon: Icons.search_rounded,
-            tooltip: 'Search ecomsbd',
+            tooltip: context.tr('nav.searchTooltip'),
             onPressed: _openSearch,
           ),
           _NotificationButton(
@@ -107,7 +139,7 @@ class MainShellState extends ConsumerState<MainShell> {
           ),
           GlassIconButton(
             icon: Icons.menu_rounded,
-            tooltip: 'Menu',
+            tooltip: context.tr('nav.menu'),
             onPressed: _openMenu,
           ),
         ],
@@ -116,12 +148,7 @@ class MainShellState extends ConsumerState<MainShell> {
       child: ContentWidthLimit(
         child: IndexedStack(
           index: _index,
-          children: <Widget>[
-            HomeScreen(onOpenMenu: _openMenu, onNavigate: _navigateByName),
-            OrdersScreen(onNavigate: _navigateByName),
-            MoneyScreen(onNavigate: _navigateByName),
-            const InsightsScreen(),
-          ],
+          children: <Widget>[for (final tab in _tabs) _tabBody(tab)],
         ),
       ),
     );
@@ -149,7 +176,11 @@ class _NotificationButton extends ConsumerWidget {
           icon: unread > 0
               ? Icons.notifications_active_rounded
               : Icons.notifications_none_rounded,
-          tooltip: unread > 0 ? '$unread unread' : 'Notifications',
+          tooltip: unread > 0
+              ? context.tr('nav.unreadTooltip', <String, Object?>{
+                  'count': unread,
+                })
+              : context.tr('nav.notificationsTooltip'),
           onPressed: onPressed,
         ),
         if (unread > 0)

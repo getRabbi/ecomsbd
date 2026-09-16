@@ -12,6 +12,7 @@ import '../../design/components/cards.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
 import 'cases_screen.dart';
@@ -34,22 +35,22 @@ class MoneyScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(moneySummaryProvider);
     final isOffline = ref.watch(isOfflineProvider);
-    final topInset = MediaQuery.viewPaddingOf(context).top;
 
     return RefreshIndicator(
+      edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
       onRefresh: () async => ref.invalidate(moneySummaryProvider),
       child: ListView(
         padding: EdgeInsets.fromLTRB(
           EcomsbdSpacing.page,
-          topInset + EcomsbdTouch.minTarget + EcomsbdSpacing.lg,
+          EcomsbdLayout.shellTopPadding(context),
           EcomsbdSpacing.page,
           EcomsbdSpacing.bottomNavClearance,
         ),
         children: <Widget>[
-          const PageHeader(
-            eyebrow: 'Courier → COD → payout → matched',
-            title: 'Money',
-            description: 'What the courier owes you, and what has arrived.',
+          PageHeader(
+            eyebrow: context.tr('money.eyebrow'),
+            title: context.tr('money.title'),
+            description: context.tr('money.description'),
           ),
           if (isOffline) ...<Widget>[
             const OfflineBanner(),
@@ -66,7 +67,7 @@ class MoneyScreen extends ConsumerWidget {
               else
                 EmptyState(
                   icon: Icons.error_outline,
-                  title: 'Could not load your money',
+                  title: context.tr('money.couldNotLoadTitle'),
                   message: '$error',
                 ),
             ],
@@ -93,29 +94,35 @@ class MoneyScreen extends ConsumerWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
       ],
       HeroMoneyCard(
-        eyebrow: 'With the courier now',
+        eyebrow: context.tr('money.withCourierNow'),
         amount: summary.outstanding,
-        subtitle:
-            '${summary.unpaidParcelCount} delivered parcel'
-            '${summary.unpaidParcelCount == 1 ? '' : 's'} not paid yet',
+        subtitle: context.trPlural(
+          'money.unpaidParcels',
+          summary.unpaidParcelCount,
+        ),
         // Settled money is exact — it came off a statement — so no estimate
         // marker (master spec section 123).
         quality: DataQuality.actual,
         trailing: summary.overdue.isZero
             ? null
             : StatusChip(
-                label: '${summary.overdue.formatCompact()} over a week',
+                label: context.tr('money.overAWeek', <String, Object?>{
+                  'amount': summary.overdue.formatCompact(),
+                }),
                 tone: Tone.bad,
                 icon: Icons.schedule,
               ),
         kpis: <HeroKpi>[
-          HeroKpi(label: 'Arrived', value: summary.settled.formatCompact()),
           HeroKpi(
-            label: 'Deducted',
+            label: context.tr('money.arrived'),
+            value: summary.settled.formatCompact(),
+          ),
+          HeroKpi(
+            label: context.tr('money.deducted'),
             value: summary.totalDeductions.formatCompact(),
           ),
           HeroKpi(
-            label: 'Needs you',
+            label: context.tr('money.needsYou'),
             value: '${summary.openCaseCount}',
             tone: summary.openCaseCount > 0 ? Tone.warning : null,
           ),
@@ -133,26 +140,26 @@ class MoneyScreen extends ConsumerWidget {
       ],
       if (!summary.unexplainedPayout.isZero) ...<Widget>[
         ProviderHealthBanner(
-          provider: '${summary.unexplainedPayout.format()} unexplained',
-          detail:
-              'Money arrived that has not been tied to a parcel yet. Open the '
-              'payout to match it.',
+          provider: context.tr('money.unexplained', <String, Object?>{
+            'amount': summary.unexplainedPayout.format(),
+          }),
+          detail: context.tr('money.unexplainedDetail'),
           tone: Tone.info,
-          actionLabel: 'Payouts',
+          actionLabel: context.tr('money.payouts'),
           onAction: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const PayoutsScreen()),
           ),
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
       ],
-      const SectionHeader(
-        title: 'How long it has been waiting',
-        subtitle: 'Outstanding COD by age',
+      SectionHeader(
+        title: context.tr('money.agingTitle'),
+        subtitle: context.tr('money.agingSub'),
       ),
       _AgingCard(bands: summary.aging, total: summary.outstanding),
-      const SectionHeader(
-        title: 'What the courier took',
-        subtitle: 'Charges deducted from your money',
+      SectionHeader(
+        title: context.tr('money.deductionsTitle'),
+        subtitle: context.tr('money.deductionsSub'),
       ),
       _DeductionsCard(summary: summary),
       const SizedBox(height: EcomsbdSpacing.md),
@@ -163,8 +170,8 @@ class MoneyScreen extends ConsumerWidget {
         children: <Widget>[
           QuickActionTile(
             icon: Icons.receipt_long_outlined,
-            title: 'Receivables',
-            subtitle: 'Parcel by parcel',
+            title: context.tr('money.receivables'),
+            subtitle: context.tr('money.receivablesSub'),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const ReceivablesScreen(),
@@ -173,8 +180,8 @@ class MoneyScreen extends ConsumerWidget {
           ),
           QuickActionTile(
             icon: Icons.account_balance_wallet_outlined,
-            title: 'Payouts',
-            subtitle: 'Statements and matching',
+            title: context.tr('money.payouts'),
+            subtitle: context.tr('money.payoutsSub'),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const PayoutsScreen()),
             ),
@@ -194,11 +201,10 @@ class _CasesBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ProviderHealthBanner(
-      provider: '$count thing${count == 1 ? '' : 's'} need you',
-      detail:
-          'Money that did not arrive, arrived short, or could not be placed.',
+      provider: context.trPlural('money.casesBanner', count),
+      detail: context.tr('money.casesDetail'),
       tone: Tone.warning,
-      actionLabel: 'Open',
+      actionLabel: context.tr('common.open'),
       onAction: onOpen,
     );
   }
@@ -213,18 +219,18 @@ class _AgingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (total.isZero) {
-      return const GlassCard(
+      return GlassCard(
         child: Row(
           children: <Widget>[
-            Icon(
+            const Icon(
               Icons.check_circle_outline,
               size: 20,
               color: EcomsbdColors.green,
             ),
-            SizedBox(width: EcomsbdSpacing.sm),
+            const SizedBox(width: EcomsbdSpacing.sm),
             Expanded(
               child: Text(
-                'Nothing is waiting. Every delivered parcel has been paid.',
+                context.tr('money.nothingWaiting'),
                 style: EcomsbdType.body,
               ),
             ),
@@ -240,11 +246,14 @@ class _AgingCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
               child: MoneyAgingRow(
-                // The band already reads "8-14 days"; the parcel count goes in
-                // the label so the row stays one line at 360dp.
-                label:
-                    '${band.label} · ${band.parcelCount} parcel'
-                    '${band.parcelCount == 1 ? '' : 's'}',
+                // The band already reads "8-14 days" and comes from the
+                // server; the parcel count goes in the label so the row stays
+                // one line at 360dp.
+                label: context.trPlural(
+                  'money.bandLabel',
+                  band.parcelCount,
+                  <String, Object?>{'band': band.label},
+                ),
                 amount: band.outstanding,
                 fraction: total.paisa == 0
                     ? 0
@@ -267,13 +276,25 @@ class _DeductionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <({String label, Money amount, bool unknown})>[
       (
-        label: 'Delivery charges',
+        label: context.tr('money.deduction.delivery'),
         amount: summary.courierCharge,
         unknown: false,
       ),
-      (label: 'COD fees', amount: summary.codFee, unknown: false),
-      (label: 'Return charges', amount: summary.returnCharge, unknown: false),
-      (label: 'Not explained', amount: summary.unknownDeduction, unknown: true),
+      (
+        label: context.tr('money.deduction.codFee'),
+        amount: summary.codFee,
+        unknown: false,
+      ),
+      (
+        label: context.tr('money.deduction.returnCharge'),
+        amount: summary.returnCharge,
+        unknown: false,
+      ),
+      (
+        label: context.tr('money.deduction.notExplained'),
+        amount: summary.unknownDeduction,
+        unknown: true,
+      ),
     ];
 
     return GlassCard(
@@ -304,8 +325,7 @@ class _DeductionsCard extends StatelessWidget {
             Text(
               // Master spec section 84: an unknown deduction stays visible
               // rather than being folded into "delivery charge".
-              'We could not tell what the courier took this for. It is shown '
-              'separately so you can ask them.',
+              context.tr('money.unknownNote'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.amber),
             ),
           ],
@@ -315,7 +335,7 @@ class _DeductionsCard extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Written off',
+                    context.tr('money.writtenOff'),
                     style: EcomsbdType.body.copyWith(color: EcomsbdColors.red),
                   ),
                 ),

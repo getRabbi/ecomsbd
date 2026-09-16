@@ -6,6 +6,8 @@ import '../../design/components/badges.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/language_picker.dart';
 import '../shared/responsive.dart';
 
 /// Shop onboarding.
@@ -34,18 +36,19 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
 
   String _category = 'CLOTHING';
 
-  static const List<({String value, String label})> _categories =
-      <({String value, String label})>[
-        (value: 'CLOTHING', label: 'কাপড় / ফ্যাশন'),
-        (value: 'ELECTRONICS', label: 'ইলেকট্রনিকস'),
-        (value: 'COSMETICS', label: 'কসমেটিকস'),
-        (value: 'FOOD', label: 'খাবার'),
-        (value: 'HOME', label: 'হোম / কিচেন'),
-        (value: 'JEWELLERY', label: 'জুয়েলারি'),
-        (value: 'BABY', label: 'বেবি'),
-        (value: 'BOOKS', label: 'বই'),
-        (value: 'OTHER', label: 'অন্যান্য'),
-      ];
+  /// The API's own category values. These are contract, not copy: only the
+  /// label the seller reads is translated, keyed off the value.
+  static const List<String> _categories = <String>[
+    'CLOTHING',
+    'ELECTRONICS',
+    'COSMETICS',
+    'FOOD',
+    'HOME',
+    'JEWELLERY',
+    'BABY',
+    'BOOKS',
+    'OTHER',
+  ];
 
   @override
   void dispose() {
@@ -102,15 +105,18 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
             EcomsbdSpacing.xl,
           ),
           children: <Widget>[
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: BrandPill(showChevron: false),
+            const Row(
+              children: <Widget>[
+                BrandPill(showChevron: false),
+                Spacer(),
+                LanguageTogglePill(),
+              ],
             ),
             const SizedBox(height: EcomsbdSpacing.xl),
-            const Text('আপনার শপ তৈরি করুন', style: EcomsbdType.pageTitle),
+            Text(context.tr('onboarding.title'), style: EcomsbdType.pageTitle),
             const SizedBox(height: EcomsbdSpacing.xs),
             Text(
-              'শুধু নামটা দিলেই শুরু করা যাবে। বাকি তথ্য পরেও যোগ করতে পারবেন।',
+              context.tr('onboarding.subtitle'),
               style: EcomsbdType.body.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.lg),
@@ -121,28 +127,31 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     _Field(
-                      label: 'শপের নাম',
+                      label: context.tr('onboarding.shopName'),
                       controller: _name,
                       hint: 'Noor Fashion',
                       required: true,
                       validator: (value) {
                         if ((value ?? '').trim().length < 2) {
-                          return 'শপের নাম দিন';
+                          return context.tr('onboarding.shopNameRequired');
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: EcomsbdSpacing.md),
-                    const Text('ব্যবসার ধরন', style: EcomsbdType.label),
+                    Text(
+                      context.tr('onboarding.businessType'),
+                      style: EcomsbdType.label,
+                    ),
                     const SizedBox(height: EcomsbdSpacing.xs),
                     DropdownButtonFormField<String>(
                       initialValue: _category,
                       items: <DropdownMenuItem<String>>[
                         for (final category in _categories)
                           DropdownMenuItem<String>(
-                            value: category.value,
+                            value: category,
                             child: Text(
-                              category.label,
+                              context.tr('onboarding.category.$category'),
                               style: EcomsbdType.body,
                             ),
                           ),
@@ -152,7 +161,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                     ),
                     const SizedBox(height: EcomsbdSpacing.md),
                     _Field(
-                      label: 'পিকআপ ঠিকানা',
+                      label: context.tr('onboarding.pickupAddress'),
                       controller: _address,
                       hint: 'House 12, Road 3, Mirpur 10, Dhaka',
                       maxLines: 2,
@@ -163,7 +172,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                       children: <Widget>[
                         Expanded(
                           child: _Field(
-                            label: 'জেলা',
+                            label: context.tr('onboarding.district'),
                             controller: _district,
                             hint: 'Dhaka',
                           ),
@@ -171,7 +180,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                         const SizedBox(width: EcomsbdSpacing.sm),
                         Expanded(
                           child: _Field(
-                            label: 'এলাকা',
+                            label: context.tr('onboarding.area'),
                             controller: _area,
                             hint: 'Mirpur',
                           ),
@@ -180,7 +189,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                     ),
                     const SizedBox(height: EcomsbdSpacing.md),
                     _Field(
-                      label: 'পিকআপ যোগাযোগ নম্বর',
+                      label: context.tr('onboarding.pickupPhone'),
                       controller: _phone,
                       hint: '01712345678',
                       keyboardType: TextInputType.phone,
@@ -214,7 +223,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('শপ তৈরি করুন'),
+                            : Text(context.tr('onboarding.createShop')),
                       ),
                     ),
                   ],
@@ -260,7 +269,7 @@ class _Field extends StatelessWidget {
             if (!required) ...<Widget>[
               const SizedBox(width: EcomsbdSpacing.xs),
               Text(
-                'ঐচ্ছিক',
+                context.tr('common.optional'),
                 style: EcomsbdType.caption.copyWith(
                   color: EcomsbdColors.muted2,
                 ),
@@ -310,21 +319,23 @@ class _ManualModeNote extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Row(
+                Row(
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        'কুরিয়ার এখন যোগ করতে হবে না',
+                        context.tr('onboarding.manualTitle'),
                         style: EcomsbdType.bodyStrong,
                       ),
                     ),
-                    StatusChip(label: 'Manual mode', tone: Tone.good),
+                    StatusChip(
+                      label: context.tr('onboarding.manualMode'),
+                      tone: Tone.good,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'অর্ডার, ট্র্যাকিং আর পেআউট স্টেটমেন্ট দিয়ে পুরো হিসাব '
-                  'ম্যানুয়ালি চালানো যাবে। API পরে যুক্ত করলেই হবে।',
+                  context.tr('onboarding.manualBody'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),

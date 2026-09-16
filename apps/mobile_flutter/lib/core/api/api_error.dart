@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../l10n/app_locale.dart';
+
 /// Stable machine codes returned by the API.
 ///
 /// Mirrors `backend/app/core/errors.py`. Values are part of the contract: an
@@ -46,10 +48,11 @@ class ApiErrorCode {
 
 /// A typed API failure.
 ///
-/// The server sends a Bangla message with every error, so the app displays
-/// [messageBn] rather than inventing its own copy — the wording of a money
-/// error is a product decision that belongs on the server (master spec
-/// section 46).
+/// The server sends both a Bangla and an English message with every error, so
+/// the app displays one of those rather than inventing its own copy — the
+/// wording of a money error is a product decision that belongs on the server
+/// (master spec section 46). Which one is shown follows the language the
+/// seller selected.
 @immutable
 class ApiError implements Exception {
   const ApiError({
@@ -128,8 +131,16 @@ class ApiError implements Exception {
   /// Remaining OTP attempts, when the server reported them.
   int? get attemptsRemaining => details?['attempts_remaining'] as int?;
 
-  /// Seller-facing message. Bangla-first (master spec section 52).
-  String get displayMessage => messageBn.isNotEmpty ? messageBn : messageEn;
+  /// Seller-facing message, in the selected language.
+  ///
+  /// Falls back to the other language rather than showing nothing: an error
+  /// the server only worded in one language is still better than a blank.
+  String get displayMessage {
+    final preferred = activeAppLocale == AppLocale.en ? messageEn : messageBn;
+    if (preferred.isNotEmpty) return preferred;
+    final fallback = activeAppLocale == AppLocale.en ? messageBn : messageEn;
+    return fallback;
+  }
 
   @override
   String toString() => 'ApiError($code, $messageEn, ref=$referenceId)';

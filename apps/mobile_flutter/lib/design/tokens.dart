@@ -306,3 +306,37 @@ class EcomsbdTouch {
   /// Height of the floating bottom navigation bar.
   static const double bottomNavHeight = 74;
 }
+
+/// Page-level layout metrics.
+///
+/// The floating top bar is painted in an overlay rather than in the layout
+/// flow (see `EcomsbdScaffold`), so a scrolling page has to reserve its height
+/// itself. Screens each reserved `viewPadding.top + minTarget + lg`, which is
+/// 22dp short of the bar's real height and left every page title tucked under
+/// the glass. The measurement lives here now, so one value moves them all.
+class EcomsbdLayout {
+  const EcomsbdLayout._();
+
+  /// Height of `GlassTopBar`: a 48dp pill plus its 9/13 vertical padding.
+  static const double topBarHeight =
+      EcomsbdTouch.minTarget + EcomsbdSpacing.sm + EcomsbdSpacing.md;
+
+  /// Breathing room between the top bar and the first line of a page.
+  static const double headerGap = EcomsbdSpacing.lg;
+
+  /// Top padding for a shell tab, whose content scrolls under the top bar.
+  static double shellTopPadding(BuildContext context) =>
+      MediaQuery.viewPaddingOf(context).top + topBarHeight + headerGap;
+
+  /// Where a shell tab's pull-to-refresh spinner belongs: clear of the bar,
+  /// not behind it.
+  static double shellRefreshOffset(BuildContext context) =>
+      MediaQuery.viewPaddingOf(context).top + topBarHeight;
+
+  /// Top padding for a pushed screen, which sits inside a `SafeArea` and
+  /// carries its own back control rather than the floating bar.
+  static const double pushedTopPadding = EcomsbdSpacing.md;
+
+  /// A pushed screen's refresh spinner, clear of its in-scroll header row.
+  static const double pushedRefreshOffset = EcomsbdSpacing.sm;
+}

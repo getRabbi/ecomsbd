@@ -44,7 +44,7 @@ class DataPrivacyScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
                 EcomsbdSpacing.page,
-                0,
+                EcomsbdLayout.pushedTopPadding,
                 EcomsbdSpacing.page,
                 EcomsbdSpacing.xxl,
               ),

@@ -7,6 +7,8 @@ import '../../data/auth/provider_sign_in.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
+import '../../l10n/language_picker.dart';
 import '../shared/responsive.dart';
 import 'auth_error.dart';
 
@@ -47,10 +49,10 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
   bool get _reset => widget.mode == EmailAuthMode.resetPassword;
 
   String get _title => switch (widget.mode) {
-    EmailAuthMode.login => 'Welcome back',
-    EmailAuthMode.register => 'Create account',
-    EmailAuthMode.forgotPassword => 'Forgot password',
-    EmailAuthMode.resetPassword => 'Reset password',
+    EmailAuthMode.login => context.tr('auth.welcomeBack'),
+    EmailAuthMode.register => context.tr('auth.createAccount'),
+    EmailAuthMode.forgotPassword => context.tr('auth.forgotPassword'),
+    EmailAuthMode.resetPassword => context.tr('auth.resetPassword'),
   };
 
   @override
@@ -92,7 +94,9 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
     final state = ref.watch(authControllerProvider);
     final invalidResetLink = _reset && (widget.resetToken?.isEmpty ?? true);
     final title = _completed
-        ? (_forgot ? 'Check your email' : 'Password updated')
+        ? (_forgot
+              ? context.tr('auth.checkYourEmail')
+              : context.tr('auth.passwordUpdated'))
         : _title;
     return AuthPage(
       title: title,
@@ -100,19 +104,19 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
         if (_completed) ...[
           Text(
             _forgot
-                ? 'If an account uses this email, you’ll receive a password reset link. Open it to choose a new password, then return here to sign in.'
-                : 'Your password has been reset. Sign in with your new password.',
+                ? context.tr('auth.resetSentBody')
+                : context.tr('auth.resetDoneBody'),
           ),
           const SizedBox(height: EcomsbdSpacing.lg),
           TextButton(
             onPressed: widget.onSignIn,
-            child: const Text('Back to Sign In'),
+            child: Text(context.tr('auth.backToSignIn')),
           ),
         ] else if (invalidResetLink) ...[
-          const Text('This reset link is incomplete. Request a new one.'),
+          Text(context.tr('auth.resetLinkIncomplete')),
           TextButton(
             onPressed: widget.onForgotPassword,
-            child: const Text('Forgot password'),
+            child: Text(context.tr('auth.forgotPassword')),
           ),
         ] else ...[
           if (_login) ...[
@@ -120,7 +124,7 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
               onPressed: state.isBusy
                   ? null
                   : () => _provider(SignInProvider.google),
-              child: const Text('Continue with Google'),
+              child: Text(context.tr('auth.continueWithGoogle')),
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
             if (Env.appleSignInEnabled)
@@ -129,17 +133,15 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                     ? null
                     : () => _provider(SignInProvider.apple),
                 icon: const Icon(Icons.apple),
-                label: const Text('Continue with Apple'),
+                label: Text(context.tr('auth.continueWithApple')),
               ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: EcomsbdSpacing.md),
-              child: Center(child: Text('or sign in with email')),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: EcomsbdSpacing.md),
+              child: Center(child: Text(context.tr('auth.orSignInWithEmail'))),
             ),
           ],
           if (_forgot) ...[
-            const Text(
-              'Enter your account email to request a password reset link.',
-            ),
+            Text(context.tr('auth.forgotIntro')),
             const SizedBox(height: EcomsbdSpacing.md),
           ],
           AutofillGroup(
@@ -160,13 +162,15 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                       textInputAction: _forgot
                           ? TextInputAction.done
                           : TextInputAction.next,
-                      decoration: const InputDecoration(labelText: 'Email'),
+                      decoration: InputDecoration(
+                        labelText: context.tr('auth.email'),
+                      ),
                       validator: (value) =>
                           RegExp(
                             r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                           ).hasMatch(value?.trim() ?? '')
                           ? null
-                          : 'Enter a valid email address.',
+                          : context.tr('auth.emailInvalid'),
                       onFieldSubmitted: _forgot ? (_) => _submit() : null,
                     ),
                     const SizedBox(height: EcomsbdSpacing.md),
@@ -188,10 +192,16 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                           ? TextInputAction.done
                           : TextInputAction.next,
                       decoration: InputDecoration(
-                        labelText: _reset ? 'New password' : 'Password',
-                        helperText: _login ? null : 'Use 10–200 characters.',
+                        labelText: _reset
+                            ? context.tr('auth.newPassword')
+                            : context.tr('auth.password'),
+                        helperText: _login
+                            ? null
+                            : context.tr('auth.passwordRule'),
                         suffixIcon: IconButton(
-                          tooltip: _obscure ? 'Show password' : 'Hide password',
+                          tooltip: _obscure
+                              ? context.tr('auth.showPassword')
+                              : context.tr('auth.hidePassword'),
                           onPressed: () => setState(() => _obscure = !_obscure),
                           icon: Icon(
                             _obscure
@@ -202,11 +212,11 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Enter your password.';
+                          return context.tr('auth.enterPassword');
                         }
                         if (!_login &&
                             (value.length < 10 || value.length > 200)) {
-                          return 'Use 10–200 characters.';
+                          return context.tr('auth.passwordRule');
                         }
                         return null;
                       },
@@ -223,12 +233,12 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                         enableSuggestions: false,
                         autofillHints: const [AutofillHints.newPassword],
                         textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm password',
+                        decoration: InputDecoration(
+                          labelText: context.tr('auth.confirmPassword'),
                         ),
                         validator: (value) => value == _password.text
                             ? null
-                            : 'Passwords do not match.',
+                            : context.tr('auth.passwordsMismatch'),
                         onFieldSubmitted: (_) => _submit(),
                       ),
                     ],
@@ -255,9 +265,9 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                           )
                         : Text(
                             _login
-                                ? 'Sign In'
+                                ? context.tr('auth.signIn')
                                 : _forgot
-                                ? 'Send reset link'
+                                ? context.tr('auth.sendResetLink')
                                 : _title,
                           ),
                   ),
@@ -268,21 +278,21 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
           if (_login) ...[
             TextButton(
               onPressed: state.isBusy ? null : widget.onCreateAccount,
-              child: const Text('Create account'),
+              child: Text(context.tr('auth.createAccount')),
             ),
             TextButton(
               onPressed: state.isBusy ? null : widget.onForgotPassword,
-              child: const Text('Forgot password'),
+              child: Text(context.tr('auth.forgotPassword')),
             ),
             if (Env.phoneOtpLoginEnabled)
               TextButton(
                 onPressed: state.isBusy ? null : widget.onPhoneLogin,
-                child: const Text('Sign in with phone'),
+                child: Text(context.tr('auth.signInWithPhone')),
               ),
           ] else
             TextButton(
               onPressed: state.isBusy ? null : widget.onSignIn,
-              child: const Text('Back to Sign In'),
+              child: Text(context.tr('auth.backToSignIn')),
             ),
         ],
       ],
@@ -298,23 +308,49 @@ class AuthPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => EcomsbdScaffold(
     child: ContentWidthLimit(
-      child: ListView(
-        padding: const EdgeInsets.all(EcomsbdSpacing.lg),
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: BrandPill(showChevron: false),
-          ),
-          const SizedBox(height: EcomsbdSpacing.xl),
-          Text(title, style: EcomsbdType.pageTitle),
-          const SizedBox(height: EcomsbdSpacing.lg),
-          StrongGlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
+      // LayoutBuilder measures the viewport the scaffold actually left us —
+      // inside the status-bar safe area, and shorter again once the keyboard
+      // is open. The auth block is centred in that, so it balances on a short
+      // screen and on a tall one without a single fixed offset.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const gutter = EcomsbdSpacing.lg;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(gutter),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - gutter * 2,
+              ),
+              child: Column(
+                // Centre the block; it grows past the viewport and scrolls
+                // when the copy is long or the keyboard takes the bottom half.
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Branding stays at the top of the auth content, with the
+                  // language control beside it: a seller has to be able to
+                  // switch language before they have an account.
+                  const Row(
+                    children: [
+                      BrandPill(showChevron: false),
+                      Spacer(),
+                      LanguageTogglePill(),
+                    ],
+                  ),
+                  const SizedBox(height: EcomsbdSpacing.xl),
+                  Text(title, style: EcomsbdType.pageTitle),
+                  const SizedBox(height: EcomsbdSpacing.lg),
+                  StrongGlassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: children,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     ),
   );

@@ -11,6 +11,7 @@ import '../../core/api/api_error.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/responsive.dart';
 
 /// OTP verification.
@@ -130,17 +131,21 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
       ),
       child: ContentWidthLimit(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(
+          // The back pill floats over this content, so the page reserves the
+          // bar's real height from the shared metrics rather than guessing.
+          padding: EdgeInsets.fromLTRB(
             EcomsbdSpacing.lg,
-            EcomsbdTouch.minTarget + EcomsbdSpacing.xl,
+            EcomsbdLayout.shellTopPadding(context),
             EcomsbdSpacing.lg,
             EcomsbdSpacing.xl,
           ),
           children: <Widget>[
-            const Text('কোড দিন', style: EcomsbdType.pageTitle),
+            Text(context.tr('otp.title'), style: EcomsbdType.pageTitle),
             const SizedBox(height: EcomsbdSpacing.xs),
             Text(
-              '${widget.maskedPhone} নম্বরে ৬ সংখ্যার কোড পাঠানো হয়েছে।',
+              context.tr('otp.sentTo', <String, Object?>{
+                'phone': widget.maskedPhone,
+              }),
               style: EcomsbdType.body.copyWith(color: EcomsbdColors.muted),
             ),
             const SizedBox(height: EcomsbdSpacing.xl),
@@ -192,7 +197,7 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('যাচাই করুন'),
+                          : Text(context.tr('otp.verify')),
                     ),
                   ),
                   const SizedBox(height: EcomsbdSpacing.sm),
@@ -205,8 +210,10 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
                       ),
                       child: Text(
                         _resendIn > 0
-                            ? 'আবার কোড চান $_resendIn সেকেন্ড পরে'
-                            : 'নম্বর বদলান বা আবার কোড নিন',
+                            ? context.tr('otp.resendIn', <String, Object?>{
+                                'count': _resendIn,
+                              })
+                            : context.tr('otp.changeNumber'),
                         style: EcomsbdType.label,
                       ),
                     ),
@@ -262,7 +269,7 @@ class _OtpError extends StatelessWidget {
           if (remaining != null) ...<Widget>[
             const SizedBox(height: 4),
             Text(
-              'আর $remaining বার চেষ্টা করতে পারবেন।',
+              context.trPlural('otp.attemptsRemaining', remaining),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.red),
             ),
           ],

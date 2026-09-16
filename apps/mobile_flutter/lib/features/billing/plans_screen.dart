@@ -38,6 +38,7 @@ class PlansScreen extends ConsumerWidget {
         child: SafeArea(
           child: ContentWidthLimit(
             child: RefreshIndicator(
+              edgeOffset: EcomsbdLayout.pushedRefreshOffset,
               onRefresh: () async =>
                   ref.refresh(billingOverviewProvider.future),
               child: overview.when(
@@ -113,7 +114,7 @@ class _Content extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         EcomsbdSpacing.page,
-        0,
+        EcomsbdLayout.pushedTopPadding,
         EcomsbdSpacing.page,
         EcomsbdSpacing.xxl,
       ),
