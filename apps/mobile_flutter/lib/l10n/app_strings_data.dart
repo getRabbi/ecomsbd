@@ -1167,11 +1167,13 @@ const Map<String, String> _authErrEn = <String, String>{
       'That email and password do not match. Please try again.',
   'autherr.offline':
       'No internet connection. Check your connection and try again.',
-  // Android reports a dismissal and a rejected OAuth registration
-  // identically, so this must not accuse the seller of cancelling.
+  // Android collapses a dismissal, a rejected OAuth client and a failed
+  // Google account reauth into the same code, so this copy names no
+  // cause: observed on device as '[16] Account reauth failed' while the
+  // OAuth client was correctly registered.
   'autherr.googleIncomplete':
-      'Google sign-in did not finish. If you did not close it yourself, this '
-      'app is not registered for Google sign-in yet — please use email.',
+      'Google sign-in did not finish. You can try again, or sign in '
+      'with your email.',
   'autherr.googleCancelled': 'Google sign-in was cancelled. You can try again.',
   'autherr.appleCancelled': 'Apple sign-in was cancelled. You can try again.',
   'autherr.googleUnavailable':
@@ -1204,9 +1206,8 @@ const Map<String, String> _authErrBn = <String, String>{
       'এই ইমেইল আর পাসওয়ার্ড মিলছে না। আবার চেষ্টা করুন।',
   'autherr.offline': 'ইন্টারনেট সংযোগ নেই। সংযোগ দেখে আবার চেষ্টা করুন।',
   'autherr.googleIncomplete':
-      'Google সাইন ইন শেষ হয়নি। আপনি নিজে বন্ধ না করে থাকলে বুঝতে হবে এই '
-      'অ্যাপটি এখনও Google সাইন ইনের জন্য রেজিস্টার করা হয়নি — আপাতত ইমেইল '
-      'দিয়ে সাইন ইন করুন।',
+      'Google সাইন ইন শেষ হয়নি। আবার চেষ্টা করতে পারেন, বা ইমেইল দিয়ে '
+      'সাইন ইন করুন।',
   'autherr.googleCancelled':
       'Google সাইন ইন বাতিল হয়েছে। আবার চেষ্টা করতে পারেন।',
   'autherr.appleCancelled':
