@@ -5,6 +5,7 @@ import '../glass.dart';
 import '../tokens.dart';
 import 'badges.dart';
 import 'surfaces.dart';
+import '../../l10n/app_strings.dart';
 
 /// One figure inside [HeroMoneyCard].
 class HeroKpi {
@@ -381,16 +382,18 @@ class AttentionCard extends StatelessWidget {
   const AttentionCard({
     required this.items,
     super.key,
-    this.title = 'Needs attention',
-    this.subtitle = 'Only issues that can cost money or require action',
+    this.title,
+    this.subtitle,
     this.actionLabel,
     this.onAction,
     this.side,
   });
 
   final List<AttentionItem> items;
-  final String title;
-  final String subtitle;
+
+  /// Both default to the localized "needs attention" heading.
+  final String? title;
+  final String? subtitle;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -406,8 +409,8 @@ class AttentionCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           SectionHeader(
-            title: title,
-            subtitle: subtitle,
+            title: title ?? context.tr('attention.title'),
+            subtitle: subtitle ?? context.tr('attention.subtitle'),
             actionLabel: actionLabel,
             onAction: onAction,
           ),

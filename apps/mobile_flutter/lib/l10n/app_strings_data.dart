@@ -27,6 +27,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._otpBn,
   ..._fieldsBn,
   ..._authErrBn,
+  ..._componentsBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -43,6 +44,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._otpEn,
   ..._fieldsEn,
   ..._authErrEn,
+  ..._componentsEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -1230,4 +1232,55 @@ const Map<String, String> _authErrBn = <String, String>{
   'autherr.forbidden':
       'এই অ্যাকাউন্ট দিয়ে সাইন ইন করা যাবে না। সাপোর্টে যোগাযোগ করুন।',
   'autherr.generic': 'সাইন ইন সম্পূর্ণ করা যায়নি। আবার চেষ্টা করুন।',
+};
+
+// --------------------------------------------------------------------------- //
+// Shared components: hero, attention card, badges, chart empty state
+// --------------------------------------------------------------------------- //
+
+const Map<String, String> _componentsEn = <String, String>{
+  'home.heroEyebrow': 'TODAY · MONEY CONTROL',
+  'attention.title': 'Needs attention',
+  'attention.subtitle': 'Only issues that can cost money or require action',
+  'chart.notEnoughHistory': 'Not enough history yet',
+  // Risk wording is about the order, never the person (master spec 130).
+  'risk.low': 'Low risk',
+  'risk.medium': 'Medium risk',
+  'risk.high': 'High risk',
+  'risk.unknown': 'No history',
+  'risk.lowShort': 'Low',
+  'risk.mediumShort': 'Medium',
+  'risk.highShort': 'High',
+  'risk.unknownShort': 'None',
+  'provider.connected': 'Connected',
+  'provider.notConnected': 'Not connected',
+  'provider.manualOnly': 'Manual only',
+  'provider.degraded': 'Degraded',
+  'quality.actual': 'Actual',
+  'quality.estimated': 'Estimated',
+  'quality.missing': 'Missing cost',
+  'quality.unreconciled': 'Unreconciled',
+};
+
+const Map<String, String> _componentsBn = <String, String>{
+  'home.heroEyebrow': 'আজ · টাকার নিয়ন্ত্রণ',
+  'attention.title': 'যা দেখতে হবে',
+  'attention.subtitle': 'যেসব বিষয়ে টাকা যেতে পারে বা ব্যবস্থা নিতে হবে',
+  'chart.notEnoughHistory': 'এখনও যথেষ্ট হিসাব জমা হয়নি',
+  'risk.low': 'কম ঝুঁকি',
+  'risk.medium': 'মাঝারি ঝুঁকি',
+  'risk.high': 'বেশি ঝুঁকি',
+  'risk.unknown': 'রেকর্ড নেই',
+  'risk.lowShort': 'কম',
+  'risk.mediumShort': 'মাঝারি',
+  'risk.highShort': 'বেশি',
+  'risk.unknownShort': 'নেই',
+  'provider.connected': 'যুক্ত আছে',
+  'provider.notConnected': 'যুক্ত নেই',
+  'provider.manualOnly': 'শুধু ম্যানুয়াল',
+  'provider.degraded': 'সমস্যা চলছে',
+  'quality.actual': 'পাক্কা হিসাব',
+  'quality.estimated': 'অনুমান',
+  'quality.missing': 'খরচ জানা নেই',
+  'quality.unreconciled': 'মেলানো হয়নি',
 };

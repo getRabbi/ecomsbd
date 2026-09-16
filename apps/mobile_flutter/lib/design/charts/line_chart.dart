@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../tokens.dart';
+import '../../l10n/app_strings.dart';
 
 /// One point on the profit trend.
 class TrendPoint {
@@ -38,10 +39,10 @@ class ProfitTrendChart extends StatelessWidget {
     if (points.length < 2) {
       return SizedBox(
         height: height,
-        child: const Center(
+        child: Center(
           child: Text(
-            'Not enough history yet',
-            style: TextStyle(color: EcomsbdColors.muted),
+            context.tr('chart.notEnoughHistory'),
+            style: const TextStyle(color: EcomsbdColors.muted),
           ),
         ),
       );

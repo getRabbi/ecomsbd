@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/money.dart';
 import '../tokens.dart';
+import '../../l10n/app_strings.dart';
 
 /// Semantic tone shared by every status surface.
 ///
@@ -103,13 +104,21 @@ class RiskBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, tone) = switch (level) {
-      RiskLevel.low => ('Low risk', Tone.good),
-      RiskLevel.medium => ('Medium risk', Tone.warning),
-      RiskLevel.high => ('High risk', Tone.bad),
-      RiskLevel.unknown => ('No history', Tone.neutral),
+      RiskLevel.low => (context.tr('risk.low'), Tone.good),
+      RiskLevel.medium => (context.tr('risk.medium'), Tone.warning),
+      RiskLevel.high => (context.tr('risk.high'), Tone.bad),
+      RiskLevel.unknown => (context.tr('risk.unknown'), Tone.neutral),
+    };
+    final String short = switch (level) {
+      RiskLevel.low => context.tr('risk.lowShort'),
+      RiskLevel.medium => context.tr('risk.mediumShort'),
+      RiskLevel.high => context.tr('risk.highShort'),
+      RiskLevel.unknown => context.tr('risk.unknownShort'),
     };
     return StatusChip(
-      label: compact ? label.split(' ').first : label,
+      // Taking the first space-separated word gave "No" in English and does
+      // not divide a Bangla label at all, so the short form is its own string.
+      label: compact ? short : label,
       tone: tone,
       icon: Icons.shield_outlined,
     );
@@ -132,10 +141,16 @@ class ProviderBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, tone) = switch (state) {
-      ProviderState.connected => ('Connected', Tone.good),
-      ProviderState.notConnected => ('Not connected', Tone.neutral),
-      ProviderState.manualOnly => ('Manual only', Tone.info),
-      ProviderState.degraded => ('Degraded', Tone.warning),
+      ProviderState.connected => (context.tr('provider.connected'), Tone.good),
+      ProviderState.notConnected => (
+        context.tr('provider.notConnected'),
+        Tone.neutral,
+      ),
+      ProviderState.manualOnly => (
+        context.tr('provider.manualOnly'),
+        Tone.info,
+      ),
+      ProviderState.degraded => (context.tr('provider.degraded'), Tone.warning),
     };
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -182,11 +197,23 @@ class DataQualityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, tone, icon) = switch (quality) {
-      DataQuality.actual => ('Actual', Tone.good, Icons.verified_outlined),
-      DataQuality.estimated => ('Estimated', Tone.warning, Icons.trending_up),
-      DataQuality.missing => ('Missing cost', Tone.bad, Icons.help_outline),
+      DataQuality.actual => (
+        context.tr('quality.actual'),
+        Tone.good,
+        Icons.verified_outlined,
+      ),
+      DataQuality.estimated => (
+        context.tr('quality.estimated'),
+        Tone.warning,
+        Icons.trending_up,
+      ),
+      DataQuality.missing => (
+        context.tr('quality.missing'),
+        Tone.bad,
+        Icons.help_outline,
+      ),
       DataQuality.unreconciled => (
-        'Unreconciled',
+        context.tr('quality.unreconciled'),
         Tone.info,
         Icons.sync_problem_outlined,
       ),

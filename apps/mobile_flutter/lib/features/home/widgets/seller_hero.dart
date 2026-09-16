@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens.dart';
+import '../../../l10n/app_strings.dart';
 
 /// `.hero-banner` — the premium navy seller hero at the top of Home.
 ///
@@ -13,14 +14,16 @@ class SellerHero extends StatelessWidget {
     required this.shopName,
     required this.subtitle,
     super.key,
-    this.eyebrow = 'TODAY · MONEY CONTROL',
+    this.eyebrow,
     this.chips = const <String>[],
     this.topInset = 0,
   });
 
   final String shopName;
   final String subtitle;
-  final String eyebrow;
+
+  /// Defaults to the localized "today · money control" line.
+  final String? eyebrow;
   final List<String> chips;
 
   /// Status-bar height: the hero runs under it, so its content is pushed down.
@@ -78,7 +81,7 @@ class SellerHero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              _DarkChip(label: eyebrow),
+              _DarkChip(label: eyebrow ?? context.tr('home.heroEyebrow')),
               const SizedBox(height: EcomsbdSpacing.lg),
               Text(
                 shopName,
