@@ -335,8 +335,9 @@ class QuickActionTile extends StatelessWidget {
                   Text(
                     title,
                     style: EcomsbdType.bodyStrong,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    // Bangla runs wider than the English this tile was sized
+                    // for, so the title wraps rather than being cut short.
+                    maxLines: 2,
                   ),
                   const SizedBox(height: 2),
                   Text(
