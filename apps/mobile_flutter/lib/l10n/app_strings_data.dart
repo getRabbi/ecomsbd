@@ -26,6 +26,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._settingsBn,
   ..._otpBn,
   ..._fieldsBn,
+  ..._authErrBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -41,6 +42,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._settingsEn,
   ..._otpEn,
   ..._fieldsEn,
+  ..._authErrEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -200,8 +202,7 @@ const Map<String, String> _commonBn = <String, String>{
   'sync.needsChoice': 'সিদ্ধান্ত দরকার',
   'sync.needsFixing': 'ঠিক করতে হবে',
 
-  'stale.notice':
-      '{when} সেভ করা তথ্য। অনলাইনে ফিরলে নিজেই আপডেট হয়ে যাবে।',
+  'stale.notice': '{when} সেভ করা তথ্য। অনলাইনে ফিরলে নিজেই আপডেট হয়ে যাবে।',
 
   'offline.detail.one':
       '{count}টি পরিবর্তন অনলাইনে ফিরলে সিঙ্ক হবে। '
@@ -260,12 +261,14 @@ const Map<String, String> _authEn = <String, String>{
       'Open it to choose a new password, then return here to sign in.',
   'auth.resetDoneBody':
       'Your password has been reset. Sign in with your new password.',
-  'auth.resetLinkIncomplete': 'This reset link is incomplete. Request a new one.',
+  'auth.resetLinkIncomplete':
+      'This reset link is incomplete. Request a new one.',
   'auth.backToSignIn': 'Back to Sign In',
   'auth.continueWithGoogle': 'Continue with Google',
   'auth.continueWithApple': 'Continue with Apple',
   'auth.orSignInWithEmail': 'or sign in with email',
-  'auth.forgotIntro': 'Enter your account email to request a password reset link.',
+  'auth.forgotIntro':
+      'Enter your account email to request a password reset link.',
   'auth.email': 'Email',
   'auth.emailInvalid': 'Enter a valid email address.',
   'auth.password': 'Password',
@@ -324,14 +327,12 @@ const Map<String, String> _authBn = <String, String>{
       'লিংকে গিয়ে নতুন পাসওয়ার্ড দিন, তারপর এখানে এসে সাইন ইন করুন।',
   'auth.resetDoneBody':
       'আপনার পাসওয়ার্ড রিসেট হয়েছে। নতুন পাসওয়ার্ড দিয়ে সাইন ইন করুন।',
-  'auth.resetLinkIncomplete':
-      'এই রিসেট লিংকটি পুরো নয়। নতুন একটি লিংক নিন।',
+  'auth.resetLinkIncomplete': 'এই রিসেট লিংকটি পুরো নয়। নতুন একটি লিংক নিন।',
   'auth.backToSignIn': 'সাইন ইনে ফিরুন',
   'auth.continueWithGoogle': 'Google দিয়ে চালিয়ে যান',
   'auth.continueWithApple': 'Apple দিয়ে চালিয়ে যান',
   'auth.orSignInWithEmail': 'অথবা ইমেইল দিয়ে সাইন ইন করুন',
-  'auth.forgotIntro':
-      'রিসেট লিংক পেতে আপনার অ্যাকাউন্টের ইমেইল দিন।',
+  'auth.forgotIntro': 'রিসেট লিংক পেতে আপনার অ্যাকাউন্টের ইমেইল দিন।',
   'auth.email': 'ইমেইল',
   'auth.emailInvalid': 'সঠিক ইমেইল দিন।',
   'auth.password': 'পাসওয়ার্ড',
@@ -640,8 +641,7 @@ const Map<String, String> _ordersBn = <String, String>{
   'orders.emptyBody':
       'নিজে লিখে দিন, বা Messenger থেকে মেসেজ পেস্ট করে দেখুন কী পাওয়া গেল।',
   'orders.emptyAction': 'প্রথম অর্ডারটি যোগ করুন',
-  'orders.savedOffline':
-      'এই ফোনে সেভ হয়েছে। অনলাইনে ফিরলে সিঙ্ক হয়ে যাবে।',
+  'orders.savedOffline': 'এই ফোনে সেভ হয়েছে। অনলাইনে ফিরলে সিঙ্ক হয়ে যাবে।',
   'orders.savedNumber': 'অর্ডার {number} সেভ হয়েছে।',
   'orders.pasteTooltip': 'অর্ডার পেস্ট করুন',
   'orders.newOrder': 'নতুন অর্ডার',
@@ -1036,8 +1036,10 @@ const Map<String, String> _settingsEn = <String, String>{
   'settings.planName': '{plan} plan',
   'settings.couldNotCheckPlan': 'Could not check your plan',
   'settings.actionNeeded': 'Action needed',
-  'settings.everythingSynced': 'Everything on this phone has reached the server.',
-  'settings.changesWaiting.one': '{count} change waiting to sync. Nothing is lost.',
+  'settings.everythingSynced':
+      'Everything on this phone has reached the server.',
+  'settings.changesWaiting.one':
+      '{count} change waiting to sync. Nothing is lost.',
   'settings.changesWaiting.other':
       '{count} changes waiting to sync. Nothing is lost.',
   'settings.checking': 'Checking…',
@@ -1066,8 +1068,7 @@ const Map<String, String> _settingsBn = <String, String>{
   'settings.courierAccounts': 'কুরিয়ার অ্যাকাউন্ট',
   'settings.steadfastConnected': 'Steadfast যুক্ত আছে {identifier}',
   'settings.steadfastReconnect': 'Steadfast আবার যুক্ত করতে হবে',
-  'settings.connectSteadfast':
-      'ecomsbd থেকে বুক করতে Steadfast যুক্ত করুন',
+  'settings.connectSteadfast': 'ecomsbd থেকে বুক করতে Steadfast যুক্ত করুন',
   'settings.courierDefault': 'বুকিং, ট্র্যাকিং আর হিসাব মেলানো নিজেই হবে',
   'settings.devices': 'ডিভাইস ও সেশন',
   'settings.devicesSub': 'কোথায় কোথায় সাইন ইন আছেন দেখুন, সাইন আউট করুন',
@@ -1151,4 +1152,82 @@ const Map<String, String> _fieldsBn = <String, String>{
   'field.unitPrice': 'প্রতি পিসের দাম (৳)',
   'field.cost': 'কেনা দাম (৳)',
   'field.sellingPrice': 'বিক্রির দাম (৳)',
+};
+
+// --------------------------------------------------------------------------- //
+// Auth failures (selected by stable code; SDK/server wording stays private)
+// --------------------------------------------------------------------------- //
+
+const Map<String, String> _authErrEn = <String, String>{
+  'autherr.invalidCredentials':
+      'That email and password do not match. Please try again.',
+  'autherr.offline':
+      'No internet connection. Check your connection and try again.',
+  // Android reports a dismissal and a rejected OAuth registration
+  // identically, so this must not accuse the seller of cancelling.
+  'autherr.googleIncomplete':
+      'Google sign-in did not finish. If you did not close it yourself, this '
+      'app is not registered for Google sign-in yet — please use email.',
+  'autherr.googleCancelled': 'Google sign-in was cancelled. You can try again.',
+  'autherr.appleCancelled': 'Apple sign-in was cancelled. You can try again.',
+  'autherr.googleUnavailable':
+      'Google sign-in is unavailable right now. Use email or try again later.',
+  'autherr.appleUnavailable':
+      'Apple sign-in is unavailable on this device. Use Google or email.',
+  'autherr.emailNotVerified':
+      'Verify your email using the link in your inbox, then sign in.',
+  'autherr.emailAlreadyRegistered':
+      'An account already uses this email. Sign in or reset your password.',
+  'autherr.identityLinkRefused':
+      'This sign-in method belongs to another account. Use your original '
+      'sign-in method.',
+  'autherr.linkExpired':
+      'This link or sign-in has expired. Request a new link or sign in again.',
+  'autherr.rateLimited':
+      'Too many attempts. Please wait a while before trying again.',
+  'autherr.validation':
+      'Check your email and password. Use 10–200 characters and avoid common '
+      'passwords.',
+  'autherr.methodUnavailable':
+      'This sign-in method is unavailable right now. Please try another '
+      'method.',
+  'autherr.forbidden': 'This account cannot sign in. Contact support for help.',
+  'autherr.generic': 'Sign-in could not be completed. Please try again.',
+};
+
+const Map<String, String> _authErrBn = <String, String>{
+  'autherr.invalidCredentials':
+      'এই ইমেইল আর পাসওয়ার্ড মিলছে না। আবার চেষ্টা করুন।',
+  'autherr.offline': 'ইন্টারনেট সংযোগ নেই। সংযোগ দেখে আবার চেষ্টা করুন।',
+  'autherr.googleIncomplete':
+      'Google সাইন ইন শেষ হয়নি। আপনি নিজে বন্ধ না করে থাকলে বুঝতে হবে এই '
+      'অ্যাপটি এখনও Google সাইন ইনের জন্য রেজিস্টার করা হয়নি — আপাতত ইমেইল '
+      'দিয়ে সাইন ইন করুন।',
+  'autherr.googleCancelled':
+      'Google সাইন ইন বাতিল হয়েছে। আবার চেষ্টা করতে পারেন।',
+  'autherr.appleCancelled':
+      'Apple সাইন ইন বাতিল হয়েছে। আবার চেষ্টা করতে পারেন।',
+  'autherr.googleUnavailable':
+      'Google সাইন ইন এখন কাজ করছে না। ইমেইল দিয়ে করুন বা পরে চেষ্টা করুন।',
+  'autherr.appleUnavailable':
+      'এই ফোনে Apple সাইন ইন কাজ করবে না। Google বা ইমেইল ব্যবহার করুন।',
+  'autherr.emailNotVerified':
+      'ইনবক্সের লিংক দিয়ে ইমেইল ভেরিফাই করে তারপর সাইন ইন করুন।',
+  'autherr.emailAlreadyRegistered':
+      'এই ইমেইলে একটি অ্যাকাউন্ট আছে। সাইন ইন করুন বা পাসওয়ার্ড রিসেট করুন।',
+  'autherr.identityLinkRefused':
+      'এই সাইন ইন পদ্ধতি অন্য একটি অ্যাকাউন্টের। আগে যেভাবে সাইন ইন করতেন '
+      'সেভাবেই করুন।',
+  'autherr.linkExpired':
+      'এই লিংক বা সাইন ইনের সময় শেষ। নতুন লিংক নিন বা আবার সাইন ইন করুন।',
+  'autherr.rateLimited':
+      'অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।',
+  'autherr.validation':
+      'ইমেইল আর পাসওয়ার্ড দেখে নিন। ১০–২০০ অক্ষর দিন, খুব সহজ পাসওয়ার্ড '
+      'এড়িয়ে চলুন।',
+  'autherr.methodUnavailable':
+      'এই সাইন ইন পদ্ধতি এখন কাজ করছে না। অন্য পদ্ধতি ব্যবহার করুন।',
+  'autherr.forbidden':
+      'এই অ্যাকাউন্ট দিয়ে সাইন ইন করা যাবে না। সাপোর্টে যোগাযোগ করুন।',
+  'autherr.generic': 'সাইন ইন সম্পূর্ণ করা যায়নি। আবার চেষ্টা করুন।',
 };

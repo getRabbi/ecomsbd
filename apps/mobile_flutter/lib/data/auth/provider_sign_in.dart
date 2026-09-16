@@ -18,25 +18,55 @@ abstract class ProviderSignIn {
   Future<void> signOut();
 }
 
+/// How a provider sign-in ended, as far as the app can honestly tell.
+enum ProviderSignInOutcome {
+  /// The person dismissed it, and the platform said so unambiguously.
+  cancelled,
+
+  /// It ended with no credential and the platform cannot say why.
+  ///
+  /// Android's Credential Manager reports a dismissal and a *rejected OAuth
+  /// registration* as the same failure, so neither can be claimed. Rendering
+  /// this as "you cancelled" is what sent the last investigation to the wrong
+  /// place: GMS had actually answered "this android application is not
+  /// registered to use OAuth2.0".
+  incomplete,
+
+  /// It failed for a reason the platform named.
+  unavailable,
+}
+
+/// Builds the failure the UI will render.
+///
+/// The seller-facing wording is chosen from [ApiError.code] by
+/// `authErrorMessage`, never from [detail]: an SDK string is for whoever is
+/// debugging, not for a seller. [detail] is kept in `details` and printed in
+/// debug builds so the real cause is still recoverable.
 ApiError providerSignInError(
   SignInProvider provider, {
-  bool cancelled = false,
+  ProviderSignInOutcome outcome = ProviderSignInOutcome.unavailable,
   String? detail,
-}) => ApiError(
-  code:
-      '${provider.name.toUpperCase()}_${cancelled ? 'CANCELLED' : 'UNAVAILABLE'}',
-  messageBn: '',
-  // Only a genuine user dismissal says "cancelled". Anything else keeps the
-  // provider's own words: a configuration rejection reported as a cancellation
-  // sends everyone looking at the wrong thing.
-  messageEn: cancelled
-      ? 'Sign-in cancelled.'
-      : detail == null || detail.isEmpty
-      ? 'Sign-in unavailable.'
-      : 'Google sign-in failed: $detail',
-  retryable: true,
-  details: detail == null ? null : <String, dynamic>{'provider_error': detail},
-);
+}) {
+  final String suffix = switch (outcome) {
+    ProviderSignInOutcome.cancelled => 'CANCELLED',
+    ProviderSignInOutcome.incomplete => 'INCOMPLETE',
+    ProviderSignInOutcome.unavailable => 'UNAVAILABLE',
+  };
+  final hasDetail = detail != null && detail.isNotEmpty;
+  assert(() {
+    if (hasDetail) {
+      debugPrint('${provider.name} sign-in failed [$suffix]: $detail');
+    }
+    return true;
+  }());
+  return ApiError(
+    code: '${provider.name.toUpperCase()}_$suffix',
+    messageBn: '',
+    messageEn: '',
+    retryable: true,
+    details: hasDetail ? <String, dynamic>{'provider_error': detail} : null,
+  );
+}
 
 class NativeProviderSignIn implements ProviderSignIn {
   static Future<void>? _googleInitialization;
@@ -99,18 +129,30 @@ class NativeProviderSignIn implements ProviderSignIn {
       }
       return token;
     } on GoogleSignInException catch (error) {
-      final cancelled = error.code == GoogleSignInExceptionCode.canceled;
       throw providerSignInError(
         provider,
-        cancelled: cancelled,
-        detail: cancelled
-            ? null
-            : '${error.code.name}: ${error.description ?? ''}'.trim(),
+        // The enum is documented as non-exhaustive, so this keeps a fallback.
+        outcome: switch (error.code) {
+          GoogleSignInExceptionCode.canceled =>
+            defaultTargetPlatform == TargetPlatform.android
+                // Ambiguous on Android: dismissal and a rejected OAuth client
+                // arrive identically. Do not call it a cancellation.
+                ? ProviderSignInOutcome.incomplete
+                : ProviderSignInOutcome.cancelled,
+          _ => ProviderSignInOutcome.unavailable,
+        },
+        detail:
+            '${error.code.name}: ${error.description ?? ''} '
+                    '${error.details ?? ''}'
+                .trim(),
       );
     } on SignInWithAppleAuthorizationException catch (error) {
       throw providerSignInError(
         provider,
-        cancelled: error.code == AuthorizationErrorCode.canceled,
+        outcome: error.code == AuthorizationErrorCode.canceled
+            ? ProviderSignInOutcome.cancelled
+            : ProviderSignInOutcome.unavailable,
+        detail: '${error.code.name}: ${error.message}',
       );
     } on ApiError {
       rethrow;

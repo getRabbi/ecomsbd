@@ -102,7 +102,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
           Semantics(
             liveRegion: true,
             child: Text(
-              authErrorMessage(state.error!),
+              authErrorMessage(context, state.error!),
               style: const TextStyle(color: EcomsbdColors.red),
             ),
           ),
@@ -148,7 +148,7 @@ class SelectShopScreen extends ConsumerWidget {
                   .selectShop(shop.id);
             },
           ),
-        if (state.error != null) Text(authErrorMessage(state.error!)),
+        if (state.error != null) Text(authErrorMessage(context, state.error!)),
         TextButton(
           onPressed: state.isBusy
               ? null

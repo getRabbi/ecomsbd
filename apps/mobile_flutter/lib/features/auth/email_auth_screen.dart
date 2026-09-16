@@ -248,7 +248,7 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                     Semantics(
                       liveRegion: true,
                       child: Text(
-                        authErrorMessage(state.error!),
+                        authErrorMessage(context, state.error!),
                         style: const TextStyle(color: EcomsbdColors.red),
                       ),
                     ),
