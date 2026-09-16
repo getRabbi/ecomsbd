@@ -42,12 +42,36 @@ class ResponsiveGrid extends StatelessWidget {
 
         final tileWidth = (available - spacing * (columns - 1)) / columns;
 
-        return Wrap(
-          spacing: spacing,
-          runSpacing: runSpacing ?? spacing,
+        // Tiles in a row share the tallest one's height. A Bangla title that
+        // wraps to two lines would otherwise leave its neighbour visibly
+        // short, which reads as a broken card rather than a longer word.
+        final rows = <Widget>[];
+        for (var start = 0; start < children.length; start += columns) {
+          final end = start + columns < children.length
+              ? start + columns
+              : children.length;
+          rows.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  for (var i = start; i < end; i++) ...<Widget>[
+                    if (i > start) SizedBox(width: spacing),
+                    SizedBox(width: tileWidth, child: children[i]),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            for (final child in children)
-              SizedBox(width: tileWidth, child: child),
+            for (var i = 0; i < rows.length; i++) ...<Widget>[
+              if (i > 0) SizedBox(height: runSpacing ?? spacing),
+              rows[i],
+            ],
           ],
         );
       },
