@@ -63,16 +63,6 @@ final providerPaymentsProvider = FutureProvider<List<ProviderPayment>>((ref) {
   return ref.watch(courierRepositoryProvider).payments();
 });
 
-/// Whether this shop can book with a courier right now.
-///
-/// Three answers, not two: connected, needs reconnecting, or no account at all.
-/// The middle one is a problem the seller can fix; the last one is a choice
-/// they have not made yet, and manual courier mode covers both.
-final canBookWithCourierProvider = Provider<AsyncValue<bool>>((ref) {
-  return ref
-      .watch(courierAccountProvider('steadfast'))
-      .whenData((account) => account?.status.canBook ?? false);
-});
 
 /// Every courier ecomsbd knows about, with its connect form.
 ///
@@ -99,4 +89,23 @@ final webhookSetupProvider = FutureProvider.family<WebhookSetup, String>((
   provider,
 ) {
   return ref.watch(courierRepositoryProvider).webhookSetup(provider);
+});
+
+/// Which couriers this shop can book with right now.
+///
+/// The booking sheet's source of truth. Not cached: a courier that went down,
+/// or a pickup store chosen a minute ago, must be reflected before a seller
+/// commits a parcel to it.
+final bookableCouriersProvider = FutureProvider<List<BookableCourier>>((ref) {
+  return ref.watch(courierRepositoryProvider).bookable();
+});
+
+/// Whether this shop can book with *any* courier right now.
+///
+/// Replaces the V1 question "is Steadfast connected", which stopped being the
+/// right question the moment a second courier existed.
+final canBookWithAnyCourierProvider = Provider<AsyncValue<bool>>((ref) {
+  return ref
+      .watch(bookableCouriersProvider)
+      .whenData((rows) => rows.any((row) => row.bookable));
 });

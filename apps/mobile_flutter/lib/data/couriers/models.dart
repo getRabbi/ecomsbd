@@ -835,3 +835,91 @@ class WebhookSetup {
 
   String? get help => activeAppLocale == AppLocale.bn ? helpBn : helpEn;
 }
+
+/// Why a courier cannot take a booking right now.
+///
+/// The server sends a stable code and this renders the copy, so the same
+/// business rule reads correctly in both languages and neither client has to
+/// know which courier it is looking at.
+enum BookableBlock {
+  notEnabled,
+  noVerifiedContract,
+  notConnected,
+  needsReconnect,
+  needsPickupStore,
+  providerUnavailable,
+  unknown;
+
+  static BookableBlock parse(String? value) => switch (value) {
+    'NOT_ENABLED' => BookableBlock.notEnabled,
+    'NO_VERIFIED_CREATE' => BookableBlock.noVerifiedContract,
+    'NOT_CONNECTED' => BookableBlock.notConnected,
+    'NEEDS_RECONNECT' => BookableBlock.needsReconnect,
+    'NEEDS_PICKUP_STORE' => BookableBlock.needsPickupStore,
+    'PROVIDER_UNAVAILABLE' => BookableBlock.providerUnavailable,
+    _ => BookableBlock.unknown,
+  };
+
+  /// What a seller can do about it, in their language.
+  String get label => switch (this) {
+    BookableBlock.notEnabled => _t('bookable.notEnabled'),
+    BookableBlock.noVerifiedContract => _t('bookable.noContract'),
+    BookableBlock.notConnected => _t('bookable.notConnected'),
+    BookableBlock.needsReconnect => _t('bookable.needsReconnect'),
+    BookableBlock.needsPickupStore => _t('bookable.needsStore'),
+    BookableBlock.providerUnavailable => _t('bookable.unavailable'),
+    BookableBlock.unknown => _t('bookable.unknown'),
+  };
+
+  /// Whether the seller can fix this from the courier accounts screen.
+  bool get isFixableInSettings => switch (this) {
+    BookableBlock.notConnected ||
+    BookableBlock.needsReconnect ||
+    BookableBlock.needsPickupStore => true,
+    _ => false,
+  };
+}
+
+/// Whether one courier can take a booking from this shop right now.
+@immutable
+class BookableCourier {
+  const BookableCourier({
+    required this.provider,
+    required this.displayName,
+    required this.bookable,
+    this.block,
+    this.requiresStore = false,
+    this.storeName,
+    this.supportsDeliveryType = false,
+  });
+
+  factory BookableCourier.fromJson(Map<String, dynamic> json) {
+    final reason = json['reason'] as String?;
+    return BookableCourier(
+      provider: json['provider'] as String,
+      displayName:
+          (json['display_name'] as String?) ?? (json['provider'] as String),
+      bookable: (json['bookable'] as bool?) ?? false,
+      block: reason == null ? null : BookableBlock.parse(reason),
+      requiresStore: (json['requires_store'] as bool?) ?? false,
+      storeName: json['store_name'] as String?,
+      supportsDeliveryType:
+          (json['supports_delivery_type'] as bool?) ?? false,
+    );
+  }
+
+  final String provider;
+  final String displayName;
+  final bool bookable;
+
+  /// `null` when [bookable] is true. Otherwise the first thing to fix.
+  final BookableBlock? block;
+
+  final bool requiresStore;
+  final String? storeName;
+
+  /// Whether the booking form may offer a delivery-type choice for this
+  /// courier. Read instead of checking a provider name, which is what keeps
+  /// the generic order UI free of provider specifics.
+  final bool supportsDeliveryType;
+}

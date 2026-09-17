@@ -9,8 +9,11 @@ import '../../data/couriers/courier_providers.dart';
 import '../../data/couriers/models.dart';
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
+import '../../design/components/states.dart';
 import '../../design/tokens.dart';
+import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 
 /// Book a parcel with a courier.
@@ -61,6 +64,10 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 
   _Stage _stage = _Stage.review;
   int _deliveryType = 0;
+
+  /// The courier this booking goes to. Chosen from the couriers the server
+  /// says are bookable, never defaulted to a hard-coded provider name.
+  String? _provider;
   BookingItem? _result;
   ApiError? _error;
 
@@ -75,6 +82,14 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
     if (_stage != _Stage.review) {
       return;
     }
+    final courier = _selectedCourier();
+    final provider = courier?.provider;
+    if (courier == null || provider == null || !courier.bookable) {
+      // Nothing to book with. The button is already disabled in this state;
+      // this guard exists so a race cannot send a booking to a courier the
+      // server just told us is unavailable.
+      return;
+    }
     setState(() {
       _stage = _Stage.submitting;
       _error = null;
@@ -84,9 +99,13 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
           .read(courierRepositoryProvider)
           .book(
             widget.order.id,
+            provider: provider,
             note: _note.text.trim(),
             itemDescription: _description.text.trim(),
-            deliveryType: _deliveryType,
+            // Only sent for a courier that declares it. Sending Steadfast's
+            // 0/1 to a courier with different codes would book the wrong
+            // service class.
+            deliveryType: courier.supportsDeliveryType ? _deliveryType : null,
           );
       final item = report.items.isEmpty ? null : report.items.first;
       _invalidateAfterBooking();
@@ -108,6 +127,29 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         });
       }
     }
+  }
+
+  /// The courier currently selected, or the first bookable one.
+  ///
+  /// Resolved against the live list every time rather than stored once, so a
+  /// courier that stopped being bookable while the sheet was open cannot be
+  /// booked from a stale selection.
+  BookableCourier? _selectedCourier() {
+    final rows = ref.read(bookableCouriersProvider).value ?? const <BookableCourier>[];
+    if (rows.isEmpty) {
+      return null;
+    }
+    for (final row in rows) {
+      if (row.provider == _provider) {
+        return row;
+      }
+    }
+    for (final row in rows) {
+      if (row.bookable) {
+        return row;
+      }
+    }
+    return null;
   }
 
   void _invalidateAfterBooking() {
@@ -145,7 +187,13 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
     );
   }
 
+  /// The courier's name for copy, or a neutral word before one is resolved.
+  String get _courierName =>
+      _selectedCourier()?.displayName ??
+      AppStrings(activeAppLocale).t('common.courier');
+
   Widget _buildReview() {
+    final selected = _selectedCourier();
     final order = widget.order;
 
     return Column(
@@ -154,10 +202,10 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        Text(context.tr('book.title'), style: EcomsbdType.sectionTitle),
+        Text(context.tr('book.title', <String, Object?>{'provider': _courierName}), style: EcomsbdType.sectionTitle),
         const SizedBox(height: 3),
         Text(
-          context.tr('book.body'),
+          context.tr('book.body', <String, Object?>{'provider': _courierName}),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
@@ -182,23 +230,32 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
           emphasis: true,
         ),
         const SizedBox(height: EcomsbdSpacing.md),
-        Text(context.tr('book.deliveryType'), style: EcomsbdType.label),
-        const SizedBox(height: EcomsbdSpacing.xs),
-        Wrap(
-          spacing: EcomsbdSpacing.xs,
-          children: <Widget>[
-            FilterToggle(
-              label: context.tr('book.homeDelivery'),
-              selected: _deliveryType == 0,
-              onChanged: (_) => setState(() => _deliveryType = 0),
-            ),
-            FilterToggle(
-              label: context.tr('book.hubPickup'),
-              selected: _deliveryType == 1,
-              onChanged: (_) => setState(() => _deliveryType = 1),
-            ),
-          ],
+        _CourierPicker(
+          selected: selected?.provider,
+          onChanged: (provider) => setState(() => _provider = provider),
         ),
+        // Shown only for a courier that declares it, so this generic sheet
+        // never has to know which couriers have which service classes.
+        if (selected?.supportsDeliveryType ?? false) ...<Widget>[
+          const SizedBox(height: EcomsbdSpacing.md),
+          Text(context.tr('book.deliveryType'), style: EcomsbdType.label),
+          const SizedBox(height: EcomsbdSpacing.xs),
+          Wrap(
+            spacing: EcomsbdSpacing.xs,
+            children: <Widget>[
+              FilterToggle(
+                label: context.tr('book.homeDelivery'),
+                selected: _deliveryType == 0,
+                onChanged: (_) => setState(() => _deliveryType = 0),
+              ),
+              FilterToggle(
+                label: context.tr('book.hubPickup'),
+                selected: _deliveryType == 1,
+                onChanged: (_) => setState(() => _deliveryType = 1),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: EcomsbdSpacing.md),
         LabelledField(
           label: context.tr('book.contents'),
@@ -231,7 +288,9 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
             Expanded(
               flex: 2,
               child: FilledButton(
-                onPressed: _confirm,
+                // No bookable courier means no booking. Manual courier mode
+                // is how a parcel still ships in that state.
+                onPressed: (selected?.bookable ?? false) ? _confirm : null,
                 style: _primaryButton,
                 child: Text(context.tr('book.confirm')),
               ),
@@ -262,7 +321,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          context.tr('book.waiting'),
+          context.tr('book.waiting', <String, Object?>{'provider': _courierName}),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.xl),
@@ -278,6 +337,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 
     if (ambiguous) {
       return _AmbiguousOutcome(
+        courierName: _courierName,
         message: result?.message ?? _error?.displayMessage,
         onClose: () => Navigator.of(context).pop(result),
       );
@@ -285,16 +345,18 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 
     if (result != null && result.outcome == BookingOutcome.booked) {
       return _BookedOutcome(
+        courierName: _courierName,
         item: result,
         onClose: () => Navigator.of(context).pop(result),
       );
     }
 
     return _FailedOutcome(
+      courierName: _courierName,
       message:
           result?.message ??
           _error?.displayMessage ??
-          context.tr('book.rejected'),
+          context.tr('book.rejected', <String, Object?>{'provider': _courierName}),
       onRetry: () => setState(() => _stage = _Stage.review),
       onClose: () => Navigator.of(context).pop(result),
     );
@@ -308,7 +370,13 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 /// it sent, and a second booking would be a second real parcel with a real
 /// delivery charge.
 class _AmbiguousOutcome extends StatelessWidget {
-  const _AmbiguousOutcome({required this.onClose, this.message});
+  const _AmbiguousOutcome({
+    required this.courierName,
+    required this.onClose,
+    this.message,
+  });
+
+  final String courierName;
 
   final String? message;
   final VoidCallback onClose;
@@ -333,7 +401,7 @@ class _AmbiguousOutcome extends StatelessWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
         // Explains *why*, without repeating the sentence above it.
         Text(
-          context.tr('book.uncertainBody'),
+          context.tr('book.uncertainBody', <String, Object?>{'provider': courierName}),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
@@ -349,7 +417,13 @@ class _AmbiguousOutcome extends StatelessWidget {
 }
 
 class _BookedOutcome extends StatelessWidget {
-  const _BookedOutcome({required this.item, required this.onClose});
+  const _BookedOutcome({
+    required this.courierName,
+    required this.item,
+    required this.onClose,
+  });
+
+  final String courierName;
 
   final BookingItem item;
   final VoidCallback onClose;
@@ -364,7 +438,10 @@ class _BookedOutcome extends StatelessWidget {
         const SizedBox(height: EcomsbdSpacing.md),
         StatusChip(label: context.tr('status.booked'), tone: Tone.good),
         const SizedBox(height: EcomsbdSpacing.sm),
-        Text(context.tr('book.hasParcel'), style: EcomsbdType.sectionTitle),
+        Text(
+          context.tr('book.hasParcel', <String, Object?>{'provider': courierName}),
+          style: EcomsbdType.sectionTitle,
+        ),
         const SizedBox(height: EcomsbdSpacing.sm),
         _ReviewRow(
           label: context.tr('common.reference'),
@@ -397,11 +474,13 @@ class _BookedOutcome extends StatelessWidget {
 /// so nothing was created and the same reference can be used again.
 class _FailedOutcome extends StatelessWidget {
   const _FailedOutcome({
+    required this.courierName,
     required this.message,
     required this.onRetry,
     required this.onClose,
   });
 
+  final String courierName;
   final String message;
   final VoidCallback onRetry;
   final VoidCallback onClose;
@@ -416,7 +495,10 @@ class _FailedOutcome extends StatelessWidget {
         const SizedBox(height: EcomsbdSpacing.md),
         StatusChip(label: context.tr('status.notBooked'), tone: Tone.bad),
         const SizedBox(height: EcomsbdSpacing.sm),
-        Text(context.tr('book.notAccepted'), style: EcomsbdType.body),
+        Text(
+          context.tr('book.notAccepted', <String, Object?>{'provider': courierName}),
+          style: EcomsbdType.body,
+        ),
         const SizedBox(height: EcomsbdSpacing.xs),
         Text(
           message,
@@ -448,6 +530,150 @@ class _FailedOutcome extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Choose the courier this parcel goes to.
+///
+/// Nothing here names a courier. The list, the display names, whether each one
+/// can take a booking and the first thing to fix when it cannot all come from
+/// `/couriers/bookable`, so adding a courier changes no code in this file.
+///
+/// Couriers that cannot take a booking are shown rather than hidden, with the
+/// reason. Hiding them would leave a seller wondering where Pathao went; saying
+/// "choose a pickup store" tells them what to do. A courier with nothing to
+/// connect at all is absent from the server's list entirely.
+class _CourierPicker extends ConsumerWidget {
+  const _CourierPicker({required this.selected, required this.onChanged});
+
+  final String? selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final couriers = ref.watch(bookableCouriersProvider);
+
+    return couriers.when(
+      loading: () => SkeletonLoader.card(height: 64),
+      error: (error, _) => error is ApiError
+          ? ErrorStateCard(
+              error: error,
+              onRetry: () => ref.invalidate(bookableCouriersProvider),
+            )
+          : EmptyState(
+              icon: Icons.error_outline,
+              title: context.tr('common.couldNotLoad'),
+              message: '$error',
+            ),
+      data: (rows) {
+        if (rows.isEmpty) {
+          return EmptyState(
+            icon: Icons.local_shipping_outlined,
+            title: context.tr('book.noCouriers'),
+            message: context.tr('book.noCouriersBody'),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(context.tr('book.courier'), style: EcomsbdType.label),
+            const SizedBox(height: EcomsbdSpacing.xs),
+            for (final courier in rows) ...<Widget>[
+              _CourierOption(
+                courier: courier,
+                selected: courier.provider == selected,
+                onTap: courier.bookable
+                    ? () => onChanged(courier.provider)
+                    : null,
+              ),
+              const SizedBox(height: 6),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CourierOption extends StatelessWidget {
+  const _CourierOption({
+    required this.courier,
+    required this.selected,
+    this.onTap,
+  });
+
+  final BookableCourier courier;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocked = !courier.bookable;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(EcomsbdRadii.sm),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(EcomsbdSpacing.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(EcomsbdRadii.sm),
+            border: Border.all(
+              color: selected ? EcomsbdColors.orange : EcomsbdColors.stroke,
+              width: selected ? 1.5 : 1,
+            ),
+            color: selected ? EcomsbdColors.orangeSoft : null,
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 18,
+                color: blocked
+                    ? EcomsbdColors.muted2
+                    : (selected ? EcomsbdColors.orange : EcomsbdColors.muted),
+              ),
+              const SizedBox(width: EcomsbdSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      courier.displayName,
+                      style: EcomsbdType.body.copyWith(
+                        color: blocked ? EcomsbdColors.muted : null,
+                      ),
+                    ),
+                    if (blocked && courier.block != null)
+                      Text(
+                        // The server's stable code, rendered here in the
+                        // seller's language.
+                        courier.block!.label,
+                        style: EcomsbdType.caption.copyWith(
+                          color: courier.block!.isFixableInSettings
+                              ? EcomsbdColors.amber
+                              : EcomsbdColors.muted2,
+                        ),
+                      )
+                    else if (courier.storeName != null)
+                      Text(
+                        courier.storeName!,
+                        style: EcomsbdType.caption.copyWith(
+                          color: EcomsbdColors.muted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

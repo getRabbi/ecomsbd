@@ -96,6 +96,18 @@ class CourierRepository {
     return CourierAccount.fromJson(json);
   }
 
+  /// Which couriers this shop can book with right now, and why not.
+  ///
+  /// Couriers with nothing to connect — manual mode, or one with no verified
+  /// contract — are absent from this list rather than present and broken.
+  Future<List<BookableCourier>> bookable() async {
+    final rows = await api.getList('/couriers/bookable');
+    return <BookableCourier>[
+      for (final row in rows)
+        BookableCourier.fromJson(row as Map<String, dynamic>),
+    ];
+  }
+
   /// The callback URL to paste into the courier's own panel.
   Future<WebhookSetup> webhookSetup(String provider) async {
     final json = await api.get('/couriers/accounts/$provider/webhook');

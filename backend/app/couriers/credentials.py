@@ -90,6 +90,11 @@ class ProviderCredentialSpec:
     #: Whether this provider sends webhooks ecomsbd can verify, which means the
     #: seller is given a callback URL and asked for a webhook secret.
     uses_webhook: bool = False
+    #: Whether the booking form may offer a delivery-type choice. Declared here
+    #: rather than decided in the UI, so the booking sheet never branches on a
+    #: provider name to know which extra field to show. ``False`` means the
+    #: field is hidden, not that the courier has one delivery type.
+    supports_delivery_type: bool = False
     webhook_help_en: str | None = None
     webhook_help_bn: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -109,6 +114,7 @@ class ProviderCredentialSpec:
             "supports_sandbox": self.supports_sandbox,
             "requires_store": self.requires_store,
             "uses_webhook": self.uses_webhook,
+            "supports_delivery_type": self.supports_delivery_type,
             "webhook_help_en": self.webhook_help_en,
             "webhook_help_bn": self.webhook_help_bn,
         }
@@ -140,6 +146,7 @@ STEADFAST_SPEC = ProviderCredentialSpec(
     ),
     primary="api_key",
     secondary="secret_key",
+    supports_delivery_type=True,
 )
 
 PATHAO_SPEC = ProviderCredentialSpec(
@@ -184,6 +191,12 @@ PATHAO_SPEC = ProviderCredentialSpec(
         "Pathao মার্চেন্ট প্যানেলে এই URL ও সিক্রেট বসান, তাহলে Pathao পার্সেলের "
         "অবস্থা হালনাগাদ থাকবে।"
     ),
+    # Pathao does document two delivery types (48 Normal, 12 On Demand), but
+    # the booking API's `delivery_type` field is Steadfast-shaped — 0 or 1 —
+    # so offering the choice here would send Pathao a value it does not
+    # recognise. Every Pathao booking goes out as Normal until that field is
+    # made per-provider.
+    supports_delivery_type=False,
 )
 
 CREDENTIAL_SPECS: dict[str, ProviderCredentialSpec] = {

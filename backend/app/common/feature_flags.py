@@ -55,6 +55,17 @@ class FlagKey(StrEnum):
     RECONCILIATION_SHADOW_MODE = "reconciliation_shadow_mode"
 
 
+#: Which flag gates each courier provider. Manual mode has no flag: it must
+#: never be switchable off, because it is the fallback every other provider
+#: degrades to. Shared, because both the provider listing and the bookable-
+#: courier check need it and two copies would drift.
+COURIER_PROVIDER_FLAGS: dict[str, str] = {
+    "steadfast": FlagKey.STEADFAST_ENABLED,
+    "pathao": FlagKey.PATHAO_ENABLED,
+    "redx": FlagKey.REDX_ENABLED,
+}
+
+
 #: Values used when a flag has no row yet. Everything provider-facing is off:
 #: a feature that has not been verified against real documentation must not be
 #: reachable just because its row is missing.

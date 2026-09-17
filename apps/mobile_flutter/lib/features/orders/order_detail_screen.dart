@@ -550,7 +550,7 @@ class _SendItSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canBook = ref.watch(canBookWithCourierProvider);
+    final canBook = ref.watch(canBookWithAnyCourierProvider);
     final courierReady = canBook.maybeWhen(
       data: (value) => value,
       orElse: () => false,

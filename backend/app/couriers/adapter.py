@@ -33,6 +33,7 @@ from app.couriers.capabilities import Capability
 
 __all__ = [
     "BookingOutcome",
+    "BookingPreview",
     "BookingRequest",
     "BookingResult",
     "CourierAdapter",
@@ -156,6 +157,35 @@ class BookingRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class BookingPreview:
+    """What a provider is about to send, in a form safe to persist.
+
+    This exists so the booking service can record evidence and mask a phone
+    number **without knowing which provider it is talking to**. Before it, the
+    generic service called Steadfast's payload builder for every provider,
+    which meant a Pathao booking stored a Steadfast-shaped request in
+    ``courier_raw_payloads`` — evidence that describes a call nobody made, in
+    the one table whose entire purpose is explaining a result months later.
+
+    Building it is also the provider's local validation step: an adapter raises
+    ``ValueError`` from :meth:`CourierAdapter.describe_booking` when it would
+    refuse the booking itself, before anything is persisted as sent.
+    """
+
+    #: The provider-shaped request body, already masked. Stored as evidence, so
+    #: it must be safe at rest rather than relying on a log redactor.
+    redacted_payload: dict[str, Any]
+    #: The recipient phone in the provider's own format, masked.
+    recipient_phone_masked: str
+    #: Whole taka the courier is asked to collect.
+    cod_taka: int
+    #: The paisa remainder that cannot be handed over in cash. Recorded, never
+    #: dropped, so a receivable is never quietly a few paisa from the money
+    #: that can actually arrive.
+    cod_residual_paisa: int
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderConsignment:
     """A parcel as the provider reports it."""
 
@@ -260,6 +290,24 @@ class CourierAdapter(Protocol):
     """
 
     provider: str
+
+    #: ecomsbd's batch size for this provider. A property rather than a shared
+    #: setting because each provider's ceiling — and each provider's blast
+    #: radius when a batch fails — is its own.
+    @property
+    def bulk_chunk_size(self) -> int: ...
+
+    def describe_booking(self, req: BookingRequest, merchant_reference: str) -> BookingPreview:
+        """What this adapter would send, safe to persist, plus the COD split.
+
+        Raises ``ValueError`` when the provider would refuse the booking
+        locally — a phone that is not a Bangladeshi mobile, an address below a
+        documented minimum, a reference outside the allowed character set. The
+        booking service calls this *before* anything is recorded as sent, so a
+        locally-invalid booking never produces an attempt row or a provider
+        call.
+        """
+        ...
 
     async def validate_credentials(self, creds: Any) -> ValidationResult: ...
 

@@ -53,10 +53,14 @@ from app.core.clock import utc_now
 from app.core.config import Settings, get_settings
 from app.core.errors import ConflictError, ErrorCode, NotFoundError, ValidationError
 from app.core.logging import get_logger
-from app.core.redaction import mask_phone
 from app.core.security import CredentialVault
 from app.couriers.accounts import CourierAccountService
-from app.couriers.adapter import BookingOutcome, BookingRequest, BookingResult
+from app.couriers.adapter import (
+    BookingOutcome,
+    BookingRequest,
+    BookingResult,
+    CourierAdapter,
+)
 from app.couriers.capabilities import Capability
 from app.couriers.metrics import CourierMetric, record_metric
 from app.couriers.models import (
@@ -69,11 +73,6 @@ from app.couriers.models import (
     CourierRawPayload,
     RawPayloadKind,
     payload_hash,
-)
-from app.couriers.steadfast.adapter import (
-    SteadfastAdapter,
-    build_create_request,
-    provider_cod_taka,
 )
 from app.customers.models import Customer
 from app.customers.service import CUSTOMER_PHONE_CONTEXT
@@ -187,6 +186,10 @@ class _Prepared:
     consignment: Consignment
     attempt: CourierBookingAttempt
     request: BookingRequest
+    #: The provider-shaped, masked payload, captured when the attempt was
+    #: prepared. Kept rather than rebuilt so the evidence row records exactly
+    #: what was described at send time.
+    redacted_request: dict[str, object] = field(default_factory=dict)
 
 
 class CourierBookingService:
@@ -237,6 +240,7 @@ class CourierBookingService:
         prepared = await self._prepare(
             order_id,
             account=account,
+            adapter=adapter,
             provider=provider,
             note=note,
             item_description=item_description,
@@ -316,6 +320,7 @@ class CourierBookingService:
                     await self._prepare(
                         order_id,
                         account=account,
+                        adapter=adapter,
                         provider=provider,
                         note=note,
                         item_description=None,
@@ -394,6 +399,7 @@ class CourierBookingService:
         order_id: uuid.UUID,
         *,
         account: CourierAccount,
+        adapter: CourierAdapter,
         provider: str,
         note: str | None,
         item_description: str | None,
@@ -446,6 +452,7 @@ class CourierBookingService:
             order,
             note=note,
             item_description=item_description,
+            account=account,
         )
 
         if consignment is None:
@@ -469,11 +476,12 @@ class CourierBookingService:
             consignment.courier_account_id = account.id
 
         request = _with_reference(request, consignment.merchant_reference)
-        # Validates against the documented invoice rules before anything is
-        # persisted as sent.
-        prepared_payload = build_create_request(request, consignment.merchant_reference)
+        # The adapter describes its own payload and validates it locally, so
+        # this method never has to know which provider it is preparing for.
+        # It raises ValueError when the provider would refuse the booking
+        # itself — before an attempt row exists and before anything is sent.
+        preview = adapter.describe_booking(request, consignment.merchant_reference)
 
-        cod_taka, residual = provider_cod_taka(request.cod_amount)
         consignment.booking_attempt_count += 1
         attempt = CourierBookingAttempt(
             consignment_id=consignment.id,
@@ -485,9 +493,9 @@ class CourierBookingService:
             state=str(BookingAttemptState.PENDING),
             is_bulk=is_bulk,
             batch_id=batch_id,
-            requested_cod_taka=cod_taka,
-            cod_residual_paisa=residual,
-            provider_phone_masked=mask_phone(prepared_payload.recipient_phone),
+            requested_cod_taka=preview.cod_taka,
+            cod_residual_paisa=preview.cod_residual_paisa,
+            provider_phone_masked=preview.recipient_phone_masked,
             started_at=utc_now(),
         )
         self._db.add(attempt)
@@ -499,7 +507,13 @@ class CourierBookingService:
                 "delivery_type": delivery_type,
             }
 
-        return _Prepared(order=order, consignment=consignment, attempt=attempt, request=request)
+        return _Prepared(
+            order=order,
+            consignment=consignment,
+            attempt=attempt,
+            request=request,
+            redacted_request=preview.redacted_payload,
+        )
 
     # -------------------------------------------------------------- apply --
 
@@ -527,9 +541,7 @@ class CourierBookingService:
                 if attempt.is_bulk
                 else RawPayloadKind.BOOKING_RESPONSE
             ),
-            request_payload=build_create_request(
-                prepared.request, attempt.merchant_reference
-            ).redacted(),
+            request_payload=prepared.redacted_request,
             response_payload=(
                 dict(result.consignment.raw) if result.consignment is not None else None
             ),
@@ -688,7 +700,7 @@ class CourierBookingService:
 
     # ---------------------------------------------------------- internals --
 
-    async def _require_account(self, provider: str) -> tuple[CourierAccount, SteadfastAdapter]:
+    async def _require_account(self, provider: str) -> tuple[CourierAccount, CourierAdapter]:
         account = await self._accounts.for_provider(provider)
         if account is None or not account.has_credentials:
             raise ConflictError(
@@ -720,11 +732,16 @@ class CourierBookingService:
         adapter = self._accounts.adapter_for(provider)
         if adapter is None:
             raise ValidationError(f"{provider} has no courier adapter")
-        return account, adapter  # type: ignore[return-value]
+        return account, adapter
 
-    def _chunk_size(self, adapter: SteadfastAdapter) -> int:
-        configured = getattr(getattr(adapter, "client", None), "config", None)
-        return getattr(configured, "bulk_chunk_size", self._settings.steadfast_bulk_chunk_size)
+    def _chunk_size(self, adapter: CourierAdapter) -> int:
+        """The provider's own batch size, from the adapter.
+
+        Each provider's ceiling — and its blast radius when a batch fails
+        ambiguously — is its own, so this no longer falls back to Steadfast's
+        setting for every courier.
+        """
+        return max(1, int(adapter.bulk_chunk_size))
 
     async def _lock_order(self, order_id: uuid.UUID) -> Order:
         """Load an order, taking a row lock where the backend offers one.
@@ -780,12 +797,20 @@ class CourierBookingService:
         *,
         note: str | None,
         item_description: str | None,
+        account: CourierAccount | None = None,
     ) -> BookingRequest:
         """Build the normalized booking input from the order.
 
         The phone comes from the order's customer in canonical E.164 and stays
         that way; the provider-format transform happens in the adapter, once,
         on the way out (brief section 6).
+
+        ``store_reference`` carries the pickup store the seller chose on the
+        courier account, for the providers that require one — Pathao rejects
+        every create without it. It is passed as a *generic* field rather than
+        read from the account inside the adapter, so this method stays free of
+        provider branches and a second provider needing a pickup store costs
+        nothing here.
         """
         customer = await self._db.get(Customer, order.customer_id) if order.customer_id else None
         phone = self._recipient_phone(customer)
@@ -822,6 +847,7 @@ class CourierBookingService:
             item_description=item_description or f"{quantity} item(s)",
             item_quantity=max(1, quantity),
             note=note or order.note,
+            store_reference=_store_reference_of(account),
         )
 
     def _recipient_phone(self, customer: Customer | None) -> str | None:
@@ -953,3 +979,20 @@ def _recovery_delay(settings: Settings, attempts: int):  # type: ignore[no-untyp
         settings.courier_recovery_max_delay_seconds,
     )
     return timedelta(seconds=seconds)
+
+
+def _store_reference_of(account: CourierAccount | None) -> str | None:
+    """The pickup store chosen on a courier account, if it has one.
+
+    Returns ``None`` for a provider with no store concept, which is the normal
+    case and not an error. A provider that *requires* one and has none set
+    fails in its own adapter, before anything is sent — which is where the
+    requirement is documented, rather than here.
+    """
+    if account is None:
+        return None
+    store_id = (account.metadata_json or {}).get("store_id")
+    if store_id is None:
+        return None
+    text = str(store_id).strip()
+    return text or None

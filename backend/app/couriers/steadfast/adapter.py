@@ -25,8 +25,10 @@ from typing import Any
 from app.common.money import BDT, Money
 from app.common.phone import try_normalize_bd_phone
 from app.core.logging import get_logger
+from app.core.redaction import mask_phone
 from app.couriers.adapter import (
     BookingOutcome,
+    BookingPreview,
     BookingRequest,
     BookingResult,
     ProviderConsignment,
@@ -227,6 +229,28 @@ class SteadfastAdapter:
         distinction or force every provider to grow a method it cannot serve.
         """
         return self._client
+
+    @property
+    def bulk_chunk_size(self) -> int:
+        return self._client.config.bulk_chunk_size
+
+    def describe_booking(self, req: BookingRequest, merchant_reference: str) -> BookingPreview:
+        """What would be sent, masked, plus the COD split.
+
+        Delegates to :func:`build_create_request` and
+        :func:`provider_cod_taka`, which is what the booking service used to
+        call directly. Moving the call behind this method is the whole point:
+        the generic service no longer reaches into one provider's module to
+        describe every provider's booking.
+        """
+        payload = build_create_request(req, merchant_reference)
+        cod_taka, residual = provider_cod_taka(req.cod_amount)
+        return BookingPreview(
+            redacted_payload=payload.redacted(),
+            recipient_phone_masked=mask_phone(payload.recipient_phone),
+            cod_taka=cod_taka,
+            cod_residual_paisa=residual,
+        )
 
     # -------------------------------------------------------- capabilities --
 

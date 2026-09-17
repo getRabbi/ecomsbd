@@ -39,259 +39,68 @@ class CourierAccountsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account = ref.watch(courierAccountProvider(steadfast));
     final evidence = ref.watch(providerEvidenceProvider(steadfast));
 
     return DetailScaffold(
       title: context.tr('ca.title'),
       children: <Widget>[
-        account.when(
-          loading: () => SkeletonLoader.card(height: 180),
-          error: (error, _) => error is ApiError
-              ? ErrorStateCard(
-                  error: error,
-                  onRetry: () =>
-                      ref.invalidate(courierAccountProvider(steadfast)),
-                )
-              : EmptyState(
-                  icon: Icons.error_outline,
-                  title: context.tr('common.couldNotLoad'),
-                  message: '$error',
-                ),
-          data: (value) => _SteadfastCard(account: value),
-        ),
-        const SizedBox(height: EcomsbdSpacing.md),
+        // Every courier, rendered from the server's own declaration of how to
+        // connect it. There is no per-courier widget any more: adding RedX,
+        // once its documentation exists, needs no change in this file.
+        const _Couriers(),
         evidence.when(
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),
           data: (value) => _WhatThisCourierSupports(evidence: value),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
-        // Every other courier, rendered from the server's own declaration of
-        // how to connect it. Steadfast keeps its dedicated card above for now;
-        // both converge onto this one in the multi-courier UX work, at which
-        // point `_SteadfastCard` goes away.
-        const _OtherCouriers(),
         const _ManualModeAlwaysWorks(),
       ],
     );
   }
 }
 
-/// The couriers beyond Steadfast, driven entirely by `/couriers/providers`.
+/// Every connectable courier, driven entirely by `/couriers/providers`.
 ///
-/// Renders nothing at all when that call has not answered — a courier list is
-/// additive information, and a spinner or an error card in its place would make
-/// the connected courier above look broken.
-class _OtherCouriers extends ConsumerWidget {
-  const _OtherCouriers();
+/// Couriers with nothing to connect — manual mode, or one with no verified
+/// contract — are absent from the server's list, so they are absent here
+/// without this widget knowing why.
+class _Couriers extends ConsumerWidget {
+  const _Couriers();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final providers = ref.watch(courierProvidersProvider);
     return providers.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      loading: () => SkeletonLoader.card(height: 180),
+      error: (error, _) => error is ApiError
+          ? ErrorStateCard(
+              error: error,
+              onRetry: () => ref.invalidate(courierProvidersProvider),
+            )
+          : EmptyState(
+              icon: Icons.error_outline,
+              title: context.tr('common.couldNotLoad'),
+              message: '$error',
+            ),
       data: (rows) {
-        final others = <CourierProviderInfo>[
+        final connectable = <CourierProviderInfo>[
           for (final row in rows)
-            if (row.provider != CourierAccountsScreen.steadfast &&
-                row.isConnectable)
-              row,
+            if (row.isConnectable) row,
         ];
-        if (others.isEmpty) {
+        if (connectable.isEmpty) {
           return const SizedBox.shrink();
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            for (final info in others) ...<Widget>[
+            for (final info in connectable) ...<Widget>[
               _ProviderCard(info: info),
               const SizedBox(height: EcomsbdSpacing.md),
             ],
           ],
         );
       },
-    );
-  }
-}
-
-class _SteadfastCard extends ConsumerStatefulWidget {
-  const _SteadfastCard({required this.account});
-
-  final CourierAccount? account;
-
-  @override
-  ConsumerState<_SteadfastCard> createState() => _SteadfastCardState();
-}
-
-class _SteadfastCardState extends ConsumerState<_SteadfastCard> {
-  bool _busy = false;
-  ConnectionTestResult? _lastCheck;
-
-  Future<void> _test() async {
-    setState(() {
-      _busy = true;
-      _lastCheck = null;
-    });
-    try {
-      final result = await ref
-          .read(courierRepositoryProvider)
-          .testConnection(CourierAccountsScreen.steadfast);
-      ref.invalidate(courierAccountsProvider);
-      if (mounted) {
-        setState(() => _lastCheck = result);
-      }
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  Future<void> _disconnect() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('ca.disconnectTitle')),
-        content: Text(context.tr('ca.disconnectBody')),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.tr('common.keepIt')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.tr('common.disconnect')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(courierRepositoryProvider)
-          .disconnect(CourierAccountsScreen.steadfast);
-      ref.invalidate(courierAccountsProvider);
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  Future<void> _connect() async {
-    final result = await ConnectCourierSheet.show(
-      context,
-      provider: CourierAccountsScreen.steadfast,
-      isReconnect: widget.account?.needsReconnect ?? false,
-    );
-    if (result != null && mounted) {
-      ref.invalidate(courierAccountsProvider);
-      setState(() => _lastCheck = result);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final account = widget.account;
-    final status = account?.status ?? CourierAccountStatus.disconnected;
-
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              const Expanded(
-                child: Text('Steadfast', style: EcomsbdType.sectionTitle),
-              ),
-              StatusChip(label: status.label, tone: _toneFor(status)),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _subtitleFor(status),
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-          if (account?.maskedIdentifier != null) ...<Widget>[
-            const SizedBox(height: EcomsbdSpacing.sm),
-            _DetailRow(
-              label: context.tr('ca.apiKeyLabel'),
-              // The only credential-derived value that ever reaches this
-              // device, and it is not reversible.
-              value: account!.maskedIdentifier!,
-            ),
-          ],
-          if (account?.lastVerifiedAt != null)
-            _DetailRow(
-              label: context.tr('ca.lastChecked'),
-              value: _relative(account!.lastVerifiedAt!),
-            ),
-          if (account?.reportedBalancePaisa != null)
-            _DetailRow(
-              // Labelled as the courier's number, never merged with the COD
-              // outstanding total on the Money screen: they measure different
-              // things (brief section 19).
-              label: context.tr('ca.reportedBalance'),
-              value: Money(account!.reportedBalancePaisa!).format(),
-            ),
-          if (_lastCheck != null) ...<Widget>[
-            const SizedBox(height: EcomsbdSpacing.sm),
-            _CheckResultBanner(result: _lastCheck!),
-          ],
-          const SizedBox(height: EcomsbdSpacing.md),
-          Wrap(
-            spacing: EcomsbdSpacing.xs,
-            runSpacing: EcomsbdSpacing.xs,
-            children: <Widget>[
-              FilledButton(
-                onPressed: _busy ? null : _connect,
-                style: _primaryButton,
-                child: Text(switch (status) {
-                  CourierAccountStatus.connected => context.tr(
-                    'ca.replaceKeys',
-                  ),
-                  CourierAccountStatus.needsReconnect => context.tr(
-                    'ca.reconnect',
-                  ),
-                  _ => context.tr('common.connect'),
-                }),
-              ),
-              if (account != null && account.connected)
-                OutlinedButton(
-                  onPressed: _busy ? null : _test,
-                  child: Text(
-                    _busy
-                        ? context.tr('settings.checking')
-                        : context.tr('ca.testConnection'),
-                  ),
-                ),
-              if (account != null &&
-                  status != CourierAccountStatus.disconnected)
-                TextButton(
-                  onPressed: _busy ? null : _disconnect,
-                  child: Text(context.tr('common.disconnect')),
-                ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -303,12 +112,6 @@ Tone _toneFor(CourierAccountStatus status) => switch (status) {
   CourierAccountStatus.unknown => Tone.neutral,
 };
 
-String _subtitleFor(CourierAccountStatus status) => switch (status) {
-  CourierAccountStatus.connected => _t('ca.connectedSub'),
-  CourierAccountStatus.needsReconnect => _t('ca.needsReconnectSub'),
-  CourierAccountStatus.disconnected => _t('ca.notConnectedSub'),
-  CourierAccountStatus.unknown => _t('ca.unreadable'),
-};
 
 /// The four validation outcomes, rendered as four different things.
 ///
@@ -620,6 +423,16 @@ class _ProviderCardState extends ConsumerState<_ProviderCard> {
             _DetailRow(
               label: context.tr('ca.lastChecked'),
               value: _relative(account!.lastVerifiedAt!),
+            ),
+          if (account?.reportedBalancePaisa != null)
+            _DetailRow(
+              // Labelled as the courier's own number, never merged with the
+              // COD outstanding total on the Money screen: they measure
+              // different things (brief section 19).
+              label: context.tr('ca.providerReportedBalance', <String, Object?>{
+                'provider': widget.info.displayName,
+              }),
+              value: Money(account!.reportedBalancePaisa!).format(),
             ),
           if (_form.requiresStore && connected)
             _DetailRow(

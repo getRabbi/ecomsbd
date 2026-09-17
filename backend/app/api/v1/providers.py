@@ -19,19 +19,11 @@ from fastapi import APIRouter
 
 from app.api.deps import CurrentPrincipal, FeatureFlagsDep
 from app.api.v1.schemas import ProviderResponse
-from app.common.feature_flags import FlagKey
+from app.common.feature_flags import COURIER_PROVIDER_FLAGS
 from app.couriers.capabilities import load_all_manifests
 from app.couriers.credentials import spec_for
 
 router = APIRouter(prefix="/couriers", tags=["couriers"])
-
-#: Which flag gates each provider. Manual mode has no flag: it must never be
-#: switchable off, because it is the fallback every other provider degrades to.
-_PROVIDER_FLAGS: dict[str, FlagKey] = {
-    "steadfast": FlagKey.STEADFAST_ENABLED,
-    "pathao": FlagKey.PATHAO_ENABLED,
-    "redx": FlagKey.REDX_ENABLED,
-}
 
 
 @router.get(
@@ -47,7 +39,7 @@ async def list_providers(
     responses: list[ProviderResponse] = []
 
     for provider, manifest in sorted(manifests.items()):
-        flag = _PROVIDER_FLAGS.get(provider)
+        flag = COURIER_PROVIDER_FLAGS.get(provider)
         enabled = (
             True if flag is None else await flags.is_enabled(flag, tenant_id=principal.tenant_id)
         )

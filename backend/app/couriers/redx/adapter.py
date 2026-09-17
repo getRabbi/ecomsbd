@@ -31,6 +31,7 @@ from app.common.money import Money
 from app.core.logging import get_logger
 from app.couriers.adapter import (
     BookingOutcome,
+    BookingPreview,
     BookingRequest,
     BookingResult,
     ProviderCustomerStats,
@@ -63,6 +64,22 @@ class RedxAdapter:
 
     provider = PROVIDER
     blocker = CONTRACT_BLOCKER
+
+    @property
+    def bulk_chunk_size(self) -> int:
+        """One. Nothing is ever sent, and a batch size is not a claim."""
+        return 1
+
+    def describe_booking(self, req: BookingRequest, merchant_reference: str) -> BookingPreview:
+        """Refuses, because there is no documented payload to describe.
+
+        ``ValueError`` is the protocol's way for an adapter to say it would
+        reject this booking locally, and the booking service turns it into a
+        clean failure before anything is recorded as sent. Returning an empty
+        payload instead would put a meaningless evidence row in
+        ``courier_raw_payloads``.
+        """
+        raise ValueError(UNAVAILABLE_REASON_EN)
 
     # -------------------------------------------------------- capabilities --
 

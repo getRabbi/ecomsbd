@@ -27,10 +27,12 @@ from app.api.deps import (
     CourierBookingDep,
     CourierReturnsDep,
     DbSession,
+    FeatureFlagsDep,
     PaymentSyncDep,
     Principal,
     require_permission,
 )
+from app.common.feature_flags import COURIER_PROVIDER_FLAGS
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.couriers.accounts import ConnectRequest
@@ -237,6 +239,60 @@ def _resolve_credential_slots(provider: str, payload: CourierConnectPayload) -> 
             details={"provider": provider},
         )
     return payload.api_key, payload.secret_key
+
+
+class BookableCourierResponse(BaseModel):
+    """Whether one courier can take a booking from this shop right now.
+
+    ``reason`` is a stable code, not a sentence: the mobile and web clients
+    branch on it and each renders its own copy in the seller's language. Every
+    value is derived from the capability manifest, the credential declaration,
+    the account's state and provider health — never from a provider name, so
+    the booking UI stays provider-independent.
+    """
+
+    provider: str
+    display_name: str
+    bookable: bool
+    #: ``NOT_ENABLED``, ``NO_VERIFIED_CREATE``, ``NOT_CONNECTED``,
+    #: ``NEEDS_RECONNECT``, ``NEEDS_PICKUP_STORE`` or ``PROVIDER_UNAVAILABLE``.
+    reason: str | None = None
+    #: Whether this courier needs a pickup store at all, so the client can
+    #: offer the fix rather than only reporting the problem.
+    requires_store: bool = False
+    store_name: str | None = None
+    #: Whether the booking form may offer a delivery-type choice for this
+    #: courier. Read by the booking sheet so it never checks a provider name.
+    supports_delivery_type: bool = False
+
+
+@router.get(
+    "/bookable",
+    response_model=list[BookableCourierResponse],
+    summary="Couriers this shop can book with right now",
+)
+async def bookable_couriers(
+    principal: Booker,
+    accounts: CourierAccountsDep,
+    flags: FeatureFlagsDep,
+) -> list[BookableCourierResponse]:
+    """The courier picker's source of truth.
+
+    Answers with every courier that *could* be a booking option, each marked
+    bookable or not with the first thing a seller would have to fix. A courier
+    with nothing to connect — manual mode, or one with no verified contract —
+    is absent entirely rather than listed as broken.
+
+    ``ORDER_BOOK`` rather than ``COURIER_CREDENTIAL_MANAGE``: an operator who
+    books parcels needs to know which couriers are available, without being
+    given access to the keys that do the booking.
+    """
+    enabled = {
+        provider: await flags.is_enabled(flag, tenant_id=principal.tenant_id)
+        for provider, flag in COURIER_PROVIDER_FLAGS.items()
+    }
+    rows = await accounts.bookable_couriers(enabled=enabled)
+    return [BookableCourierResponse(**row.as_dict()) for row in rows]
 
 
 @router.get(

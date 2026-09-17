@@ -30,6 +30,8 @@ import secrets
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
+from functools import partial
 from typing import Any
 
 import sqlalchemy as sa
@@ -43,7 +45,7 @@ from app.core.errors import ConflictError, ErrorCode, NotFoundError, ValidationE
 from app.core.logging import get_logger
 from app.core.security import CredentialVault
 from app.couriers.adapter import CourierAdapter, ValidationResult
-from app.couriers.capabilities import Capability, load_manifest
+from app.couriers.capabilities import Capability, load_all_manifests, load_manifest
 from app.couriers.credentials import build_credentials, spec_for
 from app.couriers.metrics import CourierMetric, record_metric
 from app.couriers.models import (
@@ -56,6 +58,8 @@ from app.couriers.registry import CourierAdapterRegistry, get_courier_registry
 from app.db.tenancy import allow_cross_tenant
 
 __all__ = [
+    "BookableCourier",
+    "BookableReason",
     "ConnectRequest",
     "CourierAccountService",
     "ValidationOutcome",
@@ -467,6 +471,96 @@ class CourierAccountService:
             config=dict(account.metadata_json or {}),
         )
 
+    async def bookable_couriers(
+        self, *, enabled: dict[str, bool] | None = None
+    ) -> list[BookableCourier]:
+        """Which couriers this shop can book with right now, and why not.
+
+        Every input is provider-independent — the capability manifest, the
+        credential declaration, the account's own state and provider health —
+        so adding a courier changes no logic here and the client never branches
+        on a provider name.
+
+        ``enabled`` carries the per-shop feature flags, which live in the API
+        layer; a provider missing from the map is treated as enabled so this
+        method is usable from a worker with no flag service.
+
+        The order matters. It reports the *first* thing a seller would have to
+        fix, so "connect it" is never shown for a courier the shop has not been
+        given, and "choose a pickup store" is never shown for one that is not
+        connected.
+        """
+        flags = enabled or {}
+        accounts = {account.provider: account for account in await self.list_accounts()}
+        results: list[BookableCourier] = []
+
+        for provider, manifest in sorted(load_all_manifests().items()):
+            spec = spec_for(provider)
+            if spec is None:
+                # Nothing to connect: manual mode, or a provider with no
+                # verified contract yet. Not a booking option at all.
+                continue
+
+            display_name = spec.display_name
+            requires_store = spec.requires_store
+            account = accounts.get(provider)
+            store_name = (account.metadata_json or {}).get("store_name") if account else None
+
+            # `partial` rather than a closure: it binds this iteration's
+            # values now. A closure would capture the loop variables by
+            # reference, so every entry would report the last provider's name.
+            _no = partial(
+                BookableCourier,
+                provider=provider,
+                display_name=display_name,
+                bookable=False,
+                requires_store=requires_store,
+                store_name=store_name,
+                supports_delivery_type=spec.supports_delivery_type,
+            )
+
+            if not flags.get(provider, True):
+                results.append(_no(reason=BookableReason.NOT_ENABLED))
+                continue
+            if not manifest.supports(Capability.CREATE_SINGLE):
+                results.append(_no(reason=BookableReason.NO_VERIFIED_CREATE))
+                continue
+            if account is None or not account.has_credentials:
+                results.append(_no(reason=BookableReason.NOT_CONNECTED))
+                continue
+            if not account.is_usable:
+                results.append(_no(reason=BookableReason.NEEDS_RECONNECT))
+                continue
+            if requires_store and not (account.metadata_json or {}).get("store_id"):
+                # Connected is not bookable: Pathao rejects every create with
+                # no store_id, and discovering that at booking time wastes a
+                # seller's attempt on an order they were trying to ship.
+                results.append(_no(reason=BookableReason.NEEDS_PICKUP_STORE))
+                continue
+            if not await self._health.allows(
+                provider,
+                capability=str(Capability.CREATE_SINGLE),
+                tenant_id=account.tenant_id,
+            ):
+                results.append(_no(reason=BookableReason.PROVIDER_UNAVAILABLE))
+                continue
+
+            results.append(
+                BookableCourier(
+                    provider=provider,
+                    display_name=display_name,
+                    bookable=True,
+                    requires_store=requires_store,
+                    store_name=store_name,
+                    supports_delivery_type=spec.supports_delivery_type,
+                )
+            )
+
+        # Bookable first, then alphabetically, so the picker opens on something
+        # a seller can actually use.
+        results.sort(key=lambda row: (not row.bookable, row.display_name))
+        return results
+
     async def select_store(
         self, provider: str, *, provider_store_id: str, name: str | None = None
     ) -> CourierAccount:
@@ -679,3 +773,57 @@ async def resolve_account_by_webhook_token(
             )
         )
         return result.scalar_one_or_none()
+
+
+class BookableReason(StrEnum):
+    """Why a courier cannot be booked with right now.
+
+    Stable codes rather than sentences, because the mobile and web clients
+    branch on them and each renders its own copy in the seller's language. Every
+    one of these is provider-independent: it is derived from the capability
+    manifest, the credential declaration, the account's state and provider
+    health, never from a provider name.
+    """
+
+    #: The shop has not been given this courier.
+    NOT_ENABLED = "NOT_ENABLED"
+    #: No verified create exists for this provider yet (RedX today).
+    NO_VERIFIED_CREATE = "NO_VERIFIED_CREATE"
+    #: No credentials stored.
+    NOT_CONNECTED = "NOT_CONNECTED"
+    #: Credentials were rejected repeatedly; a person must re-enter them.
+    NEEDS_RECONNECT = "NEEDS_RECONNECT"
+    #: Connected, but a mandatory pickup store has not been chosen. Pathao
+    #: rejects every create without one, so this is not a cosmetic gap.
+    NEEDS_PICKUP_STORE = "NEEDS_PICKUP_STORE"
+    #: The circuit breaker is open: we already know the provider is failing.
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+
+
+@dataclass(frozen=True, slots=True)
+class BookableCourier:
+    """Whether one courier can take a booking from this shop right now."""
+
+    provider: str
+    display_name: str
+    bookable: bool
+    reason: BookableReason | None = None
+    #: Whether this provider needs a pickup store at all, so the client can
+    #: offer the fix rather than only reporting the problem.
+    requires_store: bool = False
+    store_name: str | None = None
+    #: Whether the booking form may offer a delivery-type choice for this
+    #: courier. The booking sheet reads this instead of checking a provider
+    #: name, which is what keeps the generic order UI provider-independent.
+    supports_delivery_type: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "display_name": self.display_name,
+            "bookable": self.bookable,
+            "reason": str(self.reason) if self.reason else None,
+            "requires_store": self.requires_store,
+            "store_name": self.store_name,
+            "supports_delivery_type": self.supports_delivery_type,
+        }

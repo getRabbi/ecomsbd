@@ -33,8 +33,10 @@ from typing import Any
 from app.common.money import Money
 from app.common.phone import try_normalize_bd_phone
 from app.core.logging import get_logger
+from app.core.redaction import mask_phone
 from app.couriers.adapter import (
     BookingOutcome,
+    BookingPreview,
     BookingRequest,
     BookingResult,
     ProviderConsignment,
@@ -259,6 +261,30 @@ class PathaoAdapter:
         generic adapter interface has no shape for.
         """
         return self._client
+
+    @property
+    def bulk_chunk_size(self) -> int:
+        return self._client.config.bulk_chunk_size
+
+    def describe_booking(self, req: BookingRequest, merchant_reference: str) -> BookingPreview:
+        """What would be sent to Pathao, masked, plus the COD split.
+
+        The stored payload is Pathao-shaped — the fields Pathao's own create
+        actually takes — so the evidence record describes the call that was
+        made rather than some other provider's idea of it.
+        """
+        payload = build_create_payload(req, merchant_reference, store_id=req.store_reference or "")
+        redacted = dict(payload)
+        for key in ("recipient_phone", "recipient_secondary_phone"):
+            if redacted.get(key):
+                redacted[key] = mask_phone(str(redacted[key]))
+        cod_taka, residual = provider_cod_taka(req.cod_amount)
+        return BookingPreview(
+            redacted_payload=redacted,
+            recipient_phone_masked=mask_phone(str(payload["recipient_phone"])),
+            cod_taka=cod_taka,
+            cod_residual_paisa=residual,
+        )
 
     # -------------------------------------------------------- capabilities --
 

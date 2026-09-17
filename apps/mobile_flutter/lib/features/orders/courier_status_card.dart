@@ -86,7 +86,9 @@ class CourierStatusCard extends ConsumerWidget {
             const SizedBox(height: 6),
             // The courier's own word, so a support call can quote it.
             _KeyValue(
-              label: context.tr('csc.steadfastSays'),
+              label: context.tr('csc.providerSays', <String, Object?>{
+                'provider': _providerName(provider),
+              }),
               value: providerRawStatus!.replaceAll('_', ' '),
             ),
           ],
@@ -507,8 +509,16 @@ class _Grip extends StatelessWidget {
   }
 }
 
+/// The courier's name as a seller knows it.
+///
+/// Courier names stay English in both languages — a seller looking at the
+/// Pathao app sees "Pathao". A provider this build has not heard of falls
+/// through to its own identifier rather than being hidden: an unknown courier
+/// on a parcel is something support needs to see, not something to swallow.
 String _providerName(String provider) => switch (provider) {
   'steadfast' => 'Steadfast',
+  'pathao' => 'Pathao',
+  'redx' => 'RedX',
   'manual' => _t('csc.recordedByHand'),
   _ => provider,
 };

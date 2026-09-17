@@ -191,6 +191,45 @@ void main() {
         },
       );
 
+      // The accounts screen renders every courier from this list now, rather
+      // than from a hard-coded Steadfast card, so the form under test is
+       // reached through the server's own declaration of it.
+      harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
+        <String, dynamic>{
+          'provider': 'steadfast',
+          'display_name': 'Steadfast',
+          'capabilities': <String, dynamic>{'create_single': 'true'},
+          'enabled': true,
+          'fully_unverified': false,
+          'unknowns': <String, dynamic>{},
+          'connect_form': <String, dynamic>{
+            'provider': 'steadfast',
+            'display_name': 'Steadfast',
+            'fields': <dynamic>[
+              <String, dynamic>{
+                'name': 'api_key',
+                'label_en': 'API Key',
+                'label_bn': 'API Key',
+                'secret': true,
+                'required': true,
+                'input_type': 'text',
+              },
+              <String, dynamic>{
+                'name': 'secret_key',
+                'label_en': 'Secret Key',
+                'label_bn': 'Secret Key',
+                'secret': true,
+                'required': true,
+                'input_type': 'password',
+              },
+            ],
+            'supports_sandbox': false,
+            'requires_store': false,
+            'uses_webhook': false,
+          },
+        },
+      ]);
+
       await pumpCommerceScreen(
         tester,
         const CourierAccountsScreen(),

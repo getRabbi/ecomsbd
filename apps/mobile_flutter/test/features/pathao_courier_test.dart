@@ -76,6 +76,32 @@ const Map<String, dynamic> _steadfastProvider = <String, dynamic>{
   'fully_unverified': false,
   'enabled': true,
   'unknowns': <String, dynamic>{},
+  'connect_form': <String, dynamic>{
+    'provider': 'steadfast',
+    'display_name': 'Steadfast',
+    'fields': <dynamic>[
+      <String, dynamic>{
+        'name': 'api_key',
+        'label_en': 'API Key',
+        'label_bn': 'API Key',
+        'secret': true,
+        'required': true,
+        'input_type': 'text',
+      },
+      <String, dynamic>{
+        'name': 'secret_key',
+        'label_en': 'Secret Key',
+        'label_bn': 'Secret Key',
+        'secret': true,
+        'required': true,
+        'input_type': 'password',
+      },
+    ],
+    'supports_sandbox': false,
+    'requires_store': false,
+    'uses_webhook': false,
+    'supports_delivery_type': true,
+  },
 };
 
 const Map<String, dynamic> _steadfastEvidence = <String, dynamic>{
