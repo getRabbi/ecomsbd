@@ -21,6 +21,7 @@ import '../../l10n/app_strings.dart';
 import '../notifications/notification_centre_screen.dart';
 import '../orders/order_compose_screen.dart';
 import '../products/products_screen.dart';
+import '../risk/risk_check_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
 import 'widgets/seller_hero.dart';
@@ -286,9 +287,9 @@ class _QuickActions extends StatelessWidget {
           icon: Icons.shield_outlined,
           title: context.tr('home.quick.riskCheck'),
           subtitle: context.tr('home.quick.riskCheckSub'),
-          // Risk lookup needs a provider data path that is not verified yet;
-          // showing it as available would promise something the app cannot do.
-          enabled: false,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const RiskCheckScreen()),
+          ),
         ),
         QuickActionTile(
           icon: Icons.receipt_long_outlined,
