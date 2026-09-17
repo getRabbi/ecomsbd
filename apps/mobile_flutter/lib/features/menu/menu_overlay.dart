@@ -19,6 +19,7 @@ import '../settings/courier_accounts_screen.dart';
 import '../settings/settings_screen.dart';
 import '../imports/imports_screen.dart';
 import '../products/products_screen.dart';
+import '../risk/risk_check_screen.dart';
 import '../shared/responsive.dart';
 
 /// One tile in the menu grid.
@@ -89,6 +90,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.shield_outlined,
       titleKey: 'menu.riskCheck',
       subtitleKey: 'menu.riskCheckSub',
+      destination: RiskCheckScreen.new,
     ),
     _MenuItem(
       icon: Icons.local_shipping_outlined,

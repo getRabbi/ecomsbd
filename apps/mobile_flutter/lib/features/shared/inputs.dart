@@ -22,6 +22,7 @@ class LabelledField extends StatelessWidget {
     this.onChanged,
     this.maxLines = 1,
     this.enabled = true,
+    this.obscureText = false,
   });
 
   final String label;
@@ -33,6 +34,11 @@ class LabelledField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final int maxLines;
   final bool enabled;
+
+  /// Hide the value as it is typed. For a credential the seller is copying in
+  /// from a courier's panel: it is shoulder-surfable otherwise, and it is the
+  /// one thing on that form that never comes back once saved.
+  final bool obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +59,7 @@ class LabelledField extends StatelessWidget {
           onChanged: onChanged,
           maxLines: maxLines,
           enabled: enabled,
+          obscureText: obscureText,
           style: EcomsbdType.body,
           decoration: InputDecoration(
             hintText: hint,

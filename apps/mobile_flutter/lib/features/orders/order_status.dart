@@ -71,6 +71,9 @@ String riskLabel(String state) => switch (state) {
   'MEDIUM' => _t('risk.medium'),
   'HIGH' => _t('risk.high'),
   'NO_HISTORY' => _t('risk.unknown'),
+  // What the risk-check endpoint returns below its sample-size floor. Same
+  // answer as no history at all, because that is what it means.
+  'INSUFFICIENT_DATA' => _t('risk.unknown'),
   _ => state,
 };
 

@@ -371,7 +371,7 @@ against the old code.
 
 | Area | What exists | What is missing |
 |---|---|---|
-| Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | Risk needs a data source (blocked). Profit and courier state are now real per parcel, but the order card still reads the order's own placeholder — wiring it to the consignment and its snapshot is a small follow-up. |
+| Order card states | The server sends `fulfillment_state`, `risk_state` and `profit_state` explicitly, and the card renders them as **Not booked**, **Not checked** and **Pending** | Order cards still read the order's own `risk_state` placeholder; the Risk check screen computes its band on demand instead, which is why nothing writes back to the order yet. Profit and courier state are now real per parcel, but the order card still reads the order's own placeholder — wiring it to the consignment and its snapshot is a small follow-up. |
 | Courier adapter | Fully implemented for Steadfast V1: typed client, transport, contract-as-data, DTOs, status map, error taxonomy, plus the manual path | Live credential test pending. Pathao and RedX remain manifest placeholders. |
 | Provider manifests | Loader, three-valued capability state, per-capability evidence (endpoint, method, models, whether live credentials are needed), named unknowns and blockers | Pathao and RedX are entirely `unknown` pending real documentation. Steadfast is verified against V1 except `webhook`, which stays `unknown` because the document has no webhook section. |
 | Subscriptions | The full state model, provider architecture, verification flow, dunning and reconciliation; every transition recorded | No provider **credentials**. Play needs a service account and a decided package id; bKash needs merchant onboarding. Both refuse honestly and neither can grant today. |
@@ -421,7 +421,7 @@ inventing any of it.
 | Cloudflare R2 | Bucket + keys | Statements and exports live in database rows until then. `R2_CREDENTIALS_REQUIRED`. |
 | Sentry | DSN | Wired and inert, with `send_default_pii=False` and a redaction hook. `SENTRY_CONFIGURATION_REQUIRED`. |
 | **Staging restore drill** | A staging environment | A real drill passed on PostgreSQL 16.13 and runs in CI on every build, but not against production-shaped data — so the stated RTO is an estimate. `STAGING_RESTORE_DRILL_REQUIRED`. |
-| Risk data source | A licensed provider or courier customer-stats capability | Risk check tile is visibly disabled rather than fake; order cards read "Not checked" |
+| Cross-shop risk data | A licensed provider or courier customer-stats capability | Risk check ships on first-party data: the seller's own delivered/returned/cancelled counts for that number, banded by a documented rule, with a sample-size floor below which it answers `INSUFFICIENT_DATA`. Every result is labelled own-shop-only. A network-wide signal is still blocked and is not implied anywhere in the UI. |
 | **Provider statement format** | One real Steadfast/Pathao/RedX payout statement | The statement reader is generic and marked `UNVERIFIED`. It works, and the seller confirms the column mapping, but no provider-specific profile can be written without a real file. |
 
 ---

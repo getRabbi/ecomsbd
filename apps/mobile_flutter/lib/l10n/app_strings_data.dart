@@ -29,6 +29,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._authErrBn,
   ..._componentsBn,
   ..._secBn,
+  ..._riskBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -47,6 +48,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._authErrEn,
   ..._componentsEn,
   ..._secEn,
+  ..._riskEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -2775,3 +2777,81 @@ const Map<String, String> _secBn = <String, String>{
   'vo.wrongTenant': 'এই কেনাকাটা অন্য একটি শপের',
 };
 // <<< generated: secondary screens
+
+/// Risk check (master spec sections 24, 121, 130).
+///
+/// The wording is about the order and the history, never the person: there is
+/// no "fraud", no "scammer", and no claim that reaches past this one shop.
+const Map<String, String> _riskEn = <String, String>{
+  'rc.title': 'Risk check',
+  'rc.subtitle': 'Delivery history with your shop',
+  'rc.phoneLabel': 'Customer phone',
+  'rc.phoneHint': '01XXXXXXXXX',
+  'rc.check': 'Check history',
+  'rc.checking': 'Checking…',
+  'rc.emptyTitle': 'Check a number before you pack',
+  'rc.emptyBody':
+      'Enter a customer phone number to see how their past orders with your shop ended.',
+  'rc.unknownCustomer': 'Not in your customers yet',
+  'rc.historyTitle': 'With your shop',
+  'rc.totalOrders': 'Total orders',
+  'rc.delivered': 'Delivered',
+  'rc.returned': 'Returned',
+  'rc.cancelled': 'Cancelled',
+  'rc.successRate': 'Delivery success',
+  'rc.lastOrder': 'Last order',
+  'rc.whyTitle': 'Why this result',
+  'rc.bandedFrom': 'Based on {count} finished orders with your shop.',
+  'rc.notEnough':
+      'Not enough history to say anything yet. This is not a good sign or a bad one — it is simply too few finished orders.',
+  'rc.checksLeft': '{count} checks left today',
+  'rc.reason.noOrders': 'This number has no finished orders with your shop.',
+  'rc.reason.smallSample':
+      'Too few finished orders so far — one more order would swing the result.',
+  'rc.reason.strongRate': 'Most orders from this number were delivered.',
+  'rc.reason.mixedRate': 'A noticeable share of orders did not reach delivery.',
+  'rc.reason.weakRate':
+      'Fewer than half of the finished orders were delivered.',
+  'rc.reason.hasReturns': 'Some parcels came back.',
+  'rc.reason.hasCancellations': 'Some orders were cancelled.',
+  'rc.reason.ownShopOnly':
+      'This uses only your own shop’s order history. It says nothing about other sellers.',
+  'rc.reason.unknown': 'Extra detail from the server.',
+};
+
+/// Risk check, Bangla.
+const Map<String, String> _riskBn = <String, String>{
+  'rc.title': 'রিস্ক চেক',
+  'rc.subtitle': 'আপনার শপের সঙ্গে ডেলিভারির রেকর্ড',
+  'rc.phoneLabel': 'কাস্টমারের নম্বর',
+  'rc.phoneHint': '01XXXXXXXXX',
+  'rc.check': 'রেকর্ড দেখুন',
+  'rc.checking': 'দেখা হচ্ছে…',
+  'rc.emptyTitle': 'পার্সেল প্যাক করার আগে নম্বরটি দেখে নিন',
+  'rc.emptyBody':
+      'কাস্টমারের নম্বর দিন — আপনার শপে ওই নম্বরের আগের অর্ডারগুলো কেমন শেষ হয়েছিল দেখা যাবে।',
+  'rc.unknownCustomer': 'এই নম্বর এখনও আপনার কাস্টমার নয়',
+  'rc.historyTitle': 'আপনার শপের রেকর্ড',
+  'rc.totalOrders': 'মোট অর্ডার',
+  'rc.delivered': 'ডেলিভারি হয়েছে',
+  'rc.returned': 'ফেরত এসেছে',
+  'rc.cancelled': 'বাতিল হয়েছে',
+  'rc.successRate': 'ডেলিভারি সফলতা',
+  'rc.lastOrder': 'শেষ অর্ডার',
+  'rc.whyTitle': 'এই ফলাফল কেন',
+  'rc.bandedFrom': 'আপনার শপে শেষ হওয়া {count}টি অর্ডার দেখে বলা হয়েছে।',
+  'rc.notEnough':
+      'কিছু বলার মতো রেকর্ড এখনও নেই। এটা ভালো বা খারাপ কোনো লক্ষণ নয় — শেষ হওয়া অর্ডার শুধু খুব কম।',
+  'rc.checksLeft': 'আজ আর {count}টি চেক বাকি',
+  'rc.reason.noOrders': 'আপনার শপে এই নম্বরের শেষ হওয়া কোনো অর্ডার নেই।',
+  'rc.reason.smallSample':
+      'শেষ হওয়া অর্ডার এখনও খুব কম — আর একটি অর্ডারেই ফলাফল বদলে যাবে।',
+  'rc.reason.strongRate': 'এই নম্বরের বেশিরভাগ অর্ডার ডেলিভারি হয়েছে।',
+  'rc.reason.mixedRate': 'ভালোই সংখ্যক অর্ডার ডেলিভারি পর্যন্ত পৌঁছায়নি।',
+  'rc.reason.weakRate': 'শেষ হওয়া অর্ডারের অর্ধেকেরও কম ডেলিভারি হয়েছে।',
+  'rc.reason.hasReturns': 'কিছু পার্সেল ফেরত এসেছে।',
+  'rc.reason.hasCancellations': 'কিছু অর্ডার বাতিল হয়েছিল।',
+  'rc.reason.ownShopOnly':
+      'এটা শুধু আপনার নিজের শপের রেকর্ড। অন্য বিক্রেতার সাথে কেমন ছিল, এটা তা বলে না।',
+  'rc.reason.unknown': 'সার্ভার থেকে বাড়তি তথ্য।',
+};

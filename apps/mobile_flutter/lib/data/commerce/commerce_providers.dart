@@ -8,6 +8,7 @@ import 'customers_repository.dart';
 import 'imports_repository.dart';
 import 'orders_repository.dart';
 import 'products_repository.dart';
+import 'risk_repository.dart';
 
 /// Wiring for the commerce core.
 ///
@@ -63,6 +64,16 @@ final customersRepositoryProvider = Provider<CustomersRepository>((ref) {
     outbox: ref.watch(outboxWriterProvider),
     tenantId: ref.watch(tenantIdProvider),
   );
+});
+
+/// Delivery-risk lookups.
+///
+/// Network-only and unmemoised on purpose: each check is metered against the
+/// shop's daily quota, so answering a repeat from memory would understate what
+/// has been spent and blunt the limit that keeps this from being a number
+/// lookup service.
+final riskRepositoryProvider = Provider<RiskRepository>((ref) {
+  return RiskRepository(api: ref.watch(apiClientProvider));
 });
 
 final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {

@@ -514,6 +514,7 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
               label: context.tr('ca.secretKeyField'),
               controller: _secretKey,
               hint: context.tr('ca.secretKeyHint'),
+              obscureText: true,
               onChanged: (_) => setState(() {}),
             ),
             if (_error != null) ...<Widget>[
