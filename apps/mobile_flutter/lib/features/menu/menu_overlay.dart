@@ -15,6 +15,7 @@ import '../insights/insights_screen.dart';
 import '../money/cases_screen.dart';
 import '../money/payouts_screen.dart';
 import '../notifications/notification_centre_screen.dart';
+import '../settings/courier_accounts_screen.dart';
 import '../settings/settings_screen.dart';
 import '../imports/imports_screen.dart';
 import '../products/products_screen.dart';
@@ -37,8 +38,9 @@ class _MenuItem {
   final String titleKey;
   final String subtitleKey;
 
-  /// The phase that ships this destination. Present means "not built yet",
-  /// and the tile says so rather than opening an empty screen.
+  /// The release that brings this destination, for a tile a seller can
+  /// expect to see land — never an internal milestone name. Absent on a tile
+  /// that is inactive for a reason no date fixes.
   final String? phase;
 
   /// Where the tile goes. Absent for a destination that has not shipped.
@@ -49,10 +51,11 @@ class _MenuItem {
 
 /// The full-screen menu overlay (`.menu-screen`).
 ///
-/// Master spec section 3 lists everything under "More". Destinations that have
-/// not shipped are shown with the phase that will bring them, because a seller
-/// evaluating the app should be able to see its shape — and because a tile that
-/// opens a blank screen is worse than one that explains itself.
+/// Master spec section 3 lists everything under "More". A destination that has
+/// not shipped still gets its tile, because a seller evaluating the app should
+/// be able to see its shape — and because a tile that opens a blank screen is
+/// worse than one that explains itself. Where a release can be named, the tile
+/// names it; an internal milestone label is never one of those names.
 class MenuOverlay extends ConsumerWidget {
   const MenuOverlay({super.key});
 
@@ -86,13 +89,12 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.shield_outlined,
       titleKey: 'menu.riskCheck',
       subtitleKey: 'menu.riskCheckSub',
-      phase: 'Phase C',
     ),
     _MenuItem(
       icon: Icons.local_shipping_outlined,
       titleKey: 'menu.courierAccounts',
       subtitleKey: 'menu.courierAccountsSub',
-      phase: 'Phase C',
+      destination: CourierAccountsScreen.new,
     ),
     _MenuItem(
       icon: Icons.assignment_return_outlined,
@@ -378,7 +380,7 @@ class _MenuTile extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            if (!item.isAvailable) ...<Widget>[
+            if (item.phase != null) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.xs),
               StatusChip(
                 label: item.phase!,
