@@ -367,6 +367,45 @@ void main() {
 
       expect(find.text('Pathao'), findsNothing);
     });
+
+    testWidgets('a courier with no verified contract is not offered', (
+      tester,
+    ) async {
+      final harness = CommerceHarness();
+      harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[]);
+      harness.adapter.onJson(
+        'GET',
+        '/couriers/providers/steadfast/evidence',
+        _steadfastEvidence,
+      );
+      harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
+        _steadfastProvider,
+        // RedX as the server reports it today: enabled, but with every
+        // capability unknown and therefore no connect form. There is nothing
+        // to connect, so no card and no form — manual mode covers it.
+        <String, dynamic>{
+          'provider': 'redx',
+          'display_name': 'RedX',
+          'capabilities': <String, dynamic>{},
+          'enabled': true,
+          'fully_unverified': true,
+          'unknowns': <String, dynamic>{
+            'REDX_API_DOCUMENTATION_REQUIRED': 'unknown',
+          },
+          'manual_fallback': 'Manual courier mode.',
+        },
+      ]);
+
+      await pumpCommerceScreen(
+        tester,
+        const CourierAccountsScreen(),
+        harness: harness,
+      );
+
+      expect(find.text('RedX'), findsNothing);
+      // Manual mode is still presented as a real path, not an apology.
+      expect(find.text('ম্যানুয়াল কুরিয়ার মোড'), findsOneWidget);
+    });
   });
 
   group('Model safety', () {

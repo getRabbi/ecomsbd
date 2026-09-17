@@ -21,6 +21,8 @@ from app.couriers.http import TransportTimeouts as ProviderTimeouts
 from app.couriers.pathao.adapter import PROVIDER as PATHAO
 from app.couriers.pathao.adapter import PathaoAdapter
 from app.couriers.pathao.client import PathaoClient, PathaoConfig
+from app.couriers.redx.adapter import PROVIDER as REDX
+from app.couriers.redx.adapter import RedxAdapter
 from app.couriers.steadfast.adapter import PROVIDER as STEADFAST
 from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
@@ -136,6 +138,12 @@ def build_registry(settings: Settings | None = None) -> CourierAdapterRegistry:
         {
             STEADFAST: _steadfast_factory(resolved),
             PATHAO: _pathao_factory(resolved),
+            # Registered on purpose despite supporting nothing. A `None` here
+            # made every caller say "redx is not a courier ecomsbd can connect
+            # to", which reads as *never will be*; the adapter answers
+            # Unavailable with a reason instead. It has no transport, because
+            # it makes no calls.
+            REDX: lambda: RedxAdapter(),
         }
     )
 

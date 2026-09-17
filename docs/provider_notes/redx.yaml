@@ -1,14 +1,57 @@
 # RedX courier — provider integration manifest
 #
-# STATUS: UNVERIFIED. Scheduled for phase 8.
-# No documentation has been supplied, so every capability is unknown and no
-# implementation exists.
+# Master spec sections 61, 74, 140.
+#
+# STATUS: registered, supporting nothing. No RedX documentation has been
+# supplied or found, so every capability is `unknown` and no RedX call is made.
+#
+# This is a *verified absence*, not an unchecked one. Searched on 2026-09-18:
+#
+#   * openapi.redx.com.bd is live and answers JSON, so the host is real. It
+#     returns 404 {"message": "Please check your specified endpoint and request
+#     method"} for /, /docs, /api-docs, /swagger.json, /openapi.json, /redoc
+#     and /.well-known/openapi.json. No machine-readable spec is published.
+#   * redx.com.bd/api-documentation answers 301 -> /404/. There is no public
+#     documentation page.
+#   * merchant.redx.com.bd does not resolve from here; RedX supplies API
+#     details to merchants through their merchant panel or account manager.
+#   * The RedX Shopify app is published by ShopUp, RedX's parent, but an app
+#     store listing carries no contract.
+#   * Everything else discoverable is third party: Laravel packages, a
+#     community WooCommerce plugin, a nopCommerce plugin, blog posts.
+#
+# Several of those third-party integrations agree with each other on a base URL,
+# an API-ACCESS-TOKEN header and a handful of paths. Agreement between community
+# implementations is NOT documentation, and is not promoted here. Two reasons:
+#
+#   1. It is the category steadfast.yaml and pathao.yaml both exclude by name.
+#      Pathao was implemented from Pathao's own published source, and that
+#      mattered: the widely-repeated community contract for Pathao's own login
+#      endpoint is wrong. A weaker standard for RedX would void the guarantee
+#      this manifest system exists to make.
+#   2. The failure is asymmetric. A wrong field name on a read fails
+#      harmlessly; on a create it either fails or ships a real parcel to the
+#      wrong place and bills the seller. RedX pairs a delivery-area name with
+#      an area id — exactly the shape that misroutes silently.
+#
+# Promoting any capability to `true` requires, and must be recorded here:
+#   1. the documentation that describes it, and its date; or
+#   2. a non-destructive live call proving the shape of the response.
 
 provider: redx
 display_name: RedX
 verified_at: null
 documentation_source: null
+documentation_version: null
+base_url: null
+auth_model: >
+  UNKNOWN. Third-party packages use an API-ACCESS-TOKEN request header against
+  openapi.redx.com.bd, but no RedX-published source confirms the header name,
+  the credential format, or whether the credential expires.
 
+# Every capability is unknown. Nothing is `false`: a `false` would claim RedX
+# does not offer something, and the documentation that would say so is exactly
+# what is missing.
 capabilities:
   credential_validation: unknown
   create_single: unknown
@@ -17,16 +60,68 @@ capabilities:
   webhook: unknown
   balance: unknown
   payouts: unknown
+  payments: unknown
+  payment_consignments: unknown
   returns: unknown
   price_quote: unknown
   customer_stats: unknown
   auto_address: unknown
   cancel: unknown
   list_stores: unknown
+  location_lookup: unknown
+
+endpoints: {}
+
+# ---------------------------------------------------------------------------
+# What must be supplied. Each is a question the documentation has to answer,
+# not a feature request. The full request to send RedX is
+# docs/providers/redx/CONTRACT_REQUIRED.md.
+# ---------------------------------------------------------------------------
+unknowns:
+  BASE_URL_AND_SANDBOX: unknown
+  AUTH_CONTRACT: unknown
+  CREATE_PARCEL_CONTRACT: unknown
+  PROVIDER_CREATE_IDEMPOTENCY: unknown
+  STATUS_LOOKUP_CONTRACT: unknown
+  STATUS_VOCABULARY: unknown
+  DELIVERY_AREA_CONTRACT: unknown
+  PICKUP_STORE_CONTRACT: unknown
+  CANCEL_CONTRACT: unknown
+  RETURN_CONTRACT: unknown
+  DELIVERY_CHARGE_AND_COD_FIELDS: unknown
+  WEBHOOK_CONTRACT: unknown
+  SETTLEMENT_CONTRACT: unknown
+  RATE_LIMIT_CONTRACT: unknown
+  PAGINATION_CONTRACT: unknown
+  ERROR_BODY_CONTRACT: unknown
+
+blockers:
+  - REDX_API_DOCUMENTATION_REQUIRED
 
 manual_fallback: >
-  Manual courier mode with statement import.
+  Manual courier mode, and it covers RedX completely. The seller records the
+  parcel and tracking code by hand, uploads the RedX payout statement as CSV or
+  XLSX, and reconciliation runs on the imported lines exactly as it would on
+  API-sourced payments. Manual mode is the path every provider failure falls
+  back to, not a lesser one — a RedX shop loses automation, not capability.
 
 notes:
-  - "Capability manifest must be created from real merchant documentation before
-     any adapter code is written (master spec section 74)."
+  - "The adapter is registered and implements the full courier interface,
+     reporting every capability as Unavailable with a seller-facing reason. That
+     is deliberate: before it existed, registry.get('redx') returned None and
+     every caller rendered 'redx is not a courier ecomsbd can connect to',
+     which reads as *never will be* and tells a seller nothing about what would
+     change it."
+  - "Credentials cannot be stored for RedX. The account service refuses to save
+     credentials for any provider whose manifest is fully unverified: there is
+     no call those credentials could serve, so keeping a seller's secret would
+     be holding a secret for no purpose while showing a connected courier that
+     cannot move a parcel."
+  - "No RedX endpoint is probed to infer a contract. The 404 survey above
+     establishes only that no spec is published; deriving field names from
+     error responses would be guessing with extra steps."
+  - "When documentation arrives, the work is bounded: transcribe it into
+     app/couriers/redx/contract.py, fill in the adapter behind the interface it
+     already implements, reuse app/couriers/http.py for transport and the
+     reached-provider determination, and add a credential declaration to
+     app/couriers/credentials.py. No shared or V1 code needs to change."

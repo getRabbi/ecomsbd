@@ -616,6 +616,23 @@ class CourierAccountService:
                 f"{request.provider} has no integration manifest",
                 details={"provider": request.provider},
             )
+        if manifest.is_fully_unverified:
+            # Nothing about this provider has been confirmed against real
+            # documentation, so there is no call we could make with these
+            # credentials and no booking they could serve. Keeping them would
+            # mean holding a seller's secret for no purpose and showing a
+            # connected courier that cannot move a parcel — so they are not
+            # stored, and the blocker says what would change that.
+            raise ValidationError(
+                f"{manifest.display_name} cannot be connected yet: none of its "
+                "API behaviour has been verified against real documentation. "
+                "Use manual courier mode for now.",
+                code=ErrorCode.COURIER_PROVIDER_UNAVAILABLE,
+                details={
+                    "provider": request.provider,
+                    "blockers": list(manifest.blockers),
+                },
+            )
 
     def _apply_outcome(self, account: CourierAccount, outcome: ValidationOutcome) -> None:
         account.last_validation_result = str(outcome.result)
