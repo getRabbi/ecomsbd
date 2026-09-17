@@ -205,11 +205,22 @@ class WebhookReceiver:
         verifier: CourierWebhookVerifier,
         parser: CourierWebhookParser,
         provider: str = "steadfast",
+        blocker: str | None = None,
+        unconfigured_detail: str | None = None,
     ) -> None:
         self._db = session
         self._verifier = verifier
         self._parser = parser
         self._provider = provider
+        # Per provider, because "not configured" means different things and has
+        # a different fix. Steadfast has no published contract at all; Pathao
+        # has one and this shop has not pasted its secret in yet. Reporting the
+        # Steadfast blocker for a Pathao delivery would send an operator to
+        # chase a contract that already exists.
+        self._blocker = blocker or WEBHOOK_BLOCKER
+        self._unconfigured_detail = (
+            unconfigured_detail or "Parcel status is kept current by polling."
+        )
 
     async def ingest(self, *, headers: dict[str, str], body: bytes) -> WebhookIngestResult:
         """Take one inbound request as far as it can safely go."""
@@ -261,9 +272,9 @@ class WebhookReceiver:
             # and the body is kept for whoever writes that contract.
             delivery.state = str(WebhookDeliveryState.NOT_CONFIGURED)
             delivery.reason = (
-                f"{WEBHOOK_BLOCKER}: no verified webhook contract exists for "
-                f"{self._provider}, so this delivery was stored and not processed. "
-                "Parcel status is kept current by polling."
+                f"{self._blocker}: this delivery could not be verified for "
+                f"{self._provider}, so it was stored and not processed. "
+                f"{self._unconfigured_detail}"
             )
             await self._db.flush()
             record_metric(CourierMetric.WEBHOOK_NOT_CONFIGURED, provider=self._provider)
@@ -275,7 +286,7 @@ class WebhookReceiver:
                 context={
                     "provider": self._provider,
                     "state": delivery.state,
-                    "blocker": WEBHOOK_BLOCKER,
+                    "blocker": self._blocker,
                 },
             )
             log.info(
@@ -283,7 +294,7 @@ class WebhookReceiver:
                 extra={
                     "provider": self._provider,
                     "operation": "webhook_ingest",
-                    "blocker": WEBHOOK_BLOCKER,
+                    "blocker": self._blocker,
                     "body_bytes": len(body),
                 },
             )
@@ -295,8 +306,8 @@ class WebhookReceiver:
                 # retry loop over a state that will not change on its own.
                 http_status=202,
                 message=(
-                    "Received and stored. This provider has no verified webhook "
-                    "contract, so the delivery was not processed."
+                    "Received and stored. This delivery could not be verified, "
+                    "so it was not processed."
                 ),
             )
 

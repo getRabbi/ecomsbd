@@ -1375,6 +1375,43 @@ const Map<String, String> _secEn = <String, String>{
   'bulk.results': 'Booking results',
   'ca.apiKeyField': 'API Key',
   'ca.apiKeyHint': 'From the Steadfast merchant panel',
+  'ca.callbackUrl': 'Callback URL',
+  'ca.changeStore': 'Change store',
+  'ca.checkingWithProvider': 'Checking with {provider}…',
+  'ca.choosePickupStore': 'Choose a pickup store',
+  'ca.chooseStore': 'Choose store',
+  'ca.connectProvider': 'Connect {provider}',
+  'ca.copyUrl': 'Copy URL',
+  'ca.disconnectProviderBody':
+      'Your credentials for this courier are erased. Parcels already booked keep their tracking, and you can still record couriers by hand.',
+  'ca.disconnectProviderTitle': 'Disconnect {provider}?',
+  'ca.keysNoteProvider':
+      'Find these in your {provider} merchant panel. They are stored encrypted and are never shown again after you save them.',
+  'ca.needsReconnectProviderSub':
+      '{provider} stopped accepting these details. Enter them again to keep booking.',
+  'ca.needsStoreSub':
+      'Choose a pickup store before booking — this courier needs one on every parcel.',
+  'ca.noStoreChosen': 'Not chosen yet',
+  'ca.noStores': 'No pickup stores',
+  'ca.noStoresNote':
+      'Add a store in your {provider} merchant panel, then come back and choose it here.',
+  'ca.notConnectedProviderSub':
+      'Connect your {provider} merchant API details to book parcels from ecomsbd.',
+  'ca.pickupStore': 'Pickup store',
+  'ca.pickupStoreNote':
+      '{provider} collects every parcel from one of your stores, so it needs to know which one.',
+  'ca.readOnlyNoteProvider':
+      'We check the details with {provider} before saving them, using a read-only call. No parcel is created.',
+  'ca.reconnectProvider': 'Reconnect {provider}',
+  'ca.sandboxChip': 'Sandbox',
+  'ca.urlCopied': 'Callback URL copied',
+  'ca.useSandbox': 'Use the sandbox',
+  'ca.useSandboxNote':
+      'Bookings go to the {provider} test system instead of the real one. Nothing is delivered and no money moves.',
+  'ca.webhookMissing': 'Status updates are not set up',
+  'ca.webhookOn': 'Status updates are set up',
+  'ca.webhookSecretField': 'Webhook secret',
+  'ca.webhookSecretHint': 'From the courier panel, where you set the URL',
   'ca.apiKeyLabel': 'API key',
   'ca.capAccountBalance': 'Account balance',
   'ca.capBookBulk': 'Book in bulk',
@@ -2106,6 +2143,43 @@ const Map<String, String> _secBn = <String, String>{
   'bulk.results': 'বুকিংয়ের ফল',
   'ca.apiKeyField': 'API Key',
   'ca.apiKeyHint': 'Steadfast মার্চেন্ট প্যানেল থেকে',
+  'ca.callbackUrl': 'Callback URL',
+  'ca.changeStore': 'স্টোর বদলান',
+  'ca.checkingWithProvider': '{provider}-এর সাথে দেখা হচ্ছে…',
+  'ca.choosePickupStore': 'পিকআপ স্টোর বাছুন',
+  'ca.chooseStore': 'স্টোর বাছুন',
+  'ca.connectProvider': '{provider} যুক্ত করুন',
+  'ca.copyUrl': 'URL কপি করুন',
+  'ca.disconnectProviderBody':
+      'এই কুরিয়ারের জন্য আপনার দেওয়া তথ্য মুছে যাবে। আগে বুক করা পার্সেলের ট্র্যাকিং থেকে যাবে, আর কুরিয়ার নিজে লিখে রাখা তো চলবেই।',
+  'ca.disconnectProviderTitle': '{provider} সংযোগ বিচ্ছিন্ন করবেন?',
+  'ca.keysNoteProvider':
+      'এগুলো আপনার {provider} মার্চেন্ট প্যানেলে পাবেন। এগুলো এনক্রিপ্ট করে রাখা হয় এবং সেভ করার পর আর কখনও দেখানো হয় না।',
+  'ca.needsReconnectProviderSub':
+      '{provider} এই তথ্য আর নিচ্ছে না। বুকিং চালু রাখতে আবার দিন।',
+  'ca.needsStoreSub':
+      'বুক করার আগে একটি পিকআপ স্টোর বাছুন — এই কুরিয়ারের প্রতিটি পার্সেলেই সেটি লাগে।',
+  'ca.noStoreChosen': 'এখনও বাছা হয়নি',
+  'ca.noStores': 'কোনো পিকআপ স্টোর নেই',
+  'ca.noStoresNote':
+      'আপনার {provider} মার্চেন্ট প্যানেলে একটি স্টোর যোগ করুন, তারপর এখানে এসে বেছে নিন।',
+  'ca.notConnectedProviderSub':
+      'ecomsbd থেকে পার্সেল বুক করতে আপনার {provider} মার্চেন্ট API তথ্য যুক্ত করুন।',
+  'ca.pickupStore': 'পিকআপ স্টোর',
+  'ca.pickupStoreNote':
+      '{provider} আপনার একটি স্টোর থেকেই সব পার্সেল সংগ্রহ করে, তাই কোনটি সেটি জানা দরকার।',
+  'ca.readOnlyNoteProvider':
+      'সেভ করার আগে আমরা {provider}-এর সাথে তথ্যগুলো যাচাই করি, শুধু পড়ার একটি কল দিয়ে। কোনো পার্সেল তৈরি হয় না।',
+  'ca.reconnectProvider': '{provider} আবার যুক্ত করুন',
+  'ca.sandboxChip': 'Sandbox',
+  'ca.urlCopied': 'Callback URL কপি হয়েছে',
+  'ca.useSandbox': 'Sandbox ব্যবহার করুন',
+  'ca.useSandboxNote':
+      'বুকিং আসল সিস্টেমে না গিয়ে {provider}-এর টেস্ট সিস্টেমে যাবে। কিছু ডেলিভারি হবে না, টাকারও নড়াচড়া হবে না।',
+  'ca.webhookMissing': 'স্টেটাস আপডেট চালু হয়নি',
+  'ca.webhookOn': 'স্টেটাস আপডেট চালু আছে',
+  'ca.webhookSecretField': 'Webhook secret',
+  'ca.webhookSecretHint': 'কুরিয়ারের প্যানেলে, যেখানে URL বসিয়েছেন',
   'ca.apiKeyLabel': 'API key',
   'ca.capAccountBalance': 'অ্যাকাউন্ট ব্যালেন্স',
   'ca.capBookBulk': 'একসাথে অনেক বুক',

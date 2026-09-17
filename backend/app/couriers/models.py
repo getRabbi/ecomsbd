@@ -137,6 +137,13 @@ class CredentialValidation(StrEnum):
 AUTH_FAILURES_BEFORE_RECONNECT = 3
 
 
+#: Config keys a client may see. An allow-list rather than a deny-list: a key
+#: added to an account's metadata for some future purpose is invisible until
+#: someone deliberately puts it here, which is the right default for a field
+#: that sits next to credentials.
+_PUBLIC_CONFIG_KEYS: frozenset[str] = frozenset({"store_id", "store_name", "sandbox"})
+
+
 class CourierAccount(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     """One shop's credentials for one courier provider.
 
@@ -153,6 +160,9 @@ class CourierAccount(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
         # recovery path depends on that being answerable.
         sa.UniqueConstraint("tenant_id", "provider", name="uq_courier_accounts_tenant_id_provider"),
         sa.Index("ix_courier_accounts_tenant_status", "tenant_id", "status"),
+        # The access path the unauthenticated callback route resolves by, and
+        # the guarantee that two accounts can never share one token.
+        sa.Index("uq_courier_accounts_webhook_token", "webhook_token", unique=True),
         sa.CheckConstraint("consecutive_auth_failures >= 0", name="failures_non_negative"),
     )
 
@@ -173,6 +183,23 @@ class CourierAccount(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
 
     api_key_encrypted: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     secret_key_encrypted: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+
+    #: The provider's webhook signing secret, for providers that verify
+    #: callbacks with one. Encrypted with the same vault and context as the API
+    #: credentials, and never returned to a client: a seller who loses it
+    #: generates a new one rather than reading this back.
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+
+    #: An opaque, unguessable token that identifies this account inside its
+    #: webhook callback URL.
+    #:
+    #: A callback arrives unauthenticated and with no session, so *something*
+    #: has to say which shop it belongs to before its body can be trusted. The
+    #: alternative — reading the shop out of the body first — would mean parsing
+    #: an unverified payload to decide how to verify it. This token is that
+    #: something: it selects the account, and the account's secret then verifies
+    #: the delivery. It is not itself a credential and proves nothing on its own.
+    webhook_token: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
 
     #: Which vault key version wrote these, so rotation can decrypt-old /
     #: encrypt-new without a flag day (master spec section 132).
@@ -251,6 +278,17 @@ class CourierAccount(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
             "reported_balance_at": (
                 self.reported_balance_at.isoformat() if self.reported_balance_at else None
             ),
+            # Non-secret provider settings only — the chosen pickup store, the
+            # sandbox flag. `metadata_json` is the one field on this model a
+            # secret must never be written to, which is why the connect path
+            # keeps secrets in their own encrypted columns.
+            "config": {
+                key: value
+                for key, value in (self.metadata_json or {}).items()
+                if key in _PUBLIC_CONFIG_KEYS
+            },
+            #: Whether a webhook secret is stored. Never the secret itself.
+            "webhook_configured": bool(self.webhook_secret_encrypted),
         }
 
 

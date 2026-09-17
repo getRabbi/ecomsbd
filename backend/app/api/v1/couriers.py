@@ -31,9 +31,11 @@ from app.api.deps import (
     Principal,
     require_permission,
 )
-from app.core.errors import NotFoundError
+from app.core.config import get_settings
+from app.core.errors import NotFoundError, ValidationError
 from app.couriers.accounts import ConnectRequest
 from app.couriers.capabilities import load_manifest
+from app.couriers.credentials import spec_for
 from app.couriers.events import recent_events_for
 from app.tenants.roles import Permission
 
@@ -48,15 +50,65 @@ CredentialManager = Annotated[
 class CourierConnectPayload(BaseModel):
     """The one request body in this file that carries secrets.
 
-    Both values are constrained but not pattern-matched: the supplied
-    documentation states no key format, and rejecting a valid key because we
-    guessed its shape would be worse than passing it to the provider and
-    letting the provider decide.
+    Values are constrained but not pattern-matched: no provider states a key
+    format, and rejecting a valid key because we guessed its shape would be
+    worse than passing it to the provider and letting the provider decide.
+
+    Two ways in, because there are two generations of client:
+
+    *   ``api_key``/``secret_key`` — what V1 sends, and still exactly right for
+        Steadfast.
+    *   ``credentials`` — a map keyed by the field names the provider declares
+        in ``connect_form`` (``client_id``/``client_secret`` for Pathao). A
+        client that renders the form from the declaration posts it back the
+        same way, so adding a provider does not change this model.
+
+    Whichever arrives, the provider's declaration decides which value goes in
+    which encrypted slot.
     """
 
-    api_key: str = Field(min_length=1, max_length=300)
-    secret_key: str = Field(min_length=1, max_length=300)
+    api_key: str | None = Field(default=None, min_length=1, max_length=300)
+    secret_key: str | None = Field(default=None, min_length=1, max_length=300)
+    #: Provider-declared credential fields, by name.
+    credentials: dict[str, str] = Field(default_factory=dict)
+    #: Non-secret provider settings — ``sandbox``, ``store_id``. Echoed back to
+    #: the seller, so a secret must never be put here.
+    config: dict[str, Any] = Field(default_factory=dict)
+    #: The provider's webhook signing secret, where it has one. Stored
+    #: encrypted; there is no endpoint that reads it back.
+    webhook_secret: str | None = Field(default=None, max_length=300)
     label: str | None = Field(default=None, max_length=80)
+
+
+class CourierStoreResponse(BaseModel):
+    """A pickup store on the provider's side."""
+
+    provider_store_id: str
+    name: str
+    address: str | None = None
+
+
+class SelectStorePayload(BaseModel):
+    provider_store_id: str = Field(min_length=1, max_length=64)
+    name: str | None = Field(default=None, max_length=120)
+
+
+class WebhookSetupResponse(BaseModel):
+    """What a seller needs to wire a provider callback up, and nothing more.
+
+    The callback URL contains this account's routing token, so it is shown only
+    to someone who may already manage the credentials. The secret is never
+    returned — ``secret_configured`` says whether one is stored, which is the
+    only thing a settings screen actually needs to render.
+    """
+
+    provider: str
+    supported: bool
+    callback_url: str | None = None
+    secret_configured: bool = False
+    #: Why this matters for this provider, in the seller's terms.
+    help_en: str | None = None
+    help_bn: str | None = None
 
 
 class CourierAccountResponse(BaseModel):
@@ -84,6 +136,10 @@ class CourierAccountResponse(BaseModel):
     #: total: they measure different things (brief section 19).
     reported_balance_paisa: int | None
     reported_balance_at: str | None
+    #: Non-secret provider settings: the chosen pickup store, the sandbox flag.
+    config: dict[str, Any] = Field(default_factory=dict)
+    #: Whether a webhook secret is stored for this account. Never the secret.
+    webhook_configured: bool = False
 
 
 class ConnectionTestResponse(BaseModel):
@@ -135,18 +191,151 @@ async def connect_account(
     fails every booking. A rejection returns ``INVALID_COURIER_CREDENTIALS`` and
     stores nothing.
     """
+    primary, secondary = _resolve_credential_slots(provider, payload)
     account, outcome = await accounts.connect(
         ConnectRequest(
             provider=provider,
-            api_key=payload.api_key,
-            secret_key=payload.secret_key,
+            api_key=primary,
+            secret_key=secondary,
             label=payload.label,
+            config=payload.config,
+            webhook_secret=payload.webhook_secret,
         )
     )
     return ConnectionTestResponse(
         result=str(outcome.result),
         message=outcome.message,
         account=_response(account.public_view()),
+    )
+
+
+def _resolve_credential_slots(provider: str, payload: CourierConnectPayload) -> tuple[str, str]:
+    """Decide which submitted value fills which encrypted slot.
+
+    The provider's own declaration answers this, so the mapping lives in one
+    place instead of being re-derived by every client and every route.
+    """
+    spec = spec_for(provider)
+    if spec is not None and payload.credentials:
+        primary = (payload.credentials.get(spec.primary) or "").strip()
+        secondary = (payload.credentials.get(spec.secondary) or "").strip()
+        if not primary or not secondary:
+            primary_field = spec.field_named(spec.primary)
+            secondary_field = spec.field_named(spec.secondary)
+            raise ValidationError(
+                f"{provider} needs both "
+                f"{primary_field.label_en if primary_field else spec.primary} and "
+                f"{secondary_field.label_en if secondary_field else spec.secondary}",
+                details={"provider": provider},
+            )
+        return primary, secondary
+
+    # The V1 path, still exactly right for a two-key provider.
+    if not payload.api_key or not payload.secret_key:
+        raise ValidationError(
+            "Courier credentials are required",
+            details={"provider": provider},
+        )
+    return payload.api_key, payload.secret_key
+
+
+@router.get(
+    "/accounts/{provider}/stores",
+    response_model=list[CourierStoreResponse],
+    summary="Pickup stores on a connected courier account",
+)
+async def list_stores(
+    provider: str,
+    principal: CredentialManager,
+    accounts: CourierAccountsDep,
+) -> list[CourierStoreResponse]:
+    """List the provider's pickup stores for this shop.
+
+    Only meaningful for a provider whose bookings require one — Pathao's
+    ``store_id`` is mandatory on every create and it publishes no default, so a
+    connected Pathao account is not a bookable one until a store is chosen.
+    A provider without stores returns an empty list rather than an error.
+    """
+    account = await accounts.for_provider(provider)
+    if account is None or not account.has_credentials:
+        raise NotFoundError("No courier account is connected for that provider")
+
+    adapter = accounts.adapter_for(provider)
+    if adapter is None:
+        raise NotFoundError(f"{provider} is not a courier ecomsbd can connect to")
+
+    result = await adapter.list_stores(accounts.credentials_for(account))
+    if not result:
+        # ``Unavailable`` is falsy and carries its reason. A provider with no
+        # store concept is not an error state.
+        return []
+    return [
+        CourierStoreResponse(
+            provider_store_id=store.provider_store_id,
+            name=store.name,
+            address=store.address,
+        )
+        for store in result
+    ]
+
+
+@router.post(
+    "/accounts/{provider}/store",
+    response_model=CourierAccountResponse,
+    summary="Choose the pickup store bookings are made from",
+)
+async def select_store(
+    provider: str,
+    payload: SelectStorePayload,
+    principal: CredentialManager,
+    accounts: CourierAccountsDep,
+) -> CourierAccountResponse:
+    """Record which pickup store this shop books from.
+
+    Stored as account config, not as a credential: it is not secret, it is
+    shown back to the seller, and every booking reads it.
+    """
+    account = await accounts.select_store(
+        provider,
+        provider_store_id=payload.provider_store_id,
+        name=payload.name,
+    )
+    return _response(account.public_view())
+
+
+@router.get(
+    "/accounts/{provider}/webhook",
+    response_model=WebhookSetupResponse,
+    summary="Callback URL to paste into the provider's panel",
+)
+async def webhook_setup(
+    provider: str,
+    principal: CredentialManager,
+    accounts: CourierAccountsDep,
+) -> WebhookSetupResponse:
+    """The callback URL for this shop, and whether a secret is stored.
+
+    For Pathao this is not optional housekeeping: Pathao publishes no status
+    lookup, so a parcel's state only ever advances when a callback arrives.
+    """
+    spec = spec_for(provider)
+    if spec is None or not spec.uses_webhook:
+        return WebhookSetupResponse(provider=provider, supported=False)
+
+    account = await accounts.for_provider(provider)
+    if account is None or not account.has_credentials:
+        raise NotFoundError("No courier account is connected for that provider")
+
+    token = await accounts.ensure_webhook_token(account)
+    settings = get_settings()
+    base = (settings.public_base_url or "").rstrip("/")
+    return WebhookSetupResponse(
+        provider=provider,
+        supported=True,
+        callback_url=f"{base}/v1/webhooks/couriers/{provider}/{token}" if base else None,
+        secret_configured=bool(account.webhook_secret_encrypted),
+        help_en=spec.webhook_help_en,
+        help_bn=spec.webhook_help_bn,
     )
 
 

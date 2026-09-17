@@ -414,6 +414,20 @@ class Settings(BaseSettings):
     #: that move money, so it is refused in deployed environments below.
     steadfast_webhook_enabled: bool = False
 
+    # Pathao. Both hosts are the ones Pathao's own published integration
+    # selects between; sandbox is chosen per courier account, not per
+    # deployment, so a seller can rehearse against it while the shop is live.
+    pathao_base_url: str = "https://api-hermes.pathao.com"
+    pathao_sandbox_base_url: str = "https://courier-api-sandbox.pathao.com"
+    #: ecomsbd's own batch size. Pathao publishes no ceiling for /orders/bulk,
+    #: and no published ceiling is not a licence to send an unbounded batch.
+    pathao_bulk_chunk_size: int = 50
+    #: Pathao publishes a real webhook contract, so unlike Steadfast this can be
+    #: switched on. It still does nothing on its own: each shop's callback is
+    #: verified against that shop's own stored webhook secret, and a shop
+    #: without one is treated as not configured.
+    pathao_webhook_enabled: bool = True
+
     # Adaptive status polling, in minutes. A fresh parcel changes state within
     # hours; a two-week-old one will not change in the next ten minutes.
     courier_poll_interval_fresh_minutes: int = 20
@@ -726,6 +740,12 @@ class Settings(BaseSettings):
             problems.append(
                 "STEADFAST_BULK_CHUNK_SIZE must be between 1 and the provider's "
                 "documented maximum of 500"
+            )
+        if not 1 <= self.pathao_bulk_chunk_size <= 200:
+            problems.append(
+                "PATHAO_BULK_CHUNK_SIZE must be between 1 and 200. Pathao publishes no "
+                "maximum, so this ceiling is ecomsbd's own and is deliberately small: a "
+                "failed batch leaves every parcel in it in an unknown state."
             )
 
         if problems:

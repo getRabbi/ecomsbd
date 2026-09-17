@@ -21,6 +21,7 @@ from app.api.deps import CurrentPrincipal, FeatureFlagsDep
 from app.api.v1.schemas import ProviderResponse
 from app.common.feature_flags import FlagKey
 from app.couriers.capabilities import load_all_manifests
+from app.couriers.credentials import spec_for
 
 router = APIRouter(prefix="/couriers", tags=["couriers"])
 
@@ -51,6 +52,7 @@ async def list_providers(
             True if flag is None else await flags.is_enabled(flag, tenant_id=principal.tenant_id)
         )
         data = manifest.as_dict()
+        spec = spec_for(provider)
         responses.append(
             ProviderResponse(
                 provider=data["provider"],
@@ -62,6 +64,9 @@ async def list_providers(
                 enabled=enabled,
                 documentation_version=data["documentation_version"],
                 unknowns=data["unknowns"],
+                # ``None`` for a provider with no integration — manual mode has
+                # nothing to connect, and the client renders it as such.
+                connect_form=spec.as_dict() if spec is not None else None,
             )
         )
     return responses

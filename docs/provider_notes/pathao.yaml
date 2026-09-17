@@ -1,45 +1,243 @@
 # Pathao courier — provider integration manifest
 #
-# STATUS: UNVERIFIED for implementation. Scheduled for V1.1 / phase 7.
+# Master spec sections 61, 74, 140.
 #
-# One design decision IS verified and is recorded in the master spec (section 12
-# and 61): as of Pathao's 2025 merchant API update, order creation accepts a
-# sufficiently complete free-text recipient address and detects the delivery
-# area automatically, so legacy city/zone/area fields can be omitted.
+# STATUS: implemented against Pathao's own published integration source.
 #
-# Consequence, already reflected in the domain: a custom fuzzy city/zone/area
-# resolver is NOT a V1 dependency. Structured location lookup is a fallback for
-# accounts or API versions that still require it, not the primary path.
+# The source is the WooCommerce plugin released by Pathao's engineering
+# organisation (github.com/pathao-eng/courier-woocommerce-plugin). That is
+# first-party: it is code Pathao ships to merchants and maintains, so every
+# path, field name, numeric code, header and event string in it is one Pathao
+# itself calls in production. The normalized reading is committed at
+# docs/providers/pathao/CONTRACT.md.
 #
-# Everything else — endpoints, auth flow, token lifetime, webhook signature,
-# status strings, payout fields — is unverified.
+# Why the source matters here more than usual: the widely-repeated community
+# contract for Pathao says authentication is POST /aladdin/api/v1/issue-token
+# with grant_type, username and password. Pathao's own current plugin
+# authenticates at POST /aladdin/api/v1/external/login with client_id and
+# client_secret alone. An implementation from memory or from a blog post would
+# have asked sellers for their Pathao account password and then failed.
+#
+# Every `true` below names an endpoint that source calls, and the ecomsbd code
+# path that calls it. Every `false` means Pathao's published integration
+# contains no such endpoint — not "we have not got to it" — which is why the UI
+# shows the manual alternative rather than a disabled button. Every `unknown`
+# means the source is silent and no live evidence exists yet.
+#
+# Promoting an `unknown` to `true` requires, and must be recorded here:
+#   1. the documentation that describes it, and its date; or
+#   2. a non-destructive live call proving the shape of the response.
 
 provider: pathao
 display_name: Pathao
-verified_at: null
-documentation_source: "https://pathao.com/bn/blog/api-merchant-auto-address-feature/ (design decision only, re-check merchant docs before implementing)"
+verified_at: 2026-09-17
+documentation_source: >
+  Pathao Courier WooCommerce plugin, published by Pathao engineering at
+  github.com/pathao-eng/courier-woocommerce-plugin — pathao-bridge.php (base
+  URLs, auth, endpoints, create payload), plugin-api.php (webhook route,
+  signature check, event/status map, response header), wc-order-list.php
+  (delivery_type and item_type codes), js/ptc-location-manager.js (store, city,
+  zone and area field names). Normalized reading committed at
+  docs/providers/pathao/CONTRACT.md.
+
+documentation_version: "aladdin/api/v1 (vendor plugin, main branch)"
+base_url: https://api-hermes.pathao.com
+auth_model: >
+  OAuth-style client credentials. POST /aladdin/api/v1/external/login with
+  {client_id, client_secret} returns {access_token, refresh_token, expires_in,
+  token_type}. Every other call carries `Authorization: Bearer <access_token>`.
+  ecomsbd caches the token per credential with a 120-second expiry margin and
+  re-logs in rather than using refresh_token, because the plugin's own refresh
+  path calls the same login endpoint. Sandbox host:
+  https://courier-api-sandbox.pathao.com, selected per courier account.
 
 capabilities:
-  credential_validation: unknown
-  create_single: unknown
-  create_bulk: unknown
-  status_lookup: unknown
-  webhook: unknown
-  balance: unknown
-  payouts: unknown
-  returns: unknown
-  price_quote: unknown
-  customer_stats: unknown
-  auto_address: unknown
-  cancel: unknown
-  list_stores: unknown
+  credential_validation: true
+  create_single: true
+  create_bulk: true
+  list_stores: true
+  location_lookup: true
+  webhook: true
+  auto_address: true
+
+  # No such endpoint exists in Pathao's published integration. Not pending —
+  # absent from the source Pathao ships.
+  status_lookup: false
+  price_quote: false
+  cancel: false
+  returns: false
+  balance: false
+  payouts: false
+  payments: false
+  payment_consignments: false
+  customer_stats: false
+
+# Per-capability evidence. `live_credentials_required` marks the ones whose
+# runtime behaviour cannot be confirmed from the source alone.
+endpoints:
+  credential_validation:
+    endpoint: /aladdin/api/v1/external/login then /aladdin/api/v1/user/short-info
+    method: POST, GET
+    request_model: "{client_id, client_secret}; then bearer token only"
+    response_model: >
+      login: {access_token, refresh_token, expires_in, token_type}.
+      short-info: UNVERIFIED — the plugin reads the call's success, not its body.
+    live_credentials_required: false
+    notes: >
+      The safest published read, so it is the credential check. A parcel is
+      never created to test a credential.
+
+  create_single:
+    endpoint: /aladdin/api/v1/orders
+    method: POST
+    request_model: >
+      store_id*, merchant_order_id*, recipient_name*, recipient_phone*,
+      recipient_secondary_phone, recipient_address*, delivery_type*, item_type*,
+      special_instruction, item_quantity*, item_weight*, item_description*,
+      amount_to_collect; recipient_city / recipient_zone / recipient_area are
+      sent ONLY when non-empty.
+    response_model: "{data: {consignment_id, delivery_fee, ...}}; 201 on success"
+    live_credentials_required: true
+    notes: >
+      delivery_type 48 = Normal, 12 = On Demand. item_type 2 = Parcel,
+      1 = Document. Failure body shape is undocumented — the plugin decodes it
+      and passes it through without reading a field. Duplicate
+      merchant_order_id behaviour is undocumented; see create_idempotency.
+
+  create_bulk:
+    endpoint: /aladdin/api/v1/orders/bulk
+    method: POST
+    request_model: "{orders: [<create_single item>, ...]}"
+    response_model: UNVERIFIED — no per-item schema published
+    live_credentials_required: true
+    notes: >
+      The plugin sends the batch and never reads the response body. ecomsbd
+      therefore reports every item it actually sent as BOOKING_UNKNOWN, to be
+      resolved from delivery updates against merchant_order_id, rather than
+      claiming a success it cannot evidence. Chunked at 50 — Pathao publishes
+      no ceiling, which is not a licence to send an unbounded batch.
+
+  list_stores:
+    endpoint: /aladdin/api/v1/stores
+    method: GET
+    request_model: bearer token only
+    response_model: "records of {store_id, store_name}; envelope depth UNVERIFIED"
+    live_credentials_required: true
+    notes: >
+      Required before booking: store_id is a mandatory create field and Pathao
+      provides no default. The seller picks one at connect time.
+
+  location_lookup:
+    endpoint: >
+      /aladdin/api/v1/countries/1/city-list,
+      /aladdin/api/v1/cities/{city_id}/zone-list,
+      /aladdin/api/v1/zones/{zone_id}/area-list
+    method: GET
+    request_model: path parameter only
+    response_model: >
+      records of {city_id, city_name} / {zone_id, zone_name, city_id} /
+      {area_id, area_name, zone_id}; envelope depth UNVERIFIED
+    live_credentials_required: true
+    notes: >
+      The fallback path only. Auto-address is primary, so these are not put in
+      front of a seller during a normal booking.
+
+  webhook:
+    endpoint: inbound to ecomsbd, per-shop callback URL
+    method: POST
+    request_model: >
+      Header X-PATHAO-Signature carrying the merchant's configured webhook
+      secret verbatim — a shared secret, NOT an HMAC over the body. Body:
+      {event, merchant_order_id, order_status, delivery_fee, consignment_id}.
+    response_model: >
+      Must carry header X-Pathao-Merchant-Webhook-Integration-Secret with the
+      fixed value f3992ecc-59da-4cbe-a049-a13da2018d51, and answer 202. Pathao
+      treats a reply without that header as a failed integration.
+    live_credentials_required: true
+    notes: >
+      19 published events, each mapped to the order_status label Pathao's own
+      plugin records for it. The `webhook_integration` event is a handshake
+      sent when the merchant saves the URL; it names no parcel and is
+      acknowledged without being processed. ecomsbd compares the signature in
+      constant time and routes per shop via an opaque token in the callback
+      path, so a body is never parsed before the shop is known.
+
+  auto_address:
+    endpoint: /aladdin/api/v1/orders
+    method: POST
+    request_model: recipient_address free text, location ids omitted
+    response_model: as create_single
+    live_credentials_required: true
+    notes: >
+      Pathao's own plugin omits recipient_city/zone/area entirely when they are
+      empty, which is the evidence that free-text address is a supported
+      primary path rather than a degraded one.
+
+# ---------------------------------------------------------------------------
+# Explicit unknowns. These are facts about the source, not a backlog.
+# ---------------------------------------------------------------------------
+unknowns:
+  STATUS_LOOKUP_CONTRACT: unknown
+  PROVIDER_CREATE_IDEMPOTENCY: unknown
+  RATE_LIMIT_CONTRACT: unknown
+  PAGINATION_CONTRACT: unknown
+  ERROR_BODY_CONTRACT: unknown
+  BULK_RESPONSE_SCHEMA: unknown
+  DUPLICATE_MERCHANT_ORDER_ID_BEHAVIOUR: unknown
+  TOKEN_LIFETIME: unknown
+  ITEM_WEIGHT_RANGE: unknown
+  LIST_ENVELOPE_DEPTH: unknown
+  SETTLEMENT_BEHAVIOUR: unknown
+
+blockers:
+  - PATHAO_LIVE_CREDENTIAL_TEST_REQUIRED
+  - PATHAO_STATUS_LOOKUP_CONTRACT_REQUIRED
+  - PATHAO_WEBHOOK_URL_REGISTRATION_REQUIRED
 
 manual_fallback: >
-  Manual courier mode, plus statement import for reconciliation of historical
-  Pathao parcels.
+  Manual courier mode. The seller records the parcel and tracking code by hand,
+  uploads the Pathao payout statement as CSV or XLSX, and reconciliation runs on
+  the imported lines exactly as it would on API-sourced payments. Manual mode
+  stays available whether or not a Pathao account is connected, degraded or
+  down — it is the path every provider failure falls back to, not a lesser one.
 
 notes:
-  - "Auto-address is the intended primary flow; keep the structured-area path as
-     a fallback for accounts that reject free-text addresses."
-  - "Re-check the current merchant API documentation at implementation time.
-     The 2025 update is a product decision input, not an API contract."
+  - "STATUS_LOOKUP_CONTRACT = UNKNOWN, and this is the one gap that changes how
+     the integration behaves. Pathao's published integration never polls: it
+     keeps parcel state current from webhooks alone, and contains no
+     order-info path. Community SDKs publish GET
+     /aladdin/api/v1/orders/{consignment_id}/info, but no first-party source
+     ecomsbd has read confirms it, so it is not called. Consequence: a Pathao
+     parcel's status advances only when a webhook arrives, which makes webhook
+     registration operationally required rather than optional. Steadfast's
+     polling path is unaffected."
+  - "PROVIDER_CREATE_IDEMPOTENCY = UNKNOWN. Pathao never states what happens
+     when a merchant_order_id is reused. ecomsbd therefore provides its own
+     safety: a stable merchant reference persisted before the call, a row lock,
+     BOOKING_UNKNOWN on ambiguity, and resolution from delivery updates. A
+     create is never blindly retried."
+  - "The webhook signature is a shared secret compared for equality, not an
+     HMAC over the body. That is Pathao's scheme as its own plugin implements
+     it. ecomsbd compares it in constant time, which is a hardening, and does
+     not pretend the scheme is stronger than it is: the secret is stored
+     encrypted and the callback URL carries an opaque per-shop token so a
+     leaked secret cannot be replayed against another shop."
+  - "No courier charge is recorded from a create response. `delivery_fee` on a
+     create is Pathao's quoted fee at booking time, not a settled cost, and
+     treating a quote as a cost is how profit drifts from truth. Actual charges
+     come from payment data, when it names them."
+  - "ITEM_WEIGHT_RANGE = UNKNOWN. Pathao's merchant panel is widely reported to
+     accept 0.5-10 kg, but that range appears in no source ecomsbd has
+     verified. No ceiling is enforced: silently clamping a real 12 kg parcel to
+     10 would misdeclare it. An order with no weight is sent at ecomsbd's own
+     500 g default, which is our policy for a required field, not a Pathao
+     minimum."
+  - "LIST_ENVELOPE_DEPTH = UNKNOWN. Pathao nests list payloads at different
+     depths per endpoint — its own JavaScript reaches through `data`,
+     `data.data` and `data.data.data` for different calls — and publishes no
+     envelope schema. ecomsbd walks down to the first list of objects rather
+     than guessing one depth, and keeps every record's raw dict."
+  - "No credential literal from Pathao's plugin or panel was used to call the
+     provider. The integration secret header value is a protocol constant
+     published in Pathao's own source, not a secret of ours or of any
+     merchant's."

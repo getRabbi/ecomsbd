@@ -310,3 +310,9 @@ class ProviderResponse(BaseModel):
     #: honest about a gap rather than rendering an empty state that looks like
     #: a bug (for example: no webhook contract, so status arrives by polling).
     unknowns: dict[str, str] = Field(default_factory=dict)
+    #: How to connect this provider: which fields to ask for, in both languages,
+    #: and whether it needs a pickup store, a sandbox toggle or a webhook
+    #: secret. The client renders the connect form from this rather than
+    #: carrying one hand-written form per provider, so adding RedX does not mean
+    #: shipping a new app build. Contains no value — only the shape of the form.
+    connect_form: dict[str, Any] | None = None

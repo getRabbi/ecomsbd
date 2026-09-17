@@ -73,3 +73,30 @@ final canBookWithCourierProvider = Provider<AsyncValue<bool>>((ref) {
       .watch(courierAccountProvider('steadfast'))
       .whenData((account) => account?.status.canBook ?? false);
 });
+
+/// Every courier ecomsbd knows about, with its connect form.
+///
+/// Drives the accounts screen: one card per connectable courier, rendered from
+/// the server's declaration rather than from a list compiled into the app.
+final courierProvidersProvider = FutureProvider<List<CourierProviderInfo>>((
+  ref,
+) {
+  return ref.watch(courierRepositoryProvider).providers();
+});
+
+/// The pickup stores on a connected courier account.
+///
+/// Not cached: a store added in the courier's panel a minute ago should appear
+/// when the seller opens the picker.
+final providerStoresProvider =
+    FutureProvider.family<List<CourierStore>, String>((ref, provider) {
+      return ref.watch(courierRepositoryProvider).stores(provider);
+    });
+
+/// The callback URL and webhook state for a connected courier account.
+final webhookSetupProvider = FutureProvider.family<WebhookSetup, String>((
+  ref,
+  provider,
+) {
+  return ref.watch(courierRepositoryProvider).webhookSetup(provider);
+});

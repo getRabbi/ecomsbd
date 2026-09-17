@@ -26,8 +26,9 @@ way integrations like this normally go wrong:
 
 from __future__ import annotations
 
+import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -43,6 +44,7 @@ from app.core.logging import get_logger
 from app.core.security import CredentialVault
 from app.couriers.adapter import CourierAdapter, ValidationResult
 from app.couriers.capabilities import Capability, load_manifest
+from app.couriers.credentials import build_credentials, spec_for
 from app.couriers.metrics import CourierMetric, record_metric
 from app.couriers.models import (
     AUTH_FAILURES_BEFORE_RECONNECT,
@@ -51,12 +53,13 @@ from app.couriers.models import (
     CredentialValidation,
 )
 from app.couriers.registry import CourierAdapterRegistry, get_courier_registry
-from app.couriers.steadfast.client import SteadfastCredentials
+from app.db.tenancy import allow_cross_tenant
 
 __all__ = [
     "ConnectRequest",
     "CourierAccountService",
     "ValidationOutcome",
+    "resolve_account_by_webhook_token",
 ]
 
 log = get_logger(__name__)
@@ -68,12 +71,25 @@ class ConnectRequest:
 
     Deliberately a plain object with no persistence: it exists for the length of
     the connect call and is never stored, logged or echoed.
+
+    ``api_key`` and ``secret_key`` are **storage slots**, not Steadfast field
+    names. Each provider's declaration in :mod:`app.couriers.credentials` says
+    which of its own fields fills which slot — Steadfast puts its API key and
+    secret key there, Pathao its Client ID and Client Secret. Keeping the slots
+    positional is what lets one encryption path, one masking rule and one audit
+    shape serve every provider.
     """
 
     provider: str
     api_key: str
     secret_key: str
     label: str | None = None
+    #: Non-secret provider settings — sandbox mode, chosen pickup store. Shown
+    #: back to the seller, so nothing secret may be put here.
+    config: dict[str, Any] = field(default_factory=dict)
+    #: The provider's webhook signing secret, when it has one. Encrypted at
+    #: rest in its own slot and never returned.
+    webhook_secret: str | None = None
 
     def __repr__(self) -> str:
         return f"ConnectRequest(provider={self.provider!r}, api_key='[redacted]', ...)"
@@ -92,6 +108,8 @@ class ConnectRequest:
             api_key=self.api_key.strip(),
             secret_key=self.secret_key.strip(),
             label=(self.label or "").strip() or None,
+            config=dict(self.config or {}),
+            webhook_secret=(self.webhook_secret or "").strip() or None,
         )
 
 
@@ -188,7 +206,13 @@ class CourierAccountService:
 
         adapter = self._require_adapter(cleaned.provider)
         outcome = await self._validate_with(
-            adapter, SteadfastCredentials(cleaned.api_key, cleaned.secret_key)
+            adapter,
+            build_credentials(
+                cleaned.provider,
+                primary=cleaned.api_key,
+                secondary=cleaned.secret_key,
+                config=cleaned.config,
+            ),
         )
 
         if outcome.result is CredentialValidation.INVALID:
@@ -259,7 +283,12 @@ class CourierAccountService:
 
         account.api_key_encrypted = None
         account.secret_key_encrypted = None
+        account.webhook_secret_encrypted = None
         account.key_version = None
+        # The routing token goes too. A disconnected account's callback URL
+        # must stop resolving, or a stale URL left in a provider panel keeps
+        # pointing at a shop that revoked it.
+        account.webhook_token = None
         account.status = str(CourierAccountStatus.DISCONNECTED)
         account.disconnected_at = utc_now()
         account.capabilities_json = {}
@@ -414,11 +443,12 @@ class CourierAccountService:
 
     # -------------------------------------------------------- credentials --
 
-    def credentials_for(self, account: CourierAccount) -> SteadfastCredentials:
+    def credentials_for(self, account: CourierAccount) -> Any:
         """Decrypt this account's credentials for one call.
 
-        The returned object masks itself in ``repr`` and ``str``, so it cannot
-        reach a log line by being interpolated into a message — which is how
+        Returns whichever credentials type the account's provider declares. The
+        returned object masks itself in ``repr`` and ``str``, so it cannot reach
+        a log line by being interpolated into a message — which is how
         credentials usually get into logs.
         """
         if not account.has_credentials:
@@ -430,10 +460,78 @@ class CourierAccountService:
         assert account.api_key_encrypted is not None  # noqa: S101 - narrowed above
         assert account.secret_key_encrypted is not None  # noqa: S101
         context = account.vault_context
-        return SteadfastCredentials(
-            api_key=self._vault.decrypt(account.api_key_encrypted, context=context),
-            secret_key=self._vault.decrypt(account.secret_key_encrypted, context=context),
+        return build_credentials(
+            account.provider,
+            primary=self._vault.decrypt(account.api_key_encrypted, context=context),
+            secondary=self._vault.decrypt(account.secret_key_encrypted, context=context),
+            config=dict(account.metadata_json or {}),
         )
+
+    async def select_store(
+        self, provider: str, *, provider_store_id: str, name: str | None = None
+    ) -> CourierAccount:
+        """Record which pickup store this shop books from.
+
+        Config, not credential: it is not secret, it is shown back to the
+        seller, and every booking reads it. Audited, because changing where
+        parcels are collected from is the kind of change someone will later
+        need to explain.
+        """
+        account = await self.for_provider(provider)
+        if account is None or not account.has_credentials:
+            raise NotFoundError("No courier account is connected for that provider")
+
+        chosen = (provider_store_id or "").strip()
+        if not chosen:
+            raise ValidationError("A pickup store is required")
+
+        merged = dict(account.metadata_json or {})
+        previous = merged.get("store_id")
+        merged["store_id"] = chosen
+        if name:
+            merged["store_name"] = name.strip()
+        account.metadata_json = merged
+        await self._db.flush()
+
+        await record_audit(
+            self._db,
+            AuditAction.COURIER_CREDENTIAL_SAVED,
+            entity_type="courier_account",
+            entity_id=account.id,
+            context={
+                "provider": account.provider,
+                "change": "pickup_store",
+                "previous_store_id": previous,
+                "store_id": chosen,
+            },
+        )
+        return account
+
+    async def ensure_webhook_token(self, account: CourierAccount) -> str:
+        """This account's callback routing token, minting one if it has none.
+
+        Stable once issued, so a URL a seller has already pasted into a
+        provider's panel keeps working. Regenerating it is a deliberate act —
+        disconnecting the account — not a side effect of re-saving credentials.
+        """
+        if account.webhook_token:
+            return account.webhook_token
+        account.webhook_token = secrets.token_urlsafe(32)
+        await self._db.flush()
+        return account.webhook_token
+
+    def webhook_secret_for(self, account: CourierAccount) -> str | None:
+        """This account's webhook signing secret, or ``None`` if it has none.
+
+        Separate from :meth:`credentials_for` because it is used by a different
+        caller for a different reason: an unauthenticated inbound callback, not
+        an outbound API call. Returning ``None`` is the normal answer for a
+        provider without webhooks, and for a shop that has not configured one
+        yet — the receiver treats that as *not configured*, never as verified.
+        """
+        if not account.webhook_secret_encrypted:
+            return None
+        return self._vault.decrypt(account.webhook_secret_encrypted, context=account.vault_context)
 
     def _store_credentials(self, account: CourierAccount, request: ConnectRequest) -> None:
         context = account.vault_context
@@ -441,6 +539,18 @@ class CourierAccountService:
         account.secret_key_encrypted = self._vault.encrypt(request.secret_key, context=context)
         account.key_version = self._vault.key_version
         account.masked_identifier = _mask(request.api_key)
+
+        if request.config:
+            # Merged, not replaced: re-entering credentials must not silently
+            # drop a pickup store the seller chose in a separate step.
+            merged = dict(account.metadata_json or {})
+            merged.update(request.config)
+            account.metadata_json = merged
+
+        if request.webhook_secret:
+            account.webhook_secret_encrypted = self._vault.encrypt(
+                request.webhook_secret, context=context
+            )
 
     # ------------------------------------------------------------ balance --
 
@@ -472,14 +582,34 @@ class CourierAccountService:
         return adapter
 
     def _guard_inputs(self, request: ConnectRequest) -> None:
+        spec = spec_for(request.provider)
+        # Field names come from the provider's own declaration, so the error a
+        # Pathao seller reads says "Client ID", not "API key".
+        primary_label = "API key"
+        secondary_label = "secret key"
+        if spec is not None:
+            primary_field = spec.field_named(spec.primary)
+            secondary_field = spec.field_named(spec.secondary)
+            if primary_field is not None:
+                primary_label = primary_field.label_en
+            if secondary_field is not None:
+                secondary_label = secondary_field.label_en
+
         if not request.api_key or not request.secret_key:
-            raise ValidationError("Both the API key and the secret key are required")
+            raise ValidationError(
+                f"Both the {primary_label} and the {secondary_label} are required"
+            )
         # Generous bounds. The point is to refuse an obviously pasted-wrong
         # value (a whole email, an empty string) without guessing the
-        # provider's key format, which the documentation does not state.
-        for name, value in (("API key", request.api_key), ("secret key", request.secret_key)):
+        # provider's key format, which no provider states.
+        for name, value in (
+            (primary_label, request.api_key),
+            (secondary_label, request.secret_key),
+        ):
             if len(value) > 300:
                 raise ValidationError(f"That {name} is too long to be a credential")
+        if request.webhook_secret and len(request.webhook_secret) > 300:
+            raise ValidationError("That webhook secret is too long")
         manifest = load_manifest(request.provider)
         if manifest is None:
             raise ValidationError(
@@ -502,3 +632,33 @@ class CourierAccountService:
 def _mask(api_key: str) -> str:
     """``****abcd``. Non-reversible, and enough to tell two accounts apart."""
     return f"****{api_key[-4:]}" if len(api_key) > 4 else "****"
+
+
+async def resolve_account_by_webhook_token(
+    session: AsyncSession, *, provider: str, token: str
+) -> CourierAccount | None:
+    """Find the courier account a callback URL points at, across tenants.
+
+    A provider callback arrives with no session and no tenant, so this is a
+    deliberate, narrow cross-tenant read — one row, by an unguessable token,
+    for the sole purpose of discovering which tenant to become. The bypass is
+    logged, as every bypass is.
+
+    The token is not a credential: finding an account by it grants nothing. The
+    account's own webhook secret still has to verify the delivery, and a token
+    that matches nothing returns ``None``, which the route answers identically
+    to a token that matches an unconfigured account — a callback URL must not
+    become an oracle for which shops exist.
+    """
+    cleaned = (token or "").strip()
+    if not cleaned:
+        return None
+
+    with allow_cross_tenant(f"{provider} webhook account resolution"):
+        result = await session.execute(
+            sa.select(CourierAccount).where(
+                CourierAccount.provider == provider,
+                CourierAccount.webhook_token == cleaned,
+            )
+        )
+        return result.scalar_one_or_none()

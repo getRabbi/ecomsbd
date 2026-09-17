@@ -77,6 +77,8 @@ class CourierAccount {
     this.lastValidationMessage,
     this.reportedBalancePaisa,
     this.reportedBalanceAt,
+    this.config = const <String, dynamic>{},
+    this.webhookConfigured = false,
   });
 
   factory CourierAccount.fromJson(Map<String, dynamic> json) {
@@ -104,6 +106,9 @@ class CourierAccount {
       reportedBalanceAt: DateTime.tryParse(
         (json['reported_balance_at'] as String?) ?? '',
       ),
+      config:
+          (json['config'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      webhookConfigured: (json['webhook_configured'] as bool?) ?? false,
     );
   }
 
@@ -137,6 +142,19 @@ class CourierAccount {
   /// would be wrong in a way nobody could unpick.
   final int? reportedBalancePaisa;
   final DateTime? reportedBalanceAt;
+
+  /// Non-secret provider settings the server chose to expose — the selected
+  /// pickup store, the sandbox flag. Never a credential: the server filters
+  /// this through an allow-list before it is serialised.
+  final Map<String, dynamic> config;
+
+  /// Whether a webhook secret is stored for this account. Never the secret.
+  final bool webhookConfigured;
+
+  /// The pickup store bookings are made from, where the provider needs one.
+  String? get storeId => config['store_id'] as String?;
+  String? get storeName => config['store_name'] as String?;
+  bool get sandbox => config['sandbox'] == true;
 
   bool supports(String capability) => capabilities[capability] == 'true';
 
@@ -592,4 +610,228 @@ class ProviderPayment {
     'FAILED' => _t('sst.couldNotRead'),
     _ => syncState,
   };
+}
+
+/// One input on a courier's connect form, as the server declares it.
+///
+/// The form is **described by the backend**, not hard-coded here. Steadfast
+/// wants an API key and a secret key; Pathao wants a Client ID and a Client
+/// Secret; RedX will want something else again. Rendering from a declaration
+/// means adding a courier is a backend change, not an app release — and it
+/// means the labels a seller reads come from the same place the server's
+/// validation errors do, so the two can never disagree.
+@immutable
+class ConnectFormField {
+  const ConnectFormField({
+    required this.name,
+    required this.labelEn,
+    required this.labelBn,
+    required this.secret,
+    required this.required,
+    this.helpEn,
+    this.helpBn,
+    this.inputType = 'password',
+  });
+
+  factory ConnectFormField.fromJson(Map<String, dynamic> json) {
+    return ConnectFormField(
+      name: json['name'] as String,
+      labelEn: (json['label_en'] as String?) ?? (json['name'] as String),
+      labelBn: (json['label_bn'] as String?) ?? (json['name'] as String),
+      secret: (json['secret'] as bool?) ?? true,
+      required: (json['required'] as bool?) ?? true,
+      helpEn: json['help_en'] as String?,
+      helpBn: json['help_bn'] as String?,
+      inputType: (json['input_type'] as String?) ?? 'password',
+    );
+  }
+
+  final String name;
+  final String labelEn;
+  final String labelBn;
+  final bool secret;
+
+  // ignore: avoid_field_initializers_in_const_classes
+  final bool required;
+
+  final String? helpEn;
+  final String? helpBn;
+  final String inputType;
+
+  /// The label in the active language. Provider and technical terms stay in
+  /// English on purpose — a seller looking for "Client Secret" in the Pathao
+  /// panel needs to read the same words here.
+  String get label => activeAppLocale == AppLocale.bn ? labelBn : labelEn;
+
+  String? get help => activeAppLocale == AppLocale.bn ? helpBn : helpEn;
+
+  bool get obscure => secret && inputType == 'password';
+}
+
+/// How to connect one courier: which fields, and what else it needs.
+@immutable
+class ProviderConnectForm {
+  const ProviderConnectForm({
+    required this.provider,
+    required this.displayName,
+    required this.fields,
+    this.supportsSandbox = false,
+    this.requiresStore = false,
+    this.usesWebhook = false,
+    this.webhookHelpEn,
+    this.webhookHelpBn,
+  });
+
+  factory ProviderConnectForm.fromJson(Map<String, dynamic> json) {
+    return ProviderConnectForm(
+      provider: json['provider'] as String,
+      displayName:
+          (json['display_name'] as String?) ?? (json['provider'] as String),
+      fields: <ConnectFormField>[
+        for (final row
+            in (json['fields'] as List<dynamic>? ?? const <dynamic>[]))
+          ConnectFormField.fromJson(row as Map<String, dynamic>),
+      ],
+      supportsSandbox: (json['supports_sandbox'] as bool?) ?? false,
+      requiresStore: (json['requires_store'] as bool?) ?? false,
+      usesWebhook: (json['uses_webhook'] as bool?) ?? false,
+      webhookHelpEn: json['webhook_help_en'] as String?,
+      webhookHelpBn: json['webhook_help_bn'] as String?,
+    );
+  }
+
+  final String provider;
+  final String displayName;
+  final List<ConnectFormField> fields;
+
+  /// Whether the courier has a sandbox a seller may rehearse against.
+  final bool supportsSandbox;
+
+  /// Whether a pickup store must be chosen before booking. For Pathao it must:
+  /// `store_id` is mandatory on every create and Pathao supplies no default,
+  /// so a connected account is not yet a bookable one.
+  final bool requiresStore;
+
+  /// Whether this courier sends callbacks ecomsbd can verify, which means the
+  /// seller is given a URL and asked for a webhook secret.
+  final bool usesWebhook;
+
+  final String? webhookHelpEn;
+  final String? webhookHelpBn;
+
+  String? get webhookHelp =>
+      activeAppLocale == AppLocale.bn ? webhookHelpBn : webhookHelpEn;
+}
+
+/// A courier and what it is verified to support, plus how to connect it.
+@immutable
+class CourierProviderInfo {
+  const CourierProviderInfo({
+    required this.provider,
+    required this.displayName,
+    required this.capabilities,
+    required this.enabled,
+    required this.fullyUnverified,
+    this.connectForm,
+    this.manualFallback,
+  });
+
+  factory CourierProviderInfo.fromJson(Map<String, dynamic> json) {
+    final form = json['connect_form'] as Map<String, dynamic>?;
+    return CourierProviderInfo(
+      provider: json['provider'] as String,
+      displayName:
+          (json['display_name'] as String?) ?? (json['provider'] as String),
+      capabilities: <String, String>{
+        for (final entry
+            in (json['capabilities'] as Map<String, dynamic>? ??
+                    const <String, dynamic>{})
+                .entries)
+          entry.key: '${entry.value}',
+      },
+      enabled: (json['enabled'] as bool?) ?? false,
+      fullyUnverified: (json['fully_unverified'] as bool?) ?? false,
+      connectForm: form == null ? null : ProviderConnectForm.fromJson(form),
+      manualFallback: json['manual_fallback'] as String?,
+    );
+  }
+
+  final String provider;
+  final String displayName;
+  final Map<String, String> capabilities;
+
+  /// Whether this shop may use the courier at all. A courier that is
+  /// implemented but not switched on for this shop is not offered.
+  final bool enabled;
+
+  final bool fullyUnverified;
+
+  /// `null` for manual mode, which has nothing to connect.
+  final ProviderConnectForm? connectForm;
+
+  final String? manualFallback;
+
+  bool supports(String capability) => capabilities[capability] == 'true';
+
+  /// Whether a seller can actually connect this courier from the app.
+  bool get isConnectable => enabled && connectForm != null;
+}
+
+/// A pickup store on the courier's side.
+@immutable
+class CourierStore {
+  const CourierStore({
+    required this.providerStoreId,
+    required this.name,
+    this.address,
+  });
+
+  factory CourierStore.fromJson(Map<String, dynamic> json) {
+    return CourierStore(
+      providerStoreId: json['provider_store_id'] as String,
+      name: (json['name'] as String?) ?? (json['provider_store_id'] as String),
+      address: json['address'] as String?,
+    );
+  }
+
+  final String providerStoreId;
+  final String name;
+  final String? address;
+}
+
+/// What a seller needs to wire a courier callback up.
+///
+/// Note what is absent: the secret. [secretConfigured] says whether one is
+/// stored, which is the only thing this screen needs to know — there is no
+/// response that carries the secret back.
+@immutable
+class WebhookSetup {
+  const WebhookSetup({
+    required this.provider,
+    required this.supported,
+    required this.secretConfigured,
+    this.callbackUrl,
+    this.helpEn,
+    this.helpBn,
+  });
+
+  factory WebhookSetup.fromJson(Map<String, dynamic> json) {
+    return WebhookSetup(
+      provider: json['provider'] as String,
+      supported: (json['supported'] as bool?) ?? false,
+      secretConfigured: (json['secret_configured'] as bool?) ?? false,
+      callbackUrl: json['callback_url'] as String?,
+      helpEn: json['help_en'] as String?,
+      helpBn: json['help_bn'] as String?,
+    );
+  }
+
+  final String provider;
+  final bool supported;
+  final bool secretConfigured;
+  final String? callbackUrl;
+  final String? helpEn;
+  final String? helpBn;
+
+  String? get help => activeAppLocale == AppLocale.bn ? helpBn : helpEn;
 }

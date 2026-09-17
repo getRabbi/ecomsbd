@@ -94,6 +94,12 @@ ignore = [
 # documentation, not embedded credentials. The values they carry come from the
 # encrypted vault and never appear in source.
 "app/couriers/steadfast/contract.py" = ["S105"]
+# Same reason, plus one more: WEBHOOK_INTEGRATION_SECRET_VALUE is a fixed
+# protocol constant published in Pathao's own integration source, which every
+# receiver must echo back on every webhook response. It authenticates nothing
+# and is not any merchant's secret — those live encrypted, per account, and
+# never appear in source.
+"app/couriers/pathao/contract.py" = ["S105"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
