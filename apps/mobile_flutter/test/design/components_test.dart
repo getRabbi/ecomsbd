@@ -319,13 +319,31 @@ void main() {
 
   group('GlassSurface', () {
     testWidgets('uses a BackdropFilter in full effects mode', (tester) async {
+      // The chrome that keeps a live blur — top bar, bottom nav, sheets — uses
+      // GlassSurface at its default sigma.
+      await tester.pumpWidget(
+        wrapForTest(
+          const Scaffold(body: GlassSurface(child: Text('x'))),
+          effects: EffectsMode.full,
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsOneWidget);
+    });
+
+    testWidgets('list cards opt out of the live blur even in full mode', (
+      tester,
+    ) async {
+      // A card repeats down a scrolling list, where a BackdropFilter per card
+      // is a saveLayer and a re-blur per card per frame. It takes the
+      // thickened fill instead, whatever the device tier.
       await tester.pumpWidget(
         wrapForTest(
           const Scaffold(body: GlassCard(child: Text('x'))),
           effects: EffectsMode.full,
         ),
       );
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
+      expect(find.text('x'), findsOneWidget);
     });
 
     testWidgets('drops the blur on a low-end device', (tester) async {
@@ -333,7 +351,7 @@ void main() {
       // fallback rather than paying for a live blur per frame.
       await tester.pumpWidget(
         wrapForTest(
-          const Scaffold(body: GlassCard(child: Text('x'))),
+          const Scaffold(body: GlassSurface(child: Text('x'))),
           effects: EffectsMode.reduced,
         ),
       );
