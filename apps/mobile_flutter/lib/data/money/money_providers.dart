@@ -170,3 +170,15 @@ final reconciliationItemListProvider =
       (ref) =>
           ReconciliationItemListController(ref.watch(moneyRepositoryProvider)),
     );
+
+/// What each courier holds: outstanding, overdue, in transit, usual delay.
+final courierBalancesProvider = FutureProvider<Sourced<List<CourierBalance>>>((
+  ref,
+) {
+  return ref.watch(moneyRepositoryProvider).courierBalances();
+});
+
+/// Received, receivable, and the (estimated) timing of the receivable.
+final cashflowProvider = FutureProvider<Sourced<CashflowView>>((ref) {
+  return ref.watch(moneyRepositoryProvider).cashflow();
+});

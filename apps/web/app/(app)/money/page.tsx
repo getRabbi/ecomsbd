@@ -6,6 +6,7 @@ import { DataTable, useCursorStack, type Column } from '@/components/DataTable';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, Tile } from '@/components/ui';
 import type { Page } from '@/lib/api';
+import type { StringKey } from '@/lib/i18n';
 import { formatDate, formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
@@ -29,6 +30,45 @@ interface AgingBand {
   max_days: number | null;
   parcel_count: number;
   outstanding_paisa: number;
+}
+
+interface PayoutDelay {
+  provider: string;
+  samples: number;
+  average_days: number;
+  median_days: number;
+  reliable: boolean;
+}
+
+interface CourierBalance {
+  provider: string;
+  outstanding_paisa: number;
+  parcel_count: number;
+  delivered_unpaid_count: number;
+  delivered_unpaid_paisa: number;
+  overdue_count: number;
+  overdue_paisa: number;
+  oldest_age_days: number | null;
+  in_transit_count: number;
+  in_transit_paisa: number;
+  last_payment_on: string | null;
+  payout_delay: PayoutDelay | null;
+}
+
+interface Cashflow {
+  since: string;
+  until: string;
+  received_paisa: number;
+  receivable_paisa: number;
+  overdue_paisa: number;
+  overdue_after_days: number;
+  in_transit_paisa: number;
+  in_transit_count: number;
+  forecast: {
+    quality: 'ESTIMATE';
+    windows: { key: string; parcel_count: number; amount_paisa: number }[];
+  };
+  overall_delay: PayoutDelay | null;
 }
 
 interface Receivable {
@@ -56,23 +96,52 @@ interface Payout {
   received_at: string;
 }
 
+/** A receivables filter, set by clicking a courier or an aging band. */
+interface ReceivableFilter {
+  provider: string;
+  band: string;
+  unpaidOnly: boolean;
+}
+
+const COURIERS = ['steadfast', 'pathao', 'redx', 'manual'] as const;
+
+type Translate = (key: StringKey, vars?: Record<string, string | number>) => string;
+
 /**
  * Money.
  *
- * Every figure on this screen is one the API computed from the ledger. Nothing
- * here adds anything up — not the outstanding total, not the deductions, not
- * the aging bands. Two implementations of a ledger is two answers to "how much
- * am I owed?", and the seller has no way to know which one is wrong.
+ * Every figure on this screen is one the API computed from the ledger or the
+ * receivables. Nothing here adds anything up — not the outstanding total, not
+ * the aging bands, not a courier's balance. Two implementations of a ledger is
+ * two answers to "how much am I owed?", and the seller has no way to know
+ * which one is wrong.
  *
- * That is also why the tiles are not derived from the receivables table below
- * them: the table holds one page, and a total of one page is not a total.
+ * Facts and the one estimate are kept apart and labelled: received, with
+ * couriers, overdue and on the road are facts; "when it may arrive" is the
+ * backend's estimate, which only spreads money already owed across time.
+ *
+ * The tiles are not derived from the receivables table below them: the table
+ * holds one page, and a total of one page is not a total. Clicking a courier
+ * or an aging band filters that table on the server.
  */
 export default function MoneyPage() {
   const { t, locale } = useSession();
   const [tab, setTab] = useState<'receivables' | 'payouts'>('receivables');
+  const [filter, setFilter] = useState<ReceivableFilter>({
+    provider: '',
+    band: '',
+    unpaidOnly: false,
+  });
 
   const summary = useApi<MoneySummary>('/money/summary');
   const aging = useApi<AgingBand[]>('/money/aging');
+  const cashflow = useApi<Cashflow>('/money/cashflow');
+  const couriers = useApi<CourierBalance[]>('/money/couriers');
+
+  function focus(next: Partial<ReceivableFilter>) {
+    setFilter((current) => ({ ...current, ...next }));
+    setTab('receivables');
+  }
 
   return (
     <>
@@ -110,35 +179,103 @@ export default function MoneyPage() {
             }
             hint={
               summary.data && summary.data.unknown_deduction_paisa > 0
-                ? `${formatPaisa(summary.data.unknown_deduction_paisa, { locale })} unexplained`
+                ? t('money.unexplainedHint', {
+                    amount: formatPaisa(summary.data.unknown_deduction_paisa, { locale }),
+                  })
                 : undefined
             }
           />
         </div>
 
-        {aging.data && aging.data.length > 0 ? (
-          <Card title={t('money.aging')} padded={false}>
-            <div className="tablewrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t('money.age')}</th>
-                    <th className="num">{t('money.parcel')}</th>
-                    <th className="num">{t('money.balance')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {aging.data.map((band) => (
-                    <tr key={band.label}>
-                      <td>{band.label}</td>
-                      <td className="num">{band.parcel_count}</td>
-                      <td className="num">{formatPaisa(band.outstanding_paisa, { locale })}</td>
+        {cashflow.data ? <CashflowSection flow={cashflow.data} /> : null}
+
+        {couriers.data && couriers.data.length > 0 ? (
+          <div style={{ marginTop: 18 }}>
+            <Card title={t('cf.couriers')} hint={t('cf.couriersHint')} padded={false}>
+              <div className="tablewrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('cf.courier')}</th>
+                      <th className="num">{t('cf.outstanding')}</th>
+                      <th className="num">{t('cf.deliveredUnpaid')}</th>
+                      <th className="num">{t('cf.overdue')}</th>
+                      <th className="num">{t('cf.oldest')}</th>
+                      <th className="num">{t('cf.inTransit')}</th>
+                      <th>{t('cf.lastPaid')}</th>
+                      <th>{t('cf.delay')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                  </thead>
+                  <tbody>
+                    {couriers.data.map((row) => (
+                      <tr
+                        key={row.provider}
+                        className="table__row--clickable"
+                        onClick={() => focus({ provider: row.provider })}
+                      >
+                        <td className="table__primary">{courierName(row.provider, t)}</td>
+                        <td className="num">{formatPaisa(row.outstanding_paisa, { locale })}</td>
+                        <td className="num">{row.delivered_unpaid_count}</td>
+                        <td className={`num${row.overdue_paisa > 0 ? ' text--bad' : ''}`}>
+                          {formatPaisa(row.overdue_paisa, { locale })}
+                        </td>
+                        <td className="num">
+                          {row.oldest_age_days === null
+                            ? '—'
+                            : t('cf.days', { days: row.oldest_age_days })}
+                        </td>
+                        <td className="num">{formatPaisa(row.in_transit_paisa, { locale })}</td>
+                        <td>
+                          {row.last_payment_on
+                            ? formatDate(row.last_payment_on, { locale })
+                            : t('cf.never')}
+                        </td>
+                        <td>
+                          {row.payout_delay && row.payout_delay.reliable
+                            ? t('cf.delayValue', {
+                                days: row.payout_delay.median_days,
+                                count: row.payout_delay.samples,
+                              })
+                            : t('cf.notEnough')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
+        {aging.data && aging.data.length > 0 ? (
+          <div style={{ marginTop: 18 }}>
+            <Card title={t('money.aging')} hint={t('money.agingHint')} padded={false}>
+              <div className="tablewrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('money.age')}</th>
+                      <th className="num">{t('money.parcel')}</th>
+                      <th className="num">{t('money.balance')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aging.data.map((band) => (
+                      <tr
+                        key={band.label}
+                        className="table__row--clickable"
+                        onClick={() => focus({ band: bandKey(band) })}
+                      >
+                        <td>{bandLabel(band, t)}</td>
+                        <td className="num">{band.parcel_count}</td>
+                        <td className="num">{formatPaisa(band.outstanding_paisa, { locale })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
         ) : null}
 
         <div style={{ marginTop: 18 }}>
@@ -161,7 +298,15 @@ export default function MoneyPage() {
               <span className="bulkbar__hint">{t('money.fromBackend')}</span>
             </div>
 
-            {tab === 'receivables' ? <ReceivablesTable /> : <PayoutsTable />}
+            {tab === 'receivables' ? (
+              <ReceivablesTable
+                filter={filter}
+                onFilter={setFilter}
+                bands={aging.data ?? []}
+              />
+            ) : (
+              <PayoutsTable />
+            )}
           </Card>
         </div>
       </div>
@@ -169,11 +314,108 @@ export default function MoneyPage() {
   );
 }
 
-function ReceivablesTable() {
+function CashflowSection({ flow }: { flow: Cashflow }) {
+  const { t, locale } = useSession();
+  const windows = flow.forecast.windows.filter((window) => window.amount_paisa > 0);
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <Card title={t('cf.title')} actions={<Chip label={t('cf.fact')} tone="good" />}>
+        <div className="tiles">
+          <Tile label={t('cf.received')} value={formatPaisa(flow.received_paisa, { locale })} />
+          <Tile
+            label={t('cf.receivable')}
+            value={formatPaisa(flow.receivable_paisa, { locale })}
+            hint={t('cf.receivableHint')}
+          />
+          <Tile
+            label={t('cf.overdue')}
+            value={formatPaisa(flow.overdue_paisa, { locale })}
+            hint={t('cf.overdueHint', { days: flow.overdue_after_days })}
+          />
+          <Tile
+            label={t('cf.inTransit')}
+            value={formatPaisa(flow.in_transit_paisa, { locale })}
+            hint={t('cf.inTransitHint', { count: flow.in_transit_count })}
+          />
+        </div>
+      </Card>
+
+      <div style={{ marginTop: 18 }}>
+        <Card
+          title={t('cf.forecast')}
+          hint={t('cf.forecastNote')}
+          actions={<Chip label={t('cf.estimate')} tone="warn" />}
+          padded={false}
+        >
+          {windows.length > 0 ? (
+            <div className="tablewrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{t('cf.window')}</th>
+                    <th className="num">{t('cf.parcels')}</th>
+                    <th className="num">{t('cf.amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {windows.map((window) => (
+                    <tr key={window.key}>
+                      <td>{t(`cf.win.${window.key}` as StringKey)}</td>
+                      <td className="num">{window.parcel_count}</td>
+                      <td className="num">{formatPaisa(window.amount_paisa, { locale })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          <p className="card__hint" style={{ padding: '10px 16px' }}>
+            {flow.overall_delay
+              ? t('cf.usualDelay', {
+                  days: flow.overall_delay.median_days,
+                  count: flow.overall_delay.samples,
+                })
+              : t('cf.noHistory')}
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ReceivablesTable({
+  filter,
+  onFilter,
+  bands,
+}: {
+  filter: ReceivableFilter;
+  onFilter: (filter: ReceivableFilter) => void;
+  bands: AgingBand[];
+}) {
   const { t, locale } = useSession();
   const paging = useCursorStack();
-  const query = useMemo(() => ({ limit: 50, cursor: paging.cursor }), [paging.cursor]);
+  const band = bands.find((candidate) => bandKey(candidate) === filter.band);
+
+  const query = useMemo(
+    () => ({
+      limit: 50,
+      cursor: paging.cursor,
+      provider: filter.provider || undefined,
+      min_age_days: band ? band.min_days : undefined,
+      max_age_days: band && band.max_days !== null ? band.max_days : undefined,
+      // "Delivered, unpaid" is the same status the summary counts.
+      status: filter.unpaidOnly ? 'ELIGIBLE' : undefined,
+      open_only: filter.provider || band ? true : undefined,
+    }),
+    [paging.cursor, filter.provider, filter.unpaidOnly, band],
+  );
   const { data, loading, error, reload } = useApi<Page<Receivable>>('/money/receivables', query);
+
+  function change(next: Partial<ReceivableFilter>) {
+    onFilter({ ...filter, ...next });
+    paging.reset();
+  }
 
   const columns: Column<Receivable>[] = [
     {
@@ -182,7 +424,7 @@ function ReceivablesTable() {
       render: (row) => (
         <>
           <div className="table__primary">{row.order_number ?? row.order_id.slice(0, 8)}</div>
-          <div className="table__sub">{row.provider}</div>
+          <div className="table__sub">{courierName(row.provider, t)}</div>
         </>
       ),
     },
@@ -212,7 +454,7 @@ function ReceivablesTable() {
       key: 'age',
       header: t('money.age'),
       numeric: true,
-      render: (row) => (row.age_days === null ? '—' : `${row.age_days}d`),
+      render: (row) => (row.age_days === null ? '—' : t('cf.days', { days: row.age_days })),
     },
   ];
 
@@ -224,6 +466,44 @@ function ReceivablesTable() {
       error={error}
       onRetry={reload}
       emptyTitle={t('money.emptyReceivables')}
+      toolbar={
+        <>
+          <select
+            className="select"
+            value={filter.provider}
+            onChange={(event) => change({ provider: event.target.value })}
+            aria-label={t('cf.courier')}
+          >
+            <option value="">{t('rv.anyCourier')}</option>
+            {COURIERS.map((value) => (
+              <option key={value} value={value}>
+                {courierName(value, t)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="select"
+            value={filter.band}
+            onChange={(event) => change({ band: event.target.value })}
+            aria-label={t('money.age')}
+          >
+            <option value="">{t('money.anyAge')}</option>
+            {bands.map((value) => (
+              <option key={value.label} value={bandKey(value)}>
+                {bandLabel(value, t)}
+              </option>
+            ))}
+          </select>
+          <label className="card__hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={filter.unpaidOnly}
+              onChange={(event) => change({ unpaidOnly: event.target.checked })}
+            />
+            {t('money.unpaidOnly')}
+          </label>
+        </>
+      }
       pagination={{
         canGoBack: paging.canGoBack,
         canGoForward: Boolean(data?.has_more && data?.next_cursor),
@@ -233,6 +513,33 @@ function ReceivablesTable() {
     />
   );
 }
+
+function bandKey(band: AgingBand): string {
+  return `${band.min_days}-${band.max_days ?? ''}`;
+}
+
+/** The band in the reader's language, from its bounds rather than the API's English label. */
+function bandLabel(band: AgingBand, t: Translate): string {
+  return band.max_days === null
+    ? t('money.bandOver', { days: band.min_days - 1 })
+    : t('money.bandRange', { min: band.min_days, max: band.max_days });
+}
+
+function courierName(provider: string, t: Translate): string {
+  switch (provider) {
+    case 'steadfast':
+      return 'Steadfast';
+    case 'pathao':
+      return 'Pathao';
+    case 'redx':
+      return 'RedX';
+    case 'manual':
+      return t('rv.manualCourier');
+    default:
+      return provider;
+  }
+}
+
 
 function PayoutsTable() {
   const { t, locale } = useSession();

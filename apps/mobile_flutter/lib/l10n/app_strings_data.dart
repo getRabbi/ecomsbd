@@ -31,6 +31,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._secBn,
   ..._riskBn,
   ..._reconV2Bn,
+  ..._cashflowBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -51,6 +52,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._secEn,
   ..._riskEn,
   ..._reconV2En,
+  ..._cashflowEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -3184,4 +3186,104 @@ const Map<String, String> _reconV2Bn = <String, String>{
   'rv2.ev.autoResolved': 'স্বয়ংক্রিয়ভাবে বন্ধ — টাকা এসে গেছে',
   'rv2.ev.manualMatch': 'হাতে মেলানো হয়েছে',
   'rv2.ev.chargesAccepted': 'চার্জ মেনে নেওয়া হয়েছে',
+};
+
+// --------------------------------------------------------------------------- //
+// Receivables and cashflow (V2.2)
+// --------------------------------------------------------------------------- //
+
+const Map<String, String> _cashflowEn = <String, String>{
+  'rcv.title': 'Cashflow',
+  'rcv.tileSub': 'Received, owed, and when it may arrive',
+  'rcv.eyebrow': 'Money with couriers',
+  'rcv.description':
+      'What arrived, what each courier still holds, and when the rest may come.',
+  'rcv.bandRange': '{min}-{max} days',
+  'rcv.bandOver': 'Over {days} days',
+  'rcv.ownDelivery': 'Own delivery',
+  'rcv.factsTitle': 'Where your money is',
+  'rcv.received': 'Received',
+  'rcv.last30': 'Last 30 days',
+  'rcv.receivable': 'With couriers now',
+  'rcv.receivableNote': 'Delivered, not yet paid to you',
+  'rcv.overdue': 'Overdue',
+  'rcv.overdueNote': 'Waiting more than {days} days since delivery',
+  'rcv.inTransit': 'On the road',
+  'rcv.inTransitNote.one': '{count} parcel · owed only once delivered',
+  'rcv.inTransitNote.other': '{count} parcels · owed only once delivered',
+  'rcv.forecastTitle': 'When it may arrive',
+  'rcv.nothingExpected': 'Couriers hold nothing for you right now.',
+  'rcv.parcels.one': '{count} parcel',
+  'rcv.parcels.other': '{count} parcels',
+  'rcv.win.next7': 'In the next 7 days',
+  'rcv.win.days8to14': 'In 8 to 14 days',
+  'rcv.win.later': 'Later',
+  'rcv.win.pastExpected': 'Later than usual — date unknown',
+  'rcv.win.noHistory': 'Not enough history — date unknown',
+  'rcv.usualDelay':
+      'Usually paid {days} days after delivery (from {count} paid parcels)',
+  'rcv.noHistoryNote':
+      'Not enough payment history yet to estimate when money will arrive.',
+  'rcv.forecastNote':
+      'An estimate from past payments, not a promise. It only spreads money '
+      'couriers already owe you across time — it never adds any.',
+  'rcv.couriersTitle': 'By courier',
+  'rcv.couriersSub': 'Who holds your money, and how late it is',
+  'rcv.deliveredUnpaid.one': '{count} delivered parcel not paid at all',
+  'rcv.deliveredUnpaid.other': '{count} delivered parcels not paid at all',
+  'rcv.courierOverdue': '{amount} overdue across {count} parcels',
+  'rcv.oldest': 'Oldest unpaid: {days} days',
+  'rcv.courierInTransit': '{amount} on the road in {count} parcels',
+  'rcv.lastPaid': 'Last paid {when}',
+  'rcv.neverPaid': 'No payment recorded yet',
+  'rcv.noDelay': 'Not enough payments yet to know how long it usually takes',
+};
+
+const Map<String, String> _cashflowBn = <String, String>{
+  'rcv.title': 'ক্যাশফ্লো',
+  'rcv.tileSub': 'কত এসেছে, কত বাকি, কবে আসতে পারে',
+  'rcv.eyebrow': 'কুরিয়ারের কাছে থাকা টাকা',
+  'rcv.description':
+      'কত টাকা এসেছে, কোন কুরিয়ারের কাছে কত আছে, আর বাকিটা কবে আসতে পারে।',
+  'rcv.bandRange': '{min}-{max} দিন',
+  'rcv.bandOver': '{days} দিনের বেশি',
+  'rcv.ownDelivery': 'নিজস্ব ডেলিভারি',
+  'rcv.factsTitle': 'আপনার টাকা কোথায়',
+  'rcv.received': 'পেয়েছেন',
+  'rcv.last30': 'গত ৩০ দিন',
+  'rcv.receivable': 'এখন কুরিয়ারের কাছে',
+  'rcv.receivableNote': 'ডেলিভারি হয়েছে, টাকা এখনো পাননি',
+  'rcv.overdue': 'সময় পেরিয়ে গেছে',
+  'rcv.overdueNote': 'ডেলিভারির পর {days} দিনের বেশি অপেক্ষা',
+  'rcv.inTransit': 'পথে আছে',
+  'rcv.inTransitNote.one': '{count}টি পার্সেল · ডেলিভারি হলে তবেই পাওনা',
+  'rcv.inTransitNote.other': '{count}টি পার্সেল · ডেলিভারি হলে তবেই পাওনা',
+  'rcv.forecastTitle': 'কবে আসতে পারে',
+  'rcv.nothingExpected': 'এই মুহূর্তে কোনো কুরিয়ারের কাছে আপনার টাকা নেই।',
+  'rcv.parcels.one': '{count}টি পার্সেল',
+  'rcv.parcels.other': '{count}টি পার্সেল',
+  'rcv.win.next7': 'আগামী ৭ দিনে',
+  'rcv.win.days8to14': '৮ থেকে ১৪ দিনে',
+  'rcv.win.later': 'পরে',
+  'rcv.win.pastExpected': 'স্বাভাবিকের চেয়ে দেরি — তারিখ জানা নেই',
+  'rcv.win.noHistory': 'যথেষ্ট ইতিহাস নেই — তারিখ জানা নেই',
+  'rcv.usualDelay':
+      'সাধারণত ডেলিভারির {days} দিন পর টাকা আসে ({count}টি পার্সেলের হিসাবে)',
+  'rcv.noHistoryNote':
+      'টাকা কবে আসবে আন্দাজ করার মতো পেমেন্টের ইতিহাস এখনো নেই।',
+  'rcv.forecastNote':
+      'আগের পেমেন্ট দেখে আন্দাজ, নিশ্চয়তা নয়। কুরিয়ারের কাছে যে টাকা আগে থেকেই '
+      'পাওনা, শুধু সেটাই সময় অনুযায়ী ভাগ করা হয়েছে — নতুন কিছু যোগ করা হয়নি।',
+  'rcv.couriersTitle': 'কুরিয়ার অনুযায়ী',
+  'rcv.couriersSub': 'কার কাছে আপনার টাকা, আর কত দেরি',
+  'rcv.deliveredUnpaid.one':
+      'ডেলিভারি হওয়া {count}টি পার্সেলের টাকা একদমই আসেনি',
+  'rcv.deliveredUnpaid.other':
+      'ডেলিভারি হওয়া {count}টি পার্সেলের টাকা একদমই আসেনি',
+  'rcv.courierOverdue': '{count}টি পার্সেলে {amount} সময় পেরিয়ে গেছে',
+  'rcv.oldest': 'সবচেয়ে পুরনো বকেয়া: {days} দিন',
+  'rcv.courierInTransit': '{count}টি পার্সেলে {amount} পথে আছে',
+  'rcv.lastPaid': 'শেষ পেমেন্ট {when}',
+  'rcv.neverPaid': 'এখনো কোনো পেমেন্ট রেকর্ড হয়নি',
+  'rcv.noDelay': 'সাধারণত কত দিনে টাকা দেয় বলার মতো পেমেন্ট এখনো হয়নি',
 };

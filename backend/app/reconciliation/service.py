@@ -49,7 +49,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.audit import AuditAction, record_audit
 from app.common.pagination import Cursor, apply_cursor
 from app.consignments.models import Consignment, ConsignmentStatus
-from app.core.clock import utc_now
+from app.core.clock import ensure_utc, utc_now
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.customers.models import Customer
@@ -1877,6 +1877,18 @@ class ReconciliationService:
         note: str | None = None,
     ) -> CaseEvent:
         context = current_context()
+        # A case's history is read in time order, and two events written in
+        # the same clock tick (a note then a status change, say) would
+        # otherwise tie — with ids that are not ordered within a millisecond.
+        # Each event is stamped strictly after the case's previous one.
+        moment = utc_now()
+        latest = (
+            await self._db.execute(
+                sa.select(sa.func.max(CaseEvent.created_at)).where(CaseEvent.case_id == case.id)
+            )
+        ).scalar_one_or_none()
+        if latest is not None and moment <= ensure_utc(latest):
+            moment = ensure_utc(latest) + timedelta(microseconds=1)
         event = CaseEvent(
             case_id=case.id,
             action=str(action),
@@ -1886,7 +1898,7 @@ class ReconciliationService:
             actor_user_id=(
                 context.user_id if context and action is not CaseEventAction.AUTO_RESOLVED else None
             ),
-            created_at=utc_now(),
+            created_at=moment,
         )
         self._db.add(event)
         await self._db.flush()

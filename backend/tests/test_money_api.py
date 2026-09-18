@@ -162,7 +162,8 @@ class TestMoneySummary:
             "0-3 days",
             "4-7 days",
             "8-14 days",
-            "15+ days",
+            "15-30 days",
+            "30+ days",
         ]
         assert bands[0]["outstanding_paisa"] == 140_500
 

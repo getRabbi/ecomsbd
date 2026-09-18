@@ -376,6 +376,15 @@ button:disabled {
   color: var(--good);
 }
 
+/* A summary row that filters the table below it when clicked. */
+.table__row--clickable {
+  cursor: pointer;
+}
+
+.table__row--clickable:hover {
+  background: var(--stroke);
+}
+
 /* ------------------------------------------------------------- controls --- */
 
 .toolbar {

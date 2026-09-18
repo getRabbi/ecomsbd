@@ -8,7 +8,8 @@ import '../../l10n/app_locale.dart';
 /// they resolve against the active locale directly — the same approach
 /// `formatRelative` uses. A language change rebuilds the tree, so the next
 /// paint is already in the new language.
-String _t(String key) => AppStrings(activeAppLocale).t(key);
+String _t(String key, [Map<String, Object?>? vars]) =>
+    AppStrings(activeAppLocale).t(key, vars);
 
 /// Wire models for the money core.
 ///
@@ -47,6 +48,12 @@ class AgingBand {
 
   /// Money sitting with a courier for over a week is worth chasing.
   bool get isOverdue => minDays >= 8;
+
+  /// "8-14 days" / "Over 30 days", in the reader's language. Built from the
+  /// band's own bounds rather than the server's English label.
+  String get displayLabel => maxDays == null
+      ? _t('rcv.bandOver', <String, Object?>{'days': minDays - 1})
+      : _t('rcv.bandRange', <String, Object?>{'min': minDays, 'max': maxDays});
 }
 
 @immutable
@@ -937,4 +944,198 @@ class CaseDetail {
 
   /// The expected-against-actual row the case is about, when there is one.
   final ReconciliationItem? row;
+}
+
+// --------------------------------------------------------------------------- //
+// Receivables and cashflow (V2.2)
+// --------------------------------------------------------------------------- //
+
+/// A courier's name as a seller knows it. Brand names stay as they are;
+/// "manual" is the seller's own delivery.
+String courierLabel(String provider) => switch (provider) {
+  'steadfast' => 'Steadfast',
+  'pathao' => 'Pathao',
+  'redx' => 'RedX',
+  'manual' => _t('rcv.ownDelivery'),
+  _ => provider,
+};
+
+/// How long a courier has taken to pay, from delivery to money recorded.
+/// Measured from past payments; `reliable` is false below the minimum sample.
+@immutable
+class PayoutDelay {
+  const PayoutDelay({
+    required this.provider,
+    required this.samples,
+    required this.averageDays,
+    required this.medianDays,
+    required this.reliable,
+  });
+
+  factory PayoutDelay.fromJson(Map<String, dynamic> json) => PayoutDelay(
+    provider: json['provider'] as String,
+    samples: json['samples'] as int,
+    averageDays: (json['average_days'] as num).toDouble(),
+    medianDays: json['median_days'] as int,
+    reliable: json['reliable'] as bool? ?? false,
+  );
+
+  final String provider;
+  final int samples;
+  final double averageDays;
+  final int medianDays;
+  final bool reliable;
+}
+
+/// What one courier holds. Facts from the receivables, not estimates.
+@immutable
+class CourierBalance {
+  const CourierBalance({
+    required this.provider,
+    required this.outstanding,
+    required this.parcelCount,
+    required this.deliveredUnpaidCount,
+    required this.overdueCount,
+    required this.overdue,
+    required this.inTransitCount,
+    required this.inTransit,
+    required this.aging,
+    this.oldestAgeDays,
+    this.lastPaymentOn,
+    this.delay,
+  });
+
+  factory CourierBalance.fromJson(Map<String, dynamic> json) => CourierBalance(
+    provider: json['provider'] as String,
+    outstanding: Money(json['outstanding_paisa'] as int),
+    parcelCount: json['parcel_count'] as int,
+    deliveredUnpaidCount: json['delivered_unpaid_count'] as int,
+    overdueCount: json['overdue_count'] as int,
+    overdue: Money(json['overdue_paisa'] as int),
+    inTransitCount: json['in_transit_count'] as int? ?? 0,
+    inTransit: Money(json['in_transit_paisa'] as int? ?? 0),
+    oldestAgeDays: json['oldest_age_days'] as int?,
+    lastPaymentOn: json['last_payment_on'] == null
+        ? null
+        : DateTime.parse(json['last_payment_on'] as String),
+    delay: json['payout_delay'] == null
+        ? null
+        : PayoutDelay.fromJson(json['payout_delay'] as Map<String, dynamic>),
+    aging: <AgingBand>[
+      for (final band in json['aging'] as List<dynamic>? ?? const <dynamic>[])
+        AgingBand.fromJson(band as Map<String, dynamic>),
+    ],
+  );
+
+  final String provider;
+  final Money outstanding;
+  final int parcelCount;
+  final int deliveredUnpaidCount;
+  final int overdueCount;
+  final Money overdue;
+  final int inTransitCount;
+
+  /// COD still on the road. Owed only once delivered.
+  final Money inTransit;
+  final List<AgingBand> aging;
+  final int? oldestAgeDays;
+  final DateTime? lastPaymentOn;
+  final PayoutDelay? delay;
+
+  String get name => courierLabel(provider);
+}
+
+/// One slice of the forecast: part of today's receivable and when it may
+/// arrive.
+@immutable
+class ForecastWindow {
+  const ForecastWindow({
+    required this.key,
+    required this.parcelCount,
+    required this.amount,
+  });
+
+  factory ForecastWindow.fromJson(Map<String, dynamic> json) => ForecastWindow(
+    key: json['key'] as String,
+    parcelCount: json['parcel_count'] as int,
+    amount: Money(json['amount_paisa'] as int),
+  );
+
+  final String key;
+  final int parcelCount;
+  final Money amount;
+
+  /// The two slices whose date cannot be estimated.
+  bool get isUndated => key == 'past_expected' || key == 'no_history';
+
+  String get label => switch (key) {
+    'next_7_days' => _t('rcv.win.next7'),
+    'days_8_to_14' => _t('rcv.win.days8to14'),
+    'later' => _t('rcv.win.later'),
+    'past_expected' => _t('rcv.win.pastExpected'),
+    'no_history' => _t('rcv.win.noHistory'),
+    _ => key,
+  };
+}
+
+/// Received, receivable and expected. Received comes from the ledger and
+/// receivable from the receivables — both facts. `forecast` is the only
+/// estimate, and always adds up to `receivable`.
+@immutable
+class CashflowView {
+  const CashflowView({
+    required this.since,
+    required this.until,
+    required this.received,
+    required this.receivable,
+    required this.overdue,
+    required this.overdueAfterDays,
+    required this.deliveredUnpaid,
+    required this.inTransit,
+    required this.inTransitCount,
+    required this.forecast,
+    required this.delays,
+    this.overallDelay,
+  });
+
+  factory CashflowView.fromJson(Map<String, dynamic> json) {
+    final forecast = json['forecast'] as Map<String, dynamic>? ?? const {};
+    return CashflowView(
+      since: DateTime.parse(json['since'] as String),
+      until: DateTime.parse(json['until'] as String),
+      received: Money(json['received_paisa'] as int),
+      receivable: Money(json['receivable_paisa'] as int),
+      overdue: Money(json['overdue_paisa'] as int),
+      overdueAfterDays: json['overdue_after_days'] as int? ?? 7,
+      deliveredUnpaid: Money(json['delivered_unpaid_paisa'] as int? ?? 0),
+      inTransit: Money(json['in_transit_paisa'] as int? ?? 0),
+      inTransitCount: json['in_transit_count'] as int? ?? 0,
+      forecast: <ForecastWindow>[
+        for (final window
+            in forecast['windows'] as List<dynamic>? ?? const <dynamic>[])
+          ForecastWindow.fromJson(window as Map<String, dynamic>),
+      ],
+      delays: <PayoutDelay>[
+        for (final delay
+            in json['payout_delays'] as List<dynamic>? ?? const <dynamic>[])
+          PayoutDelay.fromJson(delay as Map<String, dynamic>),
+      ],
+      overallDelay: json['overall_delay'] == null
+          ? null
+          : PayoutDelay.fromJson(json['overall_delay'] as Map<String, dynamic>),
+    );
+  }
+
+  final DateTime since;
+  final DateTime until;
+  final Money received;
+  final Money receivable;
+  final Money overdue;
+  final int overdueAfterDays;
+  final Money deliveredUnpaid;
+  final Money inTransit;
+  final int inTransitCount;
+  final List<ForecastWindow> forecast;
+  final List<PayoutDelay> delays;
+  final PayoutDelay? overallDelay;
 }

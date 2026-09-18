@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -155,6 +155,75 @@ class AgingBandResponse(BaseModel):
     max_days: int | None
     parcel_count: int
     outstanding_paisa: int
+
+
+class PayoutDelayResponse(BaseModel):
+    """How long a courier has taken to pay, delivery to money recorded."""
+
+    provider: str
+    samples: int
+    average_days: float
+    median_days: int
+    #: False when there are too few paid parcels to call it "usual".
+    reliable: bool
+
+
+class CourierBalanceResponse(BaseModel):
+    """What one courier holds, from the receivables. Facts, not estimates."""
+
+    provider: str
+    outstanding_paisa: int
+    parcel_count: int
+    delivered_unpaid_count: int
+    delivered_unpaid_paisa: int
+    overdue_count: int
+    overdue_paisa: int
+    oldest_age_days: int | None
+    #: COD on parcels still on the road. Owed only once delivered.
+    in_transit_count: int
+    in_transit_paisa: int
+    last_payment_on: date | None
+    payout_delay: PayoutDelayResponse | None
+    aging: list[AgingBandResponse] = Field(default_factory=list)
+
+
+class ForecastWindowResponse(BaseModel):
+    #: ``next_7_days``, ``days_8_to_14``, ``later``, ``past_expected`` (the
+    #: usual payment date has passed; when it will arrive is unknown) or
+    #: ``no_history`` (too little payment history to estimate a date).
+    key: str
+    parcel_count: int
+    amount_paisa: int
+
+
+class CashflowForecastResponse(BaseModel):
+    """When today's receivable may arrive. An estimate, and labelled one.
+
+    The windows redistribute money that is already receivable — they always
+    add up to ``receivable_paisa`` — so the forecast cannot create income that
+    the receivables do not already hold.
+    """
+
+    quality: Literal["ESTIMATE"] = "ESTIMATE"
+    windows: list[ForecastWindowResponse] = Field(default_factory=list)
+
+
+class CashflowResponse(BaseModel):
+    since: date
+    until: date
+    #: From the ledger: COD that actually arrived in the period.
+    received_paisa: int
+    received_by_courier: dict[str, int] = Field(default_factory=dict)
+    #: From the receivables: what couriers hold right now.
+    receivable_paisa: int
+    overdue_paisa: int
+    overdue_after_days: int
+    delivered_unpaid_paisa: int
+    in_transit_paisa: int
+    in_transit_count: int
+    forecast: CashflowForecastResponse
+    payout_delays: list[PayoutDelayResponse] = Field(default_factory=list)
+    overall_delay: PayoutDelayResponse | None = None
 
 
 class MoneySummaryResponse(BaseModel):

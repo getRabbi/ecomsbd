@@ -267,6 +267,32 @@ class MoneyRepository extends CachingRepository {
     return json['cases_opened'] as int? ?? 0;
   }
 
+  /// What each courier holds. Cached so the screen opens on the last figures
+  /// while it refreshes, marked stale when it had to fall back.
+  Future<Sourced<List<CourierBalance>>> courierBalances() async {
+    final sourced = await readThrough(
+      'money.couriers',
+      () async => <String, dynamic>{
+        'items': await api.getList('/money/couriers'),
+      },
+    );
+    return sourced.map(
+      (json) => <CourierBalance>[
+        for (final row in json['items'] as List<dynamic>? ?? const <dynamic>[])
+          CourierBalance.fromJson(row as Map<String, dynamic>),
+      ],
+    );
+  }
+
+  /// Received, receivable, and when the receivable may arrive (an estimate).
+  Future<Sourced<CashflowView>> cashflow() async {
+    final sourced = await readThrough(
+      'money.cashflow',
+      () => api.get('/money/cashflow'),
+    );
+    return sourced.map(CashflowView.fromJson);
+  }
+
   /// Expected, actual and the difference. Cached like the Money summary so
   /// the screen opens on the last figures while it refreshes.
   Future<Sourced<ReconciliationSummary>> reconciliationSummary() async {
