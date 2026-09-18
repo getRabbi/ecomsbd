@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
@@ -36,6 +37,7 @@ from app.api.v1.commerce_schemas import (
     ParseResponse,
 )
 from app.common.pagination import Page, decode_cursor
+from app.consignments.models import Consignment
 from app.customers.service import CustomerService
 from app.orders.duplicates import DuplicateCheck
 from app.orders.models import Order, OrderStatus
@@ -129,6 +131,7 @@ def _to_item_drafts(payload_items: list) -> list[OrderItemDraft]:
 async def list_orders(
     principal: TenantPrincipal,
     orders: OrderServiceDep,
+    db: DbSession,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     order_status: Annotated[OrderStatus | None, Query(alias="status")] = None,
@@ -147,7 +150,54 @@ async def list_orders(
         customer_id=customer_id,
         search=search,
     )
-    return Page[OrderResponse].build(rows, limit=limit, serializer=_to_response)
+    couriers = await _courier_for_orders(db, [order.id for order in rows])
+
+    def serialize(order: Order) -> OrderResponse:
+        response = _to_response(order)
+        found = couriers.get(order.id)
+        if found is not None:
+            response.courier_provider, response.tracking_code = found
+        return response
+
+    return Page[OrderResponse].build(rows, limit=limit, serializer=serialize)
+
+
+async def _courier_for_orders(
+    db: DbSession, order_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, str | None]]:
+    """The courier and tracking code for each order's current parcel.
+
+    One bounded query for the whole page rather than a join on the list query
+    or a lookup per row: the list query is the hottest read in the product and
+    is left exactly as it was, and fifty orders cost one extra round trip
+    instead of fifty.
+
+    An order with several consignments — one cancelled, one reshipped — takes
+    the newest, which is the parcel a seller means when they ask "where is it?".
+    """
+    if not order_ids:
+        return {}
+
+    rows = (
+        await db.execute(
+            sa.select(
+                Consignment.order_id,
+                Consignment.provider,
+                Consignment.tracking_code,
+                Consignment.created_at,
+            )
+            .where(Consignment.order_id.in_(order_ids))
+            .order_by(Consignment.order_id, Consignment.created_at.desc())
+        )
+    ).all()
+
+    found: dict[uuid.UUID, tuple[str, str | None]] = {}
+    for order_id, provider, tracking_code, _created_at in rows:
+        # Ordered newest first, so the first row seen for an order is the one
+        # that counts and later ones are its history.
+        if order_id not in found:
+            found[order_id] = (provider, tracking_code)
+    return found
 
 
 @router.post(

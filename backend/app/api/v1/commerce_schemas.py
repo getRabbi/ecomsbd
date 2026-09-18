@@ -307,6 +307,15 @@ class OrderResponse(BaseModel):
     risk_state: str = "NOT_CHECKED"
     profit_state: str = "PENDING_CALCULATION"
 
+    #: The courier this order's live parcel is with, and its tracking code.
+    #: ``None`` for an order that has not been booked — which is a fact, not a
+    #: missing value, and renders as "not booked" rather than as a blank.
+    #:
+    #: Filled from the order's current consignment by one bounded query per
+    #: page rather than a join, so the list query itself is unchanged.
+    courier_provider: str | None = None
+    tracking_code: str | None = None
+
 
 class OrderDetailResponse(OrderResponse):
     items: list[OrderItemResponse] = Field(default_factory=list)
