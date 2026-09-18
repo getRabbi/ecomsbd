@@ -62,7 +62,13 @@ async def signed_in_shop(
     body = response.json()
     if plan is not None:
         await grant_plan(str(body["tenant_id"]), plan)
-    return body
+    # Merged, not replaced. `POST /tenants` answers with ShopSessionResponse,
+    # which carries no tokens on purpose: creating a shop binds the *session*
+    # to it server-side, so the token the caller already holds becomes
+    # tenant-scoped without being reissued. Returning the shop body alone loses
+    # that token, and every caller that then builds an auth header from it gets
+    # a KeyError rather than a request.
+    return {**session, **body}
 
 
 async def create_product(

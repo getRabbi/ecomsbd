@@ -3,6 +3,8 @@ import 'package:ecomsbd/data/auth/auth_controller.dart';
 import 'package:ecomsbd/features/auth/email_auth_screen.dart';
 import 'package:ecomsbd/features/auth/verification_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:ecomsbd/l10n/app_strings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,7 +24,16 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [authControllerProvider.overrideWith((ref) => h.controller)],
-        child: MaterialApp(home: screen),
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: const <Locale>[Locale('bn'), Locale('en')],
+          localizationsDelegates: const <LocalizationsDelegate<Object>>[
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: screen),
       ),
     );
     await tester.pumpAndSettle();
@@ -49,7 +60,16 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [authControllerProvider.overrideWith((ref) => h.controller)],
-        child: MaterialApp(home: VerificationScreen(onContinue: () {})),
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: const <Locale>[Locale('bn'), Locale('en')],
+          localizationsDelegates: const <LocalizationsDelegate<Object>>[
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: VerificationScreen(onContinue: () {})),
       ),
     );
     await tester.pumpAndSettle();

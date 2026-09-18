@@ -311,7 +311,14 @@ class InvitationService:
                 await self._db.flush()
                 raise ConflictError("You are already a member of that shop")
 
-            await self._require_seat(tenant_id, cross_tenant=True)
+            # Excluding this invitation: it is still PENDING, and the seat it
+            # has been holding is the very one this acceptance consumes.
+            # Counting both made the last seat of a plan unusable — the
+            # invitation reserved it and then the acceptance was refused for
+            # taking it.
+            await self._require_seat(
+                tenant_id, cross_tenant=True, excluding_invitation_id=invitation.id
+            )
 
             if existing is not None:
                 # Rejoining: the same row keeps their history in this shop.
@@ -376,12 +383,22 @@ class InvitationService:
                 return row
         return None
 
-    async def _require_seat(self, tenant_id: uuid.UUID, *, cross_tenant: bool = False) -> None:
+    async def _require_seat(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        cross_tenant: bool = False,
+        excluding_invitation_id: uuid.UUID | None = None,
+    ) -> None:
         """Refuse when the shop has no seat free.
 
         Counts active members **plus** open invitations. Counting only members
         would let a three-seat shop send thirty invitations and hand out thirty
         memberships as they were accepted.
+
+        ``excluding_invitation_id`` is passed when an invitation is being
+        accepted, so the seat it was holding is not counted twice — once as the
+        reservation and again as the membership it is about to become.
         """
         if self._entitlements is None:
             return
@@ -412,6 +429,8 @@ class InvitationService:
                 .scalars()
                 .all()
             ):
+                if row.id == excluding_invitation_id:
+                    continue
                 if row.is_claimable:
                     pending += 1
             return members + pending

@@ -268,7 +268,23 @@ async def get_optional_principal(
         # The tenant comes from the session row, not the token: rebinding a session
         # to a different shop must take effect without waiting for token expiry.
         tenant_id = session_row.tenant_id
-        role = TenantRole(legacy_claims.role) if legacy_claims.role else None
+
+        # And so does the role, for exactly the same reason. Reading it from the
+        # token claim instead left this path inconsistent with the sentence
+        # above: a session bound to a shop *after* its token was minted carried
+        # `role=None` and therefore no permissions at all, and rebinding to a
+        # shop where the caller holds a different role kept the old one until
+        # the token expired. The Supabase path already resolves role from
+        # membership; this now matches it, so local development behaves the way
+        # production does.
+        role = None
+        if tenant_id is not None:
+            auth = await get_auth_service(db, settings, await get_rate_limiter())
+            memberships = await auth.list_memberships(user.id)
+            membership = next((m for m in memberships if m.id == tenant_id), None)
+            if membership is None:
+                raise ForbiddenError("Shop membership is no longer active")
+            role = TenantRole(membership.role)
 
     principal = Principal(user=user, session=session_row, tenant_id=tenant_id, role=role)
 

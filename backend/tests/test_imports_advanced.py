@@ -123,9 +123,7 @@ def test_a_spreadsheet_reads_like_the_csv_of_the_same_sheet() -> None:
 
 def test_trailing_blank_rows_are_not_reported_as_failures() -> None:
     """Excel leaves them behind; they are not something a seller did wrong."""
-    content = _workbook(
-        [["Name", "Amount"], ["Rahim", 1050], [None, None], [None, None]]
-    )
+    content = _workbook([["Name", "Amount"], ["Rahim", 1050], [None, None], [None, None]])
 
     _headers, rows = read_xlsx(content, max_rows=100)
 
@@ -303,9 +301,7 @@ async def test_a_mapping_needs_a_name_and_at_least_one_column(db, service) -> No
             name="  ", template=ImportTemplate.ORDERS, mapping={"phone": "Mobile"}
         )
     with pytest.raises(ValidationError, match="at least one"):
-        await service.save_mapping(
-            name="Empty", template=ImportTemplate.ORDERS, mapping={}
-        )
+        await service.save_mapping(name="Empty", template=ImportTemplate.ORDERS, mapping={})
 
 
 # -------------------------------------------------------------- error export --
@@ -504,9 +500,7 @@ async def test_a_large_import_is_handed_to_the_worker(db, service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_job_is_enqueued_through_the_outbox_not_a_second_queue(
-    db, service
-) -> None:
+async def test_the_job_is_enqueued_through_the_outbox_not_a_second_queue(db, service) -> None:
     """So it exists if and only if the request's transaction commits.
 
     A direct enqueue would leave a worker committing an import the seller never

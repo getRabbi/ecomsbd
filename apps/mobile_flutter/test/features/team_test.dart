@@ -18,9 +18,9 @@ import 'commerce_harness.dart';
 /// * V1's role names still resolve, so a member written before the rename does
 ///   not render as an unknown role with no permissions.
 ///
-/// Copy assertions are in Bangla: the harness pumps a bare `Scaffold` with no
-/// `Localizations`, so `AppStrings.of` falls back to Bangla, which is also the
-/// app's default language.
+/// Copy assertions are in English: the test harness renders with the English
+/// locale. Provider and technical terms stay English in both languages anyway,
+/// so those assertions hold either way.
 
 Map<String, dynamic> _member(
   String userId, {
@@ -102,7 +102,7 @@ void main() {
 
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);
 
-      expect(find.text('(আপনি)'), findsOneWidget);
+      expect(find.text('(you)'), findsOneWidget);
     });
 
     testWidgets('offers no actions against yourself', (tester) async {
@@ -130,11 +130,11 @@ void main() {
 
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);
 
-      expect(find.text('পাঠানো আমন্ত্রণ'), findsOneWidget);
-      expect(find.text('অপেক্ষায়'), findsOneWidget);
+      expect(find.text('Invitations sent'), findsOneWidget);
+      expect(find.text('Waiting'), findsOneWidget);
       expect(find.text('•••• 4321'), findsOneWidget);
       // One member, and the invitee is not among them.
-      expect(find.text('সদস্য'), findsOneWidget);
+      expect(find.text('Members'), findsOneWidget);
       expect(find.text('1'), findsOneWidget);
     });
 
@@ -146,7 +146,7 @@ void main() {
 
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);
 
-      expect(find.text('পাঠানো আমন্ত্রণ'), findsNothing);
+      expect(find.text('Invitations sent'), findsNothing);
     });
 
     testWidgets('explains every role by what it unlocks', (tester) async {
@@ -156,9 +156,9 @@ void main() {
 
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);
 
-      expect(find.text('কে কী করতে পারবেন'), findsOneWidget);
+      expect(find.text('What each role can do'), findsOneWidget);
       expect(
-        find.textContaining('টাকার স্ক্রিন বা কুরিয়ার key কখনও দেখেন না'),
+        find.textContaining('Never sees the money screens or the courier keys'),
         findsOneWidget,
       );
     });
@@ -182,10 +182,10 @@ void main() {
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);
 
       expect(
-        find.text('Nusrat Collection আপনাকে যুক্ত হতে বলেছে'),
+        find.text('Nusrat Collection invited you to join'),
         findsOneWidget,
       );
-      expect(find.text('এই দোকানে যুক্ত হন'), findsOneWidget);
+      expect(find.text('Join this shop'), findsOneWidget);
     });
 
     testWidgets('surfaces the server refusal rather than deciding itself', (
@@ -215,13 +215,13 @@ void main() {
 
       await tester.tap(find.byType(PopupMenuButton<String>));
       await settle(tester, frames: 6, step: const Duration(milliseconds: 50));
-      await tester.tap(find.text('সরান').last);
+      await tester.tap(find.text('Remove').last);
       await settle(tester, frames: 6, step: const Duration(milliseconds: 50));
-      await tester.tap(find.text('সরান').last);
+      await tester.tap(find.text('Remove').last);
       await settle(tester, frames: 8, step: const Duration(milliseconds: 60));
 
       expect(
-        find.textContaining('অন্তত একজন মালিক'),
+        find.textContaining('at least one Owner'),
         findsOneWidget,
         reason: 'the rule lives on the server; the screen reports it',
       );

@@ -18,11 +18,9 @@ import 'commerce_harness.dart';
 ///   a parcel's status never advances without it;
 /// * the Client Secret is never rendered in clear text.
 ///
-/// Copy assertions are in Bangla: the harness pumps a bare `Scaffold` with no
-/// `Localizations` ancestor, so `AppStrings.of` falls back to Bangla, which is
-/// also the app's default language. Provider and technical terms — `Pathao`,
-/// `Client ID`, `Client Secret`, `Sandbox` — stay English in both languages, so
-/// those assertions are locale-stable on purpose.
+/// Copy assertions are in English: the test harness renders with the English
+/// locale. Provider and technical terms stay English in both languages anyway,
+/// so those assertions hold either way.
 
 const Map<String, dynamic> _pathaoProvider = <String, dynamic>{
   'provider': 'pathao',
@@ -236,12 +234,12 @@ void main() {
       // Pathao refuses every create without store_id, so "connected" alone
       // would be a lie the seller only discovers at booking time.
       expect(
-        find.textContaining('পিকআপ স্টোর বাছুন'),
+        find.textContaining('Choose a pickup store'),
         findsOneWidget,
         reason: 'the blocking state is stated, not left to fail at booking',
       );
-      expect(find.text('স্টোর বাছুন'), findsOneWidget);
-      expect(find.text('এখনও বাছা হয়নি'), findsOneWidget);
+      expect(find.text('Choose store'), findsOneWidget);
+      expect(find.text('Not chosen yet'), findsOneWidget);
     });
 
     testWidgets('shows the chosen pickup store once one is set', (
@@ -258,8 +256,8 @@ void main() {
       );
 
       expect(find.text('Mirpur Warehouse'), findsOneWidget);
-      expect(find.text('স্টোর বদলান'), findsOneWidget);
-      expect(find.textContaining('পিকআপ স্টোর বাছুন'), findsNothing);
+      expect(find.text('Change store'), findsOneWidget);
+      expect(find.textContaining('Choose a pickup store'), findsNothing);
     });
 
     testWidgets('lists the pickup stores the courier reports', (tester) async {
@@ -278,7 +276,7 @@ void main() {
         harness: harness,
       );
 
-      final choose = find.text('স্টোর বাছুন');
+      final choose = find.text('Choose store');
       await tester.ensureVisible(choose);
       await tester.pump();
       await tester.tap(choose);
@@ -333,7 +331,7 @@ void main() {
         harness: harness,
       );
 
-      expect(find.text('স্টেটাস আপডেট চালু আছে'), findsOneWidget);
+      expect(find.text('Status updates are set up'), findsOneWidget);
       expect(
         find.text('https://api.example.com/v1/webhooks/couriers/pathao/tok-123'),
         findsOneWidget,
@@ -341,7 +339,7 @@ void main() {
       // The courier's own reason, so a seller reads why this matters for
       // *this* courier rather than a generic note.
       expect(
-        find.textContaining('স্ট্যাটাস লুকআপ নেই'),
+        find.textContaining('does not offer a status lookup'),
         findsOneWidget,
       );
     });
@@ -367,7 +365,7 @@ void main() {
         harness: harness,
       );
 
-      expect(find.text('স্টেটাস আপডেট চালু হয়নি'), findsOneWidget);
+      expect(find.text('Status updates are not set up'), findsOneWidget);
     });
 
     testWidgets('a courier the shop may not use is not offered', (
@@ -430,7 +428,7 @@ void main() {
 
       expect(find.text('RedX'), findsNothing);
       // Manual mode is still presented as a real path, not an apology.
-      expect(find.text('ম্যানুয়াল কুরিয়ার মোড'), findsOneWidget);
+      expect(find.text('Manual courier mode'), findsOneWidget);
     });
   });
 

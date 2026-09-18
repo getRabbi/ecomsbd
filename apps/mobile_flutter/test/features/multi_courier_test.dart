@@ -118,7 +118,7 @@ void main() {
       // Hiding it would leave a seller wondering where Pathao went; this tells
       // them what to do about it.
       expect(find.text('Pathao'), findsOneWidget);
-      expect(find.text('সেটিংসে একটি পিকআপ স্টোর বাছুন'), findsOneWidget);
+      expect(find.text('Choose a pickup store in Settings'), findsOneWidget);
     });
 
     testWidgets('sends the courier the seller chose', (tester) async {
@@ -153,7 +153,7 @@ void main() {
 
       await tester.tap(find.text('Pathao'));
       await tester.pump();
-      await tester.tap(find.text('বুকিং কনফার্ম করুন'));
+      await tester.tap(find.text('Confirm booking'));
       await settle(tester, frames: 8, step: const Duration(milliseconds: 60));
 
       final booked = harness.adapter.to(
@@ -176,12 +176,12 @@ void main() {
 
       // Pathao sorts first and is selected by default; it declares no delivery
       // type, so the toggle is absent rather than sending Steadfast's codes.
-      expect(find.text('বাসায় ডেলিভারি'), findsNothing);
+      expect(find.text('Home delivery'), findsNothing);
 
       await tester.tap(find.text('Steadfast'));
       await tester.pump();
 
-      expect(find.text('বাসায় ডেলিভারি'), findsOneWidget);
+      expect(find.text('Home delivery'), findsOneWidget);
     });
 
     testWidgets('refuses to book when no courier can take it', (tester) async {
@@ -198,7 +198,7 @@ void main() {
 
       final confirm = tester.widget<FilledButton>(
         find.ancestor(
-          of: find.text('বুকিং কনফার্ম করুন'),
+          of: find.text('Confirm booking'),
           matching: find.byType(FilledButton),
         ),
       );
@@ -208,7 +208,7 @@ void main() {
     testWidgets('says so when no courier is connected at all', (tester) async {
       await _openSheet(tester, _harness(<dynamic>[]));
 
-      expect(find.text('কোনো কুরিয়ার যুক্ত নেই'), findsOneWidget);
+      expect(find.text('No courier connected'), findsOneWidget);
     });
   });
 

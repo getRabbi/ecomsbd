@@ -54,6 +54,13 @@ def settings(tmp_path_factory: pytest.TempPathFactory):
             "DATABASE_URL": _test_database_url(tmp_path),
             "LOG_JSON": "false",
             "LOG_LEVEL": "WARNING",
+            # Production defers SMS sign-in (no gateway chosen), so
+            # PHONE_OTP_LOGIN_ENABLED defaults to false and every OTP endpoint
+            # answers FEATURE_DISABLED. The suite signs in over OTP, so without
+            # this the shared sign-in fixture 403s and several hundred tests
+            # fail for a reason that has nothing to do with what they assert.
+            # Turned on here only; the production default is untouched.
+            "PHONE_OTP_LOGIN_ENABLED": "true",
             "OTP_PROVIDER": "dev_console",
             "ALLOW_DEV_OTP": "true",
             "OTP_EXPOSE_DEBUG_CODE": "true",

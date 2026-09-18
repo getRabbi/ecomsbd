@@ -642,3 +642,32 @@ async def test_the_seat_limit_is_rechecked_at_acceptance(db, settings) -> None:
         .all()
     )
     assert [m.user_id for m in members] == [owner.id]
+
+
+@pytest.mark.asyncio
+async def test_the_last_seat_can_actually_be_used(db, settings) -> None:
+    """The seat an invitation reserves is the one its acceptance consumes.
+
+    Counting both — the pending reservation *and* the membership it becomes —
+    made the final seat of a plan unusable: the invitation went out, and then
+    accepting it was refused for taking the seat it had itself reserved.
+    """
+    limit = _SeatLimit(2)
+    service = InvitationService(
+        db, hasher=get_hasher(settings), vault=CredentialVault(settings), entitlements=limit
+    )
+    tenant, owner = await _shop(db, settings)
+
+    # Owner is seat one; this invitation reserves seat two, the last one.
+    invitation = await service.invite(
+        tenant_id=tenant.id,
+        phone=INVITEE_PHONE,
+        role=TenantRole.VIEWER,
+        invited_by=owner.id,
+    )
+    invitee = await _user(db, settings, INVITEE_PHONE)
+
+    membership = await service.accept(invitation_id=invitation.id, user=invitee)
+
+    assert membership.is_active
+    assert membership.role == str(TenantRole.VIEWER)

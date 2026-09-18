@@ -92,10 +92,70 @@ SellerOrder _order({String status = 'PACKED'}) {
   });
 }
 
+
+/// The courier list the accounts screen renders from.
+///
+/// V2.1 made that screen server-driven: it no longer has a hard-coded
+/// Steadfast card, so a fixture that does not answer this renders no couriers
+/// at all.
+const Map<String, dynamic> _steadfastProvider = <String, dynamic>{
+  'provider': 'steadfast',
+  'display_name': 'Steadfast',
+  'capabilities': <String, dynamic>{'create_single': 'true'},
+  'enabled': true,
+  'fully_unverified': false,
+  'unknowns': <String, dynamic>{},
+  'connect_form': <String, dynamic>{
+    'provider': 'steadfast',
+    'display_name': 'Steadfast',
+    'fields': <dynamic>[
+      <String, dynamic>{
+        'name': 'api_key',
+        'label_en': 'API Key',
+        'label_bn': 'API Key',
+        'secret': true,
+        'required': true,
+        'input_type': 'text',
+      },
+      <String, dynamic>{
+        'name': 'secret_key',
+        'label_en': 'Secret Key',
+        'label_bn': 'Secret Key',
+        'secret': true,
+        'required': true,
+        'input_type': 'password',
+      },
+    ],
+    'supports_sandbox': false,
+    'requires_store': false,
+    'uses_webhook': false,
+    'supports_delivery_type': true,
+  },
+};
+
+/// The couriers the booking sheet may offer.
+const List<dynamic> _bookableSteadfast = <dynamic>[
+  <String, dynamic>{
+    'provider': 'steadfast',
+    'display_name': 'Steadfast',
+    'bookable': true,
+    'reason': null,
+    'requires_store': false,
+    'store_name': null,
+    'supports_delivery_type': true,
+  },
+];
+
+void _stubCourierLists(CommerceHarness harness) {
+  harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[_steadfastProvider]);
+  harness.adapter.onJson('GET', '/couriers/bookable', _bookableSteadfast);
+}
+
 void main() {
   group('Courier accounts screen', () {
     testWidgets('shows the masked key and never a secret', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[
         _connectedAccount,
       ]);
@@ -122,6 +182,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[
         _connectedAccount,
       ]);
@@ -145,6 +206,7 @@ void main() {
 
     testWidgets('offers Connect when no account exists', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[]);
       harness.adapter.onJson(
         'GET',
@@ -168,6 +230,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[
         <String, dynamic>{
           ..._connectedAccount,
@@ -191,7 +254,7 @@ void main() {
       expect(find.text('Needs reconnect'), findsOneWidget);
       expect(find.text('Reconnect'), findsOneWidget);
       expect(
-        find.textContaining('stopped accepting these keys'),
+        find.textContaining('stopped accepting these details'),
         findsOneWidget,
       );
     });
@@ -200,6 +263,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[
         _connectedAccount,
       ]);
@@ -224,6 +288,7 @@ void main() {
   group('Booking sheet', () {
     testWidgets('reviews the details the courier will receive', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       await pumpCommerceScreen(
         tester,
         _SheetHost(child: CourierBookingSheet(order: _order())),
@@ -242,6 +307,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/orders/order-1/book',
@@ -277,7 +343,7 @@ void main() {
       await settle(tester, frames: 6, step: const Duration(milliseconds: 50));
 
       expect(find.text('Booking result uncertain'), findsOneWidget);
-      expect(find.textContaining('আবার বুক করবেন না'), findsOneWidget);
+      expect(find.textContaining('did not answer in time'), findsOneWidget);
       // The whole safety model in one assertion.
       expect(find.text('Change and try again'), findsNothing);
       expect(find.text('Confirm booking'), findsNothing);
@@ -286,6 +352,7 @@ void main() {
 
     testWidgets('a refused booking does offer a retry', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/orders/order-1/book',
@@ -325,6 +392,7 @@ void main() {
 
     testWidgets('a successful booking shows the tracking code', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/orders/order-1/book',
@@ -361,6 +429,7 @@ void main() {
 
     testWidgets('one confirm tap sends one booking request', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/orders/order-1/book',
@@ -406,6 +475,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/orders/book-bulk',
@@ -454,13 +524,14 @@ void main() {
       expect(find.text('CP-1'), findsOneWidget);
       expect(find.text('CP-2'), findsOneWidget);
       expect(find.text('CP-3'), findsOneWidget);
-      expect(find.textContaining('আবার বুক করবেন না'), findsOneWidget);
+      expect(find.textContaining('do not book it again'), findsOneWidget);
     });
 
     testWidgets('holds back orders it can tell will be refused', (
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       await pumpCommerceScreen(
         tester,
         _SheetHost(
@@ -482,6 +553,7 @@ void main() {
   group('Courier status card', () {
     testWidgets('shows the courier word next to the plain one', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson(
         'GET',
         '/couriers/consignments/c-1/tracking',
@@ -525,6 +597,7 @@ void main() {
 
     testWidgets('asks for quantities on a partial delivery', (tester) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson(
         'GET',
         '/couriers/consignments/c-1/tracking',
@@ -551,6 +624,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson(
         'GET',
         '/couriers/consignments/c-1/tracking',
@@ -590,6 +664,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson(
         'GET',
         '/couriers/consignments/c-1/tracking',
@@ -626,6 +701,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       await pumpCommerceScreen(
         tester,
         const _SheetHost(child: CourierReturnSheet(consignmentId: 'c-1')),
@@ -650,6 +726,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.on(
         'POST',
         '/couriers/consignments/c-1/return',
@@ -686,6 +763,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[
         _connectedAccount,
       ]);
@@ -732,6 +810,7 @@ void main() {
       tester,
     ) async {
       final harness = CommerceHarness();
+      _stubCourierLists(harness);
       harness.adapter.onJson('GET', '/couriers/accounts', <dynamic>[]);
       harness.adapter.onJson('GET', '/money/payouts', <String, dynamic>{
         'items': <dynamic>[],

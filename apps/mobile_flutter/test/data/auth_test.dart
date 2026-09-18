@@ -2,6 +2,7 @@ import 'package:ecomsbd/core/api/api_error.dart';
 import 'package:ecomsbd/core/storage/token_store.dart';
 import 'package:ecomsbd/data/auth/auth_controller.dart';
 import 'package:ecomsbd/data/auth/auth_models.dart';
+import 'package:ecomsbd/l10n/app_locale.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -25,6 +26,13 @@ void main() {
     test('prefers the Bangla message for display', () {
       // Master spec section 52: seller-facing copy is Bangla-first, and the
       // wording of a money error is a server-side product decision.
+      //
+      // This test is *about* the language choice, so it pins the locale itself
+      // rather than depending on whatever the suite happens to default to.
+      final previous = activeAppLocale;
+      activeAppLocale = AppLocale.bn;
+      addTearDown(() => activeAppLocale = previous);
+
       final error = ApiError.fromJson(const <String, dynamic>{
         'code': 'NOT_FOUND',
         'message_bn': 'এই তথ্যটি পাওয়া যায়নি।',

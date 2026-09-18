@@ -134,8 +134,17 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
   /// Resolved against the live list every time rather than stored once, so a
   /// courier that stopped being bookable while the sheet was open cannot be
   /// booked from a stale selection.
-  BookableCourier? _selectedCourier() {
-    final rows = ref.read(bookableCouriersProvider).value ?? const <BookableCourier>[];
+  ///
+  /// [watch] must be true anywhere the result is rendered: with `read` alone
+  /// this widget never rebuilds when the courier list arrives, so the sheet
+  /// opens saying "the courier", with Confirm disabled, and stays that way
+  /// until the seller happens to tap a courier. `read` is right only in the
+  /// submit handler, which runs once and must not subscribe to anything.
+  BookableCourier? _selectedCourier({bool watch = false}) {
+    final async = watch
+        ? ref.watch(bookableCouriersProvider)
+        : ref.read(bookableCouriersProvider);
+    final rows = async.value ?? const <BookableCourier>[];
     if (rows.isEmpty) {
       return null;
     }
@@ -189,11 +198,11 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 
   /// The courier's name for copy, or a neutral word before one is resolved.
   String get _courierName =>
-      _selectedCourier()?.displayName ??
+      _selectedCourier(watch: true)?.displayName ??
       AppStrings(activeAppLocale).t('common.courier');
 
   Widget _buildReview() {
-    final selected = _selectedCourier();
+    final selected = _selectedCourier(watch: true);
     final order = widget.order;
 
     return Column(

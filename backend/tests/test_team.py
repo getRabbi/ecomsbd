@@ -23,18 +23,35 @@ from app.tenants.roles import TenantRole
 async def _member_session(
     client: AsyncClient, owner: dict[str, Any], phone: str, role: TenantRole
 ) -> dict[str, Any]:
-    """Add someone to the owner's shop and sign them in.
+    """Invite someone to the owner's shop, have them accept, and sign them in.
 
-    Signing in returns a session bound to that shop because the invite already
-    created the membership — which is exactly the flow a real team member has.
+    V2.1 made membership an offer: the owner sends an invitation and the person
+    joins by accepting it with the number it was addressed to. This helper runs
+    that whole flow, so a test that needs a member gets one the way a real one
+    arrives — rather than a membership conjured directly into the table.
     """
-    added = await client.post(
-        "/v1/team",
+    invited = await client.post(
+        "/v1/team/invitations",
         json={"phone": phone, "role": str(role)},
         headers=auth_header(owner),
     )
-    assert added.status_code == 201, added.text
+    assert invited.status_code == 201, invited.text
 
+    session = await sign_in(client, phone)
+
+    # The invitee accepts with their own session. Only the number the
+    # invitation was addressed to can do this.
+    mine = await client.get("/v1/team/invitations/mine", headers=auth_header(session))
+    assert mine.status_code == 200, mine.text
+    pending = mine.json()
+    assert len(pending) == 1, pending
+    accepted = await client.post(
+        f"/v1/team/invitations/{pending[0]['invitation_id']}/accept",
+        headers=auth_header(session),
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    # Re-read: the session was bound before the membership existed.
     session = await sign_in(client, phone)
     if session["tenant_id"] is None:
         selected = await client.post(
@@ -90,9 +107,11 @@ class TestTeamMembership:
         owner = await signed_in_shop(client, unique_phone, shop_name="Team Shop", plan="pro")
         payload = {"phone": "01733111002", "role": "MANAGER"}
         assert (
-            await client.post("/v1/team", json=payload, headers=auth_header(owner))
+            await client.post("/v1/team/invitations", json=payload, headers=auth_header(owner))
         ).status_code == 201
-        second = await client.post("/v1/team", json=payload, headers=auth_header(owner))
+        second = await client.post(
+            "/v1/team/invitations", json=payload, headers=auth_header(owner)
+        )
         assert second.status_code == 409
 
     async def test_an_invalid_number_is_refused(
@@ -100,7 +119,7 @@ class TestTeamMembership:
     ) -> None:
         owner = await signed_in_shop(client, unique_phone, shop_name="Team Shop", plan="pro")
         response = await client.post(
-            "/v1/team",
+            "/v1/team/invitations",
             json={"phone": "12345", "role": "VIEWER"},
             headers=auth_header(owner),
         )
@@ -112,7 +131,7 @@ class TestTeamMembership:
         """Starter includes one seat: the Owner. There is no second."""
         owner = await signed_in_shop(client, unique_phone, shop_name="Solo Shop", plan="starter")
         response = await client.post(
-            "/v1/team",
+            "/v1/team/invitations",
             json={"phone": "01733111003", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
@@ -126,16 +145,14 @@ class TestTeamMembership:
     ) -> None:
         """A standing cap, not a period quota: leaving gives the seat back."""
         owner = await signed_in_shop(client, unique_phone, shop_name="Pro Shop", plan="pro")
+        # Real members, accepted, because the seat is freed by removing one.
         for index in range(4):
-            added = await client.post(
-                "/v1/team",
-                json={"phone": f"0173322100{index}", "role": "ORDER_OPERATOR"},
-                headers=auth_header(owner),
+            await _member_session(
+                client, owner, f"0173322100{index}", TenantRole.ORDER_OPERATOR
             )
-            assert added.status_code == 201, added.text
 
         full = await client.post(
-            "/v1/team",
+            "/v1/team/invitations",
             json={"phone": "01733222999", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
@@ -147,7 +164,7 @@ class TestTeamMembership:
         assert removed.status_code == 204
 
         again = await client.post(
-            "/v1/team",
+            "/v1/team/invitations",
             json={"phone": "01733222999", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
@@ -192,13 +209,10 @@ class TestTeamMembership:
         member = await _member_session(client, owner, "01733111005", TenantRole.PACKER)
         await client.delete(f"/v1/team/{member['user_id']}", headers=auth_header(owner))
 
-        again = await client.post(
-            "/v1/team",
-            json={"phone": "01733111005", "role": "FINANCE"},
-            headers=auth_header(owner),
+        rejoined = await _member_session(
+            client, owner, "01733111005", TenantRole.FINANCE
         )
-        assert again.status_code == 201
-        assert again.json()["role"] == "FINANCE"
+        assert rejoined["role"] == "FINANCE"
 
         rows = (
             (
@@ -239,7 +253,7 @@ class TestRoleEnforcement:
         manager = await _member_session(client, owner, "01733444003", TenantRole.MANAGER)
 
         response = await client.post(
-            "/v1/team",
+            "/v1/team/invitations",
             json={"phone": "01733444099", "role": "VIEWER"},
             headers=auth_header(manager),
         )
