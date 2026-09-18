@@ -16,11 +16,43 @@ __all__ = ["Permission", "TenantRole", "has_permission", "permissions_for"]
 
 
 class TenantRole(StrEnum):
+    """The five roles a shop can assign.
+
+    ``PACKER`` and ``ACCOUNTANT`` were V1's names for the two middle roles.
+    They are kept as **aliases**, not as separate members: ``TenantRole.PACKER
+    is TenantRole.ORDER_OPERATOR`` is true, so existing call sites keep
+    compiling and mean exactly what they meant before. :meth:`_missing_` maps
+    the old strings too, so a row written before the rename — or a token issued
+    before it — still resolves instead of silently losing its permissions.
+    """
+
     OWNER = "OWNER"
     MANAGER = "MANAGER"
-    PACKER = "PACKER"
-    ACCOUNTANT = "ACCOUNTANT"
+    #: Orders, customers, products and courier booking. No financial admin and
+    #: no access to courier credentials.
+    ORDER_OPERATOR = "ORDER_OPERATOR"
+    #: Money, COD, payouts, reconciliation and expenses. Little operational
+    #: mutation.
+    FINANCE = "FINANCE"
     VIEWER = "VIEWER"
+
+    # --- V1 names, same members -------------------------------------------
+    PACKER = "ORDER_OPERATOR"
+    ACCOUNTANT = "FINANCE"
+
+    @classmethod
+    def _missing_(cls, value: object) -> TenantRole | None:
+        """Resolve a role stored or sent under its V1 name.
+
+        A membership row written before the rename, or a JWT minted before it,
+        must keep working. Returning ``None`` here would make
+        :func:`permissions_for` hand back an empty set, which reads as "this
+        person may do nothing" — a silent, total lockout rather than an error
+        anyone would notice.
+        """
+        if isinstance(value, str):
+            return _LEGACY_ROLE_NAMES.get(value.strip().upper())
+        return None
 
 
 class Permission(StrEnum):
@@ -51,6 +83,13 @@ class Permission(StrEnum):
     DATA_EXPORT = "data.export"
 
 
+#: V1 role names -> the members they became. Read by ``TenantRole._missing_``.
+_LEGACY_ROLE_NAMES: dict[str, TenantRole] = {
+    "PACKER": TenantRole.ORDER_OPERATOR,
+    "ACCOUNTANT": TenantRole.FINANCE,
+}
+
+
 _MATRIX: dict[TenantRole, frozenset[Permission]] = {
     TenantRole.OWNER: frozenset(Permission),
     TenantRole.MANAGER: frozenset(
@@ -67,7 +106,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.MONEY_VIEW,
         }
     ),
-    TenantRole.PACKER: frozenset(
+    TenantRole.ORDER_OPERATOR: frozenset(
         {
             Permission.ORDER_VIEW,
             Permission.ORDER_WRITE,
@@ -77,7 +116,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.PRODUCT_VIEW,
         }
     ),
-    TenantRole.ACCOUNTANT: frozenset(
+    TenantRole.FINANCE: frozenset(
         {
             Permission.ORDER_VIEW,
             Permission.MONEY_VIEW,
@@ -97,6 +136,12 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
 
 
 def permissions_for(role: TenantRole | str) -> frozenset[Permission]:
+    """Everything a role may do. An unknown role gets nothing.
+
+    An empty set is the safe answer for a value nobody recognises: a role name
+    this build has never seen must not be treated as more privileged than the
+    ones it has.
+    """
     try:
         return _MATRIX[TenantRole(role)]
     except ValueError:

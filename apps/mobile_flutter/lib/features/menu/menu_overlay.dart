@@ -17,6 +17,7 @@ import '../money/payouts_screen.dart';
 import '../notifications/notification_centre_screen.dart';
 import '../settings/courier_accounts_screen.dart';
 import '../settings/settings_screen.dart';
+import '../settings/team_screen.dart';
 import '../imports/imports_screen.dart';
 import '../products/products_screen.dart';
 import '../risk/risk_check_screen.dart';
@@ -144,7 +145,7 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.groups_outlined,
       titleKey: 'menu.team',
       subtitleKey: 'menu.teamSub',
-      phase: 'V1.1',
+      destination: TeamScreen.new,
     ),
     _MenuItem(
       icon: Icons.star_outline_rounded,

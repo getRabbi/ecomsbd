@@ -25,7 +25,15 @@ from app.db.types import GUID, JSONColumn, TZDateTime
 from app.tenants.roles import TenantRole
 from app.users.models import User
 
-__all__ = ["BusinessCategory", "OnboardingStep", "Tenant", "TenantStatus", "TenantUser"]
+__all__ = [
+    "BusinessCategory",
+    "InvitationStatus",
+    "OnboardingStep",
+    "Tenant",
+    "TenantInvitation",
+    "TenantStatus",
+    "TenantUser",
+]
 
 
 class TenantStatus(StrEnum):
@@ -136,3 +144,99 @@ class TenantUser(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
 
     tenant: Mapped[Tenant] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="memberships")
+
+
+class InvitationStatus(StrEnum):
+    """Where an invitation stands.
+
+    Terminal states are kept rather than deleted: "who invited this person, and
+    when did they accept?" is a question an owner asks months later, and a row
+    that removes itself cannot answer it.
+    """
+
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    #: Withdrawn by the shop before it was accepted.
+    REVOKED = "REVOKED"
+    #: Ran out of time. Expiry is evaluated on read, not by a sweeper job.
+    EXPIRED = "EXPIRED"
+
+    @property
+    def is_open(self) -> bool:
+        return self is InvitationStatus.PENDING
+
+
+class TenantInvitation(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """An offer of membership, before the person has accepted it.
+
+    Keyed on the **phone number**, not on a mailed token. Sign-in is OTP on a
+    Bangladeshi mobile, so the number already is the identity: a token would add
+    a second secret to leak without proving anything the OTP does not already
+    prove. Acceptance therefore requires an authenticated session whose own
+    phone matches the invitation — possession of the number, verified the same
+    way every login is.
+
+    The number is stored the way :class:`~app.users.models.User` stores it: an
+    HMAC for lookup, ciphertext for display, last four for recognition. No
+    plaintext, and the search hash is what an invitation is found by.
+    """
+
+    __tablename__ = "tenant_invitations"
+    __table_args__ = (
+        # One open invitation per number per shop. A partial unique index would
+        # be tighter, but it is not portable to SQLite, which the test suite
+        # migrates; the service enforces the same rule on the way in and this
+        # index is what makes the lookup fast.
+        sa.Index(
+            "ix_tenant_invitations_tenant_phone",
+            "tenant_id",
+            "phone_search_hmac",
+        ),
+        # The invitee's own lookup: "which shops are waiting for me?", asked
+        # before any tenant is known.
+        sa.Index("ix_tenant_invitations_phone_status", "phone_search_hmac", "status"),
+    )
+
+    phone_search_hmac: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    phone_enc: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    phone_last4: Mapped[str] = mapped_column(sa.String(4), nullable=False)
+
+    role: Mapped[str] = mapped_column(
+        sa.String(24), nullable=False, default=TenantRole.ORDER_OPERATOR
+    )
+    status: Mapped[str] = mapped_column(
+        sa.String(16), nullable=False, default=InvitationStatus.PENDING
+    )
+
+    display_name: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+    invited_by_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+
+    expires_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    accepted_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+
+    @property
+    def invitation_status(self) -> InvitationStatus:
+        try:
+            return InvitationStatus(self.status)
+        except ValueError:
+            return InvitationStatus.EXPIRED
+
+    def is_expired(self, *, now: datetime | None = None) -> bool:
+        return (now or utc_now()) >= self.expires_at
+
+    @property
+    def is_claimable(self) -> bool:
+        """Whether this invitation can still be accepted right now."""
+        return self.invitation_status.is_open and not self.is_expired()
+
+    def effective_status(self) -> InvitationStatus:
+        """What this invitation *is*, accounting for the clock.
+
+        Expiry is derived rather than swept: a job that has not run yet must
+        not leave an out-of-date invitation looking acceptable.
+        """
+        if self.invitation_status.is_open and self.is_expired():
+            return InvitationStatus.EXPIRED
+        return self.invitation_status

@@ -71,8 +71,8 @@ class TestTeamRoster:
         owner = await signed_in_shop(client, unique_phone, shop_name="Roster Shop", plan="pro")
         matrix = (await client.get("/v1/team/roles", headers=auth_header(owner))).json()
         assert set(matrix) == {str(role) for role in TenantRole}
-        assert "money.reconcile" in matrix["ACCOUNTANT"]
-        assert "money.reconcile" not in matrix["PACKER"]
+        assert "money.reconcile" in matrix["FINANCE"]
+        assert "money.reconcile" not in matrix["ORDER_OPERATOR"]
 
 
 class TestTeamMembership:
@@ -82,7 +82,7 @@ class TestTeamMembership:
         owner = await signed_in_shop(client, unique_phone, shop_name="Team Shop", plan="pro")
         member = await _member_session(client, owner, "01733111001", TenantRole.PACKER)
         assert member["tenant_id"] == owner["tenant_id"]
-        assert member["role"] == "PACKER"
+        assert member["role"] == "ORDER_OPERATOR"
 
     async def test_adding_the_same_number_twice_is_a_conflict(
         self, client: AsyncClient, unique_phone: str
@@ -113,7 +113,7 @@ class TestTeamMembership:
         owner = await signed_in_shop(client, unique_phone, shop_name="Solo Shop", plan="starter")
         response = await client.post(
             "/v1/team",
-            json={"phone": "01733111003", "role": "PACKER"},
+            json={"phone": "01733111003", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
         assert response.status_code == 402
@@ -129,26 +129,26 @@ class TestTeamMembership:
         for index in range(4):
             added = await client.post(
                 "/v1/team",
-                json={"phone": f"0173322100{index}", "role": "PACKER"},
+                json={"phone": f"0173322100{index}", "role": "ORDER_OPERATOR"},
                 headers=auth_header(owner),
             )
             assert added.status_code == 201, added.text
 
         full = await client.post(
             "/v1/team",
-            json={"phone": "01733222999", "role": "PACKER"},
+            json={"phone": "01733222999", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
         assert full.status_code == 402
 
         roster = (await client.get("/v1/team", headers=auth_header(owner))).json()
-        victim = next(row for row in roster if row["role"] == "PACKER")
+        victim = next(row for row in roster if row["role"] == "ORDER_OPERATOR")
         removed = await client.delete(f"/v1/team/{victim['user_id']}", headers=auth_header(owner))
         assert removed.status_code == 204
 
         again = await client.post(
             "/v1/team",
-            json={"phone": "01733222999", "role": "PACKER"},
+            json={"phone": "01733222999", "role": "ORDER_OPERATOR"},
             headers=auth_header(owner),
         )
         assert again.status_code == 201
@@ -194,11 +194,11 @@ class TestTeamMembership:
 
         again = await client.post(
             "/v1/team",
-            json={"phone": "01733111005", "role": "ACCOUNTANT"},
+            json={"phone": "01733111005", "role": "FINANCE"},
             headers=auth_header(owner),
         )
         assert again.status_code == 201
-        assert again.json()["role"] == "ACCOUNTANT"
+        assert again.json()["role"] == "FINANCE"
 
         rows = (
             (

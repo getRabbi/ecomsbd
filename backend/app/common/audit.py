@@ -66,6 +66,11 @@ class AuditAction(StrEnum):
     TENANT_UPDATED = "tenant.updated"
     TENANT_MEMBER_ADDED = "tenant.member_added"
     TENANT_MEMBER_ROLE_CHANGED = "tenant.member_role_changed"
+    #: An offer of membership was sent. Distinct from MEMBER_ADDED, which is
+    #: when someone actually joined: "we invited them" and "they joined" are
+    #: different events and an owner asks about both.
+    TENANT_MEMBER_INVITED = "tenant.member_invited"
+    TENANT_INVITATION_REVOKED = "tenant.invitation_revoked"
     TENANT_MEMBER_REMOVED = "tenant.member_removed"
 
     # Security

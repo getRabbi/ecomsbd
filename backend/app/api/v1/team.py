@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import (
+    CurrentPrincipal,
     DbSession,
     EntitlementsDep,
     Principal,
@@ -32,10 +33,9 @@ from app.api.deps import (
     require_permission,
 )
 from app.common.audit import AuditAction, record_audit
-from app.common.phone import try_normalize_bd_phone
-from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.entitlements.catalog import Entitlement
-from app.tenants.models import TenantUser
+from app.core.errors import ConflictError, NotFoundError
+from app.tenants.invitations import InvitationService
+from app.tenants.models import TenantInvitation, TenantUser
 from app.tenants.roles import Permission, TenantRole, permissions_for
 from app.users.models import User
 
@@ -59,8 +59,41 @@ class TeamMemberResponse(BaseModel):
 
 class InviteMemberPayload(BaseModel):
     phone: str = Field(min_length=6, max_length=20)
-    role: TenantRole = TenantRole.PACKER
+    role: TenantRole = TenantRole.ORDER_OPERATOR
     display_name: str | None = Field(default=None, max_length=120)
+
+
+class InvitationResponse(BaseModel):
+    """An invitation as the *shop* sees it.
+
+    The number is shown as its last four only. An owner needs to recognise
+    which invitation is which, not to read the number back out of the system.
+    """
+
+    id: uuid.UUID
+    role: str
+    status: str
+    phone_last4: str
+    display_name: str | None
+    invited_at: str
+    expires_at: str
+    permissions: list[str]
+
+
+class PendingInvitationResponse(BaseModel):
+    """An invitation as the *invitee* sees it, before they join.
+
+    Carries the shop's name and nothing else about the shop: someone who has
+    not accepted is not a member, and being invited must not become a way to
+    read a shop's data.
+    """
+
+    invitation_id: uuid.UUID
+    shop_name: str
+    role: str
+    invited_at: str
+    expires_at: str
+    permissions: list[str]
 
 
 class ChangeRolePayload(BaseModel):
@@ -114,11 +147,37 @@ async def list_roles(principal: TeamManager) -> dict[str, list[str]]:
     return {str(role): sorted(str(p) for p in permissions_for(role)) for role in TenantRole}
 
 
+def _invitation_response(invitation: TenantInvitation) -> InvitationResponse:
+    return InvitationResponse(
+        id=invitation.id,
+        role=invitation.role,
+        # Derived, so an invitation that has run out reads as EXPIRED even
+        # though no sweeper has touched the row.
+        status=str(invitation.effective_status()),
+        phone_last4=invitation.phone_last4,
+        display_name=invitation.display_name,
+        invited_at=invitation.created_at.isoformat(),
+        expires_at=invitation.expires_at.isoformat(),
+        permissions=sorted(str(p) for p in permissions_for(invitation.role)),
+    )
+
+
+def _invitations(db: DbSession, settings: SettingsDep, entitlements) -> InvitationService:
+    from app.api.deps import get_vault
+
+    return InvitationService(
+        db,
+        hasher=get_hasher(settings),
+        vault=get_vault(settings),
+        entitlements=entitlements,
+    )
+
+
 @router.post(
-    "",
-    response_model=TeamMemberResponse,
+    "/invitations",
+    response_model=InvitationResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Add someone to this shop",
+    summary="Invite someone to this shop",
 )
 async def invite_member(
     payload: InviteMemberPayload,
@@ -126,98 +185,124 @@ async def invite_member(
     db: DbSession,
     settings: SettingsDep,
     entitlements: EntitlementsDep,
-) -> TeamMemberResponse:
-    """Add a member by phone number.
+) -> InvitationResponse:
+    """Offer membership to a phone number.
 
-    There is no email invitation: sign-in is OTP on a Bangladeshi mobile
-    number, so the number *is* the identity. Adding someone who has never
-    opened the app creates their user record; they get access the moment they
-    sign in with that number.
+    An offer, not a membership: the person joins when they accept. V1 added
+    them the instant the number was typed, which made someone a member of a
+    shop before they had agreed to anything.
 
-    A second Owner is allowed — a shop with one owner and one lost phone is a
-    support ticket nobody enjoys.
+    There is no emailed link. Sign-in is OTP on a Bangladeshi mobile, so the
+    number already is the identity; a token would add a second secret to leak
+    while proving less than the OTP the invitee has to pass anyway.
+
+    A pending invitation holds a seat against the team limit, so a shop cannot
+    outrun its plan by sending more invitations than it has room for.
     """
-    tenant_id = principal.require_tenant()
-    number = try_normalize_bd_phone(payload.phone)
-    if number is None:
-        raise ValidationError("A valid Bangladeshi mobile number is required")
-
-    active_count = int(
-        (
-            await db.execute(
-                sa.select(sa.func.count())
-                .select_from(TenantUser)
-                .where(TenantUser.tenant_id == tenant_id, TenantUser.is_active.is_(True))
-            )
-        ).scalar_one()
+    invitation = await _invitations(db, settings, entitlements).invite(
+        tenant_id=principal.require_tenant(),
+        phone=payload.phone,
+        role=payload.role,
+        invited_by=principal.user_id,
+        display_name=payload.display_name,
     )
-    await entitlements.require_within_limit(
-        tenant_id, Entitlement.TEAM_MEMBER_LIMIT, current_count=active_count
+    return _invitation_response(invitation)
+
+
+@router.get(
+    "/invitations",
+    response_model=list[InvitationResponse],
+    summary="Invitations this shop is waiting on",
+)
+async def list_invitations(
+    principal: TeamManager,
+    db: DbSession,
+    settings: SettingsDep,
+    entitlements: EntitlementsDep,
+    include_closed: bool = False,
+) -> list[InvitationResponse]:
+    rows = await _invitations(db, settings, entitlements).list_for_shop(
+        principal.require_tenant(), include_closed=include_closed
     )
+    return [_invitation_response(row) for row in rows]
 
-    hasher = get_hasher(settings)
-    search_hash = hasher.phone_search_hash(number.e164)
 
-    user = (
-        await db.execute(sa.select(User).where(User.phone_search_hmac == search_hash))
-    ).scalar_one_or_none()
-    if user is None:
-        from app.api.deps import get_vault
-        from app.auth.service import USER_PHONE_CONTEXT
+@router.delete(
+    "/invitations/{invitation_id}",
+    response_model=InvitationResponse,
+    summary="Withdraw an invitation",
+)
+async def revoke_invitation(
+    invitation_id: uuid.UUID,
+    principal: TeamManager,
+    db: DbSession,
+    settings: SettingsDep,
+    entitlements: EntitlementsDep,
+) -> InvitationResponse:
+    invitation = await _invitations(db, settings, entitlements).revoke(
+        principal.require_tenant(), invitation_id
+    )
+    return _invitation_response(invitation)
 
-        vault = get_vault(settings)
-        user = User(
-            phone_search_hmac=search_hash,
-            phone_enc=vault.encrypt(number.e164, context=USER_PHONE_CONTEXT),
-            phone_last4=number.e164[-4:],
-            display_name=payload.display_name,
+
+# --------------------------------------------------------------------------- #
+# The invitee's side. These two are the only routes in this file that a
+# non-member may call: by definition the caller does not belong to the shop yet,
+# so they are authenticated but **not** tenant-scoped and carry no permission
+# requirement. Both are keyed on the caller's own phone hash, so they can only
+# ever reach invitations addressed to them.
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/invitations/mine",
+    response_model=list[PendingInvitationResponse],
+    summary="Shops waiting for you to join",
+)
+async def my_invitations(
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: SettingsDep,
+) -> list[PendingInvitationResponse]:
+    rows = await _invitations(db, settings, None).pending_for_user(principal.user)
+    return [
+        PendingInvitationResponse(
+            invitation_id=row.invitation_id,
+            shop_name=row.shop_name,
+            role=row.role,
+            invited_at=row.invited_at,
+            expires_at=row.expires_at,
+            permissions=sorted(str(p) for p in permissions_for(row.role)),
         )
-        db.add(user)
-        await db.flush()
+        for row in rows
+    ]
 
-    existing = (
-        await db.execute(
-            sa.select(TenantUser).where(
-                TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        if existing.is_active:
-            raise ConflictError("That number is already a member of this shop")
-        # Re-activating is a role change, not a new membership: their history
-        # in this shop stays attached to the same row.
-        existing.is_active = True
-        existing.role = str(payload.role)
-        await db.flush()
-        await record_audit(
-            db,
-            AuditAction.TENANT_MEMBER_ADDED,
-            entity_type="tenant_user",
-            entity_id=existing.id,
-            context={"role": str(payload.role), "reactivated": True},
-            tenant_id=tenant_id,
-        )
-        return _to_response(existing, user, viewer_id=principal.user_id)
 
-    membership = TenantUser(
-        tenant_id=tenant_id,
-        user_id=user.id,
-        role=str(payload.role),
-        invited_by_user_id=principal.user_id,
+@router.post(
+    "/invitations/{invitation_id}/accept",
+    response_model=TeamMemberResponse,
+    summary="Join a shop you were invited to",
+)
+async def accept_invitation(
+    invitation_id: uuid.UUID,
+    principal: CurrentPrincipal,
+    db: DbSession,
+    settings: SettingsDep,
+    entitlements: EntitlementsDep,
+) -> TeamMemberResponse:
+    """Accept an invitation and become a member.
+
+    The seat limit, the shop and the caller's existing membership are all
+    re-checked here rather than trusted from the invitation: it is a claim
+    about the past, and every one of those can have changed since it was sent.
+
+    An invitation that does not exist and one addressed to somebody else give
+    the same answer, so this cannot be used to discover which ids are real.
+    """
+    membership = await _invitations(db, settings, entitlements).accept(
+        invitation_id=invitation_id, user=principal.user
     )
-    db.add(membership)
-    await db.flush()
-
-    await record_audit(
-        db,
-        AuditAction.TENANT_MEMBER_ADDED,
-        entity_type="tenant_user",
-        entity_id=membership.id,
-        context={"role": str(payload.role)},
-        tenant_id=tenant_id,
-    )
-    return _to_response(membership, user, viewer_id=principal.user_id)
+    return _to_response(membership, principal.user, viewer_id=principal.user_id)
 
 
 @router.patch("/{user_id}", response_model=TeamMemberResponse, summary="Change someone's role")
