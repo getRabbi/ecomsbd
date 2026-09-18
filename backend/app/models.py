@@ -58,7 +58,7 @@ from app.payouts.models import (
 from app.privacy.models import DeletionRequest
 from app.products.models import Product, StockMovement
 from app.profit.models import ConsignmentCharge, ProfitSnapshot
-from app.reconciliation.models import ReconciliationCase
+from app.reconciliation.models import CaseEvent, ReconciliationCase, ReconciliationItem
 from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
 from app.users.models import User
@@ -73,6 +73,7 @@ __all__ = [
     "BillingProviderCustomer",
     "BillingTransaction",
     "BillingWebhookEvent",
+    "CaseEvent",
     "CodReceivable",
     "Consignment",
     "ConsignmentCharge",
@@ -114,6 +115,7 @@ __all__ = [
     "ProviderHealth",
     "ProviderPayment",
     "ReconciliationCase",
+    "ReconciliationItem",
     "RefreshToken",
     "RepairActionRecord",
     "StockMovement",

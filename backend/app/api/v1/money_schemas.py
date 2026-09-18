@@ -18,12 +18,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.consignments.models import ConsignmentStatus
 from app.payouts.models import AdjustmentType, PayoutLineStatus, PayoutStatus
 from app.profit.models import ReturnReason
-from app.reconciliation.models import CaseKind, CaseStatus
+from app.reconciliation.models import CaseEventAction, CaseKind, CaseStatus, ItemStatus
 
 __all__ = [
+    "AcceptChargesPayload",
     "AgingBandResponse",
+    "CaseDetailResponse",
+    "CaseEventResponse",
+    "CaseNotePayload",
     "CaseResponse",
     "CaseUpdatePayload",
+    "ChargeAcceptanceResponse",
     "ConsignmentResponse",
     "DeliveryOutcomePayload",
     "DispatchPayload",
@@ -37,6 +42,9 @@ __all__ = [
     "PayoutResponse",
     "ReceivableResponse",
     "ReconcileResponse",
+    "ReconciliationItemDetailResponse",
+    "ReconciliationItemResponse",
+    "ReconciliationSummaryResponse",
     "StatementPreviewResponse",
     "UnmatchPayload",
 ]
@@ -272,6 +280,8 @@ class PayoutAdjustmentResponse(BaseModel):
     provider_label: str | None
     raw_text: str | None
     recognized_rule: str | None
+    #: When a person accepted this deduction into the ledger; null until then.
+    accepted_at: datetime | None = None
 
 
 class PayoutResponse(BaseModel):
@@ -316,6 +326,9 @@ class StatementPreviewResponse(BaseModel):
 
     detected_headers: list[str] = Field(default_factory=list)
     column_mapping: dict[str, str] = Field(default_factory=dict)
+    #: Every field a column can be mapped to, so a client can offer the choice
+    #: without hard-coding the list.
+    fields: list[str] = Field(default_factory=list)
     row_count: int
     invalid_row_count: int
     total_paisa: int
@@ -336,6 +349,10 @@ class ReconcileResponse(BaseModel):
     exact_matches: int
     suggested: int
     unresolved: int
+    #: Rows already paid in an earlier statement.
+    duplicates: int = 0
+    #: Rows carrying only a charge for a known parcel.
+    charge_only: int = 0
     applied_paisa: int
     cases_opened: int
 
@@ -379,3 +396,99 @@ class CaseUpdatePayload(BaseModel):
     #: Required when resolving or dismissing. A case closed with no explanation
     #: teaches nobody anything, and the same problem returns next month.
     resolution: str | None = Field(default=None, max_length=400)
+
+
+class CaseEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    action: CaseEventAction
+    from_status: str | None
+    to_status: str | None
+    note: str | None
+    #: Null for the engine's own actions, so a reviewer can tell them apart.
+    actor_user_id: uuid.UUID | None
+    created_at: datetime
+
+
+class CaseNotePayload(BaseModel):
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class ReconciliationItemResponse(BaseModel):
+    """Expected against actual for one parcel, or one unplaced statement row.
+
+    Every figure is backend-computed from the ledger's own records. Clients
+    display these; they never add them up into a truth of their own.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: ItemStatus
+    provider: str
+    payout_id: uuid.UUID | None
+    payout_line_id: uuid.UUID | None
+    receivable_id: uuid.UUID | None
+    consignment_id: uuid.UUID | None
+    case_id: uuid.UUID | None
+    case_status: CaseStatus | None = None
+    merchant_reference: str | None
+    tracking_code: str | None
+    settlement_date: date | None
+    expected_cod_paisa: int | None
+    actual_cod_paisa: int
+    expected_charge_paisa: int | None
+    #: Where the expected charge came from; null means nothing was on record
+    #: and the charge could not be verified.
+    expected_charge_source: str | None
+    actual_charge_paisa: int
+    expected_net_paisa: int | None
+    actual_net_paisa: int
+    difference_paisa: int | None
+    charges_pending_paisa: int
+    line_count: int
+    detail: dict[str, Any] = Field(default_factory=dict)
+    evaluated_at: datetime
+    created_at: datetime
+
+
+class ReconciliationItemDetailResponse(ReconciliationItemResponse):
+    lines: list[PayoutLineResponse] = Field(default_factory=list)
+    adjustments: list[PayoutAdjustmentResponse] = Field(default_factory=list)
+    case: CaseResponse | None = None
+
+
+class ReconciliationSummaryResponse(BaseModel):
+    """What the courier should have paid, what it paid, and the difference."""
+
+    counts: dict[str, int] = Field(default_factory=dict)
+    matched: int
+    discrepancies: int
+    unmatched: int
+    expected_paisa: int
+    actual_paisa: int
+    #: ``actual - expected``. Negative: the seller received less.
+    difference_paisa: int
+    #: Money on statement rows no parcel could be found for.
+    unmatched_paisa: int
+    duplicate_paisa: int
+    #: Courier deductions not yet accepted into the ledger.
+    charges_pending_paisa: int
+    open_cases: int
+    open_case_paisa: int
+
+
+class CaseDetailResponse(CaseResponse):
+    events: list[CaseEventResponse] = Field(default_factory=list)
+    item: ReconciliationItemResponse | None = None
+
+
+class AcceptChargesPayload(BaseModel):
+    reason: str | None = Field(default=None, max_length=400)
+
+
+class ChargeAcceptanceResponse(BaseModel):
+    accepted_paisa: int
+    adjustments: int
+    items: int

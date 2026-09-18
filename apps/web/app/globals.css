@@ -367,6 +367,15 @@ button:disabled {
   color: var(--bad);
 }
 
+/* A signed money figure: red when the seller received less, green when more. */
+.text--bad {
+  color: var(--bad);
+}
+
+.text--good {
+  color: var(--good);
+}
+
 /* ------------------------------------------------------------- controls --- */
 
 .toolbar {

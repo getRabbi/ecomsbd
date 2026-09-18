@@ -703,6 +703,9 @@ class ReconciliationCase {
     'UNMAPPABLE_PAYOUT' => _t('ck.unmappable'),
     'STALE_IN_TRANSIT' => _t('ck.staleInTransit'),
     'RETURNED_NOT_RESTOCKED' => _t('ck.returnNotRestocked'),
+    'CHARGE_MISMATCH' => _t('rv2.kind.chargeMismatch'),
+    'MISSING_COD' => _t('rv2.kind.missingCod'),
+    'RETURN_CHARGE_MISMATCH' => _t('rv2.kind.returnChargeMismatch'),
     _ => kind,
   };
 
@@ -713,4 +716,225 @@ class ReconciliationCase {
     'DISMISSED' => _t('cst.dismissed'),
     _ => status,
   };
+}
+
+// --------------------------------------------------------------------------- //
+// Reconciliation V2: expected against actual
+// --------------------------------------------------------------------------- //
+
+Money? _moneyOrNull(Object? value) =>
+    value == null ? null : Money(value as int);
+
+/// Headline figures for the reconciliation screen. Every number is the
+/// server's; nothing here is summed on the device.
+@immutable
+class ReconciliationSummary {
+  const ReconciliationSummary({
+    required this.matched,
+    required this.discrepancies,
+    required this.unmatched,
+    required this.expected,
+    required this.actual,
+    required this.difference,
+    required this.unmatchedAmount,
+    required this.chargesPending,
+    required this.openCases,
+  });
+
+  factory ReconciliationSummary.fromJson(Map<String, dynamic> json) =>
+      ReconciliationSummary(
+        matched: json['matched'] as int? ?? 0,
+        discrepancies: json['discrepancies'] as int? ?? 0,
+        unmatched: json['unmatched'] as int? ?? 0,
+        expected: Money(json['expected_paisa'] as int? ?? 0),
+        actual: Money(json['actual_paisa'] as int? ?? 0),
+        difference: Money(json['difference_paisa'] as int? ?? 0),
+        unmatchedAmount: Money(json['unmatched_paisa'] as int? ?? 0),
+        chargesPending: Money(json['charges_pending_paisa'] as int? ?? 0),
+        openCases: json['open_cases'] as int? ?? 0,
+      );
+
+  final int matched;
+  final int discrepancies;
+  final int unmatched;
+
+  /// What the courier should have paid, across the parcels compared.
+  final Money expected;
+
+  /// What it did pay for those parcels.
+  final Money actual;
+
+  /// `actual - expected`. Negative: the seller received less.
+  final Money difference;
+
+  /// Money on rows no parcel could be found for.
+  final Money unmatchedAmount;
+  final Money chargesPending;
+  final int openCases;
+
+  bool get isEmpty => matched == 0 && discrepancies == 0 && unmatched == 0;
+}
+
+/// One parcel's expected against actual, or one statement row nobody could
+/// place.
+@immutable
+class ReconciliationItem {
+  const ReconciliationItem({
+    required this.id,
+    required this.status,
+    required this.provider,
+    required this.actualCod,
+    required this.actualCharge,
+    required this.actualNet,
+    required this.chargesPending,
+    required this.lineCount,
+    this.reference,
+    this.trackingCode,
+    this.settlementDate,
+    this.expectedCod,
+    this.expectedCharge,
+    this.expectedChargeSource,
+    this.expectedNet,
+    this.difference,
+    this.caseId,
+    this.caseStatus,
+    this.unknownDeduction = false,
+  });
+
+  factory ReconciliationItem.fromJson(Map<String, dynamic> json) {
+    final detail = Map<String, dynamic>.from(
+      json['detail'] as Map? ?? const {},
+    );
+    return ReconciliationItem(
+      id: json['id'] as String,
+      status: json['status'] as String,
+      provider: json['provider'] as String? ?? '',
+      reference: json['merchant_reference'] as String?,
+      trackingCode: json['tracking_code'] as String?,
+      settlementDate: json['settlement_date'] == null
+          ? null
+          : DateTime.parse(json['settlement_date'] as String),
+      expectedCod: _moneyOrNull(json['expected_cod_paisa']),
+      actualCod: Money(json['actual_cod_paisa'] as int? ?? 0),
+      expectedCharge: _moneyOrNull(json['expected_charge_paisa']),
+      expectedChargeSource: json['expected_charge_source'] as String?,
+      actualCharge: Money(json['actual_charge_paisa'] as int? ?? 0),
+      expectedNet: _moneyOrNull(json['expected_net_paisa']),
+      actualNet: Money(json['actual_net_paisa'] as int? ?? 0),
+      difference: _moneyOrNull(json['difference_paisa']),
+      chargesPending: Money(json['charges_pending_paisa'] as int? ?? 0),
+      lineCount: json['line_count'] as int? ?? 0,
+      caseId: json['case_id'] as String?,
+      caseStatus: json['case_status'] as String?,
+      unknownDeduction: detail['unknown_deduction'] == true,
+    );
+  }
+
+  final String id;
+  final String status;
+  final String provider;
+  final String? reference;
+  final String? trackingCode;
+  final DateTime? settlementDate;
+  final Money? expectedCod;
+  final Money actualCod;
+
+  /// Null when no charge was on record: the charge is then unverified, not
+  /// zero.
+  final Money? expectedCharge;
+  final String? expectedChargeSource;
+  final Money actualCharge;
+  final Money? expectedNet;
+  final Money actualNet;
+  final Money? difference;
+  final Money chargesPending;
+  final int lineCount;
+  final String? caseId;
+  final String? caseStatus;
+  final bool unknownDeduction;
+
+  bool get chargeVerified => expectedCharge != null;
+  bool get hasPendingCharges => !chargesPending.isZero;
+
+  bool get isDiscrepancy => const <String>{
+    'PARTIAL',
+    'AMOUNT_MISMATCH',
+    'CHARGE_MISMATCH',
+    'MISSING_COD',
+  }.contains(status);
+
+  String get statusLabel => switch (status) {
+    'MATCHED' => _t('rv2.st.matched'),
+    'PARTIAL' => _t('rv2.st.partial'),
+    'UNMATCHED' => _t('rv2.st.unmatched'),
+    'DUPLICATE' => _t('rv2.st.duplicate'),
+    'AMOUNT_MISMATCH' => _t('rv2.st.amountMismatch'),
+    'CHARGE_MISMATCH' => _t('rv2.st.chargeMismatch'),
+    'MISSING_COD' => _t('rv2.st.missingCod'),
+    'RETURN_ADJUSTMENT' => _t('rv2.st.returnAdjustment'),
+    'NEEDS_REVIEW' => _t('rv2.st.needsReview'),
+    _ => status,
+  };
+}
+
+/// One thing that happened to a case.
+@immutable
+class CaseEvent {
+  const CaseEvent({
+    required this.id,
+    required this.action,
+    required this.createdAt,
+    this.note,
+    this.byPerson = true,
+  });
+
+  factory CaseEvent.fromJson(Map<String, dynamic> json) => CaseEvent(
+    id: json['id'] as String,
+    action: json['action'] as String,
+    note: json['note'] as String?,
+    byPerson: json['actor_user_id'] != null,
+    createdAt: DateTime.parse(json['created_at'] as String),
+  );
+
+  final String id;
+  final String action;
+  final String? note;
+
+  /// False for the engine's own actions, so they read differently.
+  final bool byPerson;
+  final DateTime createdAt;
+
+  String get actionLabel => switch (action) {
+    'OPENED' => _t('rv2.ev.opened'),
+    'NOTE' => _t('rv2.ev.note'),
+    'STATUS_CHANGED' => _t('rv2.ev.statusChanged'),
+    'REOPENED' => _t('rv2.ev.reopened'),
+    'AUTO_RESOLVED' => _t('rv2.ev.autoResolved'),
+    'MANUAL_MATCH' => _t('rv2.ev.manualMatch'),
+    'CHARGES_ACCEPTED' => _t('rv2.ev.chargesAccepted'),
+    _ => action,
+  };
+}
+
+/// A case with its history.
+@immutable
+class CaseDetail {
+  const CaseDetail({required this.item, required this.events, this.row});
+
+  factory CaseDetail.fromJson(Map<String, dynamic> json) => CaseDetail(
+    item: ReconciliationCase.fromJson(json),
+    events: <CaseEvent>[
+      for (final event in json['events'] as List? ?? const <Object>[])
+        CaseEvent.fromJson(event as Map<String, dynamic>),
+    ],
+    row: json['item'] == null
+        ? null
+        : ReconciliationItem.fromJson(json['item'] as Map<String, dynamic>),
+  );
+
+  final ReconciliationCase item;
+  final List<CaseEvent> events;
+
+  /// The expected-against-actual row the case is about, when there is one.
+  final ReconciliationItem? row;
 }

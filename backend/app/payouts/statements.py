@@ -24,6 +24,7 @@ from decimal import Decimal, InvalidOperation
 
 from app.common.money import paisa_from_taka
 from app.common.phone import normalize_digits
+from app.core.errors import ValidationError
 from app.payouts.models import AdjustmentType
 
 __all__ = [
@@ -33,8 +34,10 @@ __all__ = [
     "StatementRow",
     "autodetect_columns",
     "classify_adjustment",
+    "parse_rows",
     "parse_statement",
     "sha256_of",
+    "validate_mapping",
 ]
 
 
@@ -303,6 +306,35 @@ def _decode(content: bytes) -> str:
     return content.decode("utf-8", errors="replace")
 
 
+def validate_mapping(mapping: dict[str, str], headers: list[str]) -> dict[str, str]:
+    """Check a seller's column mapping before it is used to read money.
+
+    Every key must be a field this reader knows and every value a column the
+    file actually has; the amount must be mapped, because a statement read
+    without its amount would import every row as unreadable. An empty value
+    means "not in this file" and is dropped.
+    """
+    known = set(STATEMENT_ALIASES)
+    header_set = set(headers)
+    cleaned: dict[str, str] = {}
+    problems: dict[str, str] = {}
+    for field_name, column in mapping.items():
+        if field_name not in known:
+            problems[field_name] = "Unknown field"
+            continue
+        if not column:
+            continue
+        if column not in header_set:
+            problems[field_name] = f"{column!r} is not a column in this file"
+            continue
+        cleaned[field_name] = column
+    if "amount" not in cleaned:
+        problems.setdefault("amount", "Choose the column that holds the amount")
+    if problems:
+        raise ValidationError("That column mapping does not fit this file", details=problems)
+    return cleaned
+
+
 def parse_statement(content: bytes, *, mapping: dict[str, str] | None = None) -> ParsedStatement:
     """Read a CSV statement into rows.
 
@@ -321,15 +353,33 @@ def parse_statement(content: bytes, *, mapping: dict[str, str] | None = None) ->
 
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     headers = [header.strip() for header in (reader.fieldnames or [])]
-    resolved = mapping or autodetect_columns(headers)
-
-    rows: list[StatementRow] = []
-    for index, raw_row in enumerate(reader, start=1):
-        raw = {
+    raw_rows = [
+        {
             (key or "").strip(): (value or "").strip()
-            for key, value in raw_row.items()
+            for key, value in row.items()
             if key is not None
         }
+        for row in reader
+    ]
+    return parse_rows(headers, raw_rows, mapping=mapping)
+
+
+def parse_rows(
+    headers: list[str],
+    raw_rows: list[dict[str, str]],
+    *,
+    mapping: dict[str, str] | None = None,
+) -> ParsedStatement:
+    """Read already-tabulated rows — from a CSV or a spreadsheet — into lines.
+
+    The one place a statement row becomes money, whichever format it came in,
+    so an XLSX can never grow its own looser amount handling.
+    """
+    resolved = validate_mapping(mapping, headers) if mapping else autodetect_columns(headers)
+
+    rows: list[StatementRow] = []
+    for index, raw_row in enumerate(raw_rows, start=1):
+        raw = {str(key).strip(): str(value or "").strip() for key, value in raw_row.items()}
         if not any(raw.values()):
             continue
 

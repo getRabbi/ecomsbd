@@ -413,17 +413,39 @@ class ReceivableService:
             receivable.settled_at = occurred_at or utc_now()
         await self._db.flush()
 
+        # Two entries, like a settlement: the receivable shrinks by what the
+        # courier kept, and the charge lands in its own bucket. Without the
+        # first, the receivable bucket would keep counting money the parcel no
+        # longer owes, and the ledger would stop agreeing with the dashboard's
+        # outstanding total (section 81.10).
+        moment = occurred_at or utc_now()
+        await self._ledger.record(
+            event_type=event_type,
+            entity_type="cod_receivable",
+            entity_id=receivable.id,
+            amount_paisa=amount_paisa,
+            bucket=LedgerBucket.COD_RECEIVABLE,
+            direction=LedgerDirection.DEBIT,
+            source=LedgerSource.PAYOUT,
+            occurred_at=moment,
+            source_ref=source_ref,
+            metadata={"provider_label": label},
+        )
         await self._ledger.record(
             event_type=event_type,
             entity_type="cod_receivable",
             entity_id=receivable.id,
             amount_paisa=amount_paisa,
             source=LedgerSource.PAYOUT,
-            occurred_at=occurred_at or utc_now(),
+            occurred_at=moment,
             source_ref=source_ref,
             metadata={"provider_label": label},
         )
         return receivable
+
+    async def refresh_profit(self, receivable: CodReceivable, *, reason: str) -> None:
+        """Write a new profit revision after money about this parcel changed."""
+        await self._resnapshot(receivable, reason=reason)
 
     # --------------------------------------------------------- seller acts --
 

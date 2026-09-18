@@ -30,6 +30,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._componentsBn,
   ..._secBn,
   ..._riskBn,
+  ..._reconV2Bn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -49,6 +50,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._componentsEn,
   ..._secEn,
   ..._riskEn,
+  ..._reconV2En,
 };
 
 // --------------------------------------------------------------------------- //
@@ -3055,4 +3057,131 @@ const Map<String, String> _riskBn = <String, String>{
   'rc.reason.ownShopOnly':
       'এটা শুধু আপনার নিজের শপের রেকর্ড। অন্য বিক্রেতার সাথে কেমন ছিল, এটা তা বলে না।',
   'rc.reason.unknown': 'সার্ভার থেকে বাড়তি তথ্য।',
+};
+
+// --------------------------------------------------------------------------- //
+// Reconciliation V2: expected against actual, the review queue
+// --------------------------------------------------------------------------- //
+
+const Map<String, String> _reconV2En = <String, String>{
+  'rv2.sum.title': 'Courier payments, checked',
+  'rv2.sum.expected': 'Should have paid',
+  'rv2.sum.actual': 'Actually paid',
+  'rv2.sum.difference': 'Difference',
+  'rv2.sum.matched': 'Matched',
+  'rv2.sum.discrepancies': 'Discrepancies',
+  'rv2.sum.unmatched': 'Unmatched',
+  'rv2.sum.unplaced': '{amount} paid for parcels we could not find',
+  'rv2.sum.pending': '{amount} in courier charges waiting for you to accept',
+  'rv2.tab.cases': 'Cases',
+  'rv2.tab.parcels': 'Parcels',
+  'rv2.col.expected': 'Expected',
+  'rv2.col.actual': 'Actual',
+  'rv2.row.cod': 'COD',
+  'rv2.row.charge': 'Courier charge',
+  'rv2.row.net': 'You get',
+  'rv2.row.difference': 'Difference',
+  'rv2.chargeUnverified':
+      "No charge on record for this parcel — the courier's figure is used",
+  'rv2.unknownDeduction': 'Includes a deduction the courier did not explain',
+  'rv2.pendingCharges': '{amount} in charges not yet accepted',
+  'rv2.accept': 'Accept charges',
+  'rv2.acceptTitle': 'Accept courier charges?',
+  'rv2.acceptBody':
+      '{amount} will be recorded as what the courier kept for this parcel. '
+      'It is added to your money history and cannot be edited later.',
+  'rv2.accepted': 'Charges accepted.',
+  'rv2.emptyTitle': 'Nothing to compare yet',
+  'rv2.emptyBody':
+      'Import a courier statement and reconcile it to see, for every parcel, '
+      'what should have arrived and what did.',
+  'rv2.noReference': 'Unnamed row',
+  'rv2.newCases': '{count} new to look at.',
+  'rv2.openedAgo': 'opened {when}',
+  'rv2.case.history': 'History',
+  'rv2.case.addNote': 'Add note',
+  'rv2.case.noteHint': 'What did the courier say?',
+  'rv2.case.reopen': 'Reopen',
+  'rv2.case.automatic': 'Automatic',
+  'rv2.kind.chargeMismatch': 'Charge differs',
+  'rv2.kind.missingCod': 'COD not paid',
+  'rv2.kind.returnChargeMismatch': 'Return charge differs',
+  'rv2.st.matched': 'Matched',
+  'rv2.st.partial': 'Part paid',
+  'rv2.st.unmatched': 'No parcel found',
+  'rv2.st.duplicate': 'Repeated row',
+  'rv2.st.amountMismatch': 'Amount differs',
+  'rv2.st.chargeMismatch': 'Charge differs',
+  'rv2.st.missingCod': 'COD not paid',
+  'rv2.st.returnAdjustment': 'Return charge',
+  'rv2.st.needsReview': 'Needs your check',
+  'rv2.ev.opened': 'Opened',
+  'rv2.ev.note': 'Note',
+  'rv2.ev.statusChanged': 'Status changed',
+  'rv2.ev.reopened': 'Reopened',
+  'rv2.ev.autoResolved': 'Closed automatically — the money arrived',
+  'rv2.ev.manualMatch': 'Matched by hand',
+  'rv2.ev.chargesAccepted': 'Charges accepted',
+};
+
+const Map<String, String> _reconV2Bn = <String, String>{
+  'rv2.sum.title': 'কুরিয়ারের পেমেন্ট মিলিয়ে দেখা',
+  'rv2.sum.expected': 'পাওয়ার কথা',
+  'rv2.sum.actual': 'আসলে পেয়েছেন',
+  'rv2.sum.difference': 'পার্থক্য',
+  'rv2.sum.matched': 'মিলেছে',
+  'rv2.sum.discrepancies': 'গরমিল',
+  'rv2.sum.unmatched': 'মেলেনি',
+  'rv2.sum.unplaced':
+      '{amount} এমন পার্সেলের জন্য এসেছে যা খুঁজে পাওয়া যায়নি',
+  'rv2.sum.pending': 'কুরিয়ারের {amount} চার্জ আপনার অনুমোদনের অপেক্ষায়',
+  'rv2.tab.cases': 'কেস',
+  'rv2.tab.parcels': 'পার্সেল',
+  'rv2.col.expected': 'পাওয়ার কথা',
+  'rv2.col.actual': 'আসলে',
+  'rv2.row.cod': 'COD',
+  'rv2.row.charge': 'কুরিয়ার চার্জ',
+  'rv2.row.net': 'আপনি পাবেন',
+  'rv2.row.difference': 'পার্থক্য',
+  'rv2.chargeUnverified':
+      'এই পার্সেলের কোনো চার্জ রেকর্ডে নেই — কুরিয়ারের হিসাব ধরা হয়েছে',
+  'rv2.unknownDeduction': 'এতে এমন কাটা টাকা আছে যার কারণ কুরিয়ার জানায়নি',
+  'rv2.pendingCharges': '{amount} চার্জ এখনো মেনে নেওয়া হয়নি',
+  'rv2.accept': 'চার্জ মেনে নিন',
+  'rv2.acceptTitle': 'কুরিয়ারের চার্জ মেনে নেবেন?',
+  'rv2.acceptBody':
+      '{amount} এই পার্সেলের জন্য কুরিয়ারের কেটে রাখা টাকা হিসেবে রেকর্ড হবে। '
+      'এটা আপনার টাকার হিসাবে যোগ হবে, পরে বদলানো যাবে না।',
+  'rv2.accepted': 'চার্জ মেনে নেওয়া হয়েছে।',
+  'rv2.emptyTitle': 'মেলানোর মতো কিছু নেই',
+  'rv2.emptyBody':
+      'কুরিয়ারের স্টেটমেন্ট ইমপোর্ট করে মিলিয়ে নিন — প্রতিটি পার্সেলে কত '
+      'পাওয়ার কথা আর কত এসেছে দেখতে পাবেন।',
+  'rv2.noReference': 'নাম ছাড়া সারি',
+  'rv2.newCases': '{count}টি নতুন বিষয় দেখার আছে।',
+  'rv2.openedAgo': '{when} খোলা হয়েছে',
+  'rv2.case.history': 'ইতিহাস',
+  'rv2.case.addNote': 'নোট যোগ করুন',
+  'rv2.case.noteHint': 'কুরিয়ার কী বলল?',
+  'rv2.case.reopen': 'আবার খুলুন',
+  'rv2.case.automatic': 'স্বয়ংক্রিয়',
+  'rv2.kind.chargeMismatch': 'চার্জ মেলেনি',
+  'rv2.kind.missingCod': 'COD আসেনি',
+  'rv2.kind.returnChargeMismatch': 'রিটার্ন চার্জ মেলেনি',
+  'rv2.st.matched': 'মিলেছে',
+  'rv2.st.partial': 'আংশিক পেয়েছেন',
+  'rv2.st.unmatched': 'পার্সেল পাওয়া যায়নি',
+  'rv2.st.duplicate': 'একই সারি আবার',
+  'rv2.st.amountMismatch': 'টাকার অংক মেলেনি',
+  'rv2.st.chargeMismatch': 'চার্জ মেলেনি',
+  'rv2.st.missingCod': 'COD আসেনি',
+  'rv2.st.returnAdjustment': 'রিটার্ন চার্জ',
+  'rv2.st.needsReview': 'আপনার দেখা দরকার',
+  'rv2.ev.opened': 'খোলা হয়েছে',
+  'rv2.ev.note': 'নোট',
+  'rv2.ev.statusChanged': 'অবস্থা বদলেছে',
+  'rv2.ev.reopened': 'আবার খোলা হয়েছে',
+  'rv2.ev.autoResolved': 'স্বয়ংক্রিয়ভাবে বন্ধ — টাকা এসে গেছে',
+  'rv2.ev.manualMatch': 'হাতে মেলানো হয়েছে',
+  'rv2.ev.chargesAccepted': 'চার্জ মেনে নেওয়া হয়েছে',
 };

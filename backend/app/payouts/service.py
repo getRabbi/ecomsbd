@@ -13,20 +13,24 @@ source file is never deleted (81.4).
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from datetime import date, datetime
 
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.object_storage import ObjectStorage
 from app.common.pagination import Cursor, apply_cursor
-from app.common.uploads import UploadCheck, validate_upload
+from app.common.uploads import DetectedFormat, UploadCheck, validate_upload
 from app.core.clock import utc_now
 from app.core.config import get_settings
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.imports.spreadsheet import read_xlsx
 from app.payouts.models import (
     Payout,
     PayoutAdjustment,
@@ -40,6 +44,7 @@ from app.payouts.statements import (
     ParsedStatement,
     autodetect_columns,
     classify_adjustment,
+    parse_rows,
     parse_statement,
     sha256_of,
 )
@@ -52,6 +57,8 @@ MAX_STATEMENT_ROWS = 5_000
 
 #: Statements are small. A larger file is almost certainly the wrong file.
 MAX_STATEMENT_BYTES = 5 * 1024 * 1024
+
+_XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class PayoutService:
@@ -116,16 +123,21 @@ class PayoutService:
     # ------------------------------------------------------------ statement --
 
     async def preview_statement(
-        self, content: bytes, *, mapping: dict[str, str] | None = None
+        self,
+        content: bytes,
+        *,
+        mapping: dict[str, str] | None = None,
+        filename: str | None = None,
     ) -> ParsedStatement:
         """Read a statement without saving anything.
 
         The seller sees the detected columns and the parsed rows — including
         the ones that could not be read — before any of it exists in their
-        shop's data.
+        shop's data. A mapping the seller corrected is validated against the
+        file's own headers before it is used to read a single amount.
         """
-        self._guard_size(content)
-        parsed = parse_statement(content, mapping=mapping)
+        checked = self._guard_size(content, filename=filename)
+        parsed = self._parse(checked, content, mapping)
         if len(parsed.rows) > MAX_STATEMENT_ROWS:
             raise ValidationError(
                 f"That file has more than {MAX_STATEMENT_ROWS:,} rows",
@@ -158,20 +170,9 @@ class PayoutService:
         checked = self._guard_size(content, filename=filename)
         digest = sha256_of(content)
 
-        existing = await self._db.execute(
-            sa.select(PayoutSourceFile).where(PayoutSourceFile.sha256 == digest)
-        )
-        duplicate = existing.scalar_one_or_none()
-        if duplicate is not None:
-            raise ConflictError(
-                "That statement has already been imported",
-                details={
-                    "imported_at": duplicate.imported_at.isoformat(),
-                    "original_filename": duplicate.original_filename,
-                },
-            )
+        await self._refuse_reimport(digest)
 
-        parsed = await self.preview_statement(content, mapping=mapping)
+        parsed = await self.preview_statement(content, mapping=mapping, filename=filename)
         if not parsed.rows:
             raise ValidationError("That file has no rows we could read")
 
@@ -186,19 +187,31 @@ class PayoutService:
             size_bytes=len(content),
             # Retain parsed evidence; preserve the original bytes privately in R2.
             storage_key=None,
-            raw_content=checked.text,
+            raw_content=checked.text or _as_csv(parsed),
             uploaded_by=context.user_id if context else None,
             imported_at=now,
             created_at=now,
         )
-        self._db.add(source_file)
-        await self._db.flush()
+        try:
+            # Two uploads of the same file racing each other: the unique
+            # (tenant, sha256) key lets exactly one through, and the loser gets
+            # the same answer a sequential re-upload would.
+            async with self._db.begin_nested():
+                self._db.add(source_file)
+                await self._db.flush()
+        except IntegrityError as exc:
+            await self._refuse_reimport(digest)
+            raise ConflictError("That statement has already been imported") from exc
 
         settings = get_settings()
         if settings.r2_configured:
             storage = ObjectStorage(settings)
             source_file.storage_key = storage.key(source_file.tenant_id, "payouts", source_file.id)
-            await storage.put(source_file.storage_key, content, "text/csv")
+            await storage.put(
+                source_file.storage_key,
+                content,
+                _XLSX_TYPE if checked.detected is DetectedFormat.XLSX else "text/csv",
+            )
 
         payout = await self._create_payout(
             provider=provider,
@@ -283,6 +296,36 @@ class PayoutService:
         parsed = parse_statement(content)
         return autodetect_columns(parsed.headers)
 
+    def _parse(
+        self, checked: UploadCheck, content: bytes, mapping: dict[str, str] | None
+    ) -> ParsedStatement:
+        """CSV or XLSX into lines, through the one row parser both share."""
+        if checked.detected is DetectedFormat.XLSX:
+            headers, rows = read_xlsx(content, max_rows=MAX_STATEMENT_ROWS)
+            return parse_rows(headers, rows, mapping=mapping)
+        return parse_statement(content, mapping=mapping)
+
+    async def _refuse_reimport(self, digest: str) -> None:
+        """Section 81.2: the same statement bytes are never imported twice."""
+        existing = await self._db.execute(
+            sa.select(PayoutSourceFile).where(PayoutSourceFile.sha256 == digest)
+        )
+        duplicate = existing.scalar_one_or_none()
+        if duplicate is not None:
+            payout_id = (
+                await self._db.execute(
+                    sa.select(Payout.id).where(Payout.source_file_id == duplicate.id).limit(1)
+                )
+            ).scalar_one_or_none()
+            raise ConflictError(
+                "That statement has already been imported",
+                details={
+                    "imported_at": duplicate.imported_at.isoformat(),
+                    "original_filename": duplicate.original_filename,
+                    "payout_id": str(payout_id) if payout_id else None,
+                },
+            )
+
     # -------------------------------------------------------------- reading --
 
     async def get(self, payout_id: uuid.UUID) -> Payout:
@@ -313,12 +356,20 @@ class PayoutService:
         payout_id: uuid.UUID,
         *,
         status: PayoutLineStatus | None = None,
-        limit: int = 500,
+        limit: int | None = 500,
     ) -> list[PayoutLine]:
+        """A payout's lines in file order.
+
+        ``limit=None`` reads every line. Reconciliation and the totals need all
+        of them: a statement may hold up to ``MAX_STATEMENT_ROWS``, and capping
+        the read would silently leave the tail of a long statement unmatched.
+        """
         stmt = sa.select(PayoutLine).where(PayoutLine.payout_id == payout_id)
         if status is not None:
             stmt = stmt.where(PayoutLine.status == str(status))
-        stmt = stmt.order_by(PayoutLine.row_number.asc()).limit(limit)
+        stmt = stmt.order_by(PayoutLine.row_number.asc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list((await self._db.execute(stmt)).scalars().all())
 
     async def adjustments(self, payout_id: uuid.UUID) -> list[PayoutAdjustment]:
@@ -343,7 +394,7 @@ class PayoutService:
         a reversal cannot leave the header disagreeing with its own rows.
         """
         payout = await self.get(payout_id)
-        rows = await self.lines(payout_id)
+        rows = await self.lines(payout_id, limit=None)
 
         payout.applied_paisa = sum(line.applied_paisa for line in rows)
         if not rows:
@@ -413,4 +464,21 @@ class PayoutService:
             filename=filename,
             max_bytes=MAX_STATEMENT_BYTES,
             max_rows=MAX_STATEMENT_ROWS,
+            # Read safely by the import module's spreadsheet reader: streamed,
+            # formulas off, every cell back to the text a CSV would carry.
+            allow_spreadsheet=True,
         )
+
+
+def _as_csv(parsed: ParsedStatement) -> str:
+    """A spreadsheet's rows as CSV text, kept as the statement's evidence.
+
+    Used only when the original was an XLSX and there is no text to keep
+    verbatim; the original bytes also go to R2 when it is configured.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(parsed.headers)
+    for row in parsed.rows:
+        writer.writerow([row.raw.get(header, "") for header in parsed.headers])
+    return buffer.getvalue()

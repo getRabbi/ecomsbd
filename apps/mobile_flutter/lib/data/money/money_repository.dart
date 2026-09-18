@@ -267,6 +267,66 @@ class MoneyRepository extends CachingRepository {
     return json['cases_opened'] as int? ?? 0;
   }
 
+  /// Expected, actual and the difference. Cached like the Money summary so
+  /// the screen opens on the last figures while it refreshes.
+  Future<Sourced<ReconciliationSummary>> reconciliationSummary() async {
+    final sourced = await readThrough(
+      'money.reconciliation.summary',
+      () => api.get('/reconciliation/summary'),
+    );
+    return sourced.map(ReconciliationSummary.fromJson);
+  }
+
+  /// Parcels compared expected-against-actual, filtered on the server.
+  Future<Sourced<PagedResult<ReconciliationItem>>> reconciliationItems({
+    String? cursor,
+    int limit = 30,
+    String? view,
+  }) async {
+    final extra = switch (view) {
+      'discrepancies' => <String, dynamic>{'discrepancies_only': true},
+      'unmatched' => <String, dynamic>{
+        'status': <String>['UNMATCHED', 'NEEDS_REVIEW', 'DUPLICATE'],
+      },
+      _ => <String, dynamic>{},
+    };
+    final sourced = await readThrough(
+      'money.reconciliation.items${view == null ? '' : '.$view'}'
+      '${cursor == null ? '' : '.$cursor'}',
+      () => api.get(
+        '/reconciliation/items',
+        query: pageQuery(cursor: cursor, limit: limit, extra: extra),
+      ),
+    );
+    return sourced.map(
+      (json) => PagedResult.parse<ReconciliationItem>(
+        json,
+        ReconciliationItem.fromJson,
+      ),
+    );
+  }
+
+  Future<CaseDetail> caseDetail(String caseId) async {
+    return CaseDetail.fromJson(await api.get('/reconciliation/cases/$caseId'));
+  }
+
+  Future<void> addCaseNote(String caseId, String note) async {
+    await api.post(
+      '/reconciliation/cases/$caseId/notes',
+      body: <String, dynamic>{'note': note},
+    );
+  }
+
+  /// Accept what the courier kept on one parcel. The server writes it to the
+  /// ledger once; a retry finds nothing left to accept.
+  Future<int> acceptCharges(String itemId) async {
+    final json = await api.post(
+      '/reconciliation/items/$itemId/accept-charges',
+      body: const <String, dynamic>{},
+    );
+    return json['accepted_paisa'] as int? ?? 0;
+  }
+
   Future<ReconciliationCase> updateCase(
     String caseId, {
     required String status,

@@ -8,6 +8,7 @@ before anybody looked at it.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date
 from typing import Annotated
@@ -28,6 +29,7 @@ from app.common.pagination import Page, decode_cursor
 from app.core.errors import ValidationError
 from app.payouts.models import Payout, PayoutStatus
 from app.payouts.service import MAX_STATEMENT_BYTES, PayoutService
+from app.payouts.statements import STATEMENT_ALIASES
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
@@ -38,6 +40,24 @@ async def _payouts(db: DbSession) -> PayoutService:
 
 
 PayoutsDep = Annotated[PayoutService, Depends(_payouts)]
+
+
+def _mapping(raw: str | None) -> dict[str, str] | None:
+    """The seller's corrected column mapping, sent as a JSON form field.
+
+    Checked for shape here and against the file's own headers in the service.
+    """
+    if raw is None or not raw.strip():
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("The column mapping is not valid JSON") from exc
+    if not isinstance(value, dict) or not all(
+        isinstance(key, str) and isinstance(column, str | None) for key, column in value.items()
+    ):
+        raise ValidationError("The column mapping must map field names to column names")
+    return {key: column or "" for key, column in value.items()}
 
 
 def _to_response(payout: Payout) -> PayoutResponse:
@@ -119,20 +139,26 @@ async def preview_statement(
     principal: TenantPrincipal,
     payouts: PayoutsDep,
     file: Annotated[UploadFile, File()],
+    mapping: Annotated[str | None, Form()] = None,
 ) -> StatementPreviewResponse:
     """Parse a statement and show what is in it.
 
     Nothing is created. The seller sees the detected columns and every row —
     including the ones that could not be read, with the text the file actually
-    contained — before a single paisa moves.
+    contained — before a single paisa moves. CSV or XLSX. Send ``mapping`` (a
+    JSON object of field → column) to re-read the file the way the seller
+    corrected it.
     """
     content = await file.read()
     if len(content) > MAX_STATEMENT_BYTES:
         raise ValidationError(f"That file is larger than {MAX_STATEMENT_BYTES // (1024 * 1024)}MB")
-    parsed = await payouts.preview_statement(content)
+    parsed = await payouts.preview_statement(
+        content, mapping=_mapping(mapping), filename=file.filename
+    )
     return StatementPreviewResponse(
         detected_headers=parsed.headers,
         column_mapping=parsed.mapping,
+        fields=list(STATEMENT_ALIASES),
         row_count=len(parsed.rows),
         invalid_row_count=len(parsed.invalid_rows),
         total_paisa=parsed.total_paisa,
@@ -169,6 +195,7 @@ async def import_statement(
     reference: Annotated[str | None, Form()] = None,
     paid_on: Annotated[date | None, Form()] = None,
     note: Annotated[str | None, Form()] = None,
+    mapping: Annotated[str | None, Form()] = None,
 ) -> PayoutDetailResponse:
     """Import a statement as a payout with one line per row.
 
@@ -184,6 +211,7 @@ async def import_statement(
         content,
         provider=provider,
         filename=file.filename or "statement.csv",
+        mapping=_mapping(mapping),
         reference=reference,
         paid_on=paid_on,
         note=note,

@@ -13,20 +13,26 @@ result goes through the receivable service so it lands in the ledger.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.clock import utc_now
 from app.db.base import Base, PrimaryKeyMixin, TenantOwned, TimestampMixin
 from app.db.types import GUID, JSONColumn, Paisa, TZDateTime
 
 __all__ = [
+    "DISCREPANCY_STATUSES",
+    "CaseEvent",
+    "CaseEventAction",
     "CaseKind",
     "CasePriority",
     "CaseStatus",
+    "ItemStatus",
     "ReconciliationCase",
+    "ReconciliationItem",
 ]
 
 
@@ -51,6 +57,18 @@ class CaseKind(StrEnum):
     STALE_IN_TRANSIT = "STALE_IN_TRANSIT"
     #: A parcel came back but its units were never put back on the shelf.
     RETURNED_NOT_RESTOCKED = "RETURNED_NOT_RESTOCKED"
+
+    # --- V2.2 ---------------------------------------------------------------
+
+    #: The COD arrived as expected but the courier charged a different amount
+    #: than the charge on record (booking quote, seller figure or estimate).
+    CHARGE_MISMATCH = "CHARGE_MISMATCH"
+    #: A delivered parcel the courier left out: a statement row names it with
+    #: charges and no COD, or it was delivered before everything a payout
+    #: covers and is not in it.
+    MISSING_COD = "MISSING_COD"
+    #: A return charge that differs from the one on record.
+    RETURN_CHARGE_MISMATCH = "RETURN_CHARGE_MISMATCH"
 
 
 class CaseStatus(StrEnum):
@@ -159,6 +177,9 @@ _AMOUNT_DRIVEN: frozenset[CaseKind] = frozenset(
         CaseKind.OVERPAID,
         CaseKind.UNKNOWN_DEDUCTION,
         CaseKind.UNMAPPABLE_PAYOUT,
+        CaseKind.CHARGE_MISMATCH,
+        CaseKind.MISSING_COD,
+        CaseKind.RETURN_CHARGE_MISMATCH,
     }
 )
 
@@ -183,3 +204,157 @@ def priority_for(kind: CaseKind, amount_paisa: int) -> CasePriority:
             return CasePriority.HIGH
         return CasePriority.MEDIUM if amount_paisa > 0 else CasePriority.LOW
     return CasePriority.MEDIUM
+
+
+class ItemStatus(StrEnum):
+    """Where one parcel's money stands once expected is compared with actual.
+
+    Derived, never authoritative: the ledger and the receivable hold the money
+    truth. An item *explains* that truth for one parcel (or one statement row
+    nobody could place), and is recomputed whenever the evidence moves.
+    """
+
+    #: What arrived agrees with what was owed, within tolerance.
+    MATCHED = "MATCHED"
+    #: Paid in more than one part, and the parts do not yet add up.
+    PARTIAL = "PARTIAL"
+    #: Money with no parcel behind it.
+    UNMATCHED = "UNMATCHED"
+    #: The same settlement row seen twice.
+    DUPLICATE = "DUPLICATE"
+    #: The COD the courier reports differs from what the parcel was owed.
+    AMOUNT_MISMATCH = "AMOUNT_MISMATCH"
+    #: The COD agrees but the courier's charge differs from the one on record.
+    CHARGE_MISMATCH = "CHARGE_MISMATCH"
+    #: A delivered parcel whose COD the courier did not pay.
+    MISSING_COD = "MISSING_COD"
+    #: A charge-only row for a parcel that came back.
+    RETURN_ADJUSTMENT = "RETURN_ADJUSTMENT"
+    #: The engine has a suggestion or a tie; a person decides.
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+    @property
+    def is_discrepancy(self) -> bool:
+        return self in DISCREPANCY_STATUSES
+
+
+#: Statuses that mean the money does not agree. Used by the summary and by
+#: the "discrepancies only" filter, so both count the same things.
+DISCREPANCY_STATUSES: frozenset[ItemStatus] = frozenset(
+    {
+        ItemStatus.PARTIAL,
+        ItemStatus.AMOUNT_MISMATCH,
+        ItemStatus.CHARGE_MISMATCH,
+        ItemStatus.MISSING_COD,
+    }
+)
+
+
+class ReconciliationItem(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """Expected against actual for one parcel, or one unplaced statement row.
+
+    ``subject_key`` is ``receivable:<id>`` once a row is tied to a parcel — so a
+    parcel paid in two parts is one item, not two half-mismatches — and
+    ``line:<id>`` while it is not. Unique per tenant, so re-running
+    reconciliation updates rather than accumulates.
+
+    Every figure is copied from, or summed out of, records that already exist:
+    the receivable, the payout lines and adjustments, and the charges on
+    record. Nothing is estimated here, and nothing here is read back as money —
+    the ledger stays the only financial truth.
+    """
+
+    __tablename__ = "reconciliation_items"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "subject_key", name="uq_reconciliation_items_subject"),
+        # The review table filters by status and courier and pages by date.
+        sa.Index("ix_reconciliation_items_tenant_status", "tenant_id", "status"),
+        sa.Index(
+            "ix_reconciliation_items_tenant_provider_date",
+            "tenant_id",
+            "provider",
+            "settlement_date",
+        ),
+        sa.Index("ix_reconciliation_items_tenant_payout", "tenant_id", "payout_id"),
+    )
+
+    subject_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(24), nullable=False)
+    provider: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+
+    payout_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    payout_line_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    receivable_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
+    consignment_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    case_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+
+    #: For search. The parcel's, or the row's when there is no parcel.
+    merchant_reference: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+    tracking_code: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+
+    settlement_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+
+    #: Null where there is nothing to expect — a row with no parcel.
+    expected_cod_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+    actual_cod_paisa: Mapped[int] = mapped_column(Paisa, nullable=False, default=0)
+
+    #: Null when no charge is on record for the parcel. Not zero: "we do not
+    #: know what it should cost" and "it should cost nothing" are different.
+    expected_charge_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+    #: The ``ChargeSource`` the expected charge came from; null when missing.
+    expected_charge_source: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
+    actual_charge_paisa: Mapped[int] = mapped_column(Paisa, nullable=False, default=0)
+
+    expected_net_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+    actual_net_paisa: Mapped[int] = mapped_column(Paisa, nullable=False, default=0)
+    #: ``actual_net - expected_net``. Negative means the seller got less.
+    difference_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+
+    #: Deductions on the statement not yet accepted into the ledger.
+    charges_pending_paisa: Mapped[int] = mapped_column(Paisa, nullable=False, default=0)
+    line_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+    #: Breakdown for the detail view: charges by type, lines, reasons.
+    detail: Mapped[dict] = mapped_column(JSONColumn, nullable=False, default=dict)
+
+    evaluated_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
+
+    @property
+    def item_status(self) -> ItemStatus:
+        return ItemStatus(self.status)
+
+
+class CaseEventAction(StrEnum):
+    OPENED = "OPENED"
+    NOTE = "NOTE"
+    STATUS_CHANGED = "STATUS_CHANGED"
+    REOPENED = "REOPENED"
+    #: The engine closed it because the money it was about has since arrived
+    #: or been explained.
+    AUTO_RESOLVED = "AUTO_RESOLVED"
+    MANUAL_MATCH = "MANUAL_MATCH"
+    CHARGES_ACCEPTED = "CHARGES_ACCEPTED"
+
+
+class CaseEvent(Base, TenantOwned, PrimaryKeyMixin):
+    """One thing that happened to a case. Append-only.
+
+    The case row carries the current state; this carries how it got there —
+    who looked, what they said, when it was reopened — so a decision about
+    money can be explained months later.
+    """
+
+    __tablename__ = "reconciliation_case_events"
+    __table_args__ = (sa.Index("ix_reconciliation_case_events_case", "case_id", "created_at"),)
+
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("reconciliation_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(sa.String(24), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
+    note: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False, default=utc_now)
