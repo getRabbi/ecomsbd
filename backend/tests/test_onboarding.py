@@ -27,7 +27,10 @@ async def create_shop(
     payload.update(overrides)
     response = await client.post("/v1/tenants", json=payload, headers=auth_header(session))
     assert response.status_code == 201, response.text
-    return response.json()
+    # The shop is bound to the caller's session on the server and no new
+    # credentials are issued: the token the seller already holds is the one
+    # that now resolves to this shop.
+    return {**response.json(), "access_token": session["access_token"]}
 
 
 class TestShopCreation:
@@ -37,11 +40,24 @@ class TestShopCreation:
         session = await sign_in(client, unique_phone)
         assert session["tenant_id"] is None
 
-        after = await create_shop(client, session)
-        assert after["tenant_id"] is not None
-        assert after["role"] == "OWNER"
-        # New tokens are issued so the tenant claim applies immediately.
-        assert after["access_token"] != session["access_token"]
+        response = await client.post(
+            "/v1/tenants", json={"name": "Noor Fashion"}, headers=auth_header(session)
+        )
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["tenant_id"] is not None
+        assert body["role"] == "OWNER"
+        # No token is reissued. The binding lives on the server-side session.
+        assert "access_token" not in body
+        assert "refresh_token" not in body
+
+        # The very next request, with the credentials the seller already had,
+        # sees the new shop.
+        shop = await client.get("/v1/tenant", headers=auth_header(session))
+        assert shop.status_code == 200, shop.text
+        assert shop.json()["id"] == body["tenant_id"]
+        me = await client.get("/v1/me", headers=auth_header(session))
+        assert me.json()["needs_onboarding"] is True
 
     async def test_the_new_shop_is_readable(self, client: AsyncClient, unique_phone: str) -> None:
         session = await create_shop(client, await sign_in(client, unique_phone))
@@ -218,10 +234,17 @@ class TestProviderCapabilities:
         assert steadfast["enabled"] is False
         assert steadfast["manual_fallback"]
 
-        # Providers with no documentation still claim nothing at all.
-        for name in ("pathao", "redx"):
-            assert providers[name]["fully_unverified"] is True
-            assert set(providers[name]["capabilities"].values()) == {"unknown"}
+        # Pathao is implemented from its merchant API documentation, and like
+        # Steadfast before rollout it stays behind its flag until live
+        # merchant credentials and webhook registration have been verified.
+        pathao = providers["pathao"]
+        assert pathao["fully_unverified"] is False
+        assert pathao["enabled"] is False
+
+        # RedX has no documentation on file, so it still claims nothing at all.
+        assert providers["redx"]["fully_unverified"] is True
+        assert set(providers["redx"]["capabilities"].values()) == {"unknown"}
+        assert providers["redx"]["enabled"] is False
 
         # Manual mode always works and is never gated.
         assert providers["manual"]["enabled"] is True

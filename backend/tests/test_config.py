@@ -35,6 +35,11 @@ def production_settings(**overrides: object) -> Settings:
         "otp_provider_secret": "gateway-secret",
         "allow_dev_otp": False,
         "otp_expose_debug_code": False,
+        # Production authenticates through Supabase, and refuses to boot
+        # without it. Phone OTP login is the pre-Supabase path and must be off.
+        "supabase_url": "https://project-ref.supabase.co",
+        "supabase_anon_key": "public-anon-key",
+        "phone_otp_login_enabled": False,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -68,13 +73,24 @@ class TestProductionGuards:
         assert settings.expose_otp_debug_code is False
 
     def test_dev_otp_provider_cannot_be_selected(self) -> None:
+        # The provider guard only matters when OTP sign-in is on; with it off
+        # nothing ever calls a provider. Turning it on is refused in its own
+        # right under Supabase, and the dev provider is still named as a problem.
         with pytest.raises(ValueError, match="dev_console is forbidden in production"):
-            production_settings(otp_provider=OtpProvider.DEV_CONSOLE, otp_provider_secret=None)
+            production_settings(
+                phone_otp_login_enabled=True,
+                otp_provider=OtpProvider.DEV_CONSOLE,
+                otp_provider_secret=None,
+            )
 
     def test_allow_dev_otp_flag_is_blocked_independently(self) -> None:
         # Second guard: even with a real gateway selected, the dev switch is refused.
         with pytest.raises(ValueError, match="ALLOW_DEV_OTP must be false"):
-            production_settings(allow_dev_otp=True)
+            production_settings(phone_otp_login_enabled=True, allow_dev_otp=True)
+
+    def test_phone_otp_login_is_refused_under_supabase(self) -> None:
+        with pytest.raises(ValueError, match="PHONE_OTP_LOGIN_ENABLED must be false"):
+            production_settings(phone_otp_login_enabled=True)
 
     def test_debug_code_exposure_is_blocked_independently(self) -> None:
         with pytest.raises(ValueError, match="OTP_EXPOSE_DEBUG_CODE must be false"):
@@ -171,9 +187,23 @@ class TestAuthMethods:
         assert settings.available_auth_methods == {"email_password", "google", "apple"}
         assert not settings.dev_otp_enabled
 
-    def test_disabling_everything_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="no seller can sign in"):
-            production_settings(phone_otp_login_enabled=False)
+    def test_production_sign_in_is_supabase_and_cannot_be_switched_off(self) -> None:
+        # Production authenticates through Supabase, so the legacy per-method
+        # switches cannot leave a deployment with no way in.
+        settings = production_settings(
+            phone_otp_login_enabled=False,
+            email_password_auth_enabled=False,
+            google_auth_enabled=False,
+            apple_auth_enabled=False,
+        )
+        assert settings.supabase_auth_active
+        assert settings.available_auth_methods == frozenset({"email_password", "google", "apple"})
+
+    def test_a_production_config_without_supabase_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="SUPABASE_ANON_KEY is required"):
+            production_settings(supabase_anon_key=None)
+        with pytest.raises(ValueError, match="SUPABASE_URL must be the HTTPS project origin"):
+            production_settings(supabase_url="http://project-ref.supabase.co")
 
     def test_local_is_not_subject_to_the_sign_in_check(self) -> None:
         # A developer working on something unrelated may turn every method off.
@@ -188,23 +218,25 @@ class TestAuthMethods:
         supply an SMS gateway key for a sign-in route that answers
         FEATURE_DISABLED is how an operator learns to fill in values blindly.
         """
-        with pytest.raises(ValueError) as excinfo:
-            production_settings(
-                phone_otp_login_enabled=False,
-                otp_provider=OtpProvider.SMS_GATEWAY,
-                otp_provider_secret=None,
-            )
-        message = str(excinfo.value)
-        assert "OTP_PROVIDER_SECRET" not in message
-        assert "no seller can sign in" in message
+        settings = production_settings(
+            phone_otp_login_enabled=False,
+            otp_provider=OtpProvider.SMS_GATEWAY,
+            otp_provider_secret=None,
+        )
+        assert settings.otp_provider_secret is None
+
+    # In production Google and Apple are Supabase providers, configured in the
+    # Supabase dashboard. The backend's own verifiers remain for environments
+    # without Supabase, and there an audience is still mandatory.
 
     def test_google_enabled_without_an_audience_is_refused(self) -> None:
         with pytest.raises(ValueError, match="no Google client id is set"):
-            production_settings(google_auth_enabled=True)
+            Settings(app_env=AppEnv.LOCAL, google_auth_enabled=True)
 
     def test_apple_enabled_without_its_audience_is_refused(self) -> None:
         with pytest.raises(ValueError, match="APPLE_CLIENT_ID"):
-            production_settings(
+            Settings(
+                app_env=AppEnv.LOCAL,
                 apple_auth_enabled=True,
                 apple_team_id="ABCDE12345",
                 apple_key_id="FGHIJ67890",
@@ -241,9 +273,12 @@ class TestEmailTransport:
         with pytest.raises(ValueError, match="EMAIL_TRANSPORT=provider_api requires"):
             production_settings(email_transport="provider_api")
 
-    def test_email_password_auth_requires_a_transport_that_delivers(self) -> None:
-        with pytest.raises(ValueError, match="cannot deliver mail"):
-            production_settings(email_password_auth_enabled=True)
+    def test_supabase_delivers_sign_in_mail_in_production(self) -> None:
+        # Verification and reset mail for email/password sign-in is sent by
+        # Supabase, so the backend's own transport is not demanded for it.
+        settings = production_settings(email_password_auth_enabled=True)
+        assert not settings.email_transport_can_deliver
+        assert "email_password" in settings.available_auth_methods
 
     def test_a_configured_provider_is_accepted(self) -> None:
         settings = production_settings(
@@ -285,8 +320,13 @@ class TestPartialIntegrations:
     """A half-configured integration fails on the first seller who needs it."""
 
     def test_partial_r2_is_refused(self) -> None:
+        # Credentials without somewhere to use them fail at the first upload.
         with pytest.raises(ValueError, match="R2 is partly configured"):
-            production_settings(r2_bucket="ecomsbd-prod")
+            production_settings(r2_bucket="ecomsbd-prod", r2_access_key_id="id")
+
+    def test_a_bucket_awaiting_credentials_does_not_block(self) -> None:
+        settings = production_settings(r2_bucket="ecomsbd-prod")
+        assert not settings.r2_configured
 
     def test_complete_r2_is_accepted(self) -> None:
         settings = production_settings(

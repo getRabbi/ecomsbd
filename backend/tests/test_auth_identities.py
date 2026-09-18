@@ -984,13 +984,17 @@ class TestSharedSessionSystem:
             assert shop.status_code == 201, shop.text
             assert shop.json()["tenant_id"] is not None
             assert shop.json()["user_id"] == session["user_id"]
-            headers = {"Authorization": f"Bearer {shop.json()['access_token']}"}
-            assert (await auth_client.get("/v1/me", headers=headers)).status_code == 200
-            refreshed = await auth_client.post(
-                "/v1/auth/refresh", json={"refresh_token": shop.json()["refresh_token"]}
-            )
-            assert refreshed.status_code == 200
-            assert refreshed.json()["tenant_id"] == shop.json()["tenant_id"]
+            # No credentials are reissued: the shop is bound to the existing
+            # session on the server, so the token already held now sees it.
+            assert "access_token" not in shop.json()
+            assert "refresh_token" not in shop.json()
+            me = await auth_client.get("/v1/me", headers=headers)
+            assert me.status_code == 200, me.text
+            tenant = await auth_client.get("/v1/tenant", headers=headers)
+            assert tenant.status_code == 200, tenant.text
+            assert tenant.json()["id"] == shop.json()["tenant_id"]
+            assert me.json()["tenant_id"] == shop.json()["tenant_id"]
+            assert me.json()["role"] == "OWNER"
 
 
 class TestEmailLinks:

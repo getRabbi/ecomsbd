@@ -170,6 +170,10 @@ async def test_concurrent_first_login_one_user(settings, supabase):
 async def test_api_mapping_onboarding_rbac_and_retired_endpoints(settings, supabase):
     _verifier, token = supabase
     app = create_app(settings)
+    # Requests resolve settings through `get_app_settings`, the process-wide
+    # singleton. Without this override the app would run on whatever an
+    # earlier test left there instead of this fixture's Supabase settings.
+    app.dependency_overrides[deps.get_app_settings] = lambda: settings
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:

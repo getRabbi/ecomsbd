@@ -527,7 +527,11 @@ class AuthService:
                     .where(
                         TenantUser.user_id == user_id,
                         TenantUser.is_active.is_(True),
-                        Tenant.status == TenantStatus.ACTIVE,
+                        # A shop scheduled for deletion stays reachable for the
+                        # grace period: that is when its owner exports data or
+                        # cancels. Executing the deletion detaches every member,
+                        # which is what ends access. Suspended shops stay out.
+                        Tenant.status.in_((TenantStatus.ACTIVE, TenantStatus.PENDING_DELETION)),
                         Tenant.deleted_at.is_(None),
                     )
                     .order_by(Tenant.created_at)

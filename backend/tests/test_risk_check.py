@@ -21,6 +21,7 @@ from tests.test_auth_flow import auth_header
 from tests.test_customers import create_customer
 
 from app.customers import risk
+from app.customers.models import Customer
 
 
 class _Counters:
@@ -78,19 +79,21 @@ class TestRules:
 async def _set_counters(
     db: AsyncSession, customer_id: str, *, delivered: int, returned: int, cancelled: int
 ) -> None:
-    await db.execute(
-        sa.text(
-            "UPDATE customers SET delivered_count = :d, returned_count = :r, "
-            "cancelled_count = :c, order_count = :o WHERE id = :id"
-        ),
-        {
-            "d": delivered,
-            "r": returned,
-            "c": cancelled,
-            "o": delivered + returned + cancelled,
-            "id": customer_id,
-        },
+    # Through the mapped column rather than raw SQL: the id arrives as the
+    # API's hyphenated string, and only the column type knows how the database
+    # stores it. A raw comparison matched no row and silently changed nothing.
+    result = await db.execute(
+        sa.update(Customer)
+        .where(Customer.id == uuid.UUID(customer_id))
+        .values(
+            delivered_count=delivered,
+            returned_count=returned,
+            cancelled_count=cancelled,
+            order_count=delivered + returned + cancelled,
+        )
+        .execution_options(synchronize_session=False)
     )
+    assert result.rowcount == 1
     await db.commit()
 
 

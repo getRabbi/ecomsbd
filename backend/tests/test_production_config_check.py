@@ -54,6 +54,11 @@ def production_settings(**overrides: object) -> Settings:
         "otp_provider_secret": SECRET_MARKER,
         "allow_dev_otp": False,
         "otp_expose_debug_code": False,
+        # Production authenticates through Supabase, and refuses to boot
+        # without it. Phone OTP login is the pre-Supabase path and must be off.
+        "supabase_url": "https://project-ref.supabase.co",
+        "supabase_anon_key": f"anon-{SECRET_MARKER}",
+        "phone_otp_login_enabled": False,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -105,7 +110,7 @@ class TestExitCode:
     def test_reusing_one_secret_for_two_purposes_blocks(self) -> None:
         """Four names holding one value is one secret wearing four hats."""
         shared = "s" * 48
-        settings = production_settings(jwt_signing_key=shared, otp_hash_secret=shared)
+        settings = production_settings(jwt_signing_key=shared, phone_search_hmac_key=shared)
         assert status_for("CRYPTO", settings) is Status.BLOCKING
 
     def test_an_unsigned_placeholder_play_package_blocks(self) -> None:
@@ -122,7 +127,9 @@ class TestExitCode:
         assert result.status is Status.OK
         assert "READY FOR MERCHANT ACCOUNT" in result.detail
 
-    def test_google_and_apple_report_ready_when_configured(self) -> None:
+    def test_google_and_apple_are_reported_as_supabase_providers(self) -> None:
+        """Google is a Supabase provider the operator verifies in the dashboard;
+        Apple is deferred until iOS. Neither is claimed ready from env vars."""
         settings = production_settings(
             google_auth_enabled=True,
             google_client_id_web="web.apps.googleusercontent.com",
@@ -131,8 +138,8 @@ class TestExitCode:
             phone_otp_login_enabled=False,
             otp_provider_secret=None,
         )
-        assert status_for("GOOGLE AUTH", settings) is Status.OK
-        assert status_for("APPLE AUTH", settings) is Status.OK
+        assert status_for("GOOGLE AUTH", settings) is Status.PARTIAL
+        assert status_for("APPLE AUTH", settings) is Status.DISABLED
         assert status_for("SIGN-IN", settings) is Status.OK
         assert status_for("PHONE OTP", settings) is Status.DISABLED
 
