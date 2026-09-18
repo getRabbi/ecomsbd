@@ -22,6 +22,10 @@ dependencies = [
     "google-auth[requests]>=2.40,<3",
     "boto3>=1.40,<2",
     "pyyaml>=6.0",
+    # Read-only XLSX parsing for imports. Used with read_only=True and
+    # data_only=True: no formula evaluation, and the sheet is streamed rather
+    # than loaded, so a large file cannot be turned into a memory spike.
+    "openpyxl>=3.1,<4",
     "sentry-sdk[fastapi]>=2.19",
     # Asia/Dhaka must resolve identically on every host. Windows has no system
     # tz database and slim Linux images usually drop it, so it is a hard

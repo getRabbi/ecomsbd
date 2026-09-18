@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.audit import AuditAction, record_audit
 from app.common.object_storage import ObjectStorage
 from app.common.outbox import OutboxTopic, enqueue
-from app.common.uploads import validate_upload
+from app.common.uploads import DetectedFormat, UploadCheck, validate_upload
 from app.core.clock import utc_now
 from app.core.config import Settings, get_settings
 from app.core.context import current_context
@@ -29,21 +29,45 @@ from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.customers.service import CustomerService
 from app.imports.models import (
     ImportBatch,
+    ImportMapping,
     ImportRow,
     ImportRowStatus,
     ImportStatus,
     ImportTemplate,
 )
+from app.imports.spreadsheet import read_xlsx
 from app.imports.templates import TEMPLATES, autodetect_mapping, parse_row, row_fingerprint
 from app.orders.models import OrderChannel
 from app.orders.service import OrderDraft, OrderItemDraft, OrderService
 from app.products.service import ProductService
 
-__all__ = ["MAX_IMPORT_ROWS", "ImportService"]
+__all__ = [
+    "ASYNC_COMMIT_THRESHOLD_ROWS",
+    "COMMIT_CHECKPOINT_ROWS",
+    "MAX_IMPORT_ROWS",
+    "ImportService",
+    "build_import_service",
+]
 
 #: Upper bound on one file. Large migrations are split, which also keeps a
 #: mistake's blast radius small.
 MAX_IMPORT_ROWS = 5_000
+
+#: Appended to the error export. Named with a leading underscore so they are
+#: obvious to delete before re-uploading the fixed file.
+ERROR_ROW_COLUMN = "_row_number"
+ERROR_REASON_COLUMN = "_why_it_failed"
+
+#: Rows committed before the session is flushed. A crash costs at most this
+#: much work, and the rows already created stay created so the resume skips
+#: them rather than making them twice.
+COMMIT_CHECKPOINT_ROWS = 50
+
+#: Imports at or above this many rows are handed to the ARQ worker instead of
+#: being committed inside the request. Creating this many orders through the
+#: normal order service takes far longer than a request should be held open,
+#: and a client that times out mid-commit must never be able to retry it.
+ASYNC_COMMIT_THRESHOLD_ROWS = 200
 
 #: Byte-order marks and encodings real spreadsheet exports produce.
 _ENCODINGS = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
@@ -91,6 +115,10 @@ class ImportService:
             filename=filename,
             content_type=content_type,
             max_rows=MAX_IMPORT_ROWS,
+            # Safe here specifically because `_read_file` turns every cell back
+            # into the text a CSV would have carried, so the same money and
+            # phone parsers run either way.
+            allow_spreadsheet=True,
         )
 
         digest = hashlib.sha256(content).hexdigest()
@@ -118,7 +146,7 @@ class ImportService:
                 },
             )
 
-        headers, rows = self._read_csv(filename, content)
+        headers, rows = self._read_file(checked, filename, content)
         if not headers:
             raise ValidationError("Could not read a header row from this file")
         if len(rows) > MAX_IMPORT_ROWS:
@@ -174,20 +202,24 @@ class ImportService:
         await self._db.flush()
         return batch
 
-    def _read_csv(self, filename: str, content: bytes) -> tuple[list[str], list[dict]]:
-        """Decode and parse a CSV.
+    def _read_file(
+        self, checked: UploadCheck, filename: str, content: bytes
+    ) -> tuple[list[str], list[dict]]:
+        """Read a CSV or an XLSX into headers and row dicts.
 
-        XLSX is detected and reported rather than half-parsed: the file starts
-        with a ZIP signature, and feeding that to a CSV reader produces garbage
-        rows instead of an error a seller can act on.
+        The two formats converge here and nowhere else. An XLSX cell is
+        rendered back to the string a CSV export of the same sheet would have
+        carried, so everything downstream — mapping, money parsing, phone
+        normalisation, duplicate fingerprints — is the identical code path.
+        That is what stops the spreadsheet route quietly growing its own,
+        looser, number handling.
         """
-        if content[:2] == b"PK":
-            raise ValidationError(
-                "This looks like an Excel file. Please export it as CSV and try "
-                "again — XLSX import is not supported yet.",
-                details={"filename": filename},
-            )
+        if checked.detected is DetectedFormat.XLSX:
+            return read_xlsx(content, max_rows=MAX_IMPORT_ROWS)
+        return self._read_csv(filename, content)
 
+    def _read_csv(self, filename: str, content: bytes) -> tuple[list[str], list[dict]]:
+        """Decode and parse a CSV."""
         text: str | None = None
         for encoding in _ENCODINGS:
             try:
@@ -332,7 +364,12 @@ class ImportService:
                 "This import was already committed",
                 details={"created_count": batch.created_count},
             )
-        if not batch.can_commit:
+        # A batch left in COMMITTING by a worker that died is resumed rather
+        # than refused: the row selection below only takes rows that are still
+        # READY or WARNING, so anything already created is skipped instead of
+        # being made twice. Without this the batch is stranded, because
+        # `can_commit` requires VALIDATED and it can never return to that.
+        if not (batch.can_commit or batch.is_resumable):
             raise ConflictError(
                 "Run a dry run first, and make sure there is something to import",
                 details={"status": batch.status},
@@ -340,6 +377,8 @@ class ImportService:
 
         template = ImportTemplate(batch.template)
         batch.status = ImportStatus.COMMITTING
+        if batch.started_at is None:
+            batch.started_at = utc_now()
         await self._db.flush()
 
         rows = list(
@@ -373,8 +412,17 @@ class ImportService:
             row.status = ImportRowStatus.CREATED
             row.created_entity_id = entity_id
             created += 1
+            batch.processed_count += 1
 
-        batch.created_count = created
+            # Checkpoint. A crash then costs at most one chunk of work rather
+            # than the whole import, and the rows already created stay created
+            # so the resume does not repeat them.
+            if created % COMMIT_CHECKPOINT_ROWS == 0:
+                await self._db.flush()
+
+        # `+=` rather than `=`: a resumed commit adds to what the previous
+        # attempt already created instead of reporting only its own share.
+        batch.created_count += created
         batch.committed_at = utc_now()
         batch.status = ImportStatus.COMMITTED
 
@@ -456,3 +504,261 @@ class ImportService:
         if status is not None:
             stmt = stmt.where(ImportRow.status == status)
         return list((await self._db.execute(stmt)).scalars().all())
+
+    async def begin_async_commit(self, import_id: uuid.UUID) -> ImportBatch:
+        """Mark an import as committing and hand the work to the worker.
+
+        Both halves happen in the caller's transaction, which is the point: the
+        job is enqueued through the outbox rather than straight onto a queue, so
+        it exists if and only if this transaction commits. A direct enqueue
+        would leave an orphan job whenever the request rolled back — a worker
+        committing an import the seller never confirmed.
+
+        The batch moves to ``COMMITTING`` here so a second tap finds it already
+        claimed instead of enqueueing a second job.
+        """
+        batch = await self.get(import_id)
+        if batch.import_status is ImportStatus.COMMITTED:
+            raise ConflictError(
+                "This import was already committed",
+                details={"created_count": batch.created_count},
+            )
+        if batch.import_status is ImportStatus.COMMITTING:
+            # Already claimed. Returning it rather than raising keeps a
+            # double-tap idempotent from the client's point of view.
+            return batch
+        if not batch.can_commit:
+            raise ConflictError(
+                "Run a dry run first, and make sure there is something to import",
+                details={"status": batch.status},
+            )
+
+        batch.status = ImportStatus.COMMITTING
+        batch.started_at = utc_now()
+        await self._db.flush()
+
+        event = await enqueue(
+            self._db,
+            OutboxTopic.IMPORT_COMMIT_REQUESTED,
+            {"import_id": str(batch.id)},
+            # One job per import, whatever else happens upstream.
+            dedupe_key=f"import-commit:{batch.id}",
+        )
+        batch.job_id = str(event.id)[:64]
+        await self._db.flush()
+        return batch
+
+    async def history(
+        self,
+        *,
+        template: ImportTemplate | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ImportBatch]:
+        """Past imports, newest first.
+
+        Tenant-scoped by the session, so this is every import *this shop* has
+        run — including the failed and cancelled ones, which are the ones a
+        seller comes looking for.
+        """
+        statement = sa.select(ImportBatch).order_by(ImportBatch.created_at.desc())
+        if template is not None:
+            statement = statement.where(ImportBatch.template == str(template))
+        statement = statement.offset(max(0, offset)).limit(max(1, min(limit, 200)))
+        return list((await self._db.execute(statement)).scalars().all())
+
+    async def error_rows(self, import_id: uuid.UUID) -> list[ImportRow]:
+        """Every row that could not be created, in file order.
+
+        Deliberately not paginated: this is what the error export is built
+        from, and an export that silently stopped at a hundred rows would be
+        worse than no export at all.
+        """
+        batch = await self.get(import_id)
+        return list(
+            (
+                await self._db.execute(
+                    sa.select(ImportRow)
+                    .where(
+                        ImportRow.import_id == batch.id,
+                        ImportRow.status.in_([ImportRowStatus.INVALID, ImportRowStatus.DUPLICATE]),
+                    )
+                    .order_by(ImportRow.row_number)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    async def error_csv(self, import_id: uuid.UUID) -> str:
+        """The failed rows as a CSV the seller can fix and re-upload.
+
+        The seller's **original columns** are preserved, in their original
+        order, with two appended: the row number from the file they uploaded,
+        and why it was refused. That is what makes the download usable as an
+        input — fix the flagged rows, delete the two added columns, upload
+        again — rather than only a report to read.
+        """
+        batch = await self.get(import_id)
+        rows = await self.error_rows(import_id)
+
+        headers = [str(header) for header in (batch.detected_headers or []) if header]
+        if not headers:
+            # A batch whose headers were never recorded still produces a useful
+            # file: take the columns from the rows themselves.
+            seen: list[str] = []
+            for row in rows:
+                for key in row.raw or {}:
+                    if str(key) not in seen:
+                        seen.append(str(key))
+            headers = seen
+
+        buffer = io.StringIO()
+        # QUOTE_ALL so a Bangla address containing a comma survives the round
+        # trip, and CRLF because that is what Excel expects.
+        writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+        writer.writerow([*headers, ERROR_ROW_COLUMN, ERROR_REASON_COLUMN])
+
+        for row in rows:
+            raw = row.raw or {}
+            reasons = "; ".join(
+                str(error.get("message", "")).strip()
+                for error in (row.errors or [])
+                if str(error.get("message", "")).strip()
+            )
+            if not reasons and row.status == ImportRowStatus.DUPLICATE:
+                reasons = "Already imported"
+            writer.writerow(
+                [*(str(raw.get(header, "")) for header in headers), row.row_number, reasons]
+            )
+
+        # A BOM so Excel opens Bangla text in the right encoding rather than
+        # showing mojibake, which is the first thing a seller would report.
+        return "﻿" + buffer.getvalue()
+
+    # ------------------------------------------------------ saved mappings ---
+
+    async def save_mapping(
+        self,
+        *,
+        name: str,
+        template: ImportTemplate,
+        mapping: dict[str, str],
+        source_headers: list[str] | None = None,
+    ) -> ImportMapping:
+        """Save a column mapping for reuse, or update one of the same name.
+
+        Updating rather than duplicating: a seller who saves "Daily orders"
+        twice means "this is what Daily orders is now", not "I would like two
+        mappings with the same name to choose between".
+        """
+        cleaned_name = (name or "").strip()
+        if not cleaned_name:
+            raise ValidationError("Give this mapping a name so you can find it again")
+        if not mapping:
+            raise ValidationError("Map at least one column before saving")
+        if template not in TEMPLATES:
+            raise ValidationError(f"{template} imports are not supported yet")
+
+        existing = (
+            await self._db.execute(
+                sa.select(ImportMapping).where(
+                    ImportMapping.template == str(template),
+                    ImportMapping.name == cleaned_name,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            existing.mapping = dict(mapping)
+            existing.source_headers = list(source_headers or [])
+            await self._db.flush()
+            return existing
+
+        saved = ImportMapping(
+            name=cleaned_name,
+            template=str(template),
+            mapping=dict(mapping),
+            source_headers=list(source_headers or []),
+            created_by_user_id=current_context().user_id,
+        )
+        self._db.add(saved)
+        await self._db.flush()
+        return saved
+
+    async def list_mappings(
+        self, *, template: ImportTemplate | None = None, headers: list[str] | None = None
+    ) -> list[ImportMapping]:
+        """Saved mappings, most recently used first.
+
+        When ``headers`` is given, only mappings whose columns are all present
+        in that file are returned. Offering one that cannot apply is worse than
+        offering none: the seller picks it and every row fails.
+        """
+        statement = sa.select(ImportMapping).order_by(
+            ImportMapping.last_used_at.desc().nullslast(),
+            ImportMapping.created_at.desc(),
+        )
+        if template is not None:
+            statement = statement.where(ImportMapping.template == str(template))
+        rows = list((await self._db.execute(statement)).scalars().all())
+        if headers is None:
+            return rows
+        return [row for row in rows if row.matches(headers)]
+
+    async def apply_mapping(self, import_id: uuid.UUID, mapping_id: uuid.UUID) -> ImportBatch:
+        """Put a saved mapping onto an import, and record that it was used."""
+        batch = await self.get(import_id)
+        saved = (
+            await self._db.execute(sa.select(ImportMapping).where(ImportMapping.id == mapping_id))
+        ).scalar_one_or_none()
+        if saved is None:
+            raise NotFoundError("That saved mapping does not exist")
+        if saved.template != batch.template:
+            raise ValidationError(
+                "That mapping is for a different kind of import",
+                details={
+                    "mapping_template": saved.template,
+                    "import_template": batch.template,
+                },
+            )
+
+        batch.column_mapping = dict(saved.mapping)
+        batch.status = ImportStatus.MAPPED
+        saved.last_used_at = utc_now()
+        saved.use_count += 1
+        await self._db.flush()
+        return batch
+
+    async def delete_mapping(self, mapping_id: uuid.UUID) -> None:
+        saved = (
+            await self._db.execute(sa.select(ImportMapping).where(ImportMapping.id == mapping_id))
+        ).scalar_one_or_none()
+        if saved is None:
+            raise NotFoundError("That saved mapping does not exist")
+        await self._db.delete(saved)
+        await self._db.flush()
+
+
+def build_import_service(session: AsyncSession, settings: Settings | None = None) -> ImportService:
+    """Assemble the service with its collaborators.
+
+    One builder for both callers — the API route and the worker job — so a
+    background commit runs through the identical object graph a request does.
+    Two assemblies would be two chances for the worker to construct a slightly
+    different service and import under slightly different rules.
+    """
+    from app.api.deps import get_hasher, get_vault
+    from app.customers.service import CustomerService
+    from app.orders.service import OrderService
+    from app.products.service import ProductService
+
+    resolved = settings or get_settings()
+    customers = CustomerService(session, hasher=get_hasher(resolved), vault=get_vault(resolved))
+    return ImportService(
+        session,
+        products=ProductService(session),
+        orders=OrderService(session, customers=customers),
+        customers=customers,
+        settings=resolved,
+    )

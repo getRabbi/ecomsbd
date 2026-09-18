@@ -50,6 +50,7 @@ DEFAULT_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_DECOMPRESSION_RATIO = 100
 
 _ALLOWED_EXTENSIONS = {".csv", ".txt", ".tsv"}
+_ALLOWED_SPREADSHEET_EXTENSIONS = {".xlsx", ".xlsm"}
 _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -117,12 +118,21 @@ def validate_upload(
     content_type: str | None = None,
     max_bytes: int = DEFAULT_MAX_UPLOAD_BYTES,
     max_rows: int | None = None,
+    allow_spreadsheet: bool = False,
 ) -> UploadCheck:
-    """Validate an uploaded text file, or raise with a seller-readable reason.
+    """Validate an uploaded file, or raise with a seller-readable reason.
 
     ``content_type`` is accepted and deliberately **not** used as evidence. It
     is recorded on the import batch so support can see what the client claimed,
     which is occasionally useful and never authoritative.
+
+    ``allow_spreadsheet`` lets a caller accept XLSX. It is opt-in rather than
+    the default because accepting a spreadsheet is only safe when the caller
+    also reads it safely — streamed, with formulas off, and with every cell
+    turned back into the text a CSV would have carried so the same money and
+    phone parsers run. :mod:`app.imports.spreadsheet` is that reader. A caller
+    that has not opted in still gets the old refusal, which is the right
+    answer for one that would feed the bytes to a CSV reader.
     """
     size = len(content)
     if size == 0:
@@ -139,10 +149,30 @@ def validate_upload(
 
     detected = _sniff(content)
     if detected is DetectedFormat.XLSX:
-        raise ValidationError(
-            "That looks like an Excel file. Save it as CSV and upload again — "
-            "reading it directly would risk misreading your amounts.",
-            details={"detected": str(detected)},
+        if not allow_spreadsheet:
+            raise ValidationError(
+                "That looks like an Excel file. Save it as CSV and upload again — "
+                "reading it directly would risk misreading your amounts.",
+                details={"detected": str(detected)},
+            )
+        if extension and extension not in _ALLOWED_SPREADSHEET_EXTENSIONS:
+            # A ZIP container that is not named like a workbook. ODS and DOCX
+            # sniff identically, and handing either to a spreadsheet reader
+            # produces nonsense rather than an error a seller can act on.
+            raise ValidationError(
+                "That looks like a compressed file rather than an Excel workbook. "
+                "Please upload a .xlsx file or a CSV.",
+                details={"extension": extension},
+            )
+        # The bytes are returned unread. Parsing belongs to the caller that
+        # opted in, because only it knows how to do it safely.
+        return UploadCheck(
+            detected=DetectedFormat.XLSX,
+            safe_name=safe,
+            original_name=filename or safe,
+            byte_size=size,
+            encoding="binary",
+            text="",
         )
     if detected in (DetectedFormat.XLS, DetectedFormat.PDF):
         raise ValidationError(

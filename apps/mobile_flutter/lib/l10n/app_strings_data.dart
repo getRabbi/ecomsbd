@@ -1806,6 +1806,9 @@ const Map<String, String> _secEn = <String, String>{
   'imp.readOnlyNote':
       'This only reads your file. Nothing is created until you say so.',
   'imp.ready': 'Ready',
+  'imp.running': 'Import started',
+  'imp.runningNote':
+      'This file is large, so it is being imported in the background. It will keep going even if you close this screen — check the import again in a few minutes.',
   'imp.reuploadNote':
       'Uploading the same file again will not create these a second time.',
   'imp.rowsToLookAt': 'Rows to look at',
@@ -2582,6 +2585,9 @@ const Map<String, String> _secBn = <String, String>{
   'imp.readOnlyNote':
       'এটি শুধু আপনার ফাইল পড়ে। আপনি না বললে কিছুই তৈরি হয় না।',
   'imp.ready': 'তৈরি',
+  'imp.running': 'ইমপোর্ট শুরু হয়েছে',
+  'imp.runningNote':
+      'ফাইলটি বড়, তাই পেছনে ইমপোর্ট চলছে। এই স্ক্রিন বন্ধ করলেও কাজ চলতে থাকবে — কয়েক মিনিট পর আবার দেখে নিন।',
   'imp.reuploadNote': 'একই ফাইল আবার আপলোড করলে এগুলো দ্বিতীয়বার তৈরি হবে না।',
   'imp.rowsToLookAt': 'যে সারিগুলো দেখতে হবে',
   'imp.rowsToLookAtSub': 'আপনার ফাইলে যা ছিল, সেটিই দেখানো হচ্ছে',

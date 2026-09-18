@@ -426,6 +426,10 @@ class ImportCommitResponse(BaseModel):
     import_batch: ImportResponse
     created_count: int
     skipped_count: int
+    #: True when the import was too large to commit inside the request and is
+    #: now running in the background. ``created_count`` is 0 in that case and
+    #: the client polls the batch rather than reading it as a result.
+    queued: bool = False
 
 
 # --------------------------------------------------------------------------- #

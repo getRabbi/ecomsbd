@@ -57,7 +57,11 @@ class ImportsRepository extends CachingRepository {
   ///
   /// A row that fails at creation is marked invalid with its reason and the
   /// rest continue.
-  Future<({ImportBatch batch, int created, int skipped})> commit(
+  /// A large import is committed in the background, and [queued] says so.
+  ///
+  /// Reading `created` as the result in that case would tell a seller their
+  /// import created nothing, when in fact it had only just started.
+  Future<({ImportBatch batch, int created, int skipped, bool queued})> commit(
     String importId,
   ) async {
     final json = await api.post('/imports/$importId/commit');
@@ -65,6 +69,7 @@ class ImportsRepository extends CachingRepository {
       batch: ImportBatch.fromJson(json['import_batch'] as Map<String, dynamic>),
       created: json['created_count'] as int? ?? 0,
       skipped: json['skipped_count'] as int? ?? 0,
+      queued: (json['queued'] as bool?) ?? false,
     );
   }
 

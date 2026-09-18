@@ -29,6 +29,7 @@ from app.couriers.jobs import (
 )
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
+from app.imports.jobs import commit_import_job, sweep_stuck_imports
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.worker.jobs import dispatch_outbox
 from app.worker.maintenance import (
@@ -95,6 +96,10 @@ class WorkerSettings:
         sync_courier_returns,
         sync_courier_payments,
         refresh_courier_credentials,
+        # Imports large enough to outlast a request are committed here. The
+        # job is enqueued by the request that marked the batch COMMITTING.
+        commit_import_job,
+        sweep_stuck_imports,
     ]
 
     cron_jobs: ClassVar[list[Any]] = [
@@ -148,6 +153,10 @@ class WorkerSettings:
         # Credential health: slow on purpose. Its job is to notice a revoked
         # key before a seller hits it mid-booking, not to poll a working one.
         cron(refresh_courier_credentials, hour={5, 17}, minute=25),
+        # A commit killed part-way leaves its batch in COMMITTING. This only
+        # reports them: re-running is deliberate, because one that keeps dying
+        # halfway is a bug to look at rather than a thing to retry forever.
+        cron(sweep_stuck_imports, minute={23}),
     ]
 
     on_startup = startup

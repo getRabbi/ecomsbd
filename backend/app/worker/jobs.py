@@ -75,6 +75,26 @@ async def _on_user_signed_in(_session: AsyncSession, event: OutboxEvent) -> None
     )
 
 
+@register_handler(OutboxTopic.IMPORT_COMMIT_REQUESTED)
+async def _on_import_commit_requested(session: AsyncSession, event: OutboxEvent) -> None:
+    """Commit a large import in the worker.
+
+    The request marked the batch COMMITTING and enqueued this inside its own
+    transaction, so the job exists if and only if the request committed. The
+    commit itself is idempotent — it only ever selects rows still READY or
+    WARNING — so a redelivered event finds nothing left to do rather than
+    creating a second copy of anything.
+    """
+    import_id = event.payload.get("import_id")
+    if not import_id:
+        return
+
+    from app.imports.service import build_import_service
+
+    service = build_import_service(session)
+    await service.commit(uuid.UUID(str(import_id)))
+
+
 async def dispatch_outbox(ctx: dict[str, Any] | None = None) -> dict[str, int]:
     """Claim and process a batch of outbox events.
 

@@ -74,6 +74,11 @@ class OutboxTopic(StrEnum):
     ORDER_CREATED = "order.created"
     ORDER_STATUS_CHANGED = "order.status_changed"
     IMPORT_COMMITTED = "import.committed"
+    #: A large import asked to be committed in the background. Enqueued inside
+    #: the request's transaction, so a request that rolls back never leaves an
+    #: orphan job behind — which is the whole reason this goes through the
+    #: outbox rather than straight to the queue.
+    IMPORT_COMMIT_REQUESTED = "import.commit_requested"
 
     # Later phases (master spec sections 41, 42)
     ORDER_BOOKED = "order.booked"

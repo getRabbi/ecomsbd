@@ -78,6 +78,10 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
   int _created = 0;
   int _skipped = 0;
 
+  /// A large import runs in the worker. Without this the done step would say
+  /// "0 records created" for an import that had only just started.
+  bool _queued = false;
+
   static const Map<String, List<String>> _fields = <String, List<String>>{
     'PRODUCTS': <String>[
       'name',
@@ -191,6 +195,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
           _batch = result.batch;
           _created = result.created;
           _skipped = result.skipped;
+          _queued = result.queued;
           _step = _Step.done;
         });
       }
@@ -213,6 +218,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
       _error = null;
       _created = 0;
       _skipped = 0;
+      _queued = false;
     });
   }
 
@@ -468,21 +474,34 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const Icon(
-                Icons.check_circle_outline,
+              Icon(
+                _queued
+                    ? Icons.hourglass_top_outlined
+                    : Icons.check_circle_outline,
                 size: 22,
-                color: EcomsbdColors.green,
+                color: _queued ? EcomsbdColors.orange : EcomsbdColors.green,
               ),
               const SizedBox(width: EcomsbdSpacing.sm),
               Expanded(
                 child: Text(
-                  '$_created record${_created == 1 ? '' : 's'} created',
+                  _queued
+                      ? context.tr('imp.running')
+                      : '$_created record${_created == 1 ? '' : 's'} created',
                   style: EcomsbdType.sectionTitle,
                 ),
               ),
             ],
           ),
-          if (_skipped > 0) ...<Widget>[
+          if (_queued) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(
+              // Says plainly that it is still going. Showing "0 created" here
+              // would read as a failed import that in fact had just started.
+              context.tr('imp.runningNote'),
+              style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+            ),
+          ],
+          if (!_queued && _skipped > 0) ...<Widget>[
             const SizedBox(height: 4),
             Text(
               '$_skipped row${_skipped == 1 ? '' : 's'} skipped — duplicates or '
