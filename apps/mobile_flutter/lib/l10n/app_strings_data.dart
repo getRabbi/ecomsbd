@@ -32,6 +32,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._riskBn,
   ..._reconV2Bn,
   ..._cashflowBn,
+  ..._rtoBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -53,6 +54,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._riskEn,
   ..._reconV2En,
   ..._cashflowEn,
+  ..._rtoEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -3286,4 +3288,161 @@ const Map<String, String> _cashflowBn = <String, String>{
   'rcv.lastPaid': 'শেষ পেমেন্ট {when}',
   'rcv.neverPaid': 'এখনো কোনো পেমেন্ট রেকর্ড হয়নি',
   'rcv.noDelay': 'সাধারণত কত দিনে টাকা দেয় বলার মতো পেমেন্ট এখনো হয়নি',
+};
+
+// --------------------------------------------------------------------------- //
+// Returns and RTO intelligence (V2.2)
+// --------------------------------------------------------------------------- //
+
+const Map<String, String> _rtoEn = <String, String>{
+  'rto.title': 'Returns & RTO',
+  'rto.eyebrow': 'Return intelligence',
+  'rto.description':
+      'Facts from your own parcels: what came back, with which product and which courier.',
+  'rto.tileSub': 'RTO rate, products, couriers, repeat returns',
+  'rto.tileFact':
+      'RTO {rate} in the last 30 days · {rto} of {completed} came back',
+  'rto.couldNotLoad': 'Could not load return figures',
+  'rto.rateWindow': 'RTO rate · last {days} days',
+  'rto.limited': 'Limited data',
+  'rto.limitedHint':
+      'Fewer than {min} completed parcels — not enough to compare.',
+  'rto.noCompleted': 'No completed parcels in this period yet.',
+  'rto.rateOf': '{rto} of {completed} completed parcels came back',
+  'rto.delivered': 'Delivered',
+  'rto.partial': 'Partly delivered',
+  'rto.returned': 'Returned',
+  'rto.courierCancelled': 'Cancelled at courier (came back)',
+  'rto.lost': 'Lost / damaged',
+  'rto.openNow': 'With couriers now',
+  'rto.cancelledBefore': 'Cancelled before dispatch',
+  'rto.definition':
+      'RTO = parcels returned or cancelled at the courier after dispatch. The rate is over delivered, partly delivered and RTO parcels. Parcels still on the way and orders cancelled before dispatch are not counted.',
+  'rto.windowDays': '{days} days',
+  'rto.none': 'None yet',
+  'rto.windowCounts': '{rto} of {completed}',
+  'rto.trendTitle': 'Weekly RTO',
+  'rto.trendSub': 'Last 12 weeks, parcels completed each week',
+  'rto.trendNoLatest': 'No parcel completed this week yet.',
+  'rto.trendLatest': 'This week: {rto} of {completed} came back',
+  'rto.couriersTitle': 'By courier',
+  'rto.couriersSub': 'Last 90 days. Facts only, no best-courier pick.',
+  'rto.excluded': '{providers}: no live integration yet, so no rate is shown.',
+  'rto.courierCounts': '{completed} completed · {rto} RTO · {open} on the way',
+  'rto.trend.UP': 'Last 30 days {recent} vs {previous} before — up',
+  'rto.trend.DOWN': 'Last 30 days {recent} vs {previous} before — down',
+  'rto.trend.FLAT': 'Last 30 days {recent} vs {previous} before — steady',
+  'rto.trend.INSUFFICIENT_DATA': 'Not enough parcels for a trend yet',
+  'rto.productsTitle': 'By product',
+  'rto.productsSub': 'Last 90 days, highest measured RTO first',
+  'rto.rowCounts': '{completed} completed · {rto} RTO',
+  'rto.productValue': '{amount} in returned parcels',
+  'rto.areasTitle': 'By district',
+  'rto.areasSub': 'From the district typed on the order, last 90 days',
+  'rto.areasNotReliable':
+      'District comparison is off: only {coverage} of completed parcels have a district, or there are too few parcels. Add the district when you take orders to turn it on.',
+  'rto.patternsTitle': 'Repeat returns',
+  'rto.patternsSub':
+      'Customers whose parcels show a pattern. Observations, not accusations.',
+  'rto.noPatterns': 'No repeat return pattern in the last 90 days.',
+  'rto.ownShopOnly':
+      'Only your shop’s parcels. Never shared with other sellers.',
+  'rto.customerTitle': 'Parcel history',
+  'rto.onTheWay': 'On the way',
+  'rto.observationsTitle': 'What the parcels show',
+  'rto.noObservations': 'No repeat return pattern.',
+  'rto.observationsNote':
+      'Each line comes from the counts — it is not a judgement about anyone.',
+  'rto.recentTitle': 'Recent parcels',
+  'rto.outcome.DELIVERED': 'Delivered',
+  'rto.outcome.PARTIAL': 'Partly delivered',
+  'rto.outcome.RTO': 'Came back',
+  'rto.outcome.LOST': 'Lost',
+  'rto.outcome.IN_TRANSIT': 'On the way',
+  'rto.obs.REPEAT_RTO': '{rto} of {parcels} completed parcels came back.',
+  'rto.obs.RTO_AFTER_DELIVERIES':
+      'The latest {rto} parcel(s) came back after {earlierDelivered} earlier deliveries.',
+  'rto.obs.WORSENING':
+      '{rto} of the last {parcels} came back, against {earlierRto} of {earlier} before.',
+  'rto.obs.IMPROVING':
+      'Only {rto} of the last {parcels} came back, against {earlierRto} of {earlier} before.',
+  'rto.obs.PRODUCT_REPEAT_RTO': '{product}: {rto} parcels came back.',
+  'rc.parcelsTitle': 'As parcels (RTO view)',
+  'rc.rtoRate': 'RTO rate',
+};
+
+const Map<String, String> _rtoBn = <String, String>{
+  'rto.title': 'রিটার্ন ও RTO',
+  'rto.eyebrow': 'রিটার্ন বিশ্লেষণ',
+  'rto.description':
+      'আপনার নিজের পার্সেলের হিসাব: কী ফেরত এসেছে, কোন পণ্যে, কোন কুরিয়ারে।',
+  'rto.tileSub': 'RTO হার, পণ্য, কুরিয়ার, বারবার ফেরত',
+  'rto.tileFact': 'গত ৩০ দিনে RTO {rate} · {completed}টির মধ্যে {rto}টি ফেরত',
+  'rto.couldNotLoad': 'রিটার্নের হিসাব আনা যায়নি',
+  'rto.rateWindow': 'RTO হার · গত {days} দিন',
+  'rto.limited': 'তথ্য কম',
+  'rto.limitedHint':
+      '{min}টির কম পার্সেল শেষ হয়েছে — তুলনা করার মতো যথেষ্ট নয়।',
+  'rto.noCompleted': 'এই সময়ে এখনো কোনো পার্সেল শেষ হয়নি।',
+  'rto.rateOf': 'শেষ হওয়া {completed}টি পার্সেলের মধ্যে {rto}টি ফেরত এসেছে',
+  'rto.delivered': 'ডেলিভারি হয়েছে',
+  'rto.partial': 'আংশিক ডেলিভারি',
+  'rto.returned': 'ফেরত এসেছে',
+  'rto.courierCancelled': 'কুরিয়ারে বাতিল (ফেরত এসেছে)',
+  'rto.lost': 'হারানো / নষ্ট',
+  'rto.openNow': 'এখন কুরিয়ারের কাছে',
+  'rto.cancelledBefore': 'পাঠানোর আগেই বাতিল',
+  'rto.definition':
+      'RTO = পাঠানোর পরে ফেরত আসা বা কুরিয়ারে বাতিল হওয়া পার্সেল। হার গোনা হয় ডেলিভারি, আংশিক ডেলিভারি ও RTO মিলিয়ে। পথে থাকা পার্সেল আর পাঠানোর আগে বাতিল অর্ডার এতে ধরা হয় না।',
+  'rto.windowDays': '{days} দিন',
+  'rto.none': 'এখনো নেই',
+  'rto.windowCounts': '{completed}টির {rto}টি',
+  'rto.trendTitle': 'সাপ্তাহিক RTO',
+  'rto.trendSub': 'গত ১২ সপ্তাহ, প্রতি সপ্তাহে শেষ হওয়া পার্সেল',
+  'rto.trendNoLatest': 'এই সপ্তাহে এখনো কোনো পার্সেল শেষ হয়নি।',
+  'rto.trendLatest': 'এই সপ্তাহে: {completed}টির মধ্যে {rto}টি ফেরত',
+  'rto.couriersTitle': 'কুরিয়ার অনুযায়ী',
+  'rto.couriersSub': 'গত ৯০ দিন। শুধু তথ্য — সেরা কুরিয়ার বাছাই করা হয় না।',
+  'rto.excluded': '{providers}: এখনো লাইভ সংযোগ নেই, তাই হার দেখানো হয় না।',
+  'rto.courierCounts': '{completed}টি শেষ · {rto}টি RTO · {open}টি পথে',
+  'rto.trend.UP': 'গত ৩০ দিনে {recent}, আগের ৩০ দিনে {previous} — বেড়েছে',
+  'rto.trend.DOWN': 'গত ৩০ দিনে {recent}, আগের ৩০ দিনে {previous} — কমেছে',
+  'rto.trend.FLAT': 'গত ৩০ দিনে {recent}, আগের ৩০ দিনে {previous} — প্রায় একই',
+  'rto.trend.INSUFFICIENT_DATA': 'ট্রেন্ড বলার মতো পার্সেল এখনো নেই',
+  'rto.productsTitle': 'পণ্য অনুযায়ী',
+  'rto.productsSub': 'গত ৯০ দিন, যথেষ্ট তথ্যসহ বেশি RTO আগে',
+  'rto.rowCounts': '{completed}টি শেষ · {rto}টি RTO',
+  'rto.productValue': 'ফেরত পার্সেলে {amount}',
+  'rto.areasTitle': 'জেলা অনুযায়ী',
+  'rto.areasSub': 'অর্ডারে লেখা জেলা থেকে, গত ৯০ দিন',
+  'rto.areasNotReliable':
+      'জেলার তুলনা বন্ধ আছে: শেষ হওয়া পার্সেলের মাত্র {coverage}-এ জেলা লেখা আছে, অথবা পার্সেল খুব কম। অর্ডার নেওয়ার সময় জেলা লিখলে এটি চালু হবে।',
+  'rto.patternsTitle': 'বারবার ফেরত',
+  'rto.patternsSub':
+      'যেসব কাস্টমারের পার্সেলে একটা ধরন দেখা যাচ্ছে। এটা পর্যবেক্ষণ, অভিযোগ নয়।',
+  'rto.noPatterns': 'গত ৯০ দিনে বারবার ফেরতের কোনো ধরন নেই।',
+  'rto.ownShopOnly':
+      'শুধু আপনার শপের পার্সেল। অন্য কোনো সেলারের সঙ্গে শেয়ার হয় না।',
+  'rto.customerTitle': 'পার্সেলের ইতিহাস',
+  'rto.onTheWay': 'পথে আছে',
+  'rto.observationsTitle': 'পার্সেলে যা দেখা যাচ্ছে',
+  'rto.noObservations': 'বারবার ফেরতের কোনো ধরন নেই।',
+  'rto.observationsNote': 'প্রতিটি লাইন সংখ্যা থেকে — কারও সম্পর্কে রায় নয়।',
+  'rto.recentTitle': 'সাম্প্রতিক পার্সেল',
+  'rto.outcome.DELIVERED': 'ডেলিভারি',
+  'rto.outcome.PARTIAL': 'আংশিক',
+  'rto.outcome.RTO': 'ফেরত',
+  'rto.outcome.LOST': 'হারানো',
+  'rto.outcome.IN_TRANSIT': 'পথে',
+  'rto.obs.REPEAT_RTO':
+      'শেষ হওয়া {parcels}টি পার্সেলের মধ্যে {rto}টি ফেরত এসেছে।',
+  'rto.obs.RTO_AFTER_DELIVERIES':
+      'আগের {earlierDelivered}টি ডেলিভারির পরে সর্বশেষ {rto}টি পার্সেল ফেরত এসেছে।',
+  'rto.obs.WORSENING':
+      'শেষ {parcels}টির মধ্যে {rto}টি ফেরত, আগের {earlier}টির মধ্যে {earlierRto}টি।',
+  'rto.obs.IMPROVING':
+      'শেষ {parcels}টির মধ্যে মাত্র {rto}টি ফেরত, আগের {earlier}টির মধ্যে {earlierRto}টি।',
+  'rto.obs.PRODUCT_REPEAT_RTO': '{product}: {rto}টি পার্সেল ফেরত এসেছে।',
+  'rc.parcelsTitle': 'পার্সেল হিসেবে (RTO)',
+  'rc.rtoRate': 'RTO হার',
 };

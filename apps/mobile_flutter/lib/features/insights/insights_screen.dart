@@ -5,6 +5,7 @@ import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/analytics/models.dart';
+import '../../data/analytics/rto_models.dart';
 import '../../design/charts/bar_charts.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
@@ -15,6 +16,7 @@ import '../../l10n/app_strings.dart';
 import '../expenses/expenses_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
+import 'rto_screen.dart';
 
 /// The Insights tab — profit and business intelligence.
 ///
@@ -42,6 +44,7 @@ class InsightsScreen extends ConsumerWidget {
         ref.invalidate(profitReportProvider);
         ref.invalidate(returnReportProvider);
         ref.invalidate(productProfitProvider);
+        ref.invalidate(rtoSummaryProvider);
         await ref.read(profitReportProvider.future);
       },
       child: ListView(
@@ -139,6 +142,8 @@ class InsightsScreen extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: EcomsbdSpacing.md),
+          _RtoEntry(value: ref.watch(rtoSummaryProvider).valueOrNull?.value),
           const SizedBox(height: EcomsbdSpacing.md),
           ResponsiveGrid(
             minTileWidth: 320,
@@ -449,6 +454,32 @@ class _ReturnReasons extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The way into Returns & RTO, carrying the headline fact when it is known.
+class _RtoEntry extends StatelessWidget {
+  const _RtoEntry({required this.value});
+
+  final RtoSummary? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = value?.counts;
+    return QuickActionTile(
+      icon: Icons.assignment_return_outlined,
+      title: context.tr('rto.title'),
+      subtitle: counts == null || counts.completed == 0
+          ? context.tr('rto.tileSub')
+          : context.tr('rto.tileFact', <String, Object?>{
+              'rate': counts.rateLabel,
+              'rto': counts.rto,
+              'completed': counts.completed,
+            }),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const RtoScreen()),
       ),
     );
   }

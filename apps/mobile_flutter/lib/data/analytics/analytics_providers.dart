@@ -7,6 +7,7 @@ import '../commerce/paged_list_controller.dart';
 import '../commerce/repository_support.dart';
 import 'analytics_repository.dart';
 import 'models.dart';
+import 'rto_models.dart';
 
 /// Wiring for Home, Insights, expenses and the notification centre.
 
@@ -32,6 +33,34 @@ final profitReportProvider = FutureProvider<Sourced<ProfitReport>>((ref) {
 final returnReportProvider = FutureProvider<Sourced<ReturnReport>>((ref) {
   return ref.watch(analyticsRepositoryProvider).returns();
 });
+
+/// Return / RTO intelligence (V2.2). Every figure is the server's.
+final rtoSummaryProvider = FutureProvider<Sourced<RtoSummary>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoSummary();
+});
+
+final rtoTrendProvider = FutureProvider<Sourced<List<RtoWeek>>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoTrend();
+});
+
+final rtoCouriersProvider = FutureProvider<Sourced<CourierRtoReport>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoCouriers();
+});
+
+final rtoAreasProvider = FutureProvider<Sourced<AreaRtoReport>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoAreas();
+});
+
+final rtoPatternsProvider = FutureProvider<Sourced<List<CustomerPattern>>>((
+  ref,
+) {
+  return ref.watch(analyticsRepositoryProvider).rtoPatterns();
+});
+
+final rtoCustomerProvider = FutureProvider.autoDispose
+    .family<CustomerRtoHistory, String>((ref, customerId) {
+      return ref.watch(analyticsRepositoryProvider).rtoCustomer(customerId);
+    });
 
 /// Contribution profit by product, best first.
 final productProfitProvider = FutureProvider<Sourced<List<ProductLine>>>((ref) {

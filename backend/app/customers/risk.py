@@ -2,8 +2,8 @@
 
 Master spec sections 24, 121 and 130. Three constraints shape everything here:
 
-* **First-party data only.** The inputs are the tenant's own denormalised
-  counters on :class:`~app.customers.models.Customer`. No licensed aggregator,
+* **First-party data only.** The inputs are the tenant's own parcel and order
+  outcomes (:class:`app.analytics.rto.CustomerHistory`). No licensed aggregator,
   no cross-tenant view, nothing scraped. A seller sees how *their* customers
   behaved with *them*, which is the only history they are entitled to.
 * **Explainable, not scored.** The band is a function of two integers the
@@ -20,8 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-
-from app.customers.models import Customer
+from typing import Protocol
 
 #: Finished orders needed before a band is claimed at all. Two deliveries and a
 #: return is the smallest history where the ratio says anything; below that the
@@ -63,6 +62,33 @@ class RiskReason(StrEnum):
     OWN_SHOP_HISTORY_ONLY = "OWN_SHOP_HISTORY_ONLY"
 
 
+class RiskInputs(Protocol):
+    """The counts the band reads.
+
+    Satisfied by :class:`app.analytics.rto.CustomerHistory`, which derives them
+    from the shop's parcels with the shared RTO classification: delivered
+    includes partial deliveries, returned is every RTO parcel (returned or
+    cancelled at the courier), cancelled is orders cancelled before dispatch.
+    """
+
+    @property
+    def order_count(self) -> int: ...
+    @property
+    def delivered_count(self) -> int: ...
+    @property
+    def returned_count(self) -> int: ...
+    @property
+    def cancelled_count(self) -> int: ...
+    @property
+    def terminal_count(self) -> int: ...
+    @property
+    def success_rate_basis_points(self) -> int | None: ...
+    @property
+    def first_order_at(self) -> datetime | None: ...
+    @property
+    def last_order_at(self) -> datetime | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class RiskAssessment:
     """One customer's delivery history and the band it implies."""
@@ -79,13 +105,12 @@ class RiskAssessment:
     reasons: tuple[RiskReason, ...]
 
 
-def assess(customer: Customer) -> RiskAssessment:
+def assess(customer: RiskInputs) -> RiskAssessment:
     """Band ``customer`` from their finished orders with this shop.
 
-    The denominator is :attr:`Customer.terminal_count` — delivered, returned and
-    cancelled — and the numerator is deliveries, both reused from the model
-    rather than recomputed here, so this never drifts from what the customers
-    list already displays.
+    The denominator is ``terminal_count`` — delivered, returned and cancelled —
+    and the numerator is deliveries. The API feeds it the parcel-derived
+    history the customers list also shows, so the two never disagree.
     """
     terminal = customer.terminal_count
     rate = customer.success_rate_basis_points
@@ -150,6 +175,7 @@ __all__ = [
     "MIN_TERMINAL_ORDERS",
     "UNKNOWN",
     "RiskAssessment",
+    "RiskInputs",
     "RiskReason",
     "RiskState",
     "assess",

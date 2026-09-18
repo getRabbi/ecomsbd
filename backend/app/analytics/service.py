@@ -25,6 +25,7 @@ from datetime import date, timedelta
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.rto import RTO_STATUSES, is_completed_status, is_rto_status
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.core.clock import business_date, ensure_utc, utc_now
 from app.expenses.service import ExpenseService
@@ -265,7 +266,9 @@ class AnalyticsService:
             orders_today=await self._order_count(day, day),
             delivered_today=outcomes.get(str(ConsignmentStatus.DELIVERED), 0)
             + outcomes.get(str(ConsignmentStatus.PARTIAL_DELIVERED), 0),
-            returned_today=outcomes.get(str(ConsignmentStatus.RETURNED), 0),
+            returned_today=sum(
+                count for outcome, count in outcomes.items() if is_rto_status(outcome)
+            ),
             gross_sales_paisa=await self._gross_sales(day, day),
             realized_revenue_paisa=totals["realized_revenue_paisa"],
             contribution_profit_paisa=totals["contribution_profit_paisa"],
@@ -328,18 +331,23 @@ class AnalyticsService:
             .group_by(ProfitSnapshot.outcome)
         )
 
+        # The shared RTO definition (app.analytics.rto): returns are RETURNED
+        # and courier-CANCELLED parcels, over completed parcels only, so this
+        # rate is the same number the RTO screens show.
         for outcome, count, outward, back, packaging, write_off, profit in rows:
-            report.parcel_count += int(count)
-            if outcome != str(ConsignmentStatus.RETURNED):
+            if not is_completed_status(outcome):
                 continue
-            report.return_count = int(count)
+            report.parcel_count += int(count)
+            if not is_rto_status(outcome):
+                continue
+            report.return_count += int(count)
             # On a return the outward leg was paid and collected nothing, so
             # it is a loss rather than a cost of sale.
-            report.outward_delivery_cost_paisa = int(outward or 0)
-            report.return_delivery_cost_paisa = int(back or 0)
-            report.packaging_loss_paisa = int(packaging or 0)
-            report.write_off_paisa = int(write_off or 0)
-            report.direct_loss_paisa = -min(0, int(profit or 0))
+            report.outward_delivery_cost_paisa += int(outward or 0)
+            report.return_delivery_cost_paisa += int(back or 0)
+            report.packaging_loss_paisa += int(packaging or 0)
+            report.write_off_paisa += int(write_off or 0)
+            report.direct_loss_paisa += -min(0, int(profit or 0))
 
         report.by_reason, report.unknown_reason_count = await self._return_reasons(since, until)
         report.by_product = await self._returns_by_product(since, until)
@@ -395,7 +403,7 @@ class AnalyticsService:
             weights = [weight for _, weight, _ in lines]
             profit_shares = Money(profit).allocate(weights)
             revenue_shares = Money(revenue).allocate(weights)
-            returned = outcome == str(ConsignmentStatus.RETURNED)
+            returned = is_rto_status(outcome)
             delivered = outcome in (
                 str(ConsignmentStatus.DELIVERED),
                 str(ConsignmentStatus.PARTIAL_DELIVERED),
@@ -647,7 +655,7 @@ class AnalyticsService:
                 sa.func.coalesce(sa.func.sum(-ProfitSnapshot.contribution_profit_paisa), 0)
             ).where(
                 *self._window(since, until),
-                ProfitSnapshot.outcome == str(ConsignmentStatus.RETURNED),
+                ProfitSnapshot.outcome.in_(RTO_STATUSES),
                 ProfitSnapshot.contribution_profit_paisa < 0,
             )
         )
@@ -658,7 +666,7 @@ class AnalyticsService:
             sa.select(ProfitSnapshot.return_reason, sa.func.count())
             .where(
                 *self._window(since, until),
-                ProfitSnapshot.outcome == str(ConsignmentStatus.RETURNED),
+                ProfitSnapshot.outcome.in_(RTO_STATUSES),
             )
             .group_by(ProfitSnapshot.return_reason)
         )
@@ -730,9 +738,11 @@ def _rate_lines(rows: sa.CursorResult | object) -> list[RateLine]:
     """Fold ``(label, outcome, count, profit)`` rows into one line per label."""
     totals: dict[str, list[int]] = {}
     for label, outcome, count, profit in rows:  # type: ignore[union-attr]
+        if not is_completed_status(outcome):
+            continue
         entry = totals.setdefault(str(label), [0, 0, 0])
         entry[0] += int(count)
-        if outcome == str(ConsignmentStatus.RETURNED):
+        if is_rto_status(outcome):
             entry[1] += int(count)
             entry[2] += -min(0, int(profit or 0))
 

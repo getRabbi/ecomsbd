@@ -278,6 +278,13 @@ button:disabled {
   margin: 6px 0 0;
 }
 
+/* Two cards side by side on a desktop, stacked on a narrow screen. */
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+}
+
 /* -------------------------------------------------------------- tables --- */
 
 .tablewrap {

@@ -38,6 +38,7 @@ const NAV: NavGroup[] = [
       { href: '/customers', labelKey: 'nav.customers', icon: '☺' },
       { href: '/products', labelKey: 'nav.products', icon: '⬚' },
       { href: '/couriers', labelKey: 'nav.couriers', icon: '⇢' },
+      { href: '/returns', labelKey: 'nav.returns', icon: '↺' },
     ],
   },
   {

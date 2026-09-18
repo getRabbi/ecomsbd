@@ -28,6 +28,7 @@ from app.api.v1 import (
     products,
     providers,
     reconciliation,
+    rto,
     sync,
     team,
     tenants,
@@ -53,6 +54,7 @@ api_router.include_router(couriers.router)
 api_router.include_router(courier_webhooks.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
+api_router.include_router(rto.router)
 api_router.include_router(team.router)
 api_router.include_router(account.account_router)
 api_router.include_router(account.export_router)

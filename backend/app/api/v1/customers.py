@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
+from app.analytics.rto import CustomerHistory, RtoService
 from app.api.deps import (
     DbSession,
     EntitlementsDep,
@@ -29,6 +30,11 @@ from app.api.v1.commerce_schemas import (
     CustomerDetailResponse,
     CustomerResponse,
     CustomerUpdatePayload,
+)
+from app.api.v1.rto_schemas import (
+    ObservationResponse,
+    OutcomeCountsResponse,
+    ParcelEventResponse,
 )
 from app.common.pagination import Page, decode_cursor
 from app.customers import risk as risk_rules
@@ -47,7 +53,14 @@ async def _customers(db: DbSession, settings: SettingsDep) -> CustomerService:
 CustomerServiceDep = Annotated[CustomerService, Depends(_customers)]
 
 
-def _to_response(customer: Customer) -> CustomerResponse:
+def _to_response(customer: Customer, history: CustomerHistory | None = None) -> CustomerResponse:
+    """A customer row, with counts derived from the shop's parcels.
+
+    The denormalised counters on the row were only ever maintained for orders
+    placed; delivered and returned never moved. ``history`` comes from the
+    shared RTO classification, the same numbers the Risk Check bands on.
+    """
+    history = history or CustomerHistory(order_count=customer.order_count)
     return CustomerResponse(
         id=customer.id,
         name=customer.name,
@@ -55,20 +68,22 @@ def _to_response(customer: Customer) -> CustomerResponse:
         phone_last4=customer.phone_last4,
         flag=customer.flag,
         is_repeat_buyer=customer.is_repeat_buyer,
-        order_count=customer.order_count,
-        delivered_count=customer.delivered_count,
-        returned_count=customer.returned_count,
-        cancelled_count=customer.cancelled_count,
-        success_rate_basis_points=customer.success_rate_basis_points,
+        order_count=history.order_count,
+        delivered_count=history.delivered_count,
+        returned_count=history.returned_count,
+        cancelled_count=history.cancelled_count,
+        success_rate_basis_points=history.success_rate_basis_points,
         realized_revenue_paisa=customer.realized_revenue_paisa,
-        first_order_at=customer.first_order_at,
-        last_order_at=customer.last_order_at,
+        first_order_at=history.first_order_at or customer.first_order_at,
+        last_order_at=history.last_order_at or customer.last_order_at,
         created_at=customer.created_at,
     )
 
 
-def _to_detail(customer: Customer) -> CustomerDetailResponse:
-    base = _to_response(customer)
+def _to_detail(
+    customer: Customer, history: CustomerHistory | None = None
+) -> CustomerDetailResponse:
+    base = _to_response(customer, history)
     return CustomerDetailResponse(
         **base.model_dump(),
         notes=customer.notes,
@@ -79,6 +94,10 @@ def _to_detail(customer: Customer) -> CustomerDetailResponse:
     )
 
 
+async def _history(db: DbSession, customer: Customer) -> CustomerHistory:
+    return (await RtoService(db).customer_counts([customer.id]))[customer.id]
+
+
 @router.get(
     "",
     response_model=Page[CustomerResponse],
@@ -87,6 +106,7 @@ def _to_detail(customer: Customer) -> CustomerDetailResponse:
 )
 async def list_customers(
     principal: TenantPrincipal,
+    db: DbSession,
     customers: CustomerServiceDep,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
@@ -108,7 +128,11 @@ async def list_customers(
         repeat_only=repeat_only,
         flag=flag,
     )
-    return Page[CustomerResponse].build(rows, limit=limit, serializer=_to_response)
+    # One grouped read for the whole page, not one per row.
+    histories = await RtoService(db).customer_counts(row.id for row in rows)
+    return Page[CustomerResponse].build(
+        rows, limit=limit, serializer=lambda row: _to_response(row, histories.get(row.id))
+    )
 
 
 @router.post(
@@ -137,6 +161,7 @@ async def create_customer(
 )
 async def lookup_customer(
     principal: TenantPrincipal,
+    db: DbSession,
     customers: CustomerServiceDep,
     phone: Annotated[str, Query(min_length=6, max_length=24)],
 ) -> CustomerDetailResponse | None:
@@ -146,7 +171,9 @@ async def lookup_customer(
     the normal case at this point in the flow, not an error.
     """
     customer = await customers.find_by_phone(phone)
-    return _to_detail(customer) if customer else None
+    if customer is None:
+        return None
+    return _to_detail(customer, await _history(db, customer))
 
 
 class RiskCheckResponse(BaseModel):
@@ -178,6 +205,16 @@ class RiskCheckResponse(BaseModel):
     #: Checks left in today's quota, or ``None`` when the plan is unlimited.
     checks_remaining: int | None = None
 
+    # --- V2.2 return intelligence ------------------------------------------
+    #: Completed parcels by outcome (RTO split into returned / courier
+    #: cancelled) and the RTO rate over completed parcels only.
+    parcels: OutcomeCountsResponse | None = None
+    in_transit_count: int = 0
+    #: Latest parcels, newest first (at most ten).
+    recent: list[ParcelEventResponse] = Field(default_factory=list)
+    #: Factual repeat patterns, each with the counts that make it true.
+    observations: list[ObservationResponse] = Field(default_factory=list)
+
 
 @router.get(
     "/risk-check",
@@ -187,6 +224,7 @@ class RiskCheckResponse(BaseModel):
 )
 async def risk_check(
     principal: TenantPrincipal,
+    db: DbSession,
     customers: CustomerServiceDep,
     entitlements: EntitlementsDep,
     phone: Annotated[str, Query(min_length=6, max_length=24)],
@@ -211,7 +249,10 @@ async def risk_check(
 
     # The number itself is never logged: it reaches the hasher and nothing else.
     customer = await customers.find_by_phone(phone)
-    assessment = risk_rules.assess(customer) if customer else risk_rules.UNKNOWN
+    # Parcel-derived, through the shared RTO classification. The V1 rule is
+    # unchanged; what changed is that delivered and returned are now real.
+    history = await RtoService(db).customer_history(customer.id) if customer else None
+    assessment = risk_rules.assess(history) if history else risk_rules.UNKNOWN
 
     return RiskCheckResponse(
         found=customer is not None,
@@ -230,6 +271,12 @@ async def risk_check(
         last_order_at=assessment.last_order_at,
         reasons=[str(reason) for reason in assessment.reasons],
         checks_remaining=usage.remaining,
+        parcels=OutcomeCountsResponse.of(history.counts) if history else None,
+        in_transit_count=history.counts.in_transit if history else 0,
+        recent=[ParcelEventResponse.of(event) for event in history.recent] if history else [],
+        observations=(
+            [ObservationResponse.of(obs) for obs in history.observations] if history else []
+        ),
     )
 
 
@@ -242,9 +289,11 @@ async def risk_check(
 async def get_customer(
     customer_id: uuid.UUID,
     principal: TenantPrincipal,
+    db: DbSession,
     customers: CustomerServiceDep,
 ) -> CustomerDetailResponse:
-    return _to_detail(await customers.get(customer_id))
+    customer = await customers.get(customer_id)
+    return _to_detail(customer, await _history(db, customer))
 
 
 @router.patch(
@@ -257,6 +306,7 @@ async def update_customer(
     customer_id: uuid.UUID,
     payload: CustomerUpdatePayload,
     principal: TenantPrincipal,
+    db: DbSession,
     customers: CustomerServiceDep,
 ) -> CustomerDetailResponse:
     customer = await customers.update(
@@ -266,7 +316,7 @@ async def update_customer(
         flag=payload.flag,
         flag_reason=payload.flag_reason,
     )
-    return _to_detail(customer)
+    return _to_detail(customer, await _history(db, customer))
 
 
 class RevealPhoneRequest(BaseModel):
