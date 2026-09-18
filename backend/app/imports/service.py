@@ -25,7 +25,8 @@ from app.common.uploads import DetectedFormat, UploadCheck, validate_upload
 from app.core.clock import utc_now
 from app.core.config import Settings, get_settings
 from app.core.context import current_context
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import AppError, ConflictError, NotFoundError, ValidationError
+from app.core.logging import get_logger
 from app.customers.service import CustomerService
 from app.imports.models import (
     ImportBatch,
@@ -48,6 +49,8 @@ __all__ = [
     "ImportService",
     "build_import_service",
 ]
+
+log = get_logger(__name__)
 
 #: Upper bound on one file. Large migrations are split, which also keeps a
 #: mistake's blast radius small.
@@ -358,7 +361,7 @@ class ImportService:
         rest continue. An import is not all-or-nothing: one bad row out of two
         hundred should not cost the seller the other hundred and ninety-nine.
         """
-        batch = await self.get(import_id)
+        batch = await self.get(import_id, lock=True)
         if batch.import_status is ImportStatus.COMMITTED:
             raise ConflictError(
                 "This import was already committed",
@@ -404,7 +407,7 @@ class ImportService:
                 row.status = ImportRowStatus.INVALID
                 row.errors = [
                     *row.errors,
-                    {"field": "_row", "message": str(error)[:300]},
+                    {"field": "_row", "message": _row_failure_message(error)},
                 ]
                 batch.invalid_count += 1
                 continue
@@ -482,8 +485,19 @@ class ImportService:
 
     # --------------------------------------------------------------- read ---
 
-    async def get(self, import_id: uuid.UUID) -> ImportBatch:
-        batch = await self._db.get(ImportBatch, import_id)
+    async def get(self, import_id: uuid.UUID, *, lock: bool = False) -> ImportBatch:
+        """Read a batch. ``lock`` takes the row for the rest of the transaction.
+
+        The commit paths lock, so a retry that races a still-running request
+        waits for it and then finds the batch committed or claimed, instead of
+        both reading ``VALIDATED`` and creating every row twice.
+        """
+        batch = await self._db.get(
+            ImportBatch,
+            import_id,
+            with_for_update=True if lock else None,
+            populate_existing=lock,
+        )
         if batch is None:
             raise NotFoundError("Import not found")
         return batch
@@ -517,7 +531,7 @@ class ImportService:
         The batch moves to ``COMMITTING`` here so a second tap finds it already
         claimed instead of enqueueing a second job.
         """
-        batch = await self.get(import_id)
+        batch = await self.get(import_id, lock=True)
         if batch.import_status is ImportStatus.COMMITTED:
             raise ConflictError(
                 "This import was already committed",
@@ -738,6 +752,20 @@ class ImportService:
             raise NotFoundError("That saved mapping does not exist")
         await self._db.delete(saved)
         await self._db.flush()
+
+
+def _row_failure_message(error: Exception) -> str:
+    """What a seller is told about a row that failed at creation.
+
+    This text reaches the row report and the downloadable error CSV. An
+    ``AppError`` carries copy written for a seller; anything else is an internal
+    exception whose text can name tables, constraints or values, and is logged
+    rather than shown.
+    """
+    if isinstance(error, AppError):
+        return error.message_en[:300]
+    log.warning("import row failed", extra={"error": type(error).__name__})
+    return "This row could not be created. Check its values and import it again."
 
 
 def build_import_service(session: AsyncSession, settings: Settings | None = None) -> ImportService:

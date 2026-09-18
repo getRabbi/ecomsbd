@@ -150,6 +150,38 @@ export const api = {
 };
 
 /**
+ * Send a file to the API as multipart form data, such as an import upload.
+ *
+ * The browser only carries the bytes: the API sniffs, parses and validates
+ * them, so a large spreadsheet is never read into memory on this side. The
+ * boundary header is left to the browser, which is the only thing that knows it.
+ */
+export async function upload<T>(path: string, form: FormData, signal?: AbortSignal): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new ApiError(401, 'NOT_AUTHENTICATED', 'Please sign in again.');
+  }
+
+  const response = await fetch(buildUrl(path), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    body: form,
+    signal,
+    credentials: 'omit',
+    cache: 'no-store',
+  });
+
+  if (response.status === 401) {
+    await getSupabase().auth.signOut();
+    throw new ApiError(401, 'NOT_AUTHENTICATED', 'Your session has ended. Please sign in again.');
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as T;
+}
+
+/**
  * Download a file the API generates, such as an import's error rows.
  *
  * Kept separate from {@link request} because the response is a file rather than

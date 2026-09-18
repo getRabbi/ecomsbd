@@ -6,25 +6,15 @@ import { DataTable, type Column } from '@/components/DataTable';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, type Tone } from '@/components/ui';
 import { download } from '@/lib/api';
+import type { StringKey } from '@/lib/i18n';
+import { describeError, isResumable, type ImportBatch as WizardBatch } from '@/lib/imports';
 import { formatDate } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
 
-interface ImportBatch {
-  id: string;
-  template: string;
-  status: string;
-  original_filename: string;
-  row_count: number;
-  ready_count: number;
-  warning_count: number;
-  duplicate_count: number;
-  invalid_count: number;
-  created_count: number;
-  failure_reason: string | null;
-  created_at: string;
-  committed_at: string | null;
-}
+import { ImportWizard } from './ImportWizard';
+
+type ImportBatch = WizardBatch;
 
 interface SavedMapping {
   id: string;
@@ -52,14 +42,18 @@ interface SavedMapping {
  * row number and the reason — so the download is an input they fix and
  * re-upload, not a report they read and then retype from.
  *
- * Uploading and mapping run through the same endpoints the phone uses; the
- * upload flow itself is not duplicated here yet, and history plus the error
- * export is what makes the existing flow usable at a desk.
+ * **The whole flow at a keyboard.** Upload, preview, map, validate, import and
+ * summary run in {@link ImportWizard} against the same endpoints the phone
+ * uses. An import left part-way — mapped but never validated, validated but
+ * never started, or still running in the background — is picked up from its
+ * history row rather than uploaded again.
  */
 export default function ImportsPage() {
   const { t, locale } = useSession();
   const [downloading, setDownloading] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // `undefined`: no wizard. `null`: a new import. A batch: resuming that one.
+  const [wizard, setWizard] = useState<ImportBatch | null | undefined>(undefined);
 
   const imports = useApi<ImportBatch[]>('/imports', { limit: 50 });
   const mappings = useApi<SavedMapping[]>('/imports/mappings');
@@ -73,10 +67,23 @@ export default function ImportsPage() {
         `${batch.original_filename}-errors.csv`,
       );
     } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : String(caught));
+      setNotice(describeError(caught, t));
     } finally {
       setDownloading(null);
     }
+  }
+
+  function openWizard(batch: ImportBatch | null) {
+    setNotice(null);
+    setWizard(batch);
+    window.scrollTo({ top: 0 });
+  }
+
+  function closeWizard(message: string | null) {
+    setWizard(undefined);
+    setNotice(message);
+    imports.reload();
+    mappings.reload();
   }
 
   const columns: Column<ImportBatch>[] = [
@@ -115,31 +122,64 @@ export default function ImportsPage() {
       key: 'state',
       header: t('imp.state'),
       render: (row) => (
-        <Chip label={row.status.toLowerCase()} tone={toneForStatus(row.status)} />
+        <Chip label={t(`impst.${row.status}` as StringKey)} tone={toneForStatus(row.status)} />
       ),
     },
     {
       key: 'actions',
       header: '',
-      render: (row) =>
-        row.invalid_count + row.duplicate_count > 0 ? (
-          <button
-            type="button"
-            className="btn btn--sm"
-            disabled={downloading === row.id}
-            onClick={() => downloadErrors(row)}
-          >
-            {t('imp.downloadErrors')}
-          </button>
-        ) : null,
+      render: (row) => (
+        <span style={{ display: 'inline-flex', gap: 6 }}>
+          {isResumable(row) ? (
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={wizard !== undefined}
+              onClick={() => openWizard(row)}
+            >
+              {row.status === 'COMMITTING' ? t('impw.watch') : t('impw.continue')}
+            </button>
+          ) : null}
+          {row.invalid_count + row.duplicate_count > 0 ? (
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={downloading === row.id}
+              onClick={() => downloadErrors(row)}
+            >
+              {t('imp.downloadErrors')}
+            </button>
+          ) : null}
+        </span>
+      ),
     },
   ];
 
   return (
     <>
-      <PageHeader title={t('imp.title')} subtitle={t('imp.subtitle')} />
+      <PageHeader
+        title={t('imp.title')}
+        subtitle={t('imp.subtitle')}
+        actions={
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={wizard !== undefined}
+            onClick={() => openWizard(null)}
+          >
+            {t('impw.new')}
+          </button>
+        }
+      />
 
       <div className="content">
+        {wizard !== undefined ? (
+          <div style={{ marginBottom: 18 }}>
+            {/* Keyed so a resumed import never inherits another's state. */}
+            <ImportWizard key={wizard?.id ?? 'new'} resume={wizard} onClose={closeWizard} />
+          </div>
+        ) : null}
+
         <Card padded={false}>
           <DataTable
             columns={columns}
