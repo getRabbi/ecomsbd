@@ -64,6 +64,9 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
   bool _saving = false;
   ApiError? _error;
 
+  /// Required for a product with variants: stock lives on the variant.
+  ProductVariant? _variant;
+
   /// Set when the server refused because the change would go below zero.
   bool _wouldOversell = false;
 
@@ -76,10 +79,12 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
 
   int get _amount => int.tryParse(normalizeDigits(_quantity.text).trim()) ?? 0;
   int get _delta => _isIncrease ? _amount : -_amount;
-  int get _projected => widget.product.stockOnHand + _delta;
+  int get _current => _variant?.stockOnHand ?? widget.product.stockOnHand;
+  int get _projected => _current + _delta;
+  bool get _needsVariant => widget.product.hasVariants && _variant == null;
 
   Future<void> _save({bool allowNegative = false}) async {
-    if (_amount <= 0) {
+    if (_amount <= 0 || _needsVariant) {
       setState(() => _error = null);
       return;
     }
@@ -97,6 +102,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
             reason: _reason,
             note: _note.text.trim(),
             allowNegative: allowNegative,
+            variantId: _variant?.id,
           );
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -108,7 +114,9 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
       setState(() {
         _saving = false;
         _error = error;
-        _wouldOversell = error.code == ApiErrorCode.conflict;
+        _wouldOversell =
+            error.code == ApiErrorCode.insufficientStock ||
+            error.code == ApiErrorCode.conflict;
       });
     }
   }
@@ -151,9 +159,17 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
               Text(context.tr('sa.title'), style: EcomsbdType.sectionTitle),
               const SizedBox(height: 2),
               Text(
-                '${widget.product.name} · ${widget.product.stockOnHand} in stock',
+                '${widget.product.name} · ${context.tr('inv.inStockCount', <String, Object?>{'count': _current})}',
                 style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
+              if (widget.product.hasVariants) ...<Widget>[
+                const SizedBox(height: EcomsbdSpacing.md),
+                VariantPicker(
+                  variants: widget.product.activeVariants,
+                  selected: _variant,
+                  onChanged: (variant) => setState(() => _variant = variant),
+                ),
+              ],
               const SizedBox(height: EcomsbdSpacing.md),
               Row(
                 children: <Widget>[
@@ -190,7 +206,7 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               Text(
-                'REASON',
+                context.tr('sa.reasonCaps'),
                 style: EcomsbdType.eyebrow.copyWith(
                   color: EcomsbdColors.muted2,
                 ),
@@ -239,7 +255,9 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                     ),
                     const SizedBox(width: EcomsbdSpacing.xs),
                     Text(
-                      '$_projected in stock',
+                      context.tr('inv.inStockCount', <String, Object?>{
+                        'count': _projected,
+                      }),
                       style: EcomsbdType.bodyStrong.copyWith(
                         color: _projected < 0 ? EcomsbdColors.red : null,
                       ),
@@ -272,7 +290,9 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
                 )
               else
                 FilledButton(
-                  onPressed: _saving || _amount <= 0 ? null : () => _save(),
+                  onPressed: _saving || _amount <= 0 || _needsVariant
+                      ? null
+                      : () => _save(),
                   style: FilledButton.styleFrom(
                     backgroundColor: EcomsbdColors.orange,
                     minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
@@ -289,6 +309,47 @@ class _StockAdjustmentSheetState extends ConsumerState<StockAdjustmentSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Which variant a stock change is for. Shown only for variant products.
+class VariantPicker extends StatelessWidget {
+  const VariantPicker({
+    required this.variants,
+    required this.selected,
+    required this.onChanged,
+    super.key,
+  });
+
+  final List<ProductVariant> variants;
+  final ProductVariant? selected;
+  final ValueChanged<ProductVariant> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          context.tr('inv.chooseVariant'),
+          style: EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: EcomsbdSpacing.xs,
+          runSpacing: EcomsbdSpacing.xs,
+          children: <Widget>[
+            for (final variant in variants)
+              FilterToggle(
+                label: '${variant.name} (${variant.stockOnHand})',
+                selected: selected?.id == variant.id,
+                onChanged: (_) => onChanged(variant),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

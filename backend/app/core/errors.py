@@ -92,6 +92,11 @@ class ErrorCode(StrEnum):
     IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT"
     ENTITLEMENT_REQUIRED = "ENTITLEMENT_REQUIRED"
 
+    # --- inventory (V2.2) --------------------------------------------------
+    #: A sale or a decrease would take stock below zero. Never clamped: the
+    #: seller is told how many are available instead.
+    INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK"
+
     # --- billing (phase F) -------------------------------------------------
     BILLING_VERIFICATION_FAILED = "BILLING_VERIFICATION_FAILED"
     WEBHOOK_SIGNATURE_INVALID = "WEBHOOK_SIGNATURE_INVALID"
@@ -281,6 +286,12 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         409,
         "একই রিকোয়েস্ট আলাদা তথ্য নিয়ে আবার পাঠানো হয়েছে।",
         "This idempotency key was already used with a different request body.",
+        False,
+    ),
+    ErrorCode.INSUFFICIENT_STOCK: (
+        409,
+        "পর্যাপ্ত স্টক নেই।",
+        "There is not enough stock for this.",
         False,
     ),
     ErrorCode.ENTITLEMENT_REQUIRED: (

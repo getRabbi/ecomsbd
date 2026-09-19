@@ -77,6 +77,7 @@ from app.couriers.models import (
 from app.customers.models import Customer
 from app.customers.service import CUSTOMER_PHONE_CONTEXT
 from app.orders.models import Order, OrderItem, OrderStatus
+from app.products.service import StockService
 
 __all__ = [
     "BookingReport",
@@ -447,6 +448,19 @@ class CourierBookingService:
                     "status": consignment.status,
                 },
             )
+
+        # V2.2: refuse before the courier is asked, not after. Once the provider
+        # accepts, the parcel is gone and the decrement is recorded whatever
+        # the count says; this is the last point where "not enough stock" can
+        # still stop a sale.
+        stocked = await self._db.execute(
+            sa.select(OrderItem.product_id, OrderItem.variant_id, OrderItem.quantity).where(
+                OrderItem.order_id == order.id, OrderItem.product_id.is_not(None)
+            )
+        )
+        await StockService(self._db).assert_available(
+            [(product_id, variant_id, quantity) for product_id, variant_id, quantity in stocked]
+        )
 
         request = await self._booking_request(
             order,

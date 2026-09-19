@@ -33,6 +33,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._reconV2Bn,
   ..._cashflowBn,
   ..._rtoBn,
+  ..._inventoryBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -55,6 +56,7 @@ final Map<String, String> englishStrings = <String, String>{
   ..._reconV2En,
   ..._cashflowEn,
   ..._rtoEn,
+  ..._inventoryEn,
 };
 
 // --------------------------------------------------------------------------- //
@@ -3482,4 +3484,97 @@ const Map<String, String> _rtoBn = <String, String>{
   'rto.obs.PRODUCT_REPEAT_RTO': '{product}: {rto}টি পার্সেল ফেরত এসেছে।',
   'rc.parcelsTitle': 'পার্সেল হিসেবে (RTO)',
   'rc.rtoRate': 'RTO হার',
+};
+
+/// Inventory V2: variants, restock, stock history filters, return receipt.
+const Map<String, String> _inventoryEn = <String, String>{
+  'mv.restock': 'Restock',
+  'sa.reasonCaps': 'REASON',
+  'inv.inStockCount': '{count} in stock',
+  'inv.left': '{count} left',
+  'inv.chooseVariant': 'CHOOSE A VARIANT',
+  'inv.variants': 'VARIANTS',
+  'inv.variantsSub':
+      'Each size or colour keeps its own stock and low-stock level.',
+  'inv.addVariant': 'Add variant',
+  'inv.variantName': 'Variant name',
+  'inv.variantNameHint': 'e.g. Black / M',
+  'inv.splitNote':
+      'This product has {count} in stock. Adding variants moves that stock out of the product, so count it into each variant.',
+  'inv.restock': 'Restock',
+  'inv.restockTitle': 'Restock',
+  'inv.restockSub':
+      'New goods arrived. Enter how many; cost and reference are optional.',
+  'inv.quantity': 'Quantity',
+  'inv.unitCost': 'Unit cost (৳)',
+  'inv.updateCost': 'Use this as the product cost for new orders',
+  'inv.reference': 'Reference',
+  'inv.recordRestock': 'Record restock',
+  'inv.lowStock': 'Low stock',
+  'inv.outOfStock': 'Out of stock',
+  'inv.filterAll': 'All',
+  'inv.filterSales': 'Sales',
+  'inv.filterReturns': 'Returns',
+  'inv.filterRestock': 'Restock',
+  'inv.filterAdjust': 'Adjustments',
+  'inv.orderRef': 'Order {number}',
+  'rtn.title': 'Returned parcel',
+  'rtn.pending': '{count} returned item(s) not back in stock yet',
+  'rtn.why':
+      'The courier marked this parcel returned. Stock only goes back up when you confirm what actually arrived.',
+  'rtn.receive': 'Receive return',
+  'rtn.restockAll': 'Returned to stock',
+  'rtn.restockAllSub': 'Everything came back and can be sold again.',
+  'rtn.damaged': 'Damaged / do not restock',
+  'rtn.damagedSub': 'Nothing goes back in stock; it counts as a loss.',
+  'rtn.partial': 'Some of it',
+  'rtn.partialSub': 'Choose how many of each came back sellable.',
+  'rtn.restockQty': '{restock} to stock · {damaged} damaged',
+  'rtn.confirm': 'Confirm',
+};
+
+/// Inventory V2: variants, restock, stock history filters, return receipt.
+const Map<String, String> _inventoryBn = <String, String>{
+  'mv.restock': 'রিস্টক',
+  'sa.reasonCaps': 'কারণ',
+  'inv.inStockCount': 'স্টকে {count}টি',
+  'inv.left': '{count}টি বাকি',
+  'inv.chooseVariant': 'ভ্যারিয়েন্ট বাছুন',
+  'inv.variants': 'ভ্যারিয়েন্ট',
+  'inv.variantsSub': 'প্রতিটি সাইজ বা রঙের স্টক আর লো-স্টক সীমা আলাদা থাকে।',
+  'inv.addVariant': 'ভ্যারিয়েন্ট যোগ করুন',
+  'inv.variantName': 'ভ্যারিয়েন্টের নাম',
+  'inv.variantNameHint': 'যেমন: কালো / M',
+  'inv.splitNote':
+      'এই পণ্যের স্টকে {count}টি আছে। ভ্যারিয়েন্ট যোগ করলে এই স্টক পণ্য থেকে সরে যাবে, তাই প্রতিটি ভ্যারিয়েন্টে গুনে লিখুন।',
+  'inv.restock': 'রিস্টক',
+  'inv.restockTitle': 'রিস্টক — নতুন মাল',
+  'inv.restockSub':
+      'নতুন মাল এসেছে। কয়টি এসেছে লিখুন; দাম আর রেফারেন্স ঐচ্ছিক।',
+  'inv.quantity': 'পরিমাণ',
+  'inv.unitCost': 'প্রতি পিসের ক্রয়মূল্য (৳)',
+  'inv.updateCost': 'নতুন অর্ডারে এটাই পণ্যের ক্রয়মূল্য ধরা হবে',
+  'inv.reference': 'রেফারেন্স',
+  'inv.recordRestock': 'রিস্টক রেকর্ড করুন',
+  'inv.lowStock': 'স্টক কম',
+  'inv.outOfStock': 'স্টক শেষ',
+  'inv.filterAll': 'সব',
+  'inv.filterSales': 'বিক্রি',
+  'inv.filterReturns': 'ফেরত',
+  'inv.filterRestock': 'রিস্টক',
+  'inv.filterAdjust': 'সমন্বয়',
+  'inv.orderRef': 'অর্ডার {number}',
+  'rtn.title': 'ফেরত আসা পার্সেল',
+  'rtn.pending': '{count}টি ফেরত পণ্য এখনো স্টকে তোলা হয়নি',
+  'rtn.why':
+      'কুরিয়ার পার্সেলটি ফেরত দেখিয়েছে। আসলে কী হাতে পেলেন তা নিশ্চিত করলে তবেই স্টক বাড়বে।',
+  'rtn.receive': 'ফেরত বুঝে নিন',
+  'rtn.restockAll': 'স্টকে ফেরত তুলুন',
+  'rtn.restockAllSub': 'সব ঠিকঠাক ফেরত এসেছে, আবার বিক্রি করা যাবে।',
+  'rtn.damaged': 'নষ্ট — স্টকে তুলবেন না',
+  'rtn.damagedSub': 'স্টকে কিছু যোগ হবে না; ক্ষতি হিসেবে ধরা হবে।',
+  'rtn.partial': 'কিছু অংশ',
+  'rtn.partialSub': 'প্রতিটির কয়টি বিক্রির মতো অবস্থায় ফেরত এসেছে বেছে নিন।',
+  'rtn.restockQty': 'স্টকে {restock} · নষ্ট {damaged}',
+  'rtn.confirm': 'নিশ্চিত করুন',
 };

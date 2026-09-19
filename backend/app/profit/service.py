@@ -322,6 +322,11 @@ class ProfitService:
             write_off_cost = sum(
                 item.returned_cost_paisa or item.delivered_cost_paisa for item in consignment.items
             )
+        else:
+            # V2.2: returned units the seller received back damaged (and did not
+            # restock) are a loss at their order-time cost snapshot. Units not
+            # yet received are still assumed sellable, as before.
+            write_off_cost = sum(item.not_restocked_cost_paisa for item in consignment.items)
 
         order = await self._db.get(Order, consignment.order_id)
 

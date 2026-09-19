@@ -80,6 +80,40 @@ final stockMovementsProvider =
       return ref.watch(productsRepositoryProvider).stockMovements(productId);
     });
 
+/// Movement-type filters on the stock history screen, and the ledger reasons
+/// each one covers.
+const Map<String, List<String>> stockHistoryFilters = <String, List<String>>{
+  'all': <String>[],
+  'sales': <String>['BOOKED_DECREMENT', 'BOOKED_RESERVE'],
+  'returns': <String>[
+    'RETURN_RESTORE',
+    'PARTIAL_RETURN_RESTORE',
+    'CANCEL_RESTORE',
+  ],
+  'restock': <String>['RESTOCK', 'OPENING'],
+  'adjust': <String>[
+    'MANUAL_ADJUSTMENT',
+    'DAMAGED_WRITE_OFF',
+    'IMPORT_ADJUSTMENT',
+  ],
+};
+
+/// A product's stock history under one filter. Keyed by the filter's name so
+/// the family argument compares by value.
+final stockHistoryProvider =
+    FutureProvider.family<
+      Sourced<PagedResult<StockMovement>>,
+      ({String productId, String filter})
+    >((ref, query) {
+      final reasons = stockHistoryFilters[query.filter] ?? const <String>[];
+      return ref
+          .watch(productsRepositoryProvider)
+          .stockMovements(
+            query.productId,
+            reasons: reasons.isEmpty ? null : reasons,
+          );
+    });
+
 // --------------------------------------------------------------------------- //
 // Customers
 // --------------------------------------------------------------------------- //

@@ -45,6 +45,8 @@ __all__ = [
     "ReconciliationItemDetailResponse",
     "ReconciliationItemResponse",
     "ReconciliationSummaryResponse",
+    "ReturnReceiptLinePayload",
+    "ReturnReceiptPayload",
     "StatementPreviewResponse",
     "UnmatchPayload",
 ]
@@ -86,6 +88,24 @@ class DeliveryOutcomePayload(BaseModel):
     return_reason: ReturnReason | None = None
 
 
+class ReturnReceiptLinePayload(BaseModel):
+    consignment_item_id: uuid.UUID
+    qty_restocked: int = Field(ge=0)
+    qty_not_restocked: int = Field(ge=0)
+
+
+class ReturnReceiptPayload(BaseModel):
+    """What physically came back from a returned parcel.
+
+    ``RESTOCK_ALL`` and ``RESTOCK_NONE`` (damaged / do not restock) cover the
+    common cases for every returned line; ``PARTIAL`` needs ``items``.
+    """
+
+    decision: Literal["RESTOCK_ALL", "RESTOCK_NONE", "PARTIAL"]
+    items: list[ReturnReceiptLinePayload] = Field(default_factory=list, max_length=200)
+    note: str | None = Field(default=None, max_length=400)
+
+
 class ConsignmentItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,6 +115,12 @@ class ConsignmentItemResponse(BaseModel):
     qty_delivered: int
     qty_returned: int
     unit_collectible_paisa: int
+    #: V2.2 return receipt: what the seller put back on the shelf, what came
+    #: back unusable, and how many returned units still await a decision.
+    qty_restocked: int = 0
+    qty_not_restocked: int = 0
+    qty_return_pending: int = 0
+    return_received_at: datetime | None = None
 
 
 class ConsignmentResponse(BaseModel):

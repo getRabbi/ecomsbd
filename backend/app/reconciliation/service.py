@@ -48,7 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.pagination import Cursor, apply_cursor
-from app.consignments.models import Consignment, ConsignmentStatus
+from app.consignments.models import Consignment, ConsignmentItem, ConsignmentStatus
 from app.core.clock import ensure_utc, utc_now
 from app.core.context import current_context
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -106,6 +106,7 @@ __all__ = [
     "ReconciliationReport",
     "ReconciliationService",
     "ReconciliationSummary",
+    "resolve_returned_not_restocked",
 ]
 
 #: How long a parcel may sit in transit before it is worth asking about.
@@ -2213,15 +2214,22 @@ class ReconciliationService:
         return opened
 
     async def _scan_returned_not_restocked(self) -> int:
-        """Returned parcels whose units never went back on the shelf.
+        """Returned parcels whose units nobody has received back yet.
 
-        Section 16's last case. The dispatch flow restores stock as part of
-        recording the return, so this should stay empty — which is exactly why
-        it is worth scanning for: a non-empty result means something bypassed
-        that path.
+        Section 16's last case. Since V2.2 a courier's RETURNED no longer
+        restocks by itself — the seller records what physically came back
+        (restocked, or damaged and not restocked). A returned line with no such
+        decision is the gap this surfaces; recording the decision resolves the
+        case (:func:`resolve_returned_not_restocked`).
         """
-        from app.products.models import StockMovement, StockMovementReason
-
+        undecided = (
+            sa.select(ConsignmentItem.consignment_id)
+            .where(
+                ConsignmentItem.qty_returned > 0,
+                ConsignmentItem.return_received_at.is_(None),
+            )
+            .distinct()
+        )
         rows = await self._db.execute(
             sa.select(Consignment).where(
                 Consignment.status.in_(
@@ -2229,34 +2237,21 @@ class ReconciliationService:
                         str(ConsignmentStatus.RETURNED),
                         str(ConsignmentStatus.PARTIAL_DELIVERED),
                     ]
-                )
+                ),
+                Consignment.id.in_(undecided),
             )
         )
-        restore_reasons = [
-            str(StockMovementReason.RETURN_RESTORE),
-            str(StockMovementReason.PARTIAL_RETURN_RESTORE),
-            str(StockMovementReason.CANCEL_RESTORE),
-        ]
 
         opened = 0
         for consignment in rows.scalars().all():
-            restored = await self._db.execute(
-                sa.select(sa.func.count())
-                .select_from(StockMovement)
-                .where(
-                    StockMovement.consignment_id == consignment.id,
-                    StockMovement.reason.in_(restore_reasons),
-                )
-            )
-            if restored.scalar_one() > 0:
-                continue
             opened += await self._open_case(
                 kind=CaseKind.RETURNED_NOT_RESTOCKED,
                 subject_type="consignment",
                 subject_id=consignment.id,
                 amount_paisa=0,
                 summary=(
-                    f"{consignment.merchant_reference} came back but its stock was never restored"
+                    f"{consignment.merchant_reference} came back but has not been "
+                    "received into stock"
                 ),
                 detail={"status": consignment.status},
                 consignment_id=consignment.id,
@@ -2274,3 +2269,32 @@ class ReconciliationService:
         if item is None:
             raise NotFoundError("Reconciliation item not found")
         return item
+
+
+async def resolve_returned_not_restocked(db: AsyncSession, consignment_id: uuid.UUID) -> None:
+    """Close a parcel's "returned but not restocked" case once it is received.
+
+    Called by the return-receipt flow. The Smart Alerts rule counts open cases
+    of this kind, so closing it here is also what clears that alert.
+    """
+    cases = (
+        (
+            await db.execute(
+                sa.select(ReconciliationCase).where(
+                    ReconciliationCase.kind == str(CaseKind.RETURNED_NOT_RESTOCKED),
+                    ReconciliationCase.subject_type == "consignment",
+                    ReconciliationCase.subject_id == consignment_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    still_open = [case for case in cases if case.case_status.is_open]
+    if not still_open:
+        return
+    await ReconciliationService(db)._close_cases(
+        still_open,
+        action=CaseEventAction.AUTO_RESOLVED,
+        note="The returned items were received and a stock decision recorded",
+    )

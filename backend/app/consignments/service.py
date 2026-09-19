@@ -47,7 +47,7 @@ from app.products.service import StockAdjustment, StockService
 from app.profit.models import ReturnReason
 from app.profit.service import ProfitService
 
-__all__ = ["ConsignmentService", "DeliveryOutcome", "ItemOutcome"]
+__all__ = ["ConsignmentService", "DeliveryOutcome", "ItemOutcome", "ReturnReceiptLine"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +57,20 @@ class ItemOutcome:
     consignment_item_id: uuid.UUID
     qty_delivered: int
     qty_returned: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReturnReceiptLine:
+    """What the seller found when a returned line physically arrived.
+
+    ``qty_restocked + qty_not_restocked`` must account for every returned unit
+    of the line: a courier saying RETURNED is not the same as the goods being
+    back on the shelf, and only the seller can say which they were.
+    """
+
+    consignment_item_id: uuid.UUID
+    qty_restocked: int
+    qty_not_restocked: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +192,11 @@ class ConsignmentService:
         self._db.add(consignment)
         await self._db.flush()
 
-        await self.fulfil_dispatch(consignment, order=order, occurred_at=moment)
+        # A parcel recorded by hand has not left yet: refusing it for want of
+        # stock is still possible, and is the conservative default (V2.2).
+        await self.fulfil_dispatch(
+            consignment, order=order, occurred_at=moment, allow_negative=False
+        )
         return consignment
 
     async def fulfil_dispatch(
@@ -187,6 +205,7 @@ class ConsignmentService:
         *,
         order: Order,
         occurred_at: datetime | None = None,
+        allow_negative: bool = True,
     ) -> Consignment:
         """Everything that follows a parcel physically going out.
 
@@ -201,7 +220,13 @@ class ConsignmentService:
         Idempotent on the items: called twice for the same consignment — a
         recovery that runs alongside a late provider answer — the second call
         finds lines already there and does nothing rather than decrementing
-        stock twice.
+        stock twice. Each decrement also carries an idempotency key, so even a
+        path that skipped that check could not deduct the same line twice.
+
+        ``allow_negative`` is true for a provider booking: the courier has
+        already accepted the parcel, it is physically gone, and refusing to
+        record that would leave the ledger disagreeing with the shelf. Stock is
+        checked before the provider is called instead.
         """
         moment = occurred_at or utc_now()
 
@@ -232,6 +257,7 @@ class ConsignmentService:
                 await self._stock.record_movement(
                     StockAdjustment(
                         product_id=order_item.product_id,
+                        variant_id=order_item.variant_id,
                         quantity_delta=-order_item.quantity,
                         reason=StockMovementReason.BOOKED_DECREMENT,
                         source=StockMovementSource.SYSTEM,
@@ -239,11 +265,9 @@ class ConsignmentService:
                         order_item_id=order_item.id,
                         consignment_id=consignment.id,
                         occurred_at=moment,
+                        idempotency_key=f"sale:{consignment.id}:{order_item.id}",
                     ),
-                    # Stock going negative here is a real state — the parcel is
-                    # physically gone — and refusing it would leave the ledger
-                    # disagreeing with the shelf.
-                    allow_negative=True,
+                    allow_negative=allow_negative,
                 )
 
         await self._db.flush()
@@ -403,49 +427,214 @@ class ConsignmentService:
             item.qty_returned = outcome.qty_returned
 
     async def _restore_returned_stock(self, consignment: Consignment, moment: datetime) -> None:
-        """Put returned units back on the shelf.
+        """Put a cancelled parcel's units back on the shelf.
 
-        Section 16 lists "returned but inventory not restored" as one of the
-        reconciliation cases; doing it here as part of the outcome is how that
-        case stays empty.
-
-        The product id comes from the order line rather than from the
-        consignment item, which deliberately stores only quantities and money —
-        one place owns what a line *is*, and it is the order.
+        Only a cancellation restores automatically: the parcel never left, so
+        the units are certainly there. A RETURNED or partly delivered parcel
+        waits for :meth:`receive_return` — a courier saying "returned" is not
+        the goods arriving back undamaged (V2.2), and restocking on the
+        courier's word would inflate stock with units that are lost or broken.
+        Until the seller decides, the reconciliation scan lists the parcel as
+        returned but not restocked.
         """
+        if consignment.consignment_status is not ConsignmentStatus.CANCELLED:
+            return
         returned = [item for item in consignment.items if item.qty_returned > 0]
         if not returned:
             return
 
-        is_partial = consignment.consignment_status is ConsignmentStatus.PARTIAL_DELIVERED
-        reason = (
-            StockMovementReason.PARTIAL_RETURN_RESTORE
-            if is_partial
-            else StockMovementReason.RETURN_RESTORE
-        )
-        if consignment.consignment_status is ConsignmentStatus.CANCELLED:
-            reason = StockMovementReason.CANCEL_RESTORE
-
-        rows = await self._db.execute(
-            sa.select(OrderItem).where(OrderItem.id.in_([item.order_item_id for item in returned]))
-        )
-        products = {row.id: row.product_id for row in rows.scalars().all()}
-
+        lines = await self._order_lines([item.order_item_id for item in returned])
         for item in returned:
-            product_id = products.get(item.order_item_id)
-            if product_id is None:
+            line = lines.get(item.order_item_id)
+            item.qty_restocked = item.qty_returned
+            item.return_received_at = moment
+            if line is None or line.product_id is None:
                 # A free-text line with no catalogue product behind it. There
                 # is no stock to restore, and inventing one would be worse.
                 continue
             await self._stock.record_movement(
                 StockAdjustment(
-                    product_id=product_id,
+                    product_id=line.product_id,
+                    variant_id=line.variant_id,
                     quantity_delta=item.qty_returned,
-                    reason=reason,
+                    reason=StockMovementReason.CANCEL_RESTORE,
                     source=StockMovementSource.SYSTEM,
                     order_id=consignment.order_id,
                     order_item_id=item.order_item_id,
                     consignment_id=consignment.id,
                     occurred_at=moment,
+                    idempotency_key=f"cancel-restore:{item.id}",
                 )
             )
+
+    async def _order_lines(self, order_item_ids: list[uuid.UUID]) -> dict[uuid.UUID, OrderItem]:
+        """The order lines behind consignment items, in one query.
+
+        The product and variant come from the order line rather than from the
+        consignment item, which deliberately stores only quantities and money —
+        one place owns what a line *is*, and it is the order.
+        """
+        rows = await self._db.execute(sa.select(OrderItem).where(OrderItem.id.in_(order_item_ids)))
+        return {row.id: row for row in rows.scalars().all()}
+
+    # -------------------------------------------------------- return receipt --
+
+    async def receive_return(
+        self,
+        consignment_id: uuid.UUID,
+        lines: list[ReturnReceiptLine],
+        *,
+        note: str | None = None,
+    ) -> Consignment:
+        """Record what physically came back, and restock only that.
+
+        Every returned line needs a decision covering all its returned units.
+        Restocked units create a positive movement; damaged or missing units
+        create none (they left stock at dispatch and stay gone) and count as a
+        write-off in the parcel's profit.
+
+        Once per line. A retry with the same decision is a no-op returning the
+        parcel; a different decision for a line already received is refused —
+        a correction is a manual adjustment with a note, not a rewrite.
+        """
+        consignment = await self._lock_for_receipt(consignment_id)
+        if consignment.consignment_status not in (
+            ConsignmentStatus.RETURNED,
+            ConsignmentStatus.PARTIAL_DELIVERED,
+        ):
+            raise ConflictError(
+                "Only a returned parcel can be received back into stock",
+                details={"status": consignment.status},
+            )
+
+        by_id = {item.id: item for item in consignment.items}
+        decided = {line.consignment_item_id: line for line in lines}
+        unknown = set(decided) - set(by_id)
+        if unknown:
+            raise ValidationError(
+                "That line is not part of this parcel",
+                details={"consignment_item_id": str(next(iter(unknown)))},
+            )
+
+        pending = []
+        for item in consignment.items:
+            if item.qty_returned <= 0:
+                continue
+            line = decided.get(item.id)
+            if item.return_received_at is not None:
+                if line is not None and (
+                    line.qty_restocked != item.qty_restocked
+                    or line.qty_not_restocked != item.qty_not_restocked
+                ):
+                    raise ConflictError(
+                        "This return was already received",
+                        details={"consignment_item_id": str(item.id)},
+                    )
+                continue
+            if line is None:
+                raise ValidationError(
+                    "Say what happened to every returned item",
+                    details={"consignment_item_id": str(item.id)},
+                )
+            if line.qty_restocked < 0 or line.qty_not_restocked < 0:
+                raise ValidationError("Quantities cannot be negative")
+            if line.qty_restocked + line.qty_not_restocked != item.qty_returned:
+                raise ValidationError(
+                    "Restocked and not-restocked units must add up to the returned units",
+                    details={
+                        "consignment_item_id": str(item.id),
+                        "returned": item.qty_returned,
+                        "restocked": line.qty_restocked,
+                        "not_restocked": line.qty_not_restocked,
+                    },
+                )
+            pending.append((item, line))
+
+        if not pending:
+            return consignment
+
+        moment = utc_now()
+        reason = (
+            StockMovementReason.PARTIAL_RETURN_RESTORE
+            if consignment.consignment_status is ConsignmentStatus.PARTIAL_DELIVERED
+            else StockMovementReason.RETURN_RESTORE
+        )
+        order_lines = await self._order_lines([item.order_item_id for item, _ in pending])
+        for item, line in pending:
+            order_line = order_lines.get(item.order_item_id)
+            if line.qty_restocked > 0 and order_line is not None and order_line.product_id:
+                await self._stock.record_movement(
+                    StockAdjustment(
+                        product_id=order_line.product_id,
+                        variant_id=order_line.variant_id,
+                        quantity_delta=line.qty_restocked,
+                        reason=reason,
+                        source=StockMovementSource.SELLER,
+                        order_id=consignment.order_id,
+                        order_item_id=item.order_item_id,
+                        consignment_id=consignment.id,
+                        note=note,
+                        occurred_at=moment,
+                        idempotency_key=f"return-restock:{item.id}",
+                    )
+                )
+            item.qty_restocked = line.qty_restocked
+            item.qty_not_restocked = line.qty_not_restocked
+            item.return_received_at = moment
+        await self._db.flush()
+
+        if any(line.qty_not_restocked for _, line in pending):
+            # The damaged units are now a known loss; the parcel's profit
+            # figure has to say so rather than treat them as shelf stock.
+            previous = await self._profit.current_snapshot(consignment.id)
+            if previous is not None:
+                await self._profit.snapshot(
+                    consignment.id,
+                    return_reason=ReturnReason(previous.return_reason)
+                    if previous.return_reason
+                    else None,
+                    ad_cost_paisa=previous.ad_cost_paisa,
+                    allocation_method=previous.allocation_method,
+                    allocation_version=previous.allocation_version,
+                    reason="Return received: some units not restocked",
+                )
+
+        from app.reconciliation.service import resolve_returned_not_restocked
+
+        await resolve_returned_not_restocked(self._db, consignment.id)
+
+        await record_audit(
+            self._db,
+            action=AuditAction.STOCK_ADJUSTED,
+            entity_type="consignment",
+            entity_id=consignment.id,
+            reason=note,
+            context={
+                "kind": "return_receipt",
+                "restocked": sum(line.qty_restocked for _, line in pending),
+                "not_restocked": sum(line.qty_not_restocked for _, line in pending),
+            },
+        )
+        await self._db.refresh(consignment, attribute_names=["items"])
+        return consignment
+
+    async def _lock_for_receipt(self, consignment_id: uuid.UUID) -> Consignment:
+        """The parcel with its lines, row-locked on PostgreSQL.
+
+        Two devices receiving the same return serialise here; the second finds
+        the lines already received. The movement idempotency keys back this up
+        where there is no row lock (SQLite).
+        """
+        stmt = (
+            sa.select(Consignment)
+            .where(Consignment.id == consignment_id)
+            .options(selectinload(Consignment.items))
+            .execution_options(populate_existing=True)
+        )
+        dialect = self._db.bind.dialect.name if self._db.bind is not None else ""
+        if dialect == "postgresql":
+            stmt = stmt.with_for_update(of=Consignment)
+        consignment = (await self._db.execute(stmt)).scalar_one_or_none()
+        if consignment is None:
+            raise NotFoundError("Consignment not found")
+        return consignment

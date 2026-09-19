@@ -537,33 +537,77 @@ class SmartAlerts:
     # ------------------------------------------------------ inventory --
 
     async def low_stock(self) -> list[AlertCondition]:
-        """Products at or below the low-stock level the seller set.
+        """Products — or, for a product with variants, variants — at or below
+        the low-stock level the seller set.
 
-        V1 inventory carries a seller-chosen threshold per product; a product
-        without one is never judged low, and no default threshold is assumed.
+        A simple product is judged on its own threshold; a variant product on
+        each active variant's (V2.2). Anything without a threshold is never
+        judged low, and no default threshold is assumed. When restocking lifts
+        every item above its level the condition disappears and the existing
+        resolution rule clears the alert.
         """
-        from app.products.models import Product
+        from app.products.models import Product, ProductVariant
 
-        where = (
+        live = (
             Product.is_active.is_(True),
             Product.archived_at.is_(None),
             Product.stock_tracking_enabled.is_(True),
+        )
+        simple = (
+            *live,
+            Product.has_variants.is_(False),
             Product.low_stock_threshold.is_not(None),
             Product.stock_on_hand <= Product.low_stock_threshold,
         )
-        count = int(await self._db.scalar(sa.select(sa.func.count(Product.id)).where(*where)) or 0)
+        variants = (
+            *live,
+            ProductVariant.is_active.is_(True),
+            ProductVariant.low_stock_threshold.is_not(None),
+            ProductVariant.stock_on_hand <= ProductVariant.low_stock_threshold,
+        )
+        count = int(await self._db.scalar(sa.select(sa.func.count(Product.id)).where(*simple)) or 0)
+        count += int(
+            await self._db.scalar(
+                sa.select(sa.func.count(ProductVariant.id))
+                .join(Product, Product.id == ProductVariant.product_id)
+                .where(*variants)
+            )
+            or 0
+        )
         if count == 0:
             return []
-        listed = list(
-            await self._db.execute(
+        listed: list[tuple[uuid.UUID, str, int, int]] = [
+            (row[0], row[1], row[2], row[3])
+            for row in await self._db.execute(
                 sa.select(
                     Product.id, Product.name, Product.stock_on_hand, Product.low_stock_threshold
                 )
-                .where(*where)
+                .where(*simple)
                 .order_by(Product.stock_on_hand - Product.low_stock_threshold, Product.name)
                 .limit(rules.MAX_LISTED)
             )
-        )
+        ]
+        listed += [
+            (product_id, f"{name} ({variant})", stock, threshold)
+            for product_id, name, variant, stock, threshold in await self._db.execute(
+                sa.select(
+                    Product.id,
+                    Product.name,
+                    ProductVariant.name,
+                    ProductVariant.stock_on_hand,
+                    ProductVariant.low_stock_threshold,
+                )
+                .join(Product, Product.id == ProductVariant.product_id)
+                .where(*variants)
+                .order_by(
+                    ProductVariant.stock_on_hand - ProductVariant.low_stock_threshold,
+                    Product.name,
+                    ProductVariant.name,
+                )
+                .limit(rules.MAX_LISTED)
+            )
+        ]
+        listed = sorted(listed, key=lambda row: (row[2] - row[3], row[1]))[: rules.MAX_LISTED]
         params: dict[str, Any] = {"count": count, "names": [name for _, name, _, _ in listed]}
         entity_id = None
         if count == 1:

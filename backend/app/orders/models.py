@@ -253,6 +253,11 @@ class OrderItem(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     product_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID, sa.ForeignKey("products.id", ondelete="SET NULL"), nullable=True
     )
+    #: V2.2: which variant's stock this line moves. ``variant_label`` below
+    #: keeps the name as it was when ordered.
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("product_variants.id", ondelete="SET NULL"), nullable=True
+    )
 
     position: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
 

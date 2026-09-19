@@ -299,6 +299,9 @@ class SyncService:
                             quantity=int(item.get("quantity", 1)),
                             unit_price_paisa=item.get("unit_price_paisa"),
                             discount_paisa=int(item.get("discount_paisa", 0)),
+                            variant_id=uuid.UUID(item["variant_id"])
+                            if item.get("variant_id")
+                            else None,
                         )
                         for item in body.get("items", [])
                     ],
@@ -364,6 +367,7 @@ class SyncService:
                     quantity=int(item.get("quantity", 1)),
                     unit_price_paisa=item.get("unit_price_paisa"),
                     discount_paisa=int(item.get("discount_paisa", 0)),
+                    variant_id=uuid.UUID(item["variant_id"]) if item.get("variant_id") else None,
                 )
                 for item in body["items"]
             ]
@@ -498,10 +502,13 @@ class SyncService:
         movement = await self._stock.record_movement(
             StockAdjustment(
                 product_id=uuid.UUID(str(body["product_id"])),
+                variant_id=uuid.UUID(str(body["variant_id"])) if body.get("variant_id") else None,
                 quantity_delta=int(body["quantity_delta"]),
                 reason=reason,
                 source=StockMovementSource.SELLER,
                 note=body.get("note"),
+                # The device-minted id: a replayed queue finds this movement.
+                idempotency_key=f"device:{entity_id}",
             ),
             allow_negative=bool(body.get("allow_negative", False)),
         )

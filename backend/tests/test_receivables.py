@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest_commerce import dispatched_parcel, signed_in_shop
 
 from app.consignments.models import ConsignmentStatus
-from app.consignments.service import DeliveryOutcome, ItemOutcome
+from app.consignments.service import DeliveryOutcome, ItemOutcome, ReturnReceiptLine
 from app.core.clock import utc_now
 from app.core.context import RequestContext, set_context
 from app.core.errors import ConflictError, ValidationError
@@ -174,9 +174,17 @@ class TestDelivery:
 
         product = await db.get(Product, uuid.UUID(parcel["product"]["id"]))
         await db.refresh(product)
-        # 10 − 3 shipped + 1 returned. Section 16 lists "returned but inventory
-        # not restored" as a reconciliation case; restoring it here is how that
-        # case stays empty.
+        # V2.2: the courier's word does not restock. 10 − 3 shipped, until the
+        # seller receives the returned unit.
+        assert product.stock_on_hand == 7
+
+        await parcel["consignments"].receive_return(
+            consignment.id,
+            [ReturnReceiptLine(consignment_item_id=line.id, qty_restocked=1, qty_not_restocked=0)],
+        )
+        await db.commit()
+        await db.refresh(product)
+        # 10 − 3 shipped + 1 received back.
         assert product.stock_on_hand == 8
 
     async def test_a_partial_delivery_without_quantities_is_refused(
@@ -228,6 +236,22 @@ class TestDelivery:
         assert receivable.outstanding_paisa == 0
 
         product = await db.get(Product, uuid.UUID(parcel["product"]["id"]))
+        await db.refresh(product)
+        # Returned by the courier is not yet back on the shelf (V2.2).
+        assert product.stock_on_hand == 9
+
+        consignment = await parcel["consignments"].get(parcel["consignment"].id)
+        await parcel["consignments"].receive_return(
+            consignment.id,
+            [
+                ReturnReceiptLine(
+                    consignment_item_id=consignment.items[0].id,
+                    qty_restocked=1,
+                    qty_not_restocked=0,
+                )
+            ],
+        )
+        await db.commit()
         await db.refresh(product)
         assert product.stock_on_hand == 10
 

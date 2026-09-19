@@ -65,7 +65,7 @@ class TemplateSpec:
 PRODUCTS_TEMPLATE = TemplateSpec(
     template=ImportTemplate.PRODUCTS,
     required=("name",),
-    optional=("sku", "cost", "price", "stock", "description"),
+    optional=("sku", "variant", "cost", "price", "stock", "low_stock", "description"),
     aliases={
         "name": ("name", "product", "product name", "title", "item", "পণ্য", "নাম"),
         "sku": ("sku", "code", "product code", "item code", "barcode"),
@@ -80,9 +80,21 @@ PRODUCTS_TEMPLATE = TemplateSpec(
             "দাম",
         ),
         "stock": ("stock", "quantity", "qty", "opening stock", "stock qty", "স্টক"),
+        "variant": ("variant", "variant name", "variation", "option", "ভ্যারিয়েন্ট"),
+        "low_stock": (
+            "low stock",
+            "low stock alert",
+            "low stock threshold",
+            "reorder level",
+            "min stock",
+            "লো স্টক",
+        ),
         "description": ("description", "details", "note", "বিবরণ"),
     },
-    fingerprint_fields=("sku", "name"),
+    # ``variant`` joins the identity so "T-Shirt / Black M" and "T-Shirt /
+    # Black L" are two records. Empty parts are skipped, so the fingerprint of
+    # a row without a variant is exactly what it was before V2.2.
+    fingerprint_fields=("sku", "name", "variant"),
 )
 
 ORDERS_TEMPLATE = TemplateSpec(
@@ -219,8 +231,22 @@ def _parse_product_row(raw: dict[str, Any], mapping: dict[str, str]) -> ParsedRo
             row.error("stock", "Opening stock cannot be negative")
         else:
             row.values["opening_stock"] = stock
+            # A stated count, as opposed to a missing column. Only a stated
+            # count may correct an existing SKU's stock.
+            row.values["stock_given"] = True
     else:
         row.values["opening_stock"] = 0
+
+    variant = _read(raw, mapping, "variant")
+    row.values["variant"] = variant or None
+
+    threshold_text = _read(raw, mapping, "low_stock")
+    if threshold_text:
+        threshold = _parse_int(threshold_text)
+        if threshold is None or threshold < 0:
+            row.error("low_stock", f"{threshold_text!r} is not a valid low-stock level")
+        else:
+            row.values["low_stock_threshold"] = threshold
 
     description = _read(raw, mapping, "description")
     row.values["description"] = description or None

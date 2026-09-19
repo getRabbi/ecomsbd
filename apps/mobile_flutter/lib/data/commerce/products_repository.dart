@@ -94,13 +94,27 @@ class ProductsRepository extends CachingRepository {
     String productId, {
     String? cursor,
     int limit = 30,
+    List<String>? reasons,
+    String? variantId,
   }) async {
-    final suffix = cursor == null ? '' : '.$cursor';
+    final suffix = <String>[
+      if (reasons != null && reasons.isNotEmpty) reasons.join(','),
+      if (variantId != null) variantId,
+      if (cursor != null) cursor,
+    ].map((part) => '.$part').join();
     final sourced = await readThrough(
       'products.$productId.movements$suffix',
       () => api.get(
         '/products/$productId/stock-movements',
-        query: pageQuery(cursor: cursor, limit: limit),
+        query: pageQuery(
+          cursor: cursor,
+          limit: limit,
+          extra: <String, dynamic>{
+            // Repeated `reason=` parameters; the server ORs them.
+            'reason': reasons,
+            'variant_id': variantId,
+          },
+        ),
       ),
     );
     return sourced.map(
@@ -201,18 +215,22 @@ class ProductsRepository extends CachingRepository {
     String reason = 'MANUAL_ADJUSTMENT',
     String? note,
     bool allowNegative = false,
+    String? variantId,
   }) async {
     final body = <String, dynamic>{
       'quantity_delta': quantityDelta,
       'reason': reason,
       if (note != null && note.isNotEmpty) 'note': note,
       'allow_negative': allowNegative,
+      if (variantId != null) 'variant_id': variantId,
     };
 
     try {
       final json = await api.post(
         '/products/$productId/stock-adjustments',
         body: body,
+        // A retried request records one movement, not two.
+        idempotencyKey: api.newIdempotencyKey(),
       );
       // The cached balance is now stale; take the server's new one rather than
       // adding the delta locally.
@@ -235,6 +253,54 @@ class ProductsRepository extends CachingRepository {
       await _applyLocalDelta(productId, quantityDelta);
       return null;
     }
+  }
+
+  /// Record new goods arriving. Online only: a restock is a ledger entry the
+  /// server writes, and the unit cost may update the product's cost.
+  Future<StockMovement> restock(
+    String productId, {
+    required int quantity,
+    String? variantId,
+    int? unitCostPaisa,
+    bool updateCost = false,
+    String? reference,
+    String? note,
+  }) async {
+    final json = await api.post(
+      '/products/$productId/restocks',
+      body: <String, dynamic>{
+        'quantity': quantity,
+        if (variantId != null) 'variant_id': variantId,
+        if (unitCostPaisa != null) 'unit_cost_paisa': unitCostPaisa,
+        'update_cost': updateCost && unitCostPaisa != null,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+      idempotencyKey: api.newIdempotencyKey(),
+    );
+    await get(productId);
+    return StockMovement.fromJson(json);
+  }
+
+  /// Add a variant ("Black / M"). Returns the product with all its variants.
+  Future<Product> addVariant(
+    String productId, {
+    required String name,
+    String? sku,
+    int openingStock = 0,
+    int? lowStockThreshold,
+  }) async {
+    final json = await api.post(
+      '/products/$productId/variants',
+      body: <String, dynamic>{
+        'name': name,
+        if (sku != null && sku.isNotEmpty) 'sku': sku,
+        'opening_stock': openingStock,
+        if (lowStockThreshold != null) 'low_stock_threshold': lowStockThreshold,
+      },
+    );
+    await _mirror(<dynamic>[json]);
+    return Product.fromJson(json);
   }
 
   // --- mirror ---------------------------------------------------------------

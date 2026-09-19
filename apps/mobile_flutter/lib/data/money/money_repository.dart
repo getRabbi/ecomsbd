@@ -461,6 +461,27 @@ class MoneyRepository extends CachingRepository {
     return api.get('/consignments/$consignmentId');
   }
 
+  /// Say what physically came back from a returned parcel.
+  ///
+  /// `decision` is `RESTOCK_ALL`, `RESTOCK_NONE` (damaged / do not restock) or
+  /// `PARTIAL` with per-line `items`. Only restocked units go back on the
+  /// shelf; repeating the same decision is harmless.
+  Future<Map<String, dynamic>> receiveReturn(
+    String consignmentId, {
+    required String decision,
+    List<Map<String, dynamic>> items = const <Map<String, dynamic>>[],
+    String? note,
+  }) {
+    return api.post(
+      '/consignments/$consignmentId/return-receipt',
+      body: <String, dynamic>{
+        'decision': decision,
+        if (items.isNotEmpty) 'items': items,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+  }
+
   /// True when a failure means "you need a connection for this".
   static bool needsConnection(Object error) =>
       error is ApiError && error.isOffline;
