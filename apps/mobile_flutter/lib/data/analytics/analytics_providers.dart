@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../l10n/app_locale.dart';
 import '../commerce/commerce_providers.dart';
 import '../commerce/models.dart' show PagedResult;
 import '../commerce/paged_list_controller.dart';
@@ -157,23 +158,40 @@ final expenseListProvider =
     );
 
 class NotificationListController extends PagedListController<AppNotification> {
-  NotificationListController(this._repository) {
+  NotificationListController(this._repository, {this.lang}) {
     refresh();
   }
 
   final AnalyticsRepository _repository;
 
+  /// The app's language, so the server words each alert in it.
+  final String? lang;
+
   bool _unreadOnly = false;
+  String? _category;
 
   bool get unreadOnly => _unreadOnly;
 
+  /// Null for every category.
+  String? get category => _category;
+
   @override
   Future<Sourced<PagedResult<AppNotification>>> fetchPage({String? cursor}) {
-    return _repository.notifications(cursor: cursor, unreadOnly: _unreadOnly);
+    return _repository.notifications(
+      cursor: cursor,
+      unreadOnly: _unreadOnly,
+      category: _category,
+      lang: lang,
+    );
   }
 
   void setUnreadOnly(bool value) {
     _unreadOnly = value;
+    refresh();
+  }
+
+  void setCategory(String? value) {
+    _category = value;
     refresh();
   }
 
@@ -193,6 +211,8 @@ final notificationListProvider =
       NotificationListController,
       PagedListState<AppNotification>
     >(
-      (ref) =>
-          NotificationListController(ref.watch(analyticsRepositoryProvider)),
+      (ref) => NotificationListController(
+        ref.watch(analyticsRepositoryProvider),
+        lang: ref.watch(localeProvider).name,
+      ),
     );

@@ -177,6 +177,9 @@ async def dispatch_notifications(ctx: dict[str, Any] | None = None) -> dict[str,
                         sa.select(Notification)
                         .where(
                             Notification.read_at.is_(None),
+                            # A condition that cleared before its push went
+                            # out is not worth interrupting anyone about.
+                            Notification.resolved_at.is_(None),
                             Notification.created_at >= utc_now() - timedelta(days=2),
                             sa.not_(
                                 sa.exists().where(

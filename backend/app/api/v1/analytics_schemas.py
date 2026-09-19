@@ -16,7 +16,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.expenses.models import AllocationMethod, ExpenseKind
 from app.notifications.models import NotificationKind, Severity
@@ -233,6 +233,12 @@ class NotificationResponse(BaseModel):
     id: uuid.UUID
     kind: str
     severity: str
+    #: ``MONEY``, ``RECONCILIATION``, ``COURIER``, ``RETURNS``, ``INVENTORY``,
+    #: ``IMPORTS`` or ``SUMMARY``.
+    category: str
+    #: ``NEW``, ``READ`` or ``RESOLVED`` (the condition has cleared).
+    state: str
+    #: In the requested language, from the alert's stored facts.
     title: str
     body: str
     entity_type: str | None
@@ -241,8 +247,16 @@ class NotificationResponse(BaseModel):
     item_count: int
     business_date: date
     read_at: datetime | None
+    resolved_at: datetime | None
+    #: ``params`` (the facts), ``target`` (``{"route", "id"?, "params"?}``: the
+    #: screen a tap opens) and, for the Friday summary, its figures.
     payload: dict[str, Any]
     created_at: datetime
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _category(cls, value: object) -> object:
+        return value or "SUMMARY"
 
 
 class UnreadCountResponse(BaseModel):

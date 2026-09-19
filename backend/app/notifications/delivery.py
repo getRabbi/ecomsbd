@@ -20,6 +20,7 @@ Section 95's alert-fatigue rules are enforced here rather than at each alert:
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -36,6 +37,7 @@ from app.core.logging import get_logger
 from app.db.base import Base, PrimaryKeyMixin, TenantOwned
 from app.db.types import GUID, JSONColumn, TZDateTime
 from app.notifications.models import Notification, NotificationKind, Severity
+from app.notifications.service import localized
 from app.notifications.transport import (
     DeliveryOutcome,
     PushMessage,
@@ -45,6 +47,8 @@ from app.notifications.transport import (
     count_sms_segments,
 )
 from app.tenants.models import TenantUser
+from app.tenants.roles import Permission, has_permission
+from app.users.models import User
 
 __all__ = [
     "Channel",
@@ -52,6 +56,7 @@ __all__ = [
     "NotificationDelivery",
     "NotificationDispatcher",
     "NotificationPreference",
+    "effective_preference",
 ]
 
 log = get_logger(__name__)
@@ -84,7 +89,11 @@ class DeliveryState(StrEnum):
 
 
 class NotificationPreference(Base, TenantOwned, PrimaryKeyMixin):
-    """What a shop wants to be interrupted about (section 95).
+    """What a shop, or one member of it, wants to be interrupted about.
+
+    The row with ``user_id`` NULL is the shop's default; a member's own row,
+    created the first time they change a setting, overrides it for them alone.
+    Nobody can edit another member's row: the API only ever writes the caller's.
 
     Defaults are on for everything except routine tracking, which section 95
     singles out as the thing sellers must opt *into* rather than out of: one
@@ -98,14 +107,17 @@ class NotificationPreference(Base, TenantOwned, PrimaryKeyMixin):
         ),
     )
 
-    #: NULL for the shop-wide preference, which is all of them in V1.
+    #: NULL for the shop-wide default; a member's own row otherwise.
     user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
 
     push_enabled: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
     sms_enabled: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
 
-    #: Notification kinds the seller has switched off, by name.
+    #: Notification kinds the seller has switched off, by name. Push only.
     muted_kinds: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
+    #: :class:`NotificationCategory` names switched off. Neither pushed nor
+    #: shown in this member's centre.
+    muted_categories: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
     #: Section 95's opt-in. Off by default and deliberately so.
     routine_tracking_push: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
 
@@ -122,6 +134,25 @@ class NotificationPreference(Base, TenantOwned, PrimaryKeyMixin):
         if str(kind) in (self.muted_kinds or []):
             return False
         return self.push_enabled if channel is Channel.PUSH else self.sms_enabled
+
+    def push_block(self, notification: Notification) -> str | None:
+        """Why this preference refuses a push of ``notification``, if it does."""
+        if not self.push_enabled:
+            return "push notifications are turned off"
+        if str(notification.kind) in (self.muted_kinds or []):
+            return f"{notification.kind} is muted"
+        if notification.category and notification.category in (self.muted_categories or []):
+            return f"the {notification.category} category is muted"
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class Recipient:
+    """A member the backend decided should receive one notification."""
+
+    user_id: uuid.UUID
+    locale: str
+    preference: NotificationPreference
 
 
 class NotificationDelivery(Base, TenantOwned, PrimaryKeyMixin):
@@ -197,6 +228,11 @@ class NotificationDispatcher:
     async def preferences(
         self, tenant_id: uuid.UUID, *, user_id: uuid.UUID | None = None
     ) -> NotificationPreference:
+        """The row for ``user_id`` (or the shop default), created if missing.
+
+        A member's own row starts as a copy of the shop default, so the first
+        change a person makes does not silently reset everything else.
+        """
         existing = (
             await self._db.execute(
                 sa.select(NotificationPreference).where(
@@ -211,6 +247,15 @@ class NotificationDispatcher:
             return existing
 
         preference = NotificationPreference(tenant_id=tenant_id, user_id=user_id)
+        if user_id is not None:
+            shop = await self.preferences(tenant_id)
+            preference.push_enabled = shop.push_enabled
+            preference.sms_enabled = shop.sms_enabled
+            preference.muted_kinds = list(shop.muted_kinds or [])
+            preference.muted_categories = list(shop.muted_categories or [])
+            preference.routine_tracking_push = shop.routine_tracking_push
+            preference.quiet_hours_start = shop.quiet_hours_start
+            preference.quiet_hours_end = shop.quiet_hours_end
         self._db.add(preference)
         try:
             await self._db.flush()
@@ -223,41 +268,107 @@ class NotificationDispatcher:
     # -------------------------------------------------------------- dispatch ---
 
     async def dispatch(self, notification: Notification) -> list[NotificationDelivery]:
-        """Attempt delivery of one notification to every eligible target."""
-        tenant_id = notification.tenant_id
-        preference = await self.preferences(tenant_id)
+        """Attempt delivery of one notification to every eligible member.
 
-        suppression = await self._suppression_reason(notification, preference)
+        The in-app row already exists and stays whatever happens here: push is
+        a delivery channel, not the source of truth. Recipients are decided by
+        the backend — active members whose role carries the notification's
+        audience (or the one member it is addressed to) and whose own
+        preferences allow it — and each device is pushed at most once.
+        """
+        tenant_id = notification.tenant_id
+        if not Severity(notification.severity).deserves_push:
+            return [
+                await self._record_suppressed(
+                    notification, "INFO notifications live in the centre and never interrupt"
+                )
+            ]
+
+        recipients = await self._recipients(notification)
+        if not recipients:
+            return [
+                await self._record_suppressed(
+                    notification, "no active member of the shop receives this notification"
+                )
+            ]
+        allowed = [r for r in recipients if r.preference.push_block(notification) is None]
+        if not allowed:
+            reason = recipients[0].preference.push_block(notification) or "suppressed"
+            return [await self._record_suppressed(notification, f"every recipient: {reason}")]
+
+        suppression = await self._rate_limited(notification)
         if suppression is not None:
             return [await self._record_suppressed(notification, suppression)]
 
-        tokens = await self._push_targets(tenant_id)
-        if not tokens:
+        locales = {r.user_id: r.locale for r in allowed}
+        devices = await self._push_targets(tenant_id, user_ids=list(locales))
+        if not devices:
             return [
                 await self._record_suppressed(notification, "no device has a push token registered")
             ]
 
         deliveries: list[NotificationDelivery] = []
-        for device in tokens:
+        for device in devices:
             delivery = await self._claim(notification, Channel.PUSH, target=device.push_token or "")
             if delivery is None:
                 continue  # already attempted; the unique constraint says so
-            await self._attempt_push(notification, device, delivery)
+            await self._attempt_push(
+                notification, device, delivery, locale=locales.get(device.user_id)
+            )
             deliveries.append(delivery)
         return deliveries
 
-    async def _suppression_reason(
-        self, notification: Notification, preference: NotificationPreference
-    ) -> str | None:
-        """Section 95, in order of how obvious the answer is."""
-        severity = Severity(notification.severity)
-        if not severity.deserves_push:
-            return "INFO notifications live in the centre and never interrupt"
-        if not preference.push_enabled:
-            return "the shop has turned push notifications off"
-        if str(notification.kind) in (preference.muted_kinds or []):
-            return f"the shop has muted {notification.kind}"
+    async def _recipients(self, notification: Notification) -> list[Recipient]:
+        """Who should get this, decided here and nowhere else.
 
+        One query for the members, one for their preference rows; a member
+        without their own row falls back to the shop default.
+        """
+        tenant_id = notification.tenant_id
+        stmt = (
+            sa.select(TenantUser.user_id, TenantUser.role, User.locale)
+            .join(User, User.id == TenantUser.user_id)
+            .where(TenantUser.tenant_id == tenant_id, TenantUser.is_active.is_(True))
+        )
+        if notification.user_id is not None:
+            stmt = stmt.where(TenantUser.user_id == notification.user_id)
+        members = list(await self._db.execute(stmt))
+
+        audience = Permission(notification.audience) if notification.audience else None
+        members = [
+            (user_id, locale)
+            for user_id, role, locale in members
+            if audience is None or has_permission(role, audience)
+        ]
+        if not members:
+            return []
+
+        rows = (
+            (
+                await self._db.execute(
+                    sa.select(NotificationPreference).where(
+                        NotificationPreference.tenant_id == tenant_id,
+                        sa.or_(
+                            NotificationPreference.user_id.is_(None),
+                            NotificationPreference.user_id.in_([uid for uid, _ in members]),
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        own = {row.user_id: row for row in rows if row.user_id is not None}
+        shop = next((row for row in rows if row.user_id is None), None)
+        if shop is None:
+            shop = await self.preferences(tenant_id)
+        return [
+            Recipient(user_id=user_id, locale=locale or "bn", preference=own.get(user_id, shop))
+            for user_id, locale in members
+        ]
+
+    async def _rate_limited(self, notification: Notification) -> str | None:
+        """Section 95's cap: a runaway job must not become forty pushes."""
         recent = int(
             (
                 await self._db.execute(
@@ -279,17 +390,20 @@ class NotificationDispatcher:
             )
         return None
 
-    async def _push_targets(self, tenant_id: uuid.UUID) -> list[Device]:
-        user_ids = list(
-            (
-                await self._db.execute(
-                    sa.select(TenantUser.user_id).where(
-                        TenantUser.tenant_id == tenant_id,
-                        TenantUser.is_active.is_(True),
+    async def _push_targets(
+        self, tenant_id: uuid.UUID, *, user_ids: list[uuid.UUID] | None = None
+    ) -> list[Device]:
+        if user_ids is None:
+            user_ids = list(
+                (
+                    await self._db.execute(
+                        sa.select(TenantUser.user_id).where(
+                            TenantUser.tenant_id == tenant_id,
+                            TenantUser.is_active.is_(True),
+                        )
                     )
-                )
-            ).scalars()
-        )
+                ).scalars()
+            )
         if not user_ids:
             return []
         return list(
@@ -347,16 +461,26 @@ class NotificationDispatcher:
         return delivery
 
     async def _attempt_push(
-        self, notification: Notification, device: Device, delivery: NotificationDelivery
+        self,
+        notification: Notification,
+        device: Device,
+        delivery: NotificationDelivery,
+        *,
+        locale: str | None = None,
     ) -> None:
+        # Worded in the recipient's own language from the stored facts.
+        title, body = localized(notification, locale)
+        target = (notification.payload or {}).get("target") or {}
         message = PushMessage(
             token=device.push_token or "",
-            title=notification.title,
-            body=notification.body,
+            title=title,
+            body=body,
             deep_link=_deep_link(notification),
             data={
                 "kind": str(notification.kind),
                 "notification_id": str(notification.id),
+                **({"category": notification.category} if notification.category else {}),
+                **({"route": str(target["route"])} if target.get("route") else {}),
                 **({"entity_id": str(notification.entity_id)} if notification.entity_id else {}),
             },
             idempotency_key=f"{notification.id}:{delivery.target_hash}",
@@ -487,6 +611,8 @@ class NotificationDispatcher:
             .all()
         )
 
+        from app.billing.models import hash_provider_token
+
         attempted = 0
         for delivery in due:
             notification = await self._db.get(Notification, delivery.notification_id)
@@ -494,22 +620,23 @@ class NotificationDispatcher:
                 delivery.state = str(DeliveryState.FAILED)
                 delivery.last_error = "the notification no longer exists"
                 continue
-            device = (
+            # The same device the first attempt targeted, found by its token
+            # hash among this shop's members — never "any device", which on a
+            # system session would be any shop's.
+            device = next(
                 (
-                    await self._db.execute(
-                        sa.select(Device).where(
-                            Device.push_token.is_not(None), Device.revoked_at.is_(None)
-                        )
-                    )
-                )
-                .scalars()
-                .first()
+                    candidate
+                    for candidate in await self._push_targets(notification.tenant_id)
+                    if hash_provider_token(candidate.push_token or "") == delivery.target_hash
+                ),
+                None,
             )
             if device is None:
                 delivery.state = str(DeliveryState.FAILED)
                 delivery.last_error = "no device is registered for push any more"
                 continue
-            await self._attempt_push(notification, device, delivery)
+            locale = await self._db.scalar(sa.select(User.locale).where(User.id == device.user_id))
+            await self._attempt_push(notification, device, delivery, locale=locale)
             attempted += 1
         return attempted
 
@@ -557,3 +684,26 @@ def _deep_link(notification: Notification) -> str | None:
     if notification.entity_type and notification.entity_id:
         return f"ecomsbd://{notification.entity_type}/{notification.entity_id}"
     return f"ecomsbd://notifications/{notification.id}"
+
+
+async def effective_preference(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> NotificationPreference | None:
+    """The member's own preference, else the shop default, without creating
+    either — reading the centre must not write a row."""
+    rows = (
+        (
+            await session.execute(
+                sa.select(NotificationPreference).where(
+                    NotificationPreference.tenant_id == tenant_id,
+                    sa.or_(
+                        NotificationPreference.user_id == user_id,
+                        NotificationPreference.user_id.is_(None),
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return next((r for r in rows if r.user_id == user_id), None) or next(iter(rows), None)

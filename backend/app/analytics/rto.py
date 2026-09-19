@@ -550,6 +550,25 @@ class RtoService:
             ],
         )
 
+    async def window_counts(self, *, days: int, ending: date) -> OutcomeCounts:
+        """Completed parcels settled in the ``days`` business days to ``ending``.
+
+        Bounded on both sides, so one window can be compared with the one
+        before it (the smart RTO alert). Same classifier as every other figure.
+        """
+        start = _day_start(ending - timedelta(days=days - 1))
+        end = business_day_bounds(ending)[1]
+        settled = _settled_at()
+        rows = await self._db.execute(
+            sa.select(Consignment.status, sa.func.count())
+            .where(Consignment.status.in_(COMPLETED_STATUSES), settled >= start, settled < end)
+            .group_by(Consignment.status)
+        )
+        counts = OutcomeCounts()
+        for status, count in rows:
+            counts.add(status, int(count or 0))
+        return counts
+
     async def _cancelled_before_dispatch(self, start: datetime) -> int:
         dispatched = sa.exists().where(
             Consignment.order_id == Order.id,

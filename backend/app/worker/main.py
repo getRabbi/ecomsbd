@@ -106,13 +106,13 @@ class WorkerSettings:
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),
-        # Once a day, early: alerts should be waiting when the seller opens
-        # the app, not arrive mid-afternoon. ARQ crons fire on host local
-        # time, so this is 09:30 Dhaka only when the worker runs with
-        # TZ=UTC, which the deployment sets. Getting that wrong shifts the
-        # hour; it cannot produce a duplicate, because the notifications
-        # deduplicate on the Dhaka business date.
-        cron(scan_alerts, hour=3, minute=30),
+        # Smart alerts, twice a day: 09:30 Dhaka so they are waiting when the
+        # seller opens the app, and 15:30 so a courier account that broke in
+        # the morning is not left until tomorrow. ARQ crons fire on host local
+        # time (the deployment sets TZ=UTC). Extra runs cannot duplicate
+        # anything: each alert identity is raised once and then held by its
+        # cooldown (app.notifications.rules).
+        cron(scan_alerts, hour={3, 9}, minute=30),
         # Hourly, because the job decides for itself whether the *tenant's*
         # clock has reached Friday 18:00 (master spec section 42). ARQ crons
         # fire on host local time, and pinning the weekly summary to one UTC

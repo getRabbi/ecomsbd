@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
 import '../../data/account/models.dart';
+import '../../data/analytics/analytics_providers.dart';
 import '../../data/billing/billing_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../notifications/notification_centre_screen.dart'
+    show notificationCategories;
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
 import '../../l10n/app_strings.dart';
@@ -24,16 +27,10 @@ import '../../l10n/app_strings.dart';
 class NotificationSettingsScreen extends ConsumerWidget {
   const NotificationSettingsScreen({super.key});
 
-  /// Alert kinds with the key their wording lives under. The kind is API
-  /// contract; the label is resolved where it is rendered, because a const
-  /// list cannot hold a catalogue lookup.
+  /// Individual kinds still switched one by one. Everything else is a
+  /// category — the server's list of the ones this member's role receives.
   static const List<({String kind, String labelKey})> _kinds =
       <({String kind, String labelKey})>[
-        (kind: 'DELIVERED_BUT_UNPAID', labelKey: 'ns.deliveredNotPaid'),
-        (kind: 'UNDERPAID', labelKey: 'ns.paidLess'),
-        (kind: 'STALE_IN_TRANSIT', labelKey: 'ns.stuckInTransit'),
-        (kind: 'RETURNED_NOT_RESTOCKED', labelKey: 'ns.returnsNotRestocked'),
-        (kind: 'RETURN_SPIKE', labelKey: 'ns.moreReturns'),
         (kind: 'WEEKLY_SUMMARY', labelKey: 'ns.fridaySummary'),
       ];
 
@@ -169,10 +166,29 @@ class _FormState extends ConsumerState<_Form> {
           ),
         ),
 
-        SectionHeader(title: context.tr('ns.whatWeTell')),
+        SectionHeader(
+          title: context.tr('ns.whatWeTell'),
+          subtitle: context.tr('ns.categoryNote'),
+        ),
         GlassCard(
           child: Column(
             children: <Widget>[
+              // Categories in the centre's order, limited to what this
+              // member's role receives. Personal: only this member changes.
+              for (final category in <String>[
+                for (final known in notificationCategories)
+                  if (preferences.categories.contains(known)) known,
+              ]) ...<Widget>[
+                _ChannelSwitch(
+                  title: context.tr('notif.cat.$category'),
+                  subtitle: context.tr('ns.cat.$category'),
+                  value: !preferences.mutedCategories.contains(category),
+                  enabled: !_busy,
+                  onChanged: (value) =>
+                      _toggleCategory(category, muted: !value),
+                ),
+                const Divider(height: EcomsbdSpacing.lg),
+              ],
               for (var index = 0; index < widget.kinds.length; index++) ...[
                 if (index > 0) const Divider(height: EcomsbdSpacing.lg),
                 _ChannelSwitch(
@@ -193,6 +209,16 @@ class _FormState extends ConsumerState<_Form> {
     );
   }
 
+  Future<void> _toggleCategory(String category, {required bool muted}) {
+    final next = <String>{...widget.preferences.mutedCategories};
+    if (muted) {
+      next.add(category);
+    } else {
+      next.remove(category);
+    }
+    return _save(mutedCategories: next.toList());
+  }
+
   Future<void> _toggleKind(String kind, {required bool muted}) {
     final next = <String>{...widget.preferences.mutedKinds};
     if (muted) {
@@ -208,6 +234,7 @@ class _FormState extends ConsumerState<_Form> {
     bool? smsEnabled,
     bool? routineTrackingPush,
     List<String>? mutedKinds,
+    List<String>? mutedCategories,
   }) async {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -219,7 +246,11 @@ class _FormState extends ConsumerState<_Form> {
             smsEnabled: smsEnabled,
             routineTrackingPush: routineTrackingPush,
             mutedKinds: mutedKinds,
+            mutedCategories: mutedCategories,
           );
+      // The centre hides muted categories, so it re-reads with the change.
+      ref.invalidate(notificationListProvider);
+      ref.invalidate(unreadNotificationCountProvider);
       ref.invalidate(notificationPreferencesProvider);
     } on ApiError catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));

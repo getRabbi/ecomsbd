@@ -286,20 +286,30 @@ class AnalyticsRepository extends CachingRepository {
 
   // --- notifications --------------------------------------------------------
 
+  /// The centre, as this member receives it. [lang] asks the server to word
+  /// each alert in the app's language; [category] narrows the list.
   Future<Sourced<PagedResult<AppNotification>>> notifications({
     String? cursor,
     int limit = 30,
     bool unreadOnly = false,
+    String? category,
+    String? lang,
   }) async {
     final sourced = await readThrough(
       'analytics.notifications${cursor == null ? '' : '.$cursor'}'
-      '${unreadOnly ? '.unread' : ''}',
+      '${unreadOnly ? '.unread' : ''}'
+      '${category == null ? '' : '.$category'}'
+      '${lang == null ? '' : '.$lang'}',
       () => api.get(
         '/notifications',
         query: pageQuery(
           cursor: cursor,
           limit: limit,
-          extra: <String, dynamic>{'unread_only': unreadOnly},
+          extra: <String, dynamic>{
+            'unread_only': unreadOnly,
+            if (category != null) 'category': category,
+            if (lang != null) 'lang': lang,
+          },
         ),
       ),
     );

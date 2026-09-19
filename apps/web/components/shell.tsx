@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import type { StringKey } from '@/lib/i18n';
+import { useUnreadCount } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 
 /**
@@ -34,6 +35,7 @@ const NAV: NavGroup[] = [
     labelKey: 'nav.operations',
     items: [
       { href: '/dashboard', labelKey: 'nav.dashboard', icon: '▤' },
+      { href: '/notifications', labelKey: 'nav.notifications', icon: '◔' },
       { href: '/orders', labelKey: 'nav.orders', icon: '▦' },
       { href: '/customers', labelKey: 'nav.customers', icon: '☺' },
       { href: '/products', labelKey: 'nav.products', icon: '⬚' },
@@ -61,6 +63,8 @@ const NAV: NavGroup[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { t, locale, setLocale, signOut } = useSession();
+  // Only what this member receives, as the API counts it.
+  const unread = useUnreadCount(pathname);
 
   return (
     <aside className="sidebar">
@@ -85,6 +89,15 @@ export function Sidebar() {
                 >
                   <span aria-hidden="true">{item.icon}</span>
                   <span>{t(item.labelKey)}</span>
+                  {item.href === '/notifications' && unread > 0 ? (
+                    <span
+                      className="chip chip--bad"
+                      style={{ marginLeft: 'auto' }}
+                      aria-label={`${unread} ${t('notif.unread')}`}
+                    >
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

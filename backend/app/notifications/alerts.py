@@ -16,6 +16,10 @@ in a second place where the two could disagree.
 
 Section 23 closes with the constraint that matters most here: *"do not send
 noisy notifications for non-actionable changes."*
+
+V2.2: the notifications themselves are raised by the smart-alert engine
+(:mod:`app.notifications.smart`), which owns deduplication, cooldowns and
+resolution. The four lines above remain the Home and Friday-summary figures.
 """
 
 from __future__ import annotations
@@ -27,21 +31,22 @@ from datetime import date, timedelta
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.rto import RTO_STATUSES, is_rto_status
 from app.common.money import Money, format_bdt
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.core.clock import business_date, utc_now
 from app.expenses.service import ExpenseService
 from app.money.service import ReceivableService
-from app.notifications.models import NotificationKind, Severity
+from app.notifications.models import NotificationCategory, NotificationKind, Severity
 from app.notifications.service import NotificationService
 from app.orders.models import Order, OrderItem
 from app.profit.models import ProfitSnapshot
 from app.profit.service import ProfitService
 from app.reconciliation.models import CaseKind, CaseStatus, ReconciliationCase
+from app.tenants.roles import Permission
 
 __all__ = [
     "MIN_RANKING_SAMPLE",
-    "RETURN_SPIKE_THRESHOLD_BASIS_POINTS",
     "AlertService",
     "AlertSummary",
     "WeeklySummary",
@@ -52,10 +57,6 @@ __all__ = [
 #: deliveries of one product and one of another says nothing about which
 #: sells better.
 MIN_RANKING_SAMPLE = 5
-
-#: A return rate this far above the shop's own trailing average is worth
-#: raising. Basis points: 500 = 5 percentage points.
-RETURN_SPIKE_THRESHOLD_BASIS_POINTS = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,81 +186,18 @@ class AlertService:
         ]
 
     async def raise_daily_alerts(self) -> int:
-        """Create today's notifications. Returns how many were new.
+        """Run the V2.2 smart alerts for this shop. Returns how many were new.
 
-        Only alerts with something in them are raised — an alert saying "0
-        parcels unpaid" is exactly the non-actionable noise section 23 forbids.
-        Deduplication is by kind and day, so running this hourly still produces
-        one notification per kind per day.
+        The engine decides per alert identity whether anything is written, so
+        running this hourly, or twice at once, raises each alert once; the old
+        "one per kind per day" rule is gone, and with it the daily repeat of an
+        unchanged warning. RTO is judged by the canonical classifier in
+        :mod:`app.analytics.rto` (``RETURNED`` and courier ``CANCELLED``), not
+        by counting ``RETURNED`` alone.
         """
-        created = 0
-        for alert in await self.current_alerts():
-            if alert.is_empty:
-                continue
-            title, body = _wording(alert)
-            notification = await self._notifications.notify(
-                kind=alert.kind,
-                severity=alert.severity,
-                title=title,
-                body=body,
-                amount_paisa=alert.amount_paisa,
-                item_count=alert.count,
-            )
-            if notification is not None:
-                created += 1
+        from app.notifications.smart import SmartAlerts
 
-        if await self._raise_return_spike():
-            created += 1
-        return created
-
-    async def _raise_return_spike(self) -> bool:
-        """Warn when returns jump above this shop's own recent normal.
-
-        Compared against the shop's own trailing rate rather than an industry
-        figure. A 30% return rate is a crisis for one seller and Tuesday for
-        another, and only the shop's own history says which.
-        """
-        today = business_date(at=utc_now())
-        recent = await self._return_rate(today - timedelta(days=6), today)
-        baseline = await self._return_rate(today - timedelta(days=34), today - timedelta(days=7))
-        if recent is None or baseline is None:
-            return False
-        if recent - baseline < RETURN_SPIKE_THRESHOLD_BASIS_POINTS:
-            return False
-
-        notification = await self._notifications.notify(
-            kind=NotificationKind.RETURN_SPIKE,
-            severity=Severity.WARNING,
-            title="More returns than usual",
-            body=(
-                f"{recent / 100:.1f}% of parcels came back this week, against "
-                f"{baseline / 100:.1f}% over the previous month."
-            ),
-            payload={
-                "recent_basis_points": recent,
-                "baseline_basis_points": baseline,
-            },
-        )
-        return notification is not None
-
-    async def _return_rate(self, since: date, until: date) -> int | None:
-        """Returns as a share of settled parcels, in basis points."""
-        rows = await self._db.execute(
-            sa.select(ProfitSnapshot.outcome, sa.func.count())
-            .where(
-                ProfitSnapshot.is_current.is_(True),
-                ProfitSnapshot.business_date >= since,
-                ProfitSnapshot.business_date <= until,
-            )
-            .group_by(ProfitSnapshot.outcome)
-        )
-        counts = {outcome: int(count) for outcome, count in rows}
-        total = sum(counts.values())
-        if total < MIN_RANKING_SAMPLE:
-            # Too few parcels for a rate to mean anything.
-            return None
-        returned = counts.get(str(ConsignmentStatus.RETURNED), 0)
-        return round(returned * 10_000 / total)
+        return await SmartAlerts(self._db, notifications=self._notifications).run()
 
     # -------------------------------------------------------- friday summary --
 
@@ -288,7 +226,9 @@ class AlertService:
             order_count=order_count,
             delivered_count=outcomes.get(str(ConsignmentStatus.DELIVERED), 0)
             + outcomes.get(str(ConsignmentStatus.PARTIAL_DELIVERED), 0),
-            return_count=outcomes.get(str(ConsignmentStatus.RETURNED), 0),
+            return_count=sum(
+                count for outcome, count in outcomes.items() if is_rto_status(outcome)
+            ),
             return_loss_paisa=return_loss,
             sales_paisa=totals["realized_revenue_paisa"],
             contribution_profit_paisa=totals["contribution_profit_paisa"],
@@ -327,6 +267,9 @@ class AlertService:
                 "couriers."
             ),
             dedupe_key=f"weekly:{summary.week_end.isoformat()}",
+            category=NotificationCategory.SUMMARY,
+            # Profit figures: the people who may see Money.
+            audience=Permission.MONEY_VIEW,
             amount_paisa=summary.contribution_profit_paisa,
             payload={
                 "week_start": summary.week_start.isoformat(),
@@ -398,7 +341,7 @@ class AlertService:
                 ProfitSnapshot.is_current.is_(True),
                 ProfitSnapshot.business_date >= since,
                 ProfitSnapshot.business_date <= until,
-                ProfitSnapshot.outcome == str(ConsignmentStatus.RETURNED),
+                ProfitSnapshot.outcome.in_(RTO_STATUSES),
                 ProfitSnapshot.contribution_profit_paisa < 0,
             )
         )
@@ -535,38 +478,3 @@ class AlertService:
 
         ordered = sorted(eligible, key=lambda item: (-item[1], item[0]))
         return ordered[0], ordered[-1], None
-
-
-def _wording(alert: AlertSummary) -> tuple[str, str]:
-    """Section 23's own phrasing, in seller-facing words.
-
-    The amount is in every line because it is what decides the order the
-    seller works through them.
-    """
-    amount = format_bdt(alert.amount_paisa)
-    parcels = f"{alert.count} parcel{'' if alert.count == 1 else 's'}"
-
-    match alert.kind:
-        case NotificationKind.DELIVERED_BUT_UNPAID:
-            return (
-                f"Delivered but not paid: {amount}",
-                f"{parcels} reached the customer and the money has not arrived.",
-            )
-        case NotificationKind.UNDERPAID:
-            return (
-                f"Paid short by {amount}",
-                f"{alert.count} payment{'' if alert.count == 1 else 's'} came in "
-                "below what the parcel was owed.",
-            )
-        case NotificationKind.STALE_IN_TRANSIT:
-            return (
-                f"Stuck in transit: {amount} exposed",
-                f"{parcels} have been with a courier far longer than usual.",
-            )
-        case NotificationKind.RETURNED_NOT_RESTOCKED:
-            return (
-                "Returns not back in stock",
-                f"{parcels} came back but their items were never added to your stock.",
-            )
-        case _:
-            return (str(alert.kind), f"{parcels} — {amount}")

@@ -90,6 +90,8 @@ class NotificationPreferences {
     required this.mutedKinds,
     required this.pushTransportAvailable,
     required this.smsTransportAvailable,
+    this.mutedCategories = const <String>[],
+    this.categories = const <String>[],
     this.quietHoursStart,
     this.quietHoursEnd,
   });
@@ -104,6 +106,17 @@ class NotificationPreferences {
             in (json['muted_kinds'] as List<dynamic>? ?? const <dynamic>[]))
           kind as String,
       ],
+      mutedCategories: <String>[
+        for (final category
+            in (json['muted_categories'] as List<dynamic>? ??
+                const <dynamic>[]))
+          category as String,
+      ],
+      categories: <String>[
+        for (final category
+            in (json['categories'] as List<dynamic>? ?? const <dynamic>[]))
+          category as String,
+      ],
       pushTransportAvailable:
           json['push_transport_available'] as bool? ?? false,
       smsTransportAvailable: json['sms_transport_available'] as bool? ?? false,
@@ -116,6 +129,13 @@ class NotificationPreferences {
   final bool smsEnabled;
   final bool routineTrackingPush;
   final List<String> mutedKinds;
+
+  /// Categories this member switched off: hidden from their centre and never
+  /// pushed to them. Personal — nobody else's setting changes.
+  final List<String> mutedCategories;
+
+  /// The categories this member's role receives, as the server decided.
+  final List<String> categories;
 
   /// Whether a transport exists in this deployment at all. The screen shows
   /// "not available yet" rather than a switch that changes nothing.

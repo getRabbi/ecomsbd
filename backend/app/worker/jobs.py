@@ -95,6 +95,32 @@ async def _on_import_commit_requested(session: AsyncSession, event: OutboxEvent)
     await service.commit(uuid.UUID(str(import_id)))
 
 
+@register_handler(OutboxTopic.IMPORT_COMMITTED)
+async def _on_import_committed(_session: AsyncSession, event: OutboxEvent) -> None:
+    """Tell the uploader when a commit finished with many rejected rows.
+
+    Runs on its own tenant-scoped session: the outbox session is unscoped, and
+    an alert lookup must only ever see this shop's notifications. A failure is
+    logged rather than retried — the daily smart-alert scan finds the import
+    again — so an alert problem can never hold up the outbox.
+    """
+    import_id = event.payload.get("import_id")
+    if not import_id:
+        return
+
+    from app.db.session import session_scope
+    from app.notifications.smart import SmartAlerts
+
+    try:
+        async with session_scope() as session:
+            await SmartAlerts(session).import_alert(uuid.UUID(str(import_id)))
+    except Exception as exc:
+        log.warning(
+            "import alert could not be raised",
+            extra={"import_id": str(import_id), "error": type(exc).__name__},
+        )
+
+
 async def dispatch_outbox(ctx: dict[str, Any] | None = None) -> dict[str, int]:
     """Claim and process a batch of outbox events.
 

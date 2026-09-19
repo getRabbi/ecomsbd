@@ -2,8 +2,9 @@
 
 Two crons, both of which run over every active shop:
 
-*   :func:`scan_alerts` — the daily pass that turns open reconciliation cases
-    into section 23's four alerts.
+*   :func:`scan_alerts` — the V2.2 smart-alert pass (payout overdue,
+    discrepancies, stuck parcels, RTO, stock, margin, imports, courier
+    accounts); see :mod:`app.notifications.smart`.
 *   :func:`send_weekly_summaries` — the Friday 18:00 Asia/Dhaka summary.
 
 The weekly job runs *hourly* and decides for itself whether the Dhaka clock has
