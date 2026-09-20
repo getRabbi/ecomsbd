@@ -38,9 +38,41 @@ from app.notifications.service import NotificationService
 from app.notifications.templates import render
 from app.tenants.roles import Permission
 
-__all__ = ["AlertCondition", "AlertLifecycle", "SmartAlerts"]
+__all__ = [
+    "AlertCondition",
+    "AlertLifecycle",
+    "SmartAlerts",
+    "last_moved_at",
+    "stuck_parcel_clause",
+]
 
 log = get_logger(__name__)
+
+
+def last_moved_at() -> sa.ColumnElement[datetime]:
+    """When a parcel's status last changed, falling back to when it was made."""
+    return sa.func.coalesce(
+        Consignment.last_status_at,
+        Consignment.provider_status_at,
+        Consignment.booked_at,
+        Consignment.created_at,
+        type_=TZDateTime(),
+    )
+
+
+def stuck_parcel_clause(now: datetime) -> tuple[sa.ColumnElement[bool], ...]:
+    """The one definition of a stuck parcel: the stuck alert and Insights share it.
+
+    A courier parcel whose status has not changed for longer than
+    :data:`rules.STUCK_AFTER` allows for that status. Manual parcels have no
+    courier feed to be stuck in.
+    """
+    moved = last_moved_at()
+    limits = [
+        sa.and_(Consignment.status == status, moved <= now - after)
+        for status, after in rules.STUCK_AFTER.items()
+    ]
+    return (Consignment.provider != MANUAL_PROVIDER, sa.or_(*limits))
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,18 +433,8 @@ class SmartAlerts:
         courier feed to be stuck in and are left out.
         """
         now = utc_now()
-        moved = sa.func.coalesce(
-            Consignment.last_status_at,
-            Consignment.provider_status_at,
-            Consignment.booked_at,
-            Consignment.created_at,
-            type_=TZDateTime(),
-        )
-        limits = [
-            sa.and_(Consignment.status == status, moved <= now - after)
-            for status, after in rules.STUCK_AFTER.items()
-        ]
-        where = (Consignment.provider != MANUAL_PROVIDER, sa.or_(*limits))
+        moved = last_moved_at()
+        where = stuck_parcel_clause(now)
         rows = list(
             await self._db.execute(
                 sa.select(

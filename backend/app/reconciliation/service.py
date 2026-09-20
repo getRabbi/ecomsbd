@@ -212,6 +212,9 @@ class ReconciliationSummary:
     charges_pending_paisa: int
     open_cases: int
     open_case_paisa: int
+    #: Summed ``difference_paisa`` per item status, so a caller can say how
+    #: much sits in MISSING_COD or CHARGE_MISMATCH without a second query.
+    difference_by_status: dict[str, int] = field(default_factory=dict)
 
     @property
     def matched(self) -> int:
@@ -859,9 +862,11 @@ class ReconciliationService:
             ).group_by(filtered.c.status)
         )
         counts: dict[str, int] = {}
+        by_status: dict[str, int] = {}
         expected = actual = difference = unmatched = duplicate = pending = 0
         for status, count, expected_sum, actual_sum, diff_sum, net_sum, pending_sum in rows.all():
             counts[status] = int(count)
+            by_status[status] = int(diff_sum)
             pending += int(pending_sum)
             if status == str(ItemStatus.DUPLICATE):
                 duplicate += int(net_sum)
@@ -889,6 +894,7 @@ class ReconciliationService:
             charges_pending_paisa=pending,
             open_cases=int(open_cases),
             open_case_paisa=int(open_paisa),
+            difference_by_status=by_status,
         )
 
     async def get_item(self, item_id: uuid.UUID) -> ReconciliationItem:

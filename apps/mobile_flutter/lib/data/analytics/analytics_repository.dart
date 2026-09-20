@@ -1,6 +1,7 @@
 import '../../core/api/api_error.dart';
 import '../commerce/models.dart' show PagedResult;
 import '../commerce/repository_support.dart';
+import 'insights_models.dart';
 import 'models.dart';
 import 'rto_models.dart';
 
@@ -174,6 +175,84 @@ class AnalyticsRepository extends CachingRepository {
     return CustomerRtoHistory.fromJson(
       await api.get('/analytics/rto/customers/$customerId'),
     );
+  }
+
+  // --- advanced insights --------------------------------------------------
+
+  /// One section of `/analytics/insights`, cached per range for the offline
+  /// label. Every figure is the server's; this only carries it.
+  Future<Sourced<Map<String, dynamic>>> _insight(String section, int days) {
+    return readThrough(
+      'analytics.insights.$section.$days',
+      () => api.get(
+        '/analytics/insights/$section',
+        query: <String, dynamic>{'days': days},
+      ),
+    );
+  }
+
+  Future<Sourced<InsightsOverview>> insightsOverview({int days = 30}) async =>
+      (await _insight('overview', days)).map(InsightsOverview.fromJson);
+
+  Future<Sourced<InsightsTrend>> insightsTrend({int days = 30}) async =>
+      (await _insight('trend', days)).map(InsightsTrend.fromJson);
+
+  Future<Sourced<CourierInsights>> insightsCouriers({int days = 30}) async =>
+      (await _insight('couriers', days)).map(CourierInsights.fromJson);
+
+  Future<Sourced<CashInsights>> insightsCash({int days = 30}) async =>
+      (await _insight('cash', days)).map(CashInsights.fromJson);
+
+  Future<Sourced<CustomerInsights>> insightsCustomers({int days = 30}) async =>
+      (await _insight('customers', days)).map(CustomerInsights.fromJson);
+
+  /// One server page of products. Later pages are read live, like RTO's.
+  Future<ProductInsightPage> insightsProducts({
+    required int days,
+    String category = 'all',
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final query = <String, dynamic>{
+      'days': days,
+      'category': category,
+      'offset': offset,
+      'limit': limit,
+    };
+    if (offset > 0) {
+      return ProductInsightPage.fromJson(
+        await api.get('/analytics/insights/products', query: query),
+      );
+    }
+    final sourced = await readThrough(
+      'analytics.insights.products.$days.$category.$limit',
+      () => api.get('/analytics/insights/products', query: query),
+    );
+    return ProductInsightPage.fromJson(sourced.value);
+  }
+
+  Future<InventoryInsights> insightsInventory({
+    required int days,
+    String filter = 'all',
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final query = <String, dynamic>{
+      'days': days,
+      'filter': filter,
+      'offset': offset,
+      'limit': limit,
+    };
+    if (offset > 0) {
+      return InventoryInsights.fromJson(
+        await api.get('/analytics/insights/inventory', query: query),
+      );
+    }
+    final sourced = await readThrough(
+      'analytics.insights.inventory.$days.$filter.$limit',
+      () => api.get('/analytics/insights/inventory', query: query),
+    );
+    return InventoryInsights.fromJson(sourced.value);
   }
 
   // --- expenses -------------------------------------------------------------

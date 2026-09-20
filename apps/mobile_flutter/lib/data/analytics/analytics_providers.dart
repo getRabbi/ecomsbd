@@ -7,6 +7,7 @@ import '../commerce/models.dart' show PagedResult;
 import '../commerce/paged_list_controller.dart';
 import '../commerce/repository_support.dart';
 import 'analytics_repository.dart';
+import 'insights_models.dart';
 import 'models.dart';
 import 'rto_models.dart';
 
@@ -62,6 +63,41 @@ final rtoCustomerProvider = FutureProvider.autoDispose
     .family<CustomerRtoHistory, String>((ref, customerId) {
       return ref.watch(analyticsRepositoryProvider).rtoCustomer(customerId);
     });
+
+/// Advanced Insights: the range the seller picked (7, 30 or 90 days), and
+/// each section for it. Changing the range refetches every section.
+final insightsDaysProvider = StateProvider<int>((ref) => 30);
+
+final insightsOverviewProvider = FutureProvider<Sourced<InsightsOverview>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsOverview(days: days);
+});
+
+final insightsTrendProvider = FutureProvider<Sourced<InsightsTrend>>((ref) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsTrend(days: days);
+});
+
+final insightsCouriersProvider = FutureProvider<Sourced<CourierInsights>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCouriers(days: days);
+});
+
+final insightsCashProvider = FutureProvider<Sourced<CashInsights>>((ref) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCash(days: days);
+});
+
+final insightsCustomersProvider = FutureProvider<Sourced<CustomerInsights>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCustomers(days: days);
+});
 
 /// Contribution profit by product, best first.
 final productProfitProvider = FutureProvider<Sourced<List<ProductLine>>>((ref) {

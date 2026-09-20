@@ -1,5 +1,7 @@
 'use client';
 
+import { insightsEn, insightsBn } from './insights-strings';
+
 /**
  * English and Bangla for the dashboard.
  *
@@ -14,6 +16,25 @@ export type Locale = 'en' | 'bn';
 
 export const strings = {
   en: {
+    ...insightsEn,
+    'nav.insights': 'Insights',
+    'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
+    'ins.custom': 'Custom range',
+    'ins.from': 'From',
+    'ins.to': 'To',
+    'ins.apply': 'Apply range',
+    'ins.previous': 'Previous period: {from} – {to}',
+    'ins.open': 'Open details',
+    'ins.matched': 'Matched',
+    'ins.missingCod': 'Missing COD',
+    'ins.chargeMismatch': 'Charge mismatch',
+    'ins.unmatched': 'Unmatched payments',
+    'ins.openCases': 'Open cases',
+    'ins.planLocked': 'Your plan does not include these money figures for this range.',
+    'ins.margin': 'Margin',
+    'ins.sku': 'SKU',
+    'ins.booked': 'Units booked in period',
+    'ins.date': 'Date',
     'app.name': 'ecomsbd',
     'app.tagline': 'Seller workstation',
 
@@ -607,6 +628,25 @@ export const strings = {
   },
 
   bn: {
+    ...insightsBn,
+    'nav.insights': 'ব্যবসার বিশ্লেষণ',
+    'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
+    'ins.custom': 'নিজের সময়সীমা',
+    'ins.from': 'শুরু',
+    'ins.to': 'শেষ',
+    'ins.apply': 'সময়সীমা প্রয়োগ করুন',
+    'ins.previous': 'আগের সময়: {from} – {to}',
+    'ins.open': 'বিস্তারিত দেখুন',
+    'ins.matched': 'মিলেছে',
+    'ins.missingCod': 'কম পাওয়া COD',
+    'ins.chargeMismatch': 'চার্জে অমিল',
+    'ins.unmatched': 'না মেলা পেমেন্ট',
+    'ins.openCases': 'খোলা কেস',
+    'ins.planLocked': 'আপনার প্ল্যানে এই সময়ের টাকার হিসাব অন্তর্ভুক্ত নেই।',
+    'ins.margin': 'লাভের হার',
+    'ins.sku': 'SKU',
+    'ins.booked': 'এই সময়ে বুক হওয়া ইউনিট',
+    'ins.date': 'তারিখ',
     'app.name': 'ecomsbd',
     'app.tagline': 'সেলার ওয়ার্কস্টেশন',
 

@@ -627,7 +627,8 @@ class RtoService:
         times for one. Catalogue lines group by product; free-text lines by
         the name typed on the order.
         """
-        _, _, start = self.window(days, today=today)
+        _, until, start = self.window(days, today=today)
+        end = business_day_bounds(until)[1]
         settled = _settled_at()
         name_key = sa.case(
             (OrderItem.product_id.is_(None), OrderItem.product_name), else_=sa.null()
@@ -643,7 +644,7 @@ class RtoService:
                 sa.func.coalesce(sa.func.sum(sa.case((line_total > 0, line_total), else_=0)), 0),
             )
             .join(OrderItem, OrderItem.order_id == Consignment.order_id)
-            .where(Consignment.status.in_(COMPLETED_STATUSES), settled >= start)
+            .where(Consignment.status.in_(COMPLETED_STATUSES), settled >= start, settled < end)
             .group_by(OrderItem.product_id, name_key, Consignment.status)
         )
         found: dict[tuple[object, object], ProductRto] = {}
@@ -663,6 +664,7 @@ class RtoService:
         """Per provider, over the window, plus last 30 days against the 30 before."""
         _, _, start = self.window(days, today=today)
         until = today or business_date(at=utc_now())
+        end = business_day_bounds(until)[1]
         recent_start = _day_start(until - timedelta(days=29))
         previous_start = _day_start(until - timedelta(days=59))
         settled = _settled_at()
@@ -681,6 +683,7 @@ class RtoService:
                 Consignment.status.in_(statuses_for(*COMPLETED_OUTCOMES, _O.LOST)),
                 Consignment.provider.notin_(sorted(NOT_LIVE_PROVIDERS)),
                 settled >= min(start, previous_start),
+                settled < end,
             )
             .group_by(Consignment.provider, Consignment.status)
         )

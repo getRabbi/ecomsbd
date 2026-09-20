@@ -50,6 +50,8 @@ __all__ = [
     "StockService",
     "StockSummary",
     "insufficient_stock",
+    "low_stock_clause",
+    "out_of_stock_clause",
 ]
 
 
@@ -980,9 +982,9 @@ class ProductService:
         if active_only:
             stmt = stmt.where(Product.is_active.is_(True))
         if low_stock_only:
-            stmt = stmt.where(Product.stock_tracking_enabled.is_(True), _low_stock_clause())
+            stmt = stmt.where(Product.stock_tracking_enabled.is_(True), low_stock_clause())
         if out_of_stock_only:
-            stmt = stmt.where(Product.stock_tracking_enabled.is_(True), _out_of_stock_clause())
+            stmt = stmt.where(Product.stock_tracking_enabled.is_(True), out_of_stock_clause())
         if search:
             term = f"%{search.strip().lower()}%"
             variant_match = sa.exists().where(
@@ -1079,7 +1081,7 @@ def _variant_low_exists() -> sa.Exists:
     )
 
 
-def _low_stock_clause() -> sa.ColumnElement[bool]:
+def low_stock_clause() -> sa.ColumnElement[bool]:
     """Simple products on their own threshold; variant products on any variant's."""
     return sa.or_(
         sa.and_(
@@ -1091,7 +1093,7 @@ def _low_stock_clause() -> sa.ColumnElement[bool]:
     )
 
 
-def _out_of_stock_clause() -> sa.ColumnElement[bool]:
+def out_of_stock_clause() -> sa.ColumnElement[bool]:
     return sa.or_(
         sa.and_(Product.has_variants.is_(False), Product.stock_on_hand <= 0),
         sa.and_(
