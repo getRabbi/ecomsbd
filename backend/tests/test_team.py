@@ -60,7 +60,8 @@ async def _member_session(
             headers=auth_header(session),
         )
         assert selected.status_code == 200, selected.text
-        session = selected.json()
+        # Shop selection returns metadata, not replacement credentials.
+        session.update(selected.json())
     return session
 
 
@@ -109,9 +110,7 @@ class TestTeamMembership:
         assert (
             await client.post("/v1/team/invitations", json=payload, headers=auth_header(owner))
         ).status_code == 201
-        second = await client.post(
-            "/v1/team/invitations", json=payload, headers=auth_header(owner)
-        )
+        second = await client.post("/v1/team/invitations", json=payload, headers=auth_header(owner))
         assert second.status_code == 409
 
     async def test_an_invalid_number_is_refused(
@@ -147,9 +146,7 @@ class TestTeamMembership:
         owner = await signed_in_shop(client, unique_phone, shop_name="Pro Shop", plan="pro")
         # Real members, accepted, because the seat is freed by removing one.
         for index in range(4):
-            await _member_session(
-                client, owner, f"0173322100{index}", TenantRole.ORDER_OPERATOR
-            )
+            await _member_session(client, owner, f"0173322100{index}", TenantRole.ORDER_OPERATOR)
 
         full = await client.post(
             "/v1/team/invitations",
@@ -209,9 +206,7 @@ class TestTeamMembership:
         member = await _member_session(client, owner, "01733111005", TenantRole.PACKER)
         await client.delete(f"/v1/team/{member['user_id']}", headers=auth_header(owner))
 
-        rejoined = await _member_session(
-            client, owner, "01733111005", TenantRole.FINANCE
-        )
+        rejoined = await _member_session(client, owner, "01733111005", TenantRole.FINANCE)
         assert rejoined["role"] == "FINANCE"
 
         rows = (
