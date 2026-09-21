@@ -14,6 +14,7 @@ import '../../l10n/app_strings.dart';
 import '../../l10n/language_picker.dart';
 import '../billing/plans_screen.dart';
 import '../shared/responsive.dart';
+import '../messaging/messaging_screen.dart';
 import 'account_security_screen.dart';
 import 'courier_accounts_screen.dart';
 import 'data_privacy_screen.dart';
@@ -102,6 +103,15 @@ class SettingsScreen extends ConsumerWidget {
 
                 SectionHeader(title: context.tr('settings.sectionLanguage')),
                 const LanguageSettingRow(),
+                ListTile(
+                  leading: const Icon(Icons.message_outlined),
+                  title: Text(context.tr('messaging.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MessagingScreen(),
+                    ),
+                  ),
+                ),
 
                 SectionHeader(title: context.tr('settings.sectionPlan')),
                 const _SubscriptionRow(),

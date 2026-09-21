@@ -10,6 +10,7 @@ and the test suite all import this module rather than individual model files.
 
 from __future__ import annotations
 
+import app.messaging.models  # noqa: F401
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken

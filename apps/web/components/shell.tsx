@@ -39,6 +39,7 @@ const NAV: NavGroup[] = [
       { href: '/notifications', labelKey: 'nav.notifications', icon: '◔' },
       { href: '/orders', labelKey: 'nav.orders', icon: '▦' },
       { href: '/customers', labelKey: 'nav.customers', icon: '☺' },
+      { href: '/messaging', labelKey: 'nav.messaging', icon: '✉' },
       { href: '/products', labelKey: 'nav.products', icon: '⬚' },
       { href: '/couriers', labelKey: 'nav.couriers', icon: '⇢' },
       { href: '/returns', labelKey: 'nav.returns', icon: '↺' },

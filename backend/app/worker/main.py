@@ -30,6 +30,7 @@ from app.couriers.jobs import (
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
+from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.worker.jobs import dispatch_outbox
 from app.worker.maintenance import (
@@ -83,6 +84,7 @@ class WorkerSettings:
     """ARQ configuration."""
 
     functions: ClassVar[list[Any]] = [
+        dispatch_messages,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -103,6 +105,7 @@ class WorkerSettings:
     ]
 
     cron_jobs: ClassVar[list[Any]] = [
+        cron(dispatch_messages, second={5, 35}),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),
