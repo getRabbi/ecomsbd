@@ -111,6 +111,7 @@ class NotificationKind(StrEnum):
     IMPORT_FAILURE = "IMPORT_FAILURE"
     #: A courier account whose credentials need re-entering.
     COURIER_ACCOUNT_PROBLEM = "COURIER_ACCOUNT_PROBLEM"
+    FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
 
 
 class NotificationCategory(StrEnum):
@@ -122,6 +123,7 @@ class NotificationCategory(StrEnum):
     RETURNS = "RETURNS"
     INVENTORY = "INVENTORY"
     IMPORTS = "IMPORTS"
+    CRM = "CRM"
     #: The Friday summary and bundles.
     SUMMARY = "SUMMARY"
 

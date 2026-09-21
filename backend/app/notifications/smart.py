@@ -268,6 +268,7 @@ class SmartAlerts:
     async def run(self) -> int:
         """Every detector, each isolated: one failing costs only its own alert."""
         detectors: list[tuple[NotificationKind, Callable[[], Awaitable[list[AlertCondition]]]]] = [
+            (NotificationKind.FOLLOW_UP_DUE, self.followups_due),
             (NotificationKind.PAYOUT_OVERDUE, self.payout_overdue),
             (NotificationKind.RECONCILIATION_DISCREPANCY, self.reconciliation_discrepancies),
             (NotificationKind.COURIER_STATUS_STUCK, self.courier_stuck),
@@ -295,6 +296,41 @@ class SmartAlerts:
         return created
 
     # ---------------------------------------------------------- money --
+
+    async def followups_due(self) -> list[AlertCondition]:
+        """Count only; no customer name, phone or seller note reaches a push."""
+        from app.customers.crm_models import CustomerFollowUp
+        from app.customers.models import Customer
+
+        count = int(
+            await self._db.scalar(
+                sa.select(sa.func.count(CustomerFollowUp.id))
+                .join(
+                    Customer,
+                    Customer.id == CustomerFollowUp.customer_id,
+                )
+                .where(
+                    Customer.deleted_at.is_(None),
+                    CustomerFollowUp.completed_at.is_(None),
+                    CustomerFollowUp.due_at <= utc_now(),
+                )
+            )
+            or 0
+        )
+        return (
+            [
+                AlertCondition(
+                    kind=NotificationKind.FOLLOW_UP_DUE,
+                    subject="shop",
+                    params={"count": count},
+                    magnitude=count,
+                    item_count=count,
+                    target_params={"segment": "FOLLOW_UP_DUE"},
+                )
+            ]
+            if count
+            else []
+        )
 
     async def payout_overdue(self) -> list[AlertCondition]:
         """COD past the Receivables overdue rule, one alert per courier.

@@ -15,6 +15,7 @@ import '../imports/imports_screen.dart';
 import '../insights/rto_screen.dart';
 import '../money/cases_screen.dart';
 import '../money/receivables_screen.dart';
+import '../customers/customers_screen.dart';
 import '../orders/order_detail_screen.dart';
 import '../products/products_screen.dart';
 import '../settings/courier_accounts_screen.dart';
@@ -31,6 +32,7 @@ const List<String> notificationCategories = <String>[
   'RETURNS',
   'INVENTORY',
   'IMPORTS',
+  'CRM',
 ];
 
 IconData notificationCategoryIcon(String category) => switch (category) {
@@ -51,6 +53,7 @@ IconData notificationCategoryIcon(String category) => switch (category) {
 Widget? notificationDestination(AppNotification notification) {
   final id = notification.targetId;
   return switch (notification.targetRoute) {
+    'customers' => const CustomersScreen(initialSegment: 'FOLLOW_UP_DUE'),
     'receivables' => const ReceivablesScreen(),
     'reconciliation' || 'reconciliation_case' => const CasesScreen(),
     'returns' => const RtoScreen(),

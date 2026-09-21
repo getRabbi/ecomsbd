@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
+import '../../data/commerce/crm_repository.dart';
+import '../../data/commerce/commerce_providers.dart';
+import 'crm_widgets.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
@@ -25,7 +28,8 @@ import '../../l10n/app_strings.dart';
 /// Phone numbers are masked. The full number is one audited tap away on the
 /// detail screen, with a reason (section 101).
 class CustomersScreen extends ConsumerStatefulWidget {
-  const CustomersScreen({super.key});
+  const CustomersScreen({this.initialSegment, super.key});
+  final String? initialSegment;
 
   @override
   ConsumerState<CustomersScreen> createState() => _CustomersScreenState();
@@ -33,6 +37,21 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final TextEditingController _search = TextEditingController();
+  String? _tagName;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSegment != null) {
+      Future.microtask(() {
+        if (mounted) {
+          ref
+              .read(customerListProvider.notifier)
+              .setSegment(widget.initialSegment);
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -44,6 +63,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(customerListProvider);
     final controller = ref.read(customerListProvider.notifier);
+    final moneyAvailable = ref
+        .watch(customersRepositoryProvider)
+        .moneyAvailable;
     final isOffline = ref.watch(isOfflineProvider);
 
     return Scaffold(
@@ -99,6 +121,45 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     spacing: EcomsbdSpacing.xs,
                     runSpacing: EcomsbdSpacing.xs,
                     children: <Widget>[
+                      DropdownButton<String>(
+                        isExpanded: true,
+                        menuMaxHeight: 360,
+                        value: controller.segment,
+                        hint: Text(context.tr('crm.segment')),
+                        items: [
+                          DropdownMenuItem(
+                            value: '',
+                            child: Text(context.tr('crm.all')),
+                          ),
+                          for (final segment in crmSegments.where(
+                            (value) => value != 'HIGH_VALUE' || moneyAvailable,
+                          ))
+                            DropdownMenuItem(
+                              value: segment,
+                              child: Text(context.tr('crm.$segment')),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            controller.setSegment(value == '' ? null : value),
+                      ),
+                      ActionChip(
+                        label: Text(_tagName ?? context.tr('crm.tags')),
+                        onPressed: () async {
+                          final tag = await pickCrmItem(context);
+                          if (!mounted || tag == null) return;
+                          setState(() => _tagName = tag['name'] as String);
+                          controller.setTag(tag['id'] as String);
+                        },
+                      ),
+                      if (controller.tagId != null)
+                        IconButton(
+                          tooltip: context.tr('crm.reset'),
+                          onPressed: () {
+                            setState(() => _tagName = null);
+                            controller.setTag(null);
+                          },
+                          icon: const Icon(Icons.clear),
+                        ),
                       FilterToggle(
                         label: context.tr('cust.filterRepeat'),
                         selected: controller.repeatOnly,
@@ -229,17 +290,25 @@ class CustomerRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (customer.crmTags.isNotEmpty)
+                  Text(
+                    customer.crmTags.take(2).join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EcomsbdType.caption,
+                  ),
               ],
             ),
           ),
           const SizedBox(width: EcomsbdSpacing.xs),
           // Only the amount sits on the right. Stacking the delivery rate here
           // too squeezed the name column to nothing on a 360dp screen.
-          MoneyText(
-            customer.realizedRevenue,
-            style: EcomsbdType.bodyStrong,
-            compact: true,
-          ),
+          if (customer.historicalRevenueAvailable)
+            MoneyText(
+              customer.realizedRevenue,
+              style: EcomsbdType.bodyStrong,
+              compact: true,
+            ),
         ],
       ),
     );

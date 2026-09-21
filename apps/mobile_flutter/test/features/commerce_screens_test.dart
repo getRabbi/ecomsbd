@@ -131,7 +131,7 @@ void main() {
       final harness = CommerceHarness()
         ..adapter.onJson(
           'GET',
-          '/customers',
+          '/customers/crm',
           page(<Map<String, dynamic>>[customerJson()]),
         );
       await pumpCommerceScreen(
@@ -151,7 +151,7 @@ void main() {
       final harness = CommerceHarness()
         ..adapter.onJson(
           'GET',
-          '/customers',
+          '/customers/crm',
           page(<Map<String, dynamic>>[
             customerJson(
               orders: 1,
@@ -178,7 +178,7 @@ void main() {
       final harness = CommerceHarness()
         ..adapter.onJson(
           'GET',
-          '/customers',
+          '/customers/crm',
           page(<Map<String, dynamic>>[customerJson()]),
         );
       await pumpCommerceScreen(

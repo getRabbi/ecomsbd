@@ -12,8 +12,10 @@
 ///
 /// Placeholders are `{name}` and are substituted by `AppStrings.t`.
 library;
+import 'crm_strings.dart';
 
 final Map<String, String> banglaStrings = <String, String>{
+  ...crmBn,
   ..._commonBn,
   ..._authBn,
   ..._onboardingBn,
@@ -38,6 +40,7 @@ final Map<String, String> banglaStrings = <String, String>{
 };
 
 final Map<String, String> englishStrings = <String, String>{
+  ...crmEn,
   ..._commonEn,
   ..._authEn,
   ..._onboardingEn,

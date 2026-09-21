@@ -37,6 +37,12 @@ from app.couriers.models import (
     CourierWebhookDelivery,
     ProviderPayment,
 )
+from app.customers.crm_models import (
+    CustomerActivity,
+    CustomerFollowUp,
+    CustomerTag,
+    CustomerTagLink,
+)
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
@@ -86,7 +92,11 @@ __all__ = [
     "CourierSyncCursor",
     "CourierWebhookDelivery",
     "Customer",
+    "CustomerActivity",
     "CustomerAddress",
+    "CustomerFollowUp",
+    "CustomerTag",
+    "CustomerTagLink",
     "DeletionRequest",
     "Device",
     "Expense",

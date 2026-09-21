@@ -63,11 +63,11 @@ def _provider(value: object) -> str:
     return _PROVIDERS.get(text.lower(), text.title())
 
 
-def _money(paisa: object) -> str:
+def _money(paisa: int | str | None) -> str:
     return format_bdt(int(paisa or 0))
 
 
-def _pct(bps: object) -> str:
+def _pct(bps: int | str | None) -> str:
     text = f"{int(bps or 0) / 100:.1f}"
     return text[:-2] if text.endswith(".0") else text
 
@@ -297,7 +297,15 @@ def _weekly_summary(p: Params, locale: str) -> tuple[str, str]:
     )
 
 
+def _follow_up_due(p: Params, locale: str) -> tuple[str, str]:
+    count = int(p["count"])
+    if locale == "bn":
+        return "ফলো-আপের সময় হয়েছে", f"{count}টি ফলো-আপ বাকি আছে। কাস্টমার তালিকা দেখুন।"
+    return "Customer follow-ups due", f"{count} follow-ups are due. Open your customer list."
+
+
 _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
+    NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,
     NotificationKind.COURIER_STATUS_STUCK: _courier_stuck,

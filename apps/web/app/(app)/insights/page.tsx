@@ -208,6 +208,7 @@ export default function InsightsPage() {
           <Row label={t('ins.repeatCustomers')} value={data.repeat_customers} />
           <Row label={t('ins.multiDelivered')} value={data.multi_delivery_customers} />
           <Row label={t('ins.repeatRto')} value={data.repeat_rto_customers} />
+          <div className="toolbar"><Link href="/customers?segment=REPEAT">{t('crm.REPEAT')}</Link><Link href="/customers?segment=INACTIVE">{t('crm.INACTIVE')}</Link>{!overview.data?.money_locked && <Link href="/customers?segment=HIGH_VALUE">{t('crm.HIGH_VALUE')}</Link>}</div>
           <Facts items={data.explanations} />
         </>}</Result>
       </Card>

@@ -36,6 +36,7 @@ from typing import Any, Final
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.customer_segments import REPEAT_MIN_ORDERS, REPEAT_MIN_OUTCOMES
 from app.analytics.rto import (
     MIN_RATE_SAMPLE,
     NOT_LIVE_PROVIDERS,
@@ -1022,7 +1023,7 @@ class InsightsService:
                 .join(Consignment, Consignment.order_id == Order.id)
                 .where(Order.customer_id.is_not(None), Consignment.status.in_(statuses))
                 .group_by(Order.customer_id)
-                .having(sa.func.count(sa.distinct(Consignment.id)) >= 2)
+                .having(sa.func.count(sa.distinct(Consignment.id)) >= REPEAT_MIN_OUTCOMES)
                 .subquery()
             )
             return sa.select(sa.func.count()).select_from(per_customer)
@@ -1031,7 +1032,7 @@ class InsightsService:
             sa.select(Order.customer_id)
             .where(Order.customer_id.is_not(None))
             .group_by(Order.customer_id)
-            .having(sa.func.count(Order.id) >= 2)
+            .having(sa.func.count(Order.id) >= REPEAT_MIN_ORDERS)
             .subquery()
         )
         insights = CustomerInsights(

@@ -201,6 +201,9 @@ class Customer {
     this.firstOrderAt,
     this.lastOrderAt,
     this.addresses = const <CustomerAddress>[],
+    this.crmTags = const <String>[],
+    this.crmSegments = const <String>[],
+    this.historicalRevenueAvailable = false,
   });
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
@@ -217,6 +220,13 @@ class Customer {
     cancelledCount: json['cancelled_count'] as int? ?? 0,
     successRateBasisPoints: json['success_rate_basis_points'] as int?,
     realizedRevenue: Money(json['realized_revenue_paisa'] as int? ?? 0),
+    historicalRevenueAvailable:
+        json['realized_revenue_paisa'] != null && json['value'] != null,
+    crmTags: [
+      for (final tag in json['tags'] as List? ?? [])
+        (tag as Map)['name'] as String,
+    ],
+    crmSegments: (json['segments'] as List? ?? []).cast<String>(),
     isRepeatBuyer: json['is_repeat_buyer'] as bool? ?? false,
     firstOrderAt: json['first_order_at'] == null
         ? null
@@ -256,6 +266,9 @@ class Customer {
   final DateTime? firstOrderAt;
   final DateTime? lastOrderAt;
   final List<CustomerAddress> addresses;
+  final List<String> crmTags;
+  final List<String> crmSegments;
+  final bool historicalRevenueAvailable;
 
   bool get isBlocked => flag == 'BLOCKED';
   bool get isStarred => flag == 'STARRED';

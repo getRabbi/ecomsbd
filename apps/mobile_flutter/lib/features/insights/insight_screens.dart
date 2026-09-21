@@ -14,6 +14,7 @@ import '../money/cases_screen.dart';
 import '../shared/responsive.dart';
 import 'insight_widgets.dart';
 import 'rto_screen.dart';
+import '../customers/customers_screen.dart';
 
 /// Insights drill-downs. Each reads one `/analytics/insights` section for the
 /// range picked on the overview, and pages long lists on the server.
@@ -709,6 +710,23 @@ class InsightsCustomersScreen extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const CustomersScreen(initialSegment: 'REPEAT'),
+              ),
+            ),
+            child: Text(context.tr('crm.REPEAT')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    const CustomersScreen(initialSegment: 'INACTIVE'),
+              ),
+            ),
+            child: Text(context.tr('crm.INACTIVE')),
           ),
           if (value.repeatRtoCustomers > 0)
             TextButton(

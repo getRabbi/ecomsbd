@@ -20,6 +20,7 @@ export const NOTIFICATION_CATEGORIES = [
   'RETURNS',
   'INVENTORY',
   'IMPORTS',
+  'CRM',
 ] as const;
 
 export interface AppNotification {
@@ -52,6 +53,7 @@ export interface NotificationPreferences {
  * guessing, because landing on the wrong page is worse than staying put.
  */
 const WEB_ROUTES: Record<string, string> = {
+  customers: '/customers?segment=FOLLOW_UP_DUE',
   receivables: '/money',
   reconciliation: '/reconciliation',
   reconciliation_case: '/reconciliation',

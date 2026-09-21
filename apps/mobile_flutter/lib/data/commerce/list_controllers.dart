@@ -128,6 +128,20 @@ class CustomerListController extends PagedListController<Customer> {
   String _search = '';
   bool _repeatOnly = false;
   String? _flag;
+  String? _segment;
+  String? _tagId;
+  String? get segment => _segment;
+  String? get tagId => _tagId;
+
+  void setSegment(String? value) {
+    _segment = value;
+    refresh();
+  }
+
+  void setTag(String? value) {
+    _tagId = value;
+    refresh();
+  }
 
   String get search => _search;
   bool get repeatOnly => _repeatOnly;
@@ -140,6 +154,8 @@ class CustomerListController extends PagedListController<Customer> {
       search: _search.isEmpty ? null : _search,
       repeatOnly: _repeatOnly,
       flag: _flag,
+      segment: _segment,
+      tagId: _tagId,
     );
   }
 

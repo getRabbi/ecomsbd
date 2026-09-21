@@ -76,6 +76,7 @@ CATEGORY_AUDIENCE: Final = MappingProxyType(
         NotificationCategory.INVENTORY: Permission.INVENTORY_ADJUST,
         # Addressed to the uploader; this is the fallback when nobody is known.
         NotificationCategory.IMPORTS: Permission.ORDER_WRITE,
+        NotificationCategory.CRM: Permission.ORDER_WRITE,
         NotificationCategory.SUMMARY: Permission.MONEY_VIEW,
     }
 )
@@ -84,6 +85,12 @@ _DAY = timedelta(days=1)
 
 ALERT_RULES: Final = MappingProxyType(
     {
+        NotificationKind.FOLLOW_UP_DUE: AlertRule(
+            category=NotificationCategory.CRM,
+            severity=Severity.ACTION,
+            cooldown=3 * _DAY,
+            route="customers",
+        ),
         NotificationKind.PAYOUT_OVERDUE: AlertRule(
             category=NotificationCategory.MONEY,
             severity=Severity.CRITICAL,
