@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_error.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/risk_repository.dart';
+import 'external_risk_card.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
@@ -87,6 +88,7 @@ class _RiskCheckScreenState extends ConsumerState<RiskCheckScreen> {
       title: context.tr('rc.title'),
       subtitle: context.tr('rc.subtitle'),
       children: <Widget>[
+        const ExternalRiskCard(),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

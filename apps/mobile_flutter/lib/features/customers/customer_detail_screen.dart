@@ -5,6 +5,7 @@ import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/crm_repository.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../l10n/app_strings.dart';
+import '../risk/external_risk_card.dart';
 import 'crm_records_screen.dart';
 import 'crm_widgets.dart';
 
@@ -195,6 +196,7 @@ class _CustomerDetailState extends ConsumerState<CustomerDetailScreen> {
                       ],
                     ),
                   ),
+                const ExternalRiskCard(),
                 ExpansionTile(
                   title: Text(context.tr('crm.value')),
                   children: [
