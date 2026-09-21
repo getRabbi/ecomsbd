@@ -19,6 +19,7 @@ import 'account_security_screen.dart';
 import 'courier_accounts_screen.dart';
 import 'data_privacy_screen.dart';
 import 'notification_settings_screen.dart';
+import 'order_sources_screen.dart';
 
 /// Settings.
 ///
@@ -103,6 +104,15 @@ class SettingsScreen extends ConsumerWidget {
 
                 SectionHeader(title: context.tr('settings.sectionLanguage')),
                 const LanguageSettingRow(),
+                ListTile(
+                  leading: const Icon(Icons.input),
+                  title: Text(context.tr('sources.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const OrderSourcesScreen(),
+                    ),
+                  ),
+                ),
                 ListTile(
                   leading: const Icon(Icons.message_outlined),
                   title: Text(context.tr('messaging.title')),
