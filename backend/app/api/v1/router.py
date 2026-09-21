@@ -22,6 +22,7 @@ from app.api.v1 import (
     couriers,
     crm,
     customers,
+    developers,
     imports,
     insights,
     messaging,
@@ -42,6 +43,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(messaging.router)
 api_router.include_router(order_sources.router)
+api_router.include_router(developers.router)
 api_router.include_router(tenants.router)
 api_router.include_router(products.router)
 api_router.include_router(crm.router)

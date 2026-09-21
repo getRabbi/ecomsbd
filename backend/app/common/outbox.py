@@ -156,6 +156,7 @@ async def enqueue(
     """
     context = current_context()
     event = OutboxEvent(
+        id=new_id(),
         tenant_id=tenant_id if tenant_id is not None else context.tenant_id,
         topic=str(topic),
         payload=payload,
@@ -164,6 +165,9 @@ async def enqueue(
         trace_id=context.trace_id,
     )
     session.add(event)
+    from app.public_api.webhooks import schedule_event
+
+    await schedule_event(session, event)
     return event
 
 

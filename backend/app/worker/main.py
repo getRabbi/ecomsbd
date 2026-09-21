@@ -32,6 +32,7 @@ from app.db.tenancy import install_tenancy_guards
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
 from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
+from app.public_api.webhooks import dispatch_webhooks
 from app.worker.jobs import dispatch_outbox
 from app.worker.maintenance import (
     dispatch_notifications,
@@ -85,6 +86,7 @@ class WorkerSettings:
 
     functions: ClassVar[list[Any]] = [
         dispatch_messages,
+        dispatch_webhooks,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -106,6 +108,7 @@ class WorkerSettings:
 
     cron_jobs: ClassVar[list[Any]] = [
         cron(dispatch_messages, second={5, 35}),
+        cron(dispatch_webhooks, second={10, 40}),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),

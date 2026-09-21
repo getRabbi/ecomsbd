@@ -27,6 +27,7 @@ from app.api.auth_links import router as auth_links_router
 from app.api.errors import install_exception_handlers
 from app.api.health import router as health_router
 from app.api.middleware import BodySizeLimitMiddleware, RequestContextMiddleware
+from app.api.public_v1 import router as public_router
 from app.api.v1.router import api_router
 from app.core.config import AppEnv, Settings, get_settings
 from app.core.logging import configure_logging, get_logger
@@ -139,6 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if not settings.supabase_auth_active:
         app.include_router(auth_links_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    app.include_router(public_router)
 
     return app
 

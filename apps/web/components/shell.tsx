@@ -59,6 +59,7 @@ const NAV: NavGroup[] = [
       { href: '/order-sources', labelKey: 'nav.sources', icon: '⇥' },
       { href: '/team', labelKey: 'nav.team', icon: '⚇' },
       { href: '/settings', labelKey: 'nav.settings', icon: '⚙' },
+      { href: '/developers', labelKey: 'nav.developers', icon: '⌘' },
     ],
   },
 ];
