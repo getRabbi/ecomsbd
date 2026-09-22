@@ -124,7 +124,33 @@ jobs:
         run: flutter test
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        # Compile with a synthetic debug-only Firebase project. Production
+        # google-services.json stays private and release signing stays mandatory.
+        # This file has no usable provider credentials and is never shipped.
+        env:
+          CI_FIREBASE_FIXTURE: "true"
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          target = Path("android/app/src/debug/google-services.json")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_text(json.dumps({
+              "project_info": {
+                  "project_number": "000000000000",
+                  "project_id": "ecomsbd-ci-fixture",
+              },
+              "client": [{
+                  "client_info": {
+                      "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                      "android_client_info": {"package_name": "com.smply.app"},
+                  },
+                  "api_key": [{"current_key": "ci-only-not-a-provider-credential"}],
+              }],
+              "configuration_version": "1",
+          }), encoding="utf-8")
+          PY
+          flutter build apk --debug
 
   secrets-scan:
     name: Secret scan
