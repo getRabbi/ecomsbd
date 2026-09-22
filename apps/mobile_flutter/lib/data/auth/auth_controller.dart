@@ -122,6 +122,7 @@ class AuthController extends StateNotifier<AuthState> {
   final ProviderSignIn _providerSignIn;
   late final StreamSubscription<ApiError> _invalidationSub;
   late final StreamSubscription<sb.AuthState> _authSub;
+  bool _signingOut = false;
 
   /// Restore the stored session and confirm it is still valid.
   ///
@@ -222,15 +223,24 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut({bool allDevices = false}) async {
-    state = state.copyWith(isBusy: true, clearError: true);
+    _signingOut = true;
     try {
-      await _repository.signOut(allDevices: allDevices);
-    } on ApiError catch (error) {
-      state = state.copyWith(isBusy: false, error: error);
-      return;
+      state = state.copyWith(isBusy: true, clearError: true);
+      try {
+        await _repository.signOut(allDevices: allDevices);
+      } on ApiError catch (error) {
+        // The local session is cleared before the remote revoke is attempted;
+        // once it is gone this device is signed out, whatever the server said.
+        if (await _repository.currentSession() != null) {
+          state = state.copyWith(isBusy: false, error: error);
+          return;
+        }
+      }
+      await _clearProviderSession();
+      state = const AuthState(stage: AuthStage.signedOut);
+    } finally {
+      _signingOut = false;
     }
-    await _clearProviderSession();
-    state = const AuthState(stage: AuthStage.signedOut);
   }
 
   void clearError() {
@@ -285,6 +295,10 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   void _onInvalidated(ApiError error) {
+    // Requests already in flight when the seller signs out come back 401 once
+    // the session is revoked. That is the sign-out working, not a failure to
+    // show on the login screen.
+    if (_signingOut || state.stage == AuthStage.signedOut) return;
     state = AuthState(stage: AuthStage.signedOut, error: error);
   }
 

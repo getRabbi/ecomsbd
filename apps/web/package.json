@@ -1,6 +1,6 @@
 {
   "name": "@ecomsbd/web",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "description": "ecomsbd desktop seller workstation. Talks to the same FastAPI as the mobile app; it has no backend of its own and no database access.",
   "scripts": {

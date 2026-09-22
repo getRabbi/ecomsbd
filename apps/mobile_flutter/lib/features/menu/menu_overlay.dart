@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../design/glass.dart';
-import '../../design/components/badges.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
@@ -29,7 +28,6 @@ class _MenuItem {
     required this.icon,
     required this.titleKey,
     required this.subtitleKey,
-    this.phase,
     this.destination,
   });
 
@@ -40,15 +38,10 @@ class _MenuItem {
   final String titleKey;
   final String subtitleKey;
 
-  /// The release that brings this destination, for a tile a seller can
-  /// expect to see land — never an internal milestone name. Absent on a tile
-  /// that is inactive for a reason no date fixes.
-  final String? phase;
-
   /// Where the tile goes. Absent for a destination that has not shipped.
   final Widget Function()? destination;
 
-  bool get isAvailable => phase == null && destination != null;
+  bool get isAvailable => destination != null;
 }
 
 /// The full-screen menu overlay (`.menu-screen`).
@@ -56,8 +49,7 @@ class _MenuItem {
 /// Master spec section 3 lists everything under "More". A destination that has
 /// not shipped still gets its tile, because a seller evaluating the app should
 /// be able to see its shape — and because a tile that opens a blank screen is
-/// worse than one that explains itself. Where a release can be named, the tile
-/// names it; an internal milestone label is never one of those names.
+/// worse than one that explains itself.
 class MenuOverlay extends ConsumerWidget {
   const MenuOverlay({super.key});
 
@@ -163,7 +155,6 @@ class MenuOverlay extends ConsumerWidget {
       icon: Icons.help_outline_rounded,
       titleKey: 'menu.support',
       subtitleKey: 'menu.supportSub',
-      phase: 'V1.1',
     ),
   ];
 
@@ -386,14 +377,6 @@ class _MenuTile extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            if (item.phase != null) ...<Widget>[
-              const SizedBox(height: EcomsbdSpacing.xs),
-              StatusChip(
-                label: item.phase!,
-                tone: Tone.neutral,
-                icon: Icons.schedule_rounded,
-              ),
-            ],
           ],
         ),
       ),

@@ -1,6 +1,6 @@
 [project]
 name = "ecomsbd-backend"
-version = "2.3.0"
+version = "2.3.1"
 description = "ecomsbd - Bangladesh F-commerce seller financial operations system (backend)"
 requires-python = ">=3.12,<3.13"
 dependencies = [

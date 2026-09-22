@@ -120,6 +120,29 @@ void main() {
   );
 
   test(
+    'a request revoked by signing out does not show a sign-in error',
+    () async {
+      expect(
+        await controller.login('seller@example.com', 'strong password'),
+        isTrue,
+      );
+      await controller.signOut();
+      // Home had a request in flight; it comes back 401 once logout revokes it.
+      await repository.onSessionInvalidated(
+        const ApiError(
+          code: 'SESSION_REVOKED',
+          messageBn: '',
+          messageEn: 'Session revoked.',
+          retryable: false,
+        ),
+      );
+      await pumpEventQueue();
+      expect(controller.state.stage, AuthStage.signedOut);
+      expect(controller.state.error, isNull);
+    },
+  );
+
+  test(
     'saved Supabase session restores and no shop uses existing onboarding',
     () async {
       api.onJson('GET', '/me', {
