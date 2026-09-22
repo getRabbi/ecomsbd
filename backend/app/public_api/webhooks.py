@@ -68,7 +68,7 @@ async def resolve_public(host: str) -> str:
     answers = await asyncio.wait_for(
         asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM), timeout=5
     )
-    addresses = {item[4][0] for item in answers}
+    addresses = {str(item[4][0]) for item in answers}
     if not addresses or any(not ipaddress.ip_address(ip).is_global for ip in addresses):
         raise ValidationError("Webhook DNS must resolve only to public addresses")
     return sorted(addresses)[0]

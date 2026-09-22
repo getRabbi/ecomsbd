@@ -15,12 +15,12 @@ from app.common.outbox import OutboxEvent
 from app.core.clock import utc_now
 from app.core.errors import ConflictError, ValidationError
 from app.customers.crm import CrmService
-from app.customers.crm_models import CustomerTag
+from app.customers.crm_models import CustomerFollowUp, CustomerTag
 from app.customers.models import Customer
 from app.customers.service import CustomerService
 from app.messaging import service as messaging
-from app.messaging.models import Channel, Conversation
-from app.notifications.models import NotificationCategory, NotificationKind, Severity
+from app.messaging.models import Channel, Conversation, Message
+from app.notifications.models import Notification, NotificationCategory, NotificationKind, Severity
 from app.notifications.service import NotificationService
 from app.orders.models import Order, OrderChannel, OrderStatus
 from app.tenants.models import TenantUser
@@ -164,6 +164,7 @@ async def perform(db: AsyncSession, execution: AutomationExecution) -> str | Non
         raise ConflictError("Order customer changed")
     customers = CustomerService(db, hasher=get_hasher(), vault=get_vault())
     crm = CrmService(db, customers)
+    row: Message | CustomerFollowUp | Notification | AutomationTask | None
     if action == "SEND_TEMPLATE":
         conversation = await db.scalar(
             sa.select(Conversation).where(

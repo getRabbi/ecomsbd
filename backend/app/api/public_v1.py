@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Header, Query
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/public/v1", tags=["public API v1"])
 Key = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=120)]
 
 
-def fields(row, names: str) -> dict:
+def fields(row: object, names: str) -> dict:
     return jsonable_encoder({key: getattr(row, key) for key in names.split()})
 
 
@@ -45,7 +45,7 @@ async def orders(
     db: DbSession,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-):
+) -> dict[str, Any]:
     principal.require("orders:read")
     rows = (
         await db.scalars(
@@ -60,7 +60,9 @@ async def orders(
 
 
 @router.get("/orders/{order_id}")
-async def order_detail(order_id: uuid.UUID, principal: PublicPrincipal, db: DbSession):
+async def order_detail(
+    order_id: uuid.UUID, principal: PublicPrincipal, db: DbSession
+) -> dict[str, Any]:
     principal.require("orders:read")
     row = await required(db, Order, order_id)
     return {
@@ -76,12 +78,14 @@ async def order_detail(order_id: uuid.UUID, principal: PublicPrincipal, db: DbSe
 
 
 @router.post("/orders", status_code=201)
-async def create_order(body: NativeOrder, principal: PublicPrincipal, db: DbSession, key: Key):
+async def create_order(
+    body: NativeOrder, principal: PublicPrincipal, db: DbSession, key: Key
+) -> dict[str, Any]:
     principal.require("orders:write")
     if body.client_id is not None or len(body.items) > 100:
         raise ValidationError("Use Idempotency-Key; at most 100 items per order")
 
-    async def execute():
+    async def execute() -> dict[str, Any]:
         return fields(await create_native(db, body), ORDER_FIELDS)
 
     return await write_once(
@@ -95,7 +99,7 @@ async def customers(
     db: DbSession,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-):
+) -> dict[str, Any]:
     principal.require("customers:read")
     rows = (
         await db.scalars(
@@ -115,10 +119,10 @@ async def customers(
 @router.post("/customers", status_code=201)
 async def create_customer(
     body: CustomerCreatePayload, principal: PublicPrincipal, db: DbSession, key: Key
-):
+) -> dict[str, Any]:
     principal.require("customers:write")
 
-    async def execute():
+    async def execute() -> dict[str, Any]:
         service = CustomerService(db, hasher=get_hasher(), vault=get_vault())
         return fields(await service.create(**body.model_dump()), CUSTOMER_FIELDS)
 
@@ -133,12 +137,12 @@ async def products(
     db: DbSession,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-):
+) -> dict[str, Any]:
     principal.require("products:read")
     rows = (
         await db.scalars(
             sa.select(Product)
-            .where(Product.deleted_at.is_(None))
+            .where(Product.is_active.is_(True))
             .order_by(Product.created_at.desc(), Product.id)
             .offset(offset)
             .limit(limit)
@@ -153,12 +157,12 @@ async def products(
 @router.post("/products", status_code=201)
 async def create_product(
     body: ProductCreatePayload, principal: PublicPrincipal, db: DbSession, key: Key
-):
+) -> dict[str, Any]:
     principal.require("products:write")
     if body.opening_stock:
         principal.require("inventory:write")
 
-    async def execute():
+    async def execute() -> dict[str, Any]:
         return fields(await ProductService(db).create(**body.model_dump()), PRODUCT_FIELDS)
 
     return await write_once(
@@ -167,7 +171,9 @@ async def create_product(
 
 
 @router.get("/inventory/{product_id}")
-async def inventory(product_id: uuid.UUID, principal: PublicPrincipal, db: DbSession):
+async def inventory(
+    product_id: uuid.UUID, principal: PublicPrincipal, db: DbSession
+) -> dict[str, Any]:
     principal.require("inventory:read")
     row = await required(db, Product, product_id)
     variants = (
@@ -186,12 +192,12 @@ async def adjust_inventory(
     principal: PublicPrincipal,
     db: DbSession,
     key: Key,
-):
+) -> dict[str, Any]:
     principal.require("inventory:write")
     if body.idempotency_key is not None:
         raise ValidationError("Use the Idempotency-Key header")
 
-    async def execute():
+    async def execute() -> dict[str, Any]:
         movement = await ProductService(db).adjust_stock(
             product_id,
             quantity_delta=body.quantity_delta,
@@ -213,11 +219,11 @@ async def adjust_inventory(
 @router.post("/sources/{source_id}/orders", status_code=201)
 async def source_order(
     source_id: uuid.UUID, body: IngestInput, principal: PublicPrincipal, db: DbSession, key: Key
-):
+) -> dict[str, Any]:
     principal.require("sources:write")
     principal.require("orders:write")
 
-    async def execute():
+    async def execute() -> dict[str, Any]:
         return await ingest(db, source_id, body.external_order_id, body.payload)
 
     return await write_once(

@@ -40,7 +40,8 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -738,7 +739,7 @@ class ReconciliationService:
         return ChargeAcceptance(accepted_paisa=total, adjustments=len(pending), items=1)
 
     async def _record_settled_charge(
-        self, consignment_id: uuid.UUID, adjustment: PayoutAdjustment, occurred_at
+        self, consignment_id: uuid.UUID, adjustment: PayoutAdjustment, occurred_at: datetime
     ) -> None:
         """Promote the accepted charge to the parcel's settled charge.
 
@@ -952,7 +953,7 @@ class ReconciliationService:
         date_from: date | None = None,
         date_to: date | None = None,
         case_status: CaseStatus | None = None,
-    ):
+    ) -> sa.Select[tuple[ReconciliationItem]]:
         stmt = sa.select(ReconciliationItem)
         if statuses:
             stmt = stmt.where(ReconciliationItem.status.in_([str(status) for status in statuses]))
@@ -1280,7 +1281,7 @@ class ReconciliationService:
         key: str,
         evaluation: Evaluation,
         *,
-        now,
+        now: datetime,
         provider: str,
         payout: Payout,
         line_id: uuid.UUID | None,
@@ -1632,9 +1633,9 @@ class ReconciliationService:
                 continue
             for field_name in ("provider_consignment_id", "tracking_code", "merchant_reference"):
                 value = _norm(getattr(line, field_name))
-                earlier = seen.get((field_name, value, line.amount_paisa)) if value else None
-                if earlier is not None:
-                    found[line.id] = earlier
+                prior = seen.get((field_name, value, line.amount_paisa)) if value else None
+                if prior is not None:
+                    found[line.id] = prior
                     break
         return found
 
@@ -1772,7 +1773,7 @@ class ReconciliationService:
                 result[consignment_id] = expected
         return result
 
-    async def _by_ids(self, model, ids: set[uuid.UUID]) -> dict:
+    async def _by_ids(self, model: Any, ids: set[uuid.UUID]) -> dict:
         found: dict = {}
         for chunk in _chunks(list(ids)):
             rows = await self._db.execute(sa.select(model).where(model.id.in_(chunk)))

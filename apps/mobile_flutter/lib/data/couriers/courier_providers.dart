@@ -63,7 +63,6 @@ final providerPaymentsProvider = FutureProvider<List<ProviderPayment>>((ref) {
   return ref.watch(courierRepositoryProvider).payments();
 });
 
-
 /// Every courier ecomsbd knows about, with its connect form.
 ///
 /// Drives the accounts screen: one card per connectable courier, rendered from

@@ -247,7 +247,7 @@ class SteadfastAdapter:
         cod_taka, residual = provider_cod_taka(req.cod_amount)
         return BookingPreview(
             redacted_payload=payload.redacted(),
-            recipient_phone_masked=mask_phone(payload.recipient_phone),
+            recipient_phone_masked=mask_phone(payload.recipient_phone) or "",
             cod_taka=cod_taka,
             cod_residual_paisa=residual,
         )

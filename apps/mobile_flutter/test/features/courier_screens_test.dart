@@ -92,7 +92,6 @@ SellerOrder _order({String status = 'PACKED'}) {
   });
 }
 
-
 /// The courier list the accounts screen renders from.
 ///
 /// V2.1 made that screen server-driven: it no longer has a hard-coded
@@ -147,7 +146,9 @@ const List<dynamic> _bookableSteadfast = <dynamic>[
 ];
 
 void _stubCourierLists(CommerceHarness harness) {
-  harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[_steadfastProvider]);
+  harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
+    _steadfastProvider,
+  ]);
   harness.adapter.onJson('GET', '/couriers/bookable', _bookableSteadfast);
 }
 

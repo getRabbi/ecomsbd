@@ -211,9 +211,7 @@ class _Members extends ConsumerWidget {
               ),
               Text(
                 '${active.length}',
-                style: EcomsbdType.caption.copyWith(
-                  color: EcomsbdColors.muted,
-                ),
+                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
             ],
           ),
@@ -322,9 +320,7 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    Flexible(
-                      child: Text(member.name, style: EcomsbdType.body),
-                    ),
+                    Flexible(child: Text(member.name, style: EcomsbdType.body)),
                     if (member.isSelf) ...<Widget>[
                       const SizedBox(width: 6),
                       Text(
@@ -411,9 +407,7 @@ class _Invitations extends ConsumerWidget {
               const SizedBox(height: 3),
               Text(
                 context.tr('team.waitingOnSub'),
-                style: EcomsbdType.caption.copyWith(
-                  color: EcomsbdColors.muted,
-                ),
+                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
               for (final invitation in open)
@@ -611,9 +605,7 @@ class _InviteSheetState extends ConsumerState<InviteSheet> {
               Text(
                 // Says plainly that this is an offer, not an addition.
                 context.tr('team.inviteBody'),
-                style: EcomsbdType.caption.copyWith(
-                  color: EcomsbdColors.muted,
-                ),
+                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
               ),
               const SizedBox(height: EcomsbdSpacing.md),
               LabelledField(

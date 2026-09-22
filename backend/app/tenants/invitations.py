@@ -44,6 +44,7 @@ from app.core.logging import get_logger
 from app.core.security import CredentialVault, SecretHasher
 from app.db.tenancy import allow_cross_tenant
 from app.entitlements.catalog import Entitlement
+from app.entitlements.service import EntitlementService
 from app.tenants.models import InvitationStatus, Tenant, TenantInvitation, TenantUser
 from app.tenants.roles import TenantRole
 from app.users.models import User
@@ -88,7 +89,7 @@ class InvitationService:
         *,
         hasher: SecretHasher,
         vault: CredentialVault,
-        entitlements=None,
+        entitlements: EntitlementService | None = None,
     ) -> None:
         self._db = session
         self._hasher = hasher

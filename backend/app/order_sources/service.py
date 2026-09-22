@@ -17,7 +17,7 @@ from app.customers.service import CustomerService
 from app.imports.templates import ORDERS_TEMPLATE, parse_row
 from app.messaging.service import required
 from app.order_sources.models import ExternalOrder, OrderSource
-from app.orders.models import OrderChannel
+from app.orders.models import Order, OrderChannel
 from app.orders.service import OrderDraft, OrderItemDraft, OrderService
 
 PROVIDERS = ("CUSTOM_PUSH", "SHOPIFY", "WOOCOMMERCE", "MESSENGER")
@@ -95,7 +95,7 @@ def normalize(source: OrderSource, payload: dict[str, Any]) -> NativeOrder:
 
 async def create_native(
     db: AsyncSession, payload: OrderCreatePayload, *, client_id: uuid.UUID | None = None
-):
+) -> Order:
     service = OrderService(
         db, customers=CustomerService(db, hasher=get_hasher(), vault=get_vault())
     )

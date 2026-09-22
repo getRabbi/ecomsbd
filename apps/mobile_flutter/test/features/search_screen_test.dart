@@ -22,7 +22,7 @@ void main() {
         )
         ..adapter.onJson(
           'GET',
-          '/customers',
+          '/customers/crm',
           page(<Map<String, dynamic>>[customerJson()]),
         )
         ..adapter.onJson(
@@ -49,7 +49,7 @@ void main() {
           .toSet();
       expect(
         searched,
-        containsAll(<String>['/orders', '/customers', '/products']),
+        containsAll(<String>['/orders', '/customers/crm', '/products']),
       );
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('Customers'), findsOneWidget);
@@ -84,7 +84,11 @@ void main() {
     ) async {
       final harness = CommerceHarness()
         ..adapter.onJson('GET', '/orders', page(<Map<String, dynamic>>[]))
-        ..adapter.onJson('GET', '/customers', page(<Map<String, dynamic>>[]))
+        ..adapter.onJson(
+          'GET',
+          '/customers/crm',
+          page(<Map<String, dynamic>>[]),
+        )
         ..adapter.onJson('GET', '/products', page(<Map<String, dynamic>>[]));
       await pumpCommerceScreen(
         tester,

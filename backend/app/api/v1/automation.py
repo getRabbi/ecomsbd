@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
@@ -36,7 +36,7 @@ class TaskInput(BaseModel):
     completed: bool
 
 
-def rule_view(row):
+def rule_view(row: AutomationRule) -> dict[str, Any]:
     return {
         key: getattr(row, key)
         for key in ("id", "name", "trigger", "conditions", "action", "config", "enabled", "version")
@@ -44,7 +44,7 @@ def rule_view(row):
 
 
 @router.get("/catalog")
-async def catalog(db: DbSession, _: Reader):
+async def catalog(db: DbSession, _: Reader) -> dict[str, Any]:
     tags = (
         await db.scalars(
             sa.select(CustomerTag)
@@ -65,7 +65,7 @@ async def catalog(db: DbSession, _: Reader):
 
 
 @router.get("/rules")
-async def rules(db: DbSession, _: Reader):
+async def rules(db: DbSession, _: Reader) -> dict[str, Any]:
     return {
         "items": [
             rule_view(row)
@@ -79,9 +79,9 @@ async def rules(db: DbSession, _: Reader):
 
 
 @router.post("/rules", status_code=201)
-async def create_rule(body: RuleInput, db: DbSession, actor: Manager):
+async def create_rule(body: RuleInput, db: DbSession, actor: Manager) -> dict[str, Any]:
     await lock_shop(db)
-    if await db.scalar(sa.select(sa.func.count()).select_from(AutomationRule)) >= 50:
+    if (await db.scalar(sa.select(sa.func.count()).select_from(AutomationRule)) or 0) >= 50:
         raise ConflictError("At most 50 rules per shop")
     config = await validate_rule(db, body)
     row = AutomationRule(
@@ -93,7 +93,9 @@ async def create_rule(body: RuleInput, db: DbSession, actor: Manager):
 
 
 @router.put("/rules/{rule_id}")
-async def update_rule(rule_id: uuid.UUID, body: RuleInput, db: DbSession, actor: Manager):
+async def update_rule(
+    rule_id: uuid.UUID, body: RuleInput, db: DbSession, actor: Manager
+) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, AutomationRule, rule_id)
     config = await validate_rule(db, body)
@@ -106,7 +108,9 @@ async def update_rule(rule_id: uuid.UUID, body: RuleInput, db: DbSession, actor:
 
 
 @router.patch("/rules/{rule_id}")
-async def toggle_rule(rule_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager):
+async def toggle_rule(
+    rule_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager
+) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, AutomationRule, rule_id)
     await validate_rule(
@@ -131,7 +135,7 @@ async def toggle_rule(rule_id: uuid.UUID, body: ToggleInput, db: DbSession, _: M
 @router.get("/executions")
 async def history(
     db: DbSession, _: Reader, rule_id: uuid.UUID | None = None, offset: int = Query(0, ge=0)
-):
+) -> dict[str, Any]:
     query = sa.select(AutomationExecution)
     if rule_id:
         query = query.where(AutomationExecution.rule_id == rule_id)
@@ -159,7 +163,7 @@ async def history(
 
 
 @router.get("/executions/{execution_id}/attempts")
-async def attempts(execution_id: uuid.UUID, db: DbSession, _: Reader):
+async def attempts(execution_id: uuid.UUID, db: DbSession, _: Reader) -> dict[str, Any]:
     await required(db, AutomationExecution, execution_id)
     rows = (
         await db.scalars(
@@ -178,7 +182,7 @@ async def attempts(execution_id: uuid.UUID, db: DbSession, _: Reader):
 
 
 @router.post("/executions/{execution_id}/retry")
-async def retry(execution_id: uuid.UUID, db: DbSession, _: Manager):
+async def retry(execution_id: uuid.UUID, db: DbSession, _: Manager) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, AutomationExecution, execution_id)
     if row.status != "FAILED":
@@ -192,7 +196,7 @@ async def retry(execution_id: uuid.UUID, db: DbSession, _: Manager):
 
 
 @router.get("/tasks")
-async def tasks(db: DbSession, _: Reader, offset: int = Query(0, ge=0)):
+async def tasks(db: DbSession, _: Reader, offset: int = Query(0, ge=0)) -> dict[str, Any]:
     rows = (
         await db.scalars(
             sa.select(AutomationTask)
@@ -221,7 +225,9 @@ async def tasks(db: DbSession, _: Reader, offset: int = Query(0, ge=0)):
 
 
 @router.patch("/tasks/{task_id}")
-async def complete_task(task_id: uuid.UUID, body: TaskInput, db: DbSession, _: Operator):
+async def complete_task(
+    task_id: uuid.UUID, body: TaskInput, db: DbSession, _: Operator
+) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, AutomationTask, task_id)
     row.completed_at = (row.completed_at or utc_now()) if body.completed else None

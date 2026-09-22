@@ -58,9 +58,7 @@ def upgrade() -> None:
         # phone number reaches this column.
         sa.Column("provider_subject", sa.String(255), nullable=False),
         sa.Column("normalized_email", sa.String(254), nullable=True),
-        sa.Column(
-            "email_verified", sa.Boolean(), nullable=False, server_default=sa.false()
-        ),
+        sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("password_hash", sa.String(255), nullable=True),
         sa.Column("password_updated_at", app.db.types.TZDateTime(), nullable=True),
         sa.Column("last_login_at", app.db.types.TZDateTime(), nullable=True),
@@ -104,9 +102,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_auth_tokens_identity_id", "auth_tokens", ["identity_id"])
     op.create_index("ix_auth_tokens_user_id", "auth_tokens", ["user_id"])
-    op.create_index(
-        "ix_auth_tokens_identity_purpose", "auth_tokens", ["identity_id", "purpose"]
-    )
+    op.create_index("ix_auth_tokens_identity_purpose", "auth_tokens", ["identity_id", "purpose"])
     op.create_index("ix_auth_tokens_expires_at", "auth_tokens", ["expires_at"])
 
 

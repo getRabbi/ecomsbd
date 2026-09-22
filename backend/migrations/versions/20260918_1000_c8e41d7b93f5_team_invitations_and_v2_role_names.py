@@ -86,8 +86,6 @@ def _rename_roles(pairs: tuple[tuple[str, str], ...]) -> None:
     as it is rather than being guessed at.
     """
     connection = op.get_bind()
-    statement = sa.text(
-        "UPDATE tenant_users SET role = :new WHERE role = :old"
-    )
+    statement = sa.text("UPDATE tenant_users SET role = :new WHERE role = :old")
     for old, new in pairs:
         connection.execute(statement, {"old": old, "new": new})

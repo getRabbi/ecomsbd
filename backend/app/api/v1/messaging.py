@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
@@ -64,7 +64,7 @@ class SendInput(Input):
     idempotency_key: str = Field(min_length=8, max_length=200)
 
 
-def view(row, fields):
+def view(row: object, fields: str) -> dict[str, Any]:
     return {key: getattr(row, key) for key in fields.split()}
 
 
@@ -73,7 +73,7 @@ CONTACT_FIELDS = "id customer_id channel recipient_masked consent consent_versio
 
 
 @router.get("/channels")
-async def channels(db: DbSession, _: Reader):
+async def channels(db: DbSession, _: Reader) -> dict[str, Any]:
     configured = {row.kind: row.enabled for row in (await db.scalars(sa.select(Channel))).all()}
     return {
         "items": [
@@ -94,7 +94,7 @@ async def configure_channel(
     body: ChannelInput,
     db: DbSession,
     _: Manager,
-):
+) -> dict[str, Any]:
     await lock_shop(db)
     if body.enabled and not service.capability(kind)[0]:
         raise ConflictError(
@@ -110,12 +110,12 @@ async def configure_channel(
 
 
 @router.get("/templates")
-async def list_templates(db: DbSession, _: Reader):
+async def list_templates(db: DbSession, _: Reader) -> dict[str, Any]:
     return {"items": await service.templates(db)}
 
 
 @router.post("/templates", status_code=201)
-async def save_template(body: TemplateInput, db: DbSession, _: Manager):
+async def save_template(body: TemplateInput, db: DbSession, _: Manager) -> TemplateInput:
     await lock_shop(db)
     service.validate_template(body.model_dump())
     if body.key == service.BUILTIN["key"] or await db.scalar(
@@ -128,7 +128,7 @@ async def save_template(body: TemplateInput, db: DbSession, _: Manager):
 
 
 @router.post("/conversations", status_code=201)
-async def contact(body: ContactInput, db: DbSession, actor: Writer):
+async def contact(body: ContactInput, db: DbSession, actor: Writer) -> dict[str, Any]:
     row = await service.set_contact(db, **body.model_dump(), actor_id=actor.user_id)
     return view(row, CONTACT_FIELDS)
 
@@ -136,7 +136,7 @@ async def contact(body: ContactInput, db: DbSession, actor: Writer):
 @router.get("/conversations")
 async def conversations(
     db: DbSession, _: Reader, customer_id: uuid.UUID | None = None, offset: int = Query(0, ge=0)
-):
+) -> dict[str, Any]:
     query = sa.select(Conversation)
     if customer_id:
         query = query.where(Conversation.customer_id == customer_id)
@@ -153,7 +153,9 @@ async def conversations(
 
 
 @router.patch("/conversations/{conversation_id}/consent")
-async def consent(conversation_id: uuid.UUID, body: ConsentInput, db: DbSession, actor: Writer):
+async def consent(
+    conversation_id: uuid.UUID, body: ConsentInput, db: DbSession, actor: Writer
+) -> dict[str, Any]:
     await lock_shop(db)
     row = await db.scalar(
         sa.select(Conversation).where(Conversation.id == conversation_id).with_for_update()
@@ -174,7 +176,7 @@ async def consent(conversation_id: uuid.UUID, body: ConsentInput, db: DbSession,
 
 
 @router.post("/messages", status_code=202)
-async def send(body: SendInput, db: DbSession, _: Writer):
+async def send(body: SendInput, db: DbSession, _: Writer) -> dict[str, Any]:
     return view(await service.queue_message(db, **body.model_dump()), MESSAGE_FIELDS)
 
 
@@ -185,7 +187,7 @@ async def messages(
     conversation_id: uuid.UUID | None = None,
     order_id: uuid.UUID | None = None,
     offset: int = Query(0, ge=0),
-):
+) -> dict[str, Any]:
     query = sa.select(Message)
     if conversation_id:
         query = query.where(Message.conversation_id == conversation_id)
@@ -202,12 +204,12 @@ async def messages(
 
 
 @router.post("/messages/{message_id}/retry")
-async def retry(message_id: uuid.UUID, db: DbSession, _: Writer):
+async def retry(message_id: uuid.UUID, db: DbSession, _: Writer) -> dict[str, Any]:
     return view(await service.retry_message(db, message_id), MESSAGE_FIELDS)
 
 
 @router.get("/messages/{message_id}/attempts")
-async def attempts(message_id: uuid.UUID, db: DbSession, _: Reader):
+async def attempts(message_id: uuid.UUID, db: DbSession, _: Reader) -> dict[str, Any]:
     await service.required(db, Message, message_id)
     rows = (
         await db.scalars(

@@ -162,7 +162,9 @@ def _invitation_response(invitation: TenantInvitation) -> InvitationResponse:
     )
 
 
-def _invitations(db: DbSession, settings: SettingsDep, entitlements) -> InvitationService:
+def _invitations(
+    db: DbSession, settings: SettingsDep, entitlements: EntitlementsDep | None
+) -> InvitationService:
     from app.api.deps import get_vault
 
     return InvitationService(

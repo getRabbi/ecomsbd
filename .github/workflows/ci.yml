@@ -74,9 +74,11 @@ jobs:
       - name: Migration sanity — apply from empty against PostgreSQL
         env:
           APP_ENV: test
-          DATABASE_URL: postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_test
+          DATABASE_URL: postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_migrations
         run: |
-          alembic downgrade base
+          # Email-only test users cannot fit the historical phone-only schema.
+          # Verify the migration chain on an empty, separate database.
+          psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ecomsbd_migrations"
           alembic upgrade head
           alembic downgrade base
 

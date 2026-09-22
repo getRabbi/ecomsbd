@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
@@ -14,11 +14,11 @@ Reader = Annotated[Principal, Depends(require_permission(Permission.CUSTOMER_RIS
 
 
 @router.get("/capability")
-async def provider_capability(_: Reader):
+async def provider_capability(_: Reader) -> dict[str, Any]:
     return capability()
 
 
 @router.get("/customers/{customer_id}")
-async def customer_facts(customer_id: uuid.UUID, db: DbSession, _: Reader):
+async def customer_facts(customer_id: uuid.UUID, db: DbSession, _: Reader) -> dict[str, Any]:
     await required(db, Customer, customer_id)
     return {"customer_id": customer_id, **capability()}

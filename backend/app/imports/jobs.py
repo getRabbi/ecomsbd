@@ -26,6 +26,7 @@ what it created, and the next run picks up from there.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import sqlalchemy as sa
@@ -185,9 +186,7 @@ async def _raise_import_alert(tenant_id: uuid.UUID, import_id: uuid.UUID) -> Non
         clear_context(token)
 
 
-def _stuck_delta():
-    from datetime import timedelta
-
+def _stuck_delta() -> timedelta:
     return timedelta(minutes=STUCK_COMMIT_MINUTES)
 
 

@@ -102,9 +102,7 @@ class _LanguageOption extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: EcomsbdRadii.round,
               border: Border.all(
-                color: isSelected
-                    ? EcomsbdColors.orange
-                    : EcomsbdColors.stroke,
+                color: isSelected ? EcomsbdColors.orange : EcomsbdColors.stroke,
               ),
             ),
             alignment: Alignment.center,

@@ -193,7 +193,7 @@ void main() {
 
       // The accounts screen renders every courier from this list now, rather
       // than from a hard-coded Steadfast card, so the form under test is
-       // reached through the server's own declaration of it.
+      // reached through the server's own declaration of it.
       harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
         <String, dynamic>{
           'provider': 'steadfast',

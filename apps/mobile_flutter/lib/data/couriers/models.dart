@@ -107,7 +107,8 @@ class CourierAccount {
         (json['reported_balance_at'] as String?) ?? '',
       ),
       config:
-          (json['config'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+          (json['config'] as Map<String, dynamic>?) ??
+          const <String, dynamic>{},
       webhookConfigured: (json['webhook_configured'] as bool?) ?? false,
     );
   }
@@ -903,8 +904,7 @@ class BookableCourier {
       block: reason == null ? null : BookableBlock.parse(reason),
       requiresStore: (json['requires_store'] as bool?) ?? false,
       storeName: json['store_name'] as String?,
-      supportsDeliveryType:
-          (json['supports_delivery_type'] as bool?) ?? false,
+      supportsDeliveryType: (json['supports_delivery_type'] as bool?) ?? false,
     );
   }
 

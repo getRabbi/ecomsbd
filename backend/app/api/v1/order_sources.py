@@ -37,7 +37,7 @@ class IngestInput(BaseModel):
     payload: dict[str, Any]
 
 
-def source_view(row):
+def source_view(row: OrderSource) -> dict[str, Any]:
     return {
         "id": row.id,
         "name": row.name,
@@ -48,7 +48,7 @@ def source_view(row):
 
 
 @router.get("")
-async def sources(db: DbSession, _: Reader):
+async def sources(db: DbSession, _: Reader) -> dict[str, Any]:
     return {
         "items": [
             source_view(row)
@@ -62,7 +62,7 @@ async def sources(db: DbSession, _: Reader):
 
 
 @router.post("", status_code=201)
-async def create(body: SourceInput, db: DbSession, _: Manager):
+async def create(body: SourceInput, db: DbSession, _: Manager) -> dict[str, Any]:
     service.validate_mapping(body.mapping)
     if body.enabled and not service.capability(body.provider)["available"]:
         raise ConflictError(
@@ -76,7 +76,9 @@ async def create(body: SourceInput, db: DbSession, _: Manager):
 
 
 @router.patch("/{source_id}")
-async def toggle(source_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager):
+async def toggle(
+    source_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager
+) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, OrderSource, source_id)
     if body.enabled and not service.capability(row.provider)["available"]:
@@ -90,12 +92,16 @@ async def toggle(source_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Mana
 
 
 @router.post("/{source_id}/ingest", status_code=201)
-async def ingest(source_id: uuid.UUID, body: IngestInput, db: DbSession, _: Writer):
+async def ingest(
+    source_id: uuid.UUID, body: IngestInput, db: DbSession, _: Writer
+) -> dict[str, Any]:
     return await service.ingest(db, source_id, body.external_order_id, body.payload)
 
 
 @router.get("/{source_id}/history")
-async def history(source_id: uuid.UUID, db: DbSession, _: Reader, offset: int = Query(0, ge=0)):
+async def history(
+    source_id: uuid.UUID, db: DbSession, _: Reader, offset: int = Query(0, ge=0)
+) -> dict[str, Any]:
     await required(db, OrderSource, source_id)
     rows = (
         await db.scalars(

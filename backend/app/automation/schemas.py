@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,7 +24,7 @@ class Condition(Input):
     value: str | int
 
     @model_validator(mode="after")
-    def valid_comparison(self):
+    def valid_comparison(self) -> Self:
         if self.field == "cod_amount_paisa":
             if type(self.value) is not int or self.value < 0:
                 raise ValueError("COD condition needs non-negative integer paisa")
@@ -78,7 +78,7 @@ class NoticeAction(Input):
     text_bn: str = Field(min_length=1, max_length=1000)
 
 
-CONFIGS = {
+CONFIGS: dict[str, type[Input]] = {
     "SEND_TEMPLATE": TemplateAction,
     "CREATE_FOLLOWUP": FollowupAction,
     "ADD_TAG": TagAction,

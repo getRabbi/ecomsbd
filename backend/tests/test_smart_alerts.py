@@ -736,6 +736,7 @@ class TestPushAndWording:
             },
             NotificationKind.COURIER_ACCOUNT_PROBLEM: {"provider": "pathao"},
             NotificationKind.RETURNED_NOT_RESTOCKED: {"count": 2},
+            NotificationKind.FOLLOW_UP_DUE: {"count": 2},
         }
         assert set(samples) == set(rules.ALERT_RULES)
         for kind, params in samples.items():

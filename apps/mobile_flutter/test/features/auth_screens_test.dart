@@ -33,21 +33,23 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: screen),
+          home: screen,
+        ),
       ),
     );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Android login offers email and Google; Apple and phone are deferred', (
-    tester,
-  ) async {
-    await show(tester, const EmailAuthScreen());
-    expect(find.byType(TextFormField), findsNWidgets(2));
-    expect(find.textContaining('Google'), findsWidgets);
-    expect(find.textContaining('Apple'), findsNothing);
-    expect(find.textContaining('phone', findRichText: true), findsNothing);
-  });
+  testWidgets(
+    'Android login offers email and Google; Apple and phone are deferred',
+    (tester) async {
+      await show(tester, const EmailAuthScreen());
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      expect(find.textContaining('Google'), findsWidgets);
+      expect(find.textContaining('Apple'), findsNothing);
+      expect(find.textContaining('phone', findRichText: true), findsNothing);
+    },
+  );
 
   testWidgets('confirmation remains signed out and supports Supabase resend', (
     tester,
@@ -69,7 +71,8 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: VerificationScreen(onContinue: () {})),
+          home: VerificationScreen(onContinue: () {}),
+        ),
       ),
     );
     await tester.pumpAndSettle();

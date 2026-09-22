@@ -147,7 +147,9 @@ def _check_crypto(settings: Settings) -> CheckResult:
 def _check_auth(settings: Settings) -> CheckResult:
     if settings.supabase_auth_active:
         return CheckResult(
-            "SIGN-IN", Status.OK, "Supabase Auth only; Android email/password + Google; Apple deferred"
+            "SIGN-IN",
+            Status.OK,
+            "Supabase Auth only; Android email/password + Google; Apple deferred",
         )
     enabled = sorted(settings.enabled_auth_methods)
     available = sorted(settings.available_auth_methods)

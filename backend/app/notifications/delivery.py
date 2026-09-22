@@ -332,12 +332,12 @@ class NotificationDispatcher:
         )
         if notification.user_id is not None:
             stmt = stmt.where(TenantUser.user_id == notification.user_id)
-        members = list(await self._db.execute(stmt))
+        member_rows = list(await self._db.execute(stmt))
 
         audience = Permission(notification.audience) if notification.audience else None
         members = [
             (user_id, locale)
-            for user_id, role, locale in members
+            for user_id, role, locale in member_rows
             if audience is None or has_permission(role, audience)
         ]
         if not members:

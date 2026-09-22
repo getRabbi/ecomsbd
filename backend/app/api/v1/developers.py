@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, Response
@@ -40,7 +40,7 @@ class ToggleInput(BaseModel):
     enabled: bool
 
 
-def key_view(row):
+def key_view(row: ApiKey) -> dict[str, Any]:
     return {
         "id": row.id,
         "name": row.name,
@@ -51,12 +51,12 @@ def key_view(row):
     }
 
 
-def hook_view(row):
+def hook_view(row: WebhookEndpoint) -> dict[str, Any]:
     return {"id": row.id, "url": row.url, "topics": row.topics, "enabled": row.enabled}
 
 
 @router.get("/keys")
-async def keys(db: DbSession, _: Manager):
+async def keys(db: DbSession, _: Manager) -> dict[str, Any]:
     return {
         "items": [
             key_view(row)
@@ -69,7 +69,9 @@ async def keys(db: DbSession, _: Manager):
 
 
 @router.post("/keys", status_code=201)
-async def create_key(body: KeyInput, db: DbSession, actor: Manager, response: Response):
+async def create_key(
+    body: KeyInput, db: DbSession, actor: Manager, response: Response
+) -> dict[str, Any]:
     if set(body.scopes) - SCOPES:
         raise ValidationError("Unknown API scope")
     row_id = new_id()
@@ -89,7 +91,7 @@ async def create_key(body: KeyInput, db: DbSession, actor: Manager, response: Re
 
 
 @router.delete("/keys/{key_id}")
-async def revoke(key_id: uuid.UUID, db: DbSession, _: Manager):
+async def revoke(key_id: uuid.UUID, db: DbSession, _: Manager) -> dict[str, Any]:
     await lock_shop(db)
     row = await required(db, ApiKey, key_id)
     row.revoked_at = row.revoked_at or utc_now()
@@ -98,7 +100,7 @@ async def revoke(key_id: uuid.UUID, db: DbSession, _: Manager):
 
 
 @router.get("/webhooks")
-async def webhooks(db: DbSession, _: Manager):
+async def webhooks(db: DbSession, _: Manager) -> dict[str, Any]:
     return {
         "items": [
             hook_view(row)
@@ -113,7 +115,9 @@ async def webhooks(db: DbSession, _: Manager):
 
 
 @router.post("/webhooks", status_code=201)
-async def create_webhook(body: WebhookInput, db: DbSession, _: Manager, response: Response):
+async def create_webhook(
+    body: WebhookInput, db: DbSession, _: Manager, response: Response
+) -> dict[str, Any]:
     valid_url(body.url)
     if set(body.topics) - TOPICS:
         raise ValidationError("Unknown webhook topic")
@@ -132,7 +136,9 @@ async def create_webhook(body: WebhookInput, db: DbSession, _: Manager, response
 
 
 @router.patch("/webhooks/{endpoint_id}")
-async def toggle(endpoint_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager):
+async def toggle(
+    endpoint_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Manager
+) -> dict[str, Any]:
     row = await db.scalar(
         sa.select(WebhookEndpoint).where(WebhookEndpoint.id == endpoint_id).with_for_update()
     )
@@ -144,7 +150,7 @@ async def toggle(endpoint_id: uuid.UUID, body: ToggleInput, db: DbSession, _: Ma
 
 
 @router.post("/webhooks/{endpoint_id}/test", status_code=202)
-async def test_hook(endpoint_id: uuid.UUID, db: DbSession, actor: Manager):
+async def test_hook(endpoint_id: uuid.UUID, db: DbSession, actor: Manager) -> dict[str, Any]:
     row = await required(db, WebhookEndpoint, endpoint_id)
     if not row.enabled:
         raise ConflictError("Webhook is disabled")
@@ -168,7 +174,7 @@ async def test_hook(endpoint_id: uuid.UUID, db: DbSession, actor: Manager):
 
 
 @router.get("/deliveries")
-async def deliveries(db: DbSession, _: Manager, offset: int = Query(0, ge=0)):
+async def deliveries(db: DbSession, _: Manager, offset: int = Query(0, ge=0)) -> dict[str, Any]:
     rows = (
         await db.scalars(
             sa.select(WebhookDelivery)
@@ -196,7 +202,7 @@ async def deliveries(db: DbSession, _: Manager, offset: int = Query(0, ge=0)):
 
 
 @router.post("/deliveries/{delivery_id}/retry")
-async def retry(delivery_id: uuid.UUID, db: DbSession, _: Manager):
+async def retry(delivery_id: uuid.UUID, db: DbSession, _: Manager) -> dict[str, Any]:
     row = await db.scalar(
         sa.select(WebhookDelivery).where(WebhookDelivery.id == delivery_id).with_for_update()
     )
@@ -213,7 +219,7 @@ async def retry(delivery_id: uuid.UUID, db: DbSession, _: Manager):
 
 
 @router.get("/deliveries/{delivery_id}/attempts")
-async def attempts(delivery_id: uuid.UUID, db: DbSession, _: Manager):
+async def attempts(delivery_id: uuid.UUID, db: DbSession, _: Manager) -> dict[str, Any]:
     await required(db, WebhookDelivery, delivery_id)
     rows = (
         await db.scalars(

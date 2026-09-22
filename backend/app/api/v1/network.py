@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends
@@ -21,7 +21,7 @@ class PreferenceInput(BaseModel):
 
 
 @router.get("")
-async def benchmark(db: DbSession, _: Reader):
+async def benchmark(db: DbSession, _: Reader) -> dict[str, Any]:
     preference = await db.scalar(sa.select(NetworkPreference))
     row = await db.scalar(
         sa.select(NetworkBenchmark)
@@ -35,7 +35,7 @@ async def benchmark(db: DbSession, _: Reader):
         "blocker": None if published else "NETWORK_MINIMUM_SAMPLE_REQUIRED",
         "opted_in": bool(preference and preference.opted_in),
         "period": row.period if row else None,
-        "facts": row.facts if published else {},
+        "facts": row.facts if row is not None and published else {},
         "minimum_shops": MIN_SHOPS,
         "minimum_sample": MIN_SAMPLE,
         "message_en": "Anonymous monthly parcel outcomes from consenting shops. No customer or phone data is shared. At least 20 shops and 200 parcels; rates are rounded to 5%. Payout benchmarks are unavailable.",
@@ -44,7 +44,7 @@ async def benchmark(db: DbSession, _: Reader):
 
 
 @router.patch("/preference")
-async def preference(body: PreferenceInput, db: DbSession, _: Manager):
+async def preference(body: PreferenceInput, db: DbSession, _: Manager) -> dict[str, Any]:
     await lock_shop(db)
     row = await db.scalar(sa.select(NetworkPreference))
     if row is None:

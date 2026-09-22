@@ -72,7 +72,11 @@ class SupabaseTransport extends http.BaseClient {
     failCode = null;
     Object body = {};
     if (error != null) {
-      body = {'code': error, 'error_code': error, 'msg': 'private provider error'};
+      body = {
+        'code': error,
+        'error_code': error,
+        'msg': 'private provider error',
+      };
     } else if (r.url.path.endsWith('/token')) {
       body = session;
     } else if (r.url.path.endsWith('/signup')) {

@@ -200,15 +200,12 @@ void main() {
       harness.adapter.on(
         'DELETE',
         '/team/u2',
-        (_) => const FakeReply(
-          <String, dynamic>{
-            'code': 'CONFLICT',
-            'message_en': 'A shop must always have at least one Owner.',
-            'message_bn': 'একটি দোকানে অন্তত একজন মালিক থাকতেই হবে।',
-            'retryable': false,
-          },
-          statusCode: 409,
-        ),
+        (_) => const FakeReply(<String, dynamic>{
+          'code': 'CONFLICT',
+          'message_en': 'A shop must always have at least one Owner.',
+          'message_bn': 'একটি দোকানে অন্তত একজন মালিক থাকতেই হবে।',
+          'retryable': false,
+        }, statusCode: 409),
       );
 
       await pumpCommerceScreen(tester, const TeamScreen(), harness: harness);

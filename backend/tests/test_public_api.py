@@ -177,6 +177,9 @@ async def test_customer_product_and_inventory_writes_use_domain_services(client,
     )
     assert product.status_code == 201, product.text
     product_id = product.json()["id"]
+    products = await client.get("/public/v1/products", headers=headers)
+    assert products.status_code == 200, products.text
+    assert [row["id"] for row in products.json()["items"]] == [product_id]
     path = f"/public/v1/inventory/{product_id}/adjustments"
     body = {"quantity_delta": -2, "note": "Count correction"}
     first = await client.post(path, headers=headers, json=body)

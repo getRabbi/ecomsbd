@@ -211,7 +211,10 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       children: <Widget>[
         const _SheetGrip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        Text(context.tr('book.title', <String, Object?>{'provider': _courierName}), style: EcomsbdType.sectionTitle),
+        Text(
+          context.tr('book.title', <String, Object?>{'provider': _courierName}),
+          style: EcomsbdType.sectionTitle,
+        ),
         const SizedBox(height: 3),
         Text(
           context.tr('book.body', <String, Object?>{'provider': _courierName}),
@@ -330,7 +333,9 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          context.tr('book.waiting', <String, Object?>{'provider': _courierName}),
+          context.tr('book.waiting', <String, Object?>{
+            'provider': _courierName,
+          }),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.xl),
@@ -365,7 +370,9 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       message:
           result?.message ??
           _error?.displayMessage ??
-          context.tr('book.rejected', <String, Object?>{'provider': _courierName}),
+          context.tr('book.rejected', <String, Object?>{
+            'provider': _courierName,
+          }),
       onRetry: () => setState(() => _stage = _Stage.review),
       onClose: () => Navigator.of(context).pop(result),
     );
@@ -410,7 +417,9 @@ class _AmbiguousOutcome extends StatelessWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
         // Explains *why*, without repeating the sentence above it.
         Text(
-          context.tr('book.uncertainBody', <String, Object?>{'provider': courierName}),
+          context.tr('book.uncertainBody', <String, Object?>{
+            'provider': courierName,
+          }),
           style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
@@ -448,7 +457,9 @@ class _BookedOutcome extends StatelessWidget {
         StatusChip(label: context.tr('status.booked'), tone: Tone.good),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          context.tr('book.hasParcel', <String, Object?>{'provider': courierName}),
+          context.tr('book.hasParcel', <String, Object?>{
+            'provider': courierName,
+          }),
           style: EcomsbdType.sectionTitle,
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
@@ -505,7 +516,9 @@ class _FailedOutcome extends StatelessWidget {
         StatusChip(label: context.tr('status.notBooked'), tone: Tone.bad),
         const SizedBox(height: EcomsbdSpacing.sm),
         Text(
-          context.tr('book.notAccepted', <String, Object?>{'provider': courierName}),
+          context.tr('book.notAccepted', <String, Object?>{
+            'provider': courierName,
+          }),
           style: EcomsbdType.body,
         ),
         const SizedBox(height: EcomsbdSpacing.xs),
