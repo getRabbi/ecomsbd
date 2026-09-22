@@ -112,6 +112,7 @@ class NotificationKind(StrEnum):
     #: A courier account whose credentials need re-entering.
     COURIER_ACCOUNT_PROBLEM = "COURIER_ACCOUNT_PROBLEM"
     FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
+    AUTOMATION = "AUTOMATION"
 
 
 class NotificationCategory(StrEnum):

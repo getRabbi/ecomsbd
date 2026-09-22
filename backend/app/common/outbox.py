@@ -168,6 +168,9 @@ async def enqueue(
     from app.public_api.webhooks import schedule_event
 
     await schedule_event(session, event)
+    from app.automation.service import schedule_event as schedule_automation
+
+    await schedule_automation(session, event)
     return event
 
 

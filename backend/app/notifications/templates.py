@@ -304,7 +304,12 @@ def _follow_up_due(p: Params, locale: str) -> tuple[str, str]:
     return "Customer follow-ups due", f"{count} follow-ups are due. Open your customer list."
 
 
+def _automation(p: Params, locale: str) -> tuple[str, str]:
+    return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
+
+
 _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
+    NotificationKind.AUTOMATION: _automation,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

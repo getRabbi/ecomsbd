@@ -21,6 +21,7 @@ import 'data_privacy_screen.dart';
 import 'notification_settings_screen.dart';
 import 'order_sources_screen.dart';
 import 'network_screen.dart';
+import 'automation_screen.dart';
 
 /// Settings.
 ///
@@ -105,6 +106,15 @@ class SettingsScreen extends ConsumerWidget {
 
                 SectionHeader(title: context.tr('settings.sectionLanguage')),
                 const LanguageSettingRow(),
+                ListTile(
+                  leading: const Icon(Icons.auto_awesome),
+                  title: Text(context.tr('automation.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AutomationScreen(),
+                    ),
+                  ),
+                ),
                 ListTile(
                   leading: const Icon(Icons.bar_chart),
                   title: Text(context.tr('network.title')),

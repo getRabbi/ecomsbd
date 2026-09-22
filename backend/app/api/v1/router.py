@@ -16,6 +16,7 @@ from app.api.v1 import (
     admin,
     analytics,
     auth,
+    automation,
     billing,
     consignments,
     courier_webhooks,
@@ -48,6 +49,7 @@ api_router.include_router(order_sources.router)
 api_router.include_router(developers.router)
 api_router.include_router(external_risk.router)
 api_router.include_router(network.router)
+api_router.include_router(automation.router)
 api_router.include_router(tenants.router)
 api_router.include_router(products.router)
 api_router.include_router(crm.router)

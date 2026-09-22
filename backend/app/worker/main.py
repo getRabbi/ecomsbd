@@ -19,6 +19,7 @@ from arq.connections import RedisSettings
 
 from app import __version__
 from app.analytics.network import build_network_benchmarks
+from app.automation.jobs import dispatch_automation
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -89,6 +90,7 @@ class WorkerSettings:
         dispatch_messages,
         dispatch_webhooks,
         build_network_benchmarks,
+        dispatch_automation,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -112,6 +114,7 @@ class WorkerSettings:
         cron(dispatch_messages, second={5, 35}),
         cron(dispatch_webhooks, second={10, 40}),
         cron(build_network_benchmarks, day=8, hour=3, minute=45, run_at_startup=True),
+        cron(dispatch_automation, second={12, 42}),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),
