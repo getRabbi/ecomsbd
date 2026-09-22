@@ -36,6 +36,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/dashboard', labelKey: 'nav.dashboard', icon: '▤' },
       { href: '/insights', labelKey: 'nav.insights', icon: '↗' },
+      { href: '/network', labelKey: 'nav.network', icon: '◉' },
       { href: '/notifications', labelKey: 'nav.notifications', icon: '◔' },
       { href: '/orders', labelKey: 'nav.orders', icon: '▦' },
       { href: '/customers', labelKey: 'nav.customers', icon: '☺' },

@@ -10,6 +10,7 @@ and the test suite all import this module rather than individual model files.
 
 from __future__ import annotations
 
+import app.analytics.network_models
 import app.messaging.models
 import app.order_sources.models
 import app.public_api.models  # noqa: F401

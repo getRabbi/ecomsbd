@@ -20,6 +20,7 @@ import 'courier_accounts_screen.dart';
 import 'data_privacy_screen.dart';
 import 'notification_settings_screen.dart';
 import 'order_sources_screen.dart';
+import 'network_screen.dart';
 
 /// Settings.
 ///
@@ -104,6 +105,15 @@ class SettingsScreen extends ConsumerWidget {
 
                 SectionHeader(title: context.tr('settings.sectionLanguage')),
                 const LanguageSettingRow(),
+                ListTile(
+                  leading: const Icon(Icons.bar_chart),
+                  title: Text(context.tr('network.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NetworkScreen(),
+                    ),
+                  ),
+                ),
                 ListTile(
                   leading: const Icon(Icons.input),
                   title: Text(context.tr('sources.title')),
