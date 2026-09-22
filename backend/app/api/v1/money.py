@@ -18,10 +18,15 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import DbSession, TenantPrincipal, require_permission
 from app.api.v1.money_schemas import (
     AgingBandResponse,
+    CashflowForecastResponse,
+    CashflowResponse,
+    CourierBalanceResponse,
     DisputePayload,
+    ForecastWindowResponse,
     LedgerEntryResponse,
     ManualCorrectionPayload,
     MoneySummaryResponse,
+    PayoutDelayResponse,
     ReceivableResponse,
     WriteOffPayload,
 )
@@ -29,8 +34,9 @@ from app.common.pagination import Page, decode_cursor
 from app.core.clock import utc_now
 from app.ledger.models import LedgerBucket, LedgerDirection, LedgerEventType, LedgerSource
 from app.ledger.service import LedgerService
+from app.money.cashflow import CashflowService, PayoutDelay
 from app.money.models import CodReceivable, ReceivableStatus
-from app.money.service import ReceivableService
+from app.money.service import OVERDUE_AFTER_DAYS, ReceivableService
 from app.orders.models import Order
 from app.payouts.models import Payout
 from app.reconciliation.models import CaseStatus, ReconciliationCase
@@ -154,6 +160,8 @@ async def list_receivables(
     status: Annotated[ReceivableStatus | None, Query()] = None,
     provider: Annotated[str | None, Query(max_length=40)] = None,
     open_only: Annotated[bool, Query()] = False,
+    min_age_days: Annotated[int | None, Query(ge=0, le=3650)] = None,
+    max_age_days: Annotated[int | None, Query(ge=0, le=3650)] = None,
 ) -> Page[ReceivableResponse]:
     """What each parcel still owes.
 
@@ -168,6 +176,8 @@ async def list_receivables(
         status=status,
         provider=provider,
         open_only=open_only,
+        min_age_days=min_age_days,
+        max_age_days=max_age_days,
     )
 
     numbers: dict[uuid.UUID, str] = {}
@@ -321,6 +331,110 @@ async def dispute_receivable(
     """
     receivable = await receivables.mark_disputed(receivable_id, reason=payload.reason)
     return _to_response(receivable)
+
+
+def _delay(delay: PayoutDelay | None) -> PayoutDelayResponse | None:
+    if delay is None:
+        return None
+    return PayoutDelayResponse(
+        provider=delay.provider,
+        samples=delay.samples,
+        average_days=delay.average_days,
+        median_days=delay.median_days,
+        reliable=delay.is_reliable,
+    )
+
+
+@router.get(
+    "/couriers",
+    response_model=list[CourierBalanceResponse],
+    summary="What each courier holds",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
+async def courier_balances(
+    principal: TenantPrincipal, db: DbSession
+) -> list[CourierBalanceResponse]:
+    """Courier by courier: outstanding COD, delivered-but-unpaid, overdue,
+    aging, COD still in transit, the last payment and the usual delay.
+
+    Read from the receivables and payouts. Nothing here is an estimate except
+    the payout delay, which is a measured average of past payments and says
+    how many parcels it was measured over.
+    """
+    rows = await CashflowService(db).courier_balances()
+    return [
+        CourierBalanceResponse(
+            provider=row.provider,
+            outstanding_paisa=row.outstanding_paisa,
+            parcel_count=row.parcel_count,
+            delivered_unpaid_count=row.delivered_unpaid_count,
+            delivered_unpaid_paisa=row.delivered_unpaid_paisa,
+            overdue_count=row.overdue_count,
+            overdue_paisa=row.overdue_paisa,
+            oldest_age_days=row.oldest_age_days,
+            in_transit_count=row.in_transit_count,
+            in_transit_paisa=row.in_transit_paisa,
+            last_payment_on=row.last_payment_on,
+            payout_delay=_delay(row.delay),
+            aging=[
+                AgingBandResponse(
+                    label=bucket.label,
+                    min_days=bucket.min_days,
+                    max_days=bucket.max_days,
+                    parcel_count=count,
+                    outstanding_paisa=amount,
+                )
+                for bucket, count, amount in row.aging
+            ],
+        )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/cashflow",
+    response_model=CashflowResponse,
+    summary="Money received, receivable, and expected",
+    dependencies=[Depends(require_permission(Permission.MONEY_VIEW))],
+)
+async def cashflow(
+    principal: TenantPrincipal,
+    db: DbSession,
+    since: Annotated[date | None, Query()] = None,
+    until: Annotated[date | None, Query()] = None,
+) -> CashflowResponse:
+    """Received (ledger), receivable and overdue (receivables), and when the
+    receivable may arrive (``forecast``, always ``ESTIMATE``).
+
+    The period defaults to the last 30 business days. The forecast is not a
+    period figure: it spreads today's receivable across the coming weeks by
+    each courier's recorded delay, and adds up to exactly what is receivable.
+    """
+    result = await CashflowService(db).cashflow(since=since, until=until)
+    return CashflowResponse(
+        since=result.since,
+        until=result.until,
+        received_paisa=result.received_paisa,
+        received_by_courier=result.received_by_courier,
+        receivable_paisa=result.receivable_paisa,
+        overdue_paisa=result.overdue_paisa,
+        overdue_after_days=OVERDUE_AFTER_DAYS,
+        delivered_unpaid_paisa=result.delivered_unpaid_paisa,
+        in_transit_paisa=result.in_transit_paisa,
+        in_transit_count=result.in_transit_count,
+        forecast=CashflowForecastResponse(
+            windows=[
+                ForecastWindowResponse(
+                    key=window.key,
+                    parcel_count=window.parcel_count,
+                    amount_paisa=window.amount_paisa,
+                )
+                for window in result.forecast
+            ]
+        ),
+        payout_delays=[_delay(delay) for delay in result.delays if delay is not None],
+        overall_delay=_delay(result.overall_delay),
+    )
 
 
 __all__ = ["router"]

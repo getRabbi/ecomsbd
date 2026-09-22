@@ -117,8 +117,12 @@ class _DispatchSheetState extends ConsumerState<DispatchSheet> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Icon(Icons.info_outline, size: 15, color: EcomsbdColors.muted2),
-                SizedBox(width: 6),
+                const Icon(
+                  Icons.info_outline,
+                  size: 15,
+                  color: EcomsbdColors.muted2,
+                ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     context.tr('disp.notOwedYet'),

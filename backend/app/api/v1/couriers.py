@@ -321,7 +321,7 @@ async def list_stores(
         raise NotFoundError(f"{provider} is not a courier ecomsbd can connect to")
 
     result = await adapter.list_stores(accounts.credentials_for(account))
-    if not result:
+    if not isinstance(result, list) or not result:
         # ``Unavailable`` is falsy and carries its reason. A provider with no
         # store concept is not an error state.
         return []

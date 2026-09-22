@@ -68,8 +68,11 @@ router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(legacy_a
 
 @router.post("/device", status_code=204, summary="Attach this installation to the verified session")
 async def attach_device(
-    payload: DevicePayload, request: Request, principal: CurrentPrincipal,
-    auth: AuthServiceDep, db: DbSession,
+    payload: DevicePayload,
+    request: Request,
+    principal: CurrentPrincipal,
+    auth: AuthServiceDep,
+    db: DbSession,
 ) -> None:
     import sqlalchemy as sa
 

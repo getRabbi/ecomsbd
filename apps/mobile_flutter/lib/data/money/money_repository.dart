@@ -267,6 +267,92 @@ class MoneyRepository extends CachingRepository {
     return json['cases_opened'] as int? ?? 0;
   }
 
+  /// What each courier holds. Cached so the screen opens on the last figures
+  /// while it refreshes, marked stale when it had to fall back.
+  Future<Sourced<List<CourierBalance>>> courierBalances() async {
+    final sourced = await readThrough(
+      'money.couriers',
+      () async => <String, dynamic>{
+        'items': await api.getList('/money/couriers'),
+      },
+    );
+    return sourced.map(
+      (json) => <CourierBalance>[
+        for (final row in json['items'] as List<dynamic>? ?? const <dynamic>[])
+          CourierBalance.fromJson(row as Map<String, dynamic>),
+      ],
+    );
+  }
+
+  /// Received, receivable, and when the receivable may arrive (an estimate).
+  Future<Sourced<CashflowView>> cashflow() async {
+    final sourced = await readThrough(
+      'money.cashflow',
+      () => api.get('/money/cashflow'),
+    );
+    return sourced.map(CashflowView.fromJson);
+  }
+
+  /// Expected, actual and the difference. Cached like the Money summary so
+  /// the screen opens on the last figures while it refreshes.
+  Future<Sourced<ReconciliationSummary>> reconciliationSummary() async {
+    final sourced = await readThrough(
+      'money.reconciliation.summary',
+      () => api.get('/reconciliation/summary'),
+    );
+    return sourced.map(ReconciliationSummary.fromJson);
+  }
+
+  /// Parcels compared expected-against-actual, filtered on the server.
+  Future<Sourced<PagedResult<ReconciliationItem>>> reconciliationItems({
+    String? cursor,
+    int limit = 30,
+    String? view,
+  }) async {
+    final extra = switch (view) {
+      'discrepancies' => <String, dynamic>{'discrepancies_only': true},
+      'unmatched' => <String, dynamic>{
+        'status': <String>['UNMATCHED', 'NEEDS_REVIEW', 'DUPLICATE'],
+      },
+      _ => <String, dynamic>{},
+    };
+    final sourced = await readThrough(
+      'money.reconciliation.items${view == null ? '' : '.$view'}'
+      '${cursor == null ? '' : '.$cursor'}',
+      () => api.get(
+        '/reconciliation/items',
+        query: pageQuery(cursor: cursor, limit: limit, extra: extra),
+      ),
+    );
+    return sourced.map(
+      (json) => PagedResult.parse<ReconciliationItem>(
+        json,
+        ReconciliationItem.fromJson,
+      ),
+    );
+  }
+
+  Future<CaseDetail> caseDetail(String caseId) async {
+    return CaseDetail.fromJson(await api.get('/reconciliation/cases/$caseId'));
+  }
+
+  Future<void> addCaseNote(String caseId, String note) async {
+    await api.post(
+      '/reconciliation/cases/$caseId/notes',
+      body: <String, dynamic>{'note': note},
+    );
+  }
+
+  /// Accept what the courier kept on one parcel. The server writes it to the
+  /// ledger once; a retry finds nothing left to accept.
+  Future<int> acceptCharges(String itemId) async {
+    final json = await api.post(
+      '/reconciliation/items/$itemId/accept-charges',
+      body: const <String, dynamic>{},
+    );
+    return json['accepted_paisa'] as int? ?? 0;
+  }
+
   Future<ReconciliationCase> updateCase(
     String caseId, {
     required String status,
@@ -373,6 +459,27 @@ class MoneyRepository extends CachingRepository {
 
   Future<Map<String, dynamic>> consignment(String consignmentId) {
     return api.get('/consignments/$consignmentId');
+  }
+
+  /// Say what physically came back from a returned parcel.
+  ///
+  /// `decision` is `RESTOCK_ALL`, `RESTOCK_NONE` (damaged / do not restock) or
+  /// `PARTIAL` with per-line `items`. Only restocked units go back on the
+  /// shelf; repeating the same decision is harmless.
+  Future<Map<String, dynamic>> receiveReturn(
+    String consignmentId, {
+    required String decision,
+    List<Map<String, dynamic>> items = const <Map<String, dynamic>>[],
+    String? note,
+  }) {
+    return api.post(
+      '/consignments/$consignmentId/return-receipt',
+      body: <String, dynamic>{
+        'decision': decision,
+        if (items.isNotEmpty) 'items': items,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
   }
 
   /// True when a failure means "you need a connection for this".

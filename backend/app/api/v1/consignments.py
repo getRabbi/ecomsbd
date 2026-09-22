@@ -24,9 +24,15 @@ from app.api.v1.money_schemas import (
     ConsignmentResponse,
     DeliveryOutcomePayload,
     DispatchPayload,
+    ReturnReceiptPayload,
 )
 from app.consignments.models import Consignment
-from app.consignments.service import ConsignmentService, DeliveryOutcome, ItemOutcome
+from app.consignments.service import (
+    ConsignmentService,
+    DeliveryOutcome,
+    ItemOutcome,
+    ReturnReceiptLine,
+)
 from app.money.service import ReceivableService
 from app.profit.service import ProfitService
 from app.tenants.roles import Permission
@@ -143,6 +149,48 @@ async def get_consignment(
     consignments: ConsignmentsDep,
 ) -> ConsignmentResponse:
     return _to_response(await consignments.get(consignment_id))
+
+
+@router.post(
+    "/{consignment_id}/return-receipt",
+    response_model=ConsignmentResponse,
+    summary="Receive a returned parcel back into stock",
+    dependencies=[Depends(require_permission(Permission.INVENTORY_ADJUST))],
+)
+async def receive_return(
+    consignment_id: uuid.UUID,
+    payload: ReturnReceiptPayload,
+    principal: TenantPrincipal,
+    consignments: ConsignmentsDep,
+) -> ConsignmentResponse:
+    """Say what physically came back: restock it, or not (damaged / missing).
+
+    A courier marking a parcel RETURNED never restocks anything by itself;
+    only this does, and only for the units the seller says are sellable. Once
+    per line — repeating the same decision is a no-op.
+    """
+    consignment = await consignments.get(consignment_id)
+    if payload.decision == "PARTIAL":
+        lines = [
+            ReturnReceiptLine(
+                consignment_item_id=item.consignment_item_id,
+                qty_restocked=item.qty_restocked,
+                qty_not_restocked=item.qty_not_restocked,
+            )
+            for item in payload.items
+        ]
+    else:
+        restock = payload.decision == "RESTOCK_ALL"
+        lines = [
+            ReturnReceiptLine(
+                consignment_item_id=item.id,
+                qty_restocked=item.qty_returned if restock else 0,
+                qty_not_restocked=0 if restock else item.qty_returned,
+            )
+            for item in consignment.items
+            if item.qty_returned > 0 and item.return_received_at is None
+        ]
+    return _to_response(await consignments.receive_return(consignment_id, lines, note=payload.note))
 
 
 __all__ = ["router"]

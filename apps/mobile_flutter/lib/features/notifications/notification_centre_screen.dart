@@ -11,9 +11,59 @@ import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
+import '../imports/imports_screen.dart';
+import '../insights/rto_screen.dart';
+import '../money/cases_screen.dart';
+import '../money/receivables_screen.dart';
+import '../customers/customers_screen.dart';
+import '../orders/order_detail_screen.dart';
+import '../products/products_screen.dart';
+import '../settings/courier_accounts_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../shared/responsive.dart';
+
+/// The categories a seller can filter by, in the order the Settings screen
+/// lists them. The server decides which ones a member receives at all.
+const List<String> notificationCategories = <String>[
+  'MONEY',
+  'RECONCILIATION',
+  'COURIER',
+  'RETURNS',
+  'INVENTORY',
+  'IMPORTS',
+  'CRM',
+];
+
+IconData notificationCategoryIcon(String category) => switch (category) {
+  'MONEY' => Icons.payments_rounded,
+  'RECONCILIATION' => Icons.rule_rounded,
+  'COURIER' => Icons.local_shipping_rounded,
+  'RETURNS' => Icons.assignment_return_rounded,
+  'INVENTORY' => Icons.inventory_2_rounded,
+  'IMPORTS' => Icons.upload_file_rounded,
+  _ => Icons.insights_rounded,
+};
+
+/// The screen a notification opens, from the target the server attached.
+///
+/// Only screens that stand on their own are opened. A target this build does
+/// not know opens nothing — the row already says what happened, and landing on
+/// the wrong screen is worse than staying put.
+Widget? notificationDestination(AppNotification notification) {
+  final id = notification.targetId;
+  return switch (notification.targetRoute) {
+    'customers' => const CustomersScreen(initialSegment: 'FOLLOW_UP_DUE'),
+    'receivables' => const ReceivablesScreen(),
+    'reconciliation' || 'reconciliation_case' => const CasesScreen(),
+    'returns' => const RtoScreen(),
+    'import' || 'imports' => const ImportsScreen(),
+    'courier_account' || 'courier_accounts' => const CourierAccountsScreen(),
+    'product' || 'products' => const ProductsScreen(),
+    'order' when id != null => OrderDetailScreen(orderId: id),
+    _ => null,
+  };
+}
 
 /// The in-app notification centre.
 ///
@@ -98,6 +148,26 @@ class NotificationCentreScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: EcomsbdSpacing.xs),
+                  Wrap(
+                    spacing: EcomsbdSpacing.xs,
+                    runSpacing: EcomsbdSpacing.xs,
+                    children: <Widget>[
+                      FilterToggle(
+                        label: context.tr('notif.cat.all'),
+                        selected: controller.category == null,
+                        onChanged: (_) => controller.setCategory(null),
+                      ),
+                      for (final category in notificationCategories)
+                        FilterToggle(
+                          label: context.tr('notif.cat.$category'),
+                          selected: controller.category == category,
+                          onChanged: (selected) => controller.setCategory(
+                            selected ? category : null,
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: EcomsbdSpacing.sm),
                   PagedListBody<AppNotification>(
                     state: state,
@@ -144,13 +214,21 @@ class NotificationCentreScreen extends ConsumerWidget {
         }
       }
     }
-    if (notification.kind == 'WEEKLY_SUMMARY' && context.mounted) {
+    if (!context.mounted) return;
+    if (notification.kind == 'WEEKLY_SUMMARY') {
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => WeeklySummarySheet(payload: notification.payload),
       );
+      return;
+    }
+    final destination = notificationDestination(notification);
+    if (destination != null) {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => destination));
     }
   }
 }
@@ -163,7 +241,9 @@ class NotificationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = severityTone(notification.severity);
+    final tone = notification.isResolved
+        ? Tone.neutral
+        : severityTone(notification.severity);
 
     return GlassCard(
       onTap: onTap,
@@ -174,6 +254,20 @@ class NotificationRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: 1,
+                  right: EcomsbdSpacing.xs,
+                ),
+                child: Icon(
+                  notificationCategoryIcon(notification.category),
+                  size: 18,
+                  color: tone.ink,
+                  semanticLabel: context.tr(
+                    'notif.cat.${notification.category}',
+                  ),
+                ),
+              ),
               // A dot rather than a bold typeface: bold on a glass surface at
               // 360dp is hard to tell from regular weight.
               if (!notification.isRead)
@@ -194,10 +288,17 @@ class NotificationRow extends StatelessWidget {
               ),
               const SizedBox(width: EcomsbdSpacing.xs),
               Flexible(
-                child: StatusChip(
-                  label: severityLabel(context, notification.severity),
-                  tone: tone,
-                ),
+                // Resolved replaces the severity: the problem it named has
+                // cleared, and a red "Critical" on it would say otherwise.
+                child: notification.isResolved
+                    ? StatusChip(
+                        label: context.tr('notif.resolved'),
+                        tone: Tone.good,
+                      )
+                    : StatusChip(
+                        label: severityLabel(context, notification.severity),
+                        tone: tone,
+                      ),
               ),
             ],
           ),

@@ -60,9 +60,7 @@ def upgrade() -> None:
         "imports",
         sa.Column("processed_count", sa.Integer(), nullable=False, server_default="0"),
     )
-    op.add_column(
-        "imports", sa.Column("started_at", sa.DateTime(timezone=True), nullable=True)
-    )
+    op.add_column("imports", sa.Column("started_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

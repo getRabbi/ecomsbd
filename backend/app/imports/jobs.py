@@ -26,6 +26,7 @@ what it created, and the next run picks up from there.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import sqlalchemy as sa
@@ -119,6 +120,7 @@ async def sweep_stuck_imports(ctx: dict[str, Any] | None = None) -> dict[str, in
     at rather than a thing to retry forever.
     """
     cutoff = utc_now() - _stuck_delta()
+    stopped: list[tuple[uuid.UUID, uuid.UUID]] = []
 
     async with system_session(f"worker: {JOB_NAME}:sweep") as session:
         stuck = list(
@@ -149,14 +151,42 @@ async def sweep_stuck_imports(ctx: dict[str, Any] | None = None) -> dict[str, in
                     "row_count": batch.row_count,
                 },
             )
+            stopped.append((batch.tenant_id, batch.id))
         await session.flush()
+
+    # After the reason is committed, and per shop on a tenant-scoped session:
+    # the uploader hears once that the import did not finish.
+    for tenant_id, import_id in stopped:
+        await _raise_import_alert(tenant_id, import_id)
 
     return {"stuck": len(stuck)}
 
 
-def _stuck_delta():
-    from datetime import timedelta
+async def _raise_import_alert(tenant_id: uuid.UUID, import_id: uuid.UUID) -> None:
+    from app.db.session import session_scope
+    from app.notifications.smart import SmartAlerts
 
+    token = set_context(
+        RequestContext(
+            trace_id=uuid.uuid4().hex,
+            tenant_id=tenant_id,
+            actor_type=ActorType.SYSTEM,
+            job_name=f"{JOB_NAME}:alert",
+        )
+    )
+    try:
+        async with session_scope() as session:
+            await SmartAlerts(session).import_alert(import_id)
+    except Exception as exc:
+        log.warning(
+            "import alert could not be raised",
+            extra={**_ctx(import_id), "error": type(exc).__name__},
+        )
+    finally:
+        clear_context(token)
+
+
+def _stuck_delta() -> timedelta:
     return timedelta(minutes=STUCK_COMMIT_MINUTES)
 
 

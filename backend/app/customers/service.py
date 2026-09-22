@@ -176,7 +176,31 @@ class CustomerService:
         if name is not None:
             customer.name = name.strip() or None
             changed.append("name")
-        if notes is not None:
+        if notes is not None and notes != customer.notes:
+            from app.core.context import current_context
+            from app.customers.crm_models import CustomerActivity
+
+            # Older clients still edit the legacy field. Preserve both versions
+            # as append-only observations, without claiming authorship of old text.
+            if customer.notes:
+                self._db.add(
+                    CustomerActivity(
+                        tenant_id=customer.tenant_id,
+                        customer_id=customer.id,
+                        kind="NOTE_LEGACY",
+                        text=customer.notes,
+                    )
+                )
+            if notes.strip():
+                self._db.add(
+                    CustomerActivity(
+                        tenant_id=customer.tenant_id,
+                        customer_id=customer.id,
+                        kind="NOTE",
+                        text=notes,
+                        actor_id=current_context().user_id,
+                    )
+                )
             customer.notes = notes
             changed.append("notes")
         if flag is not None and flag != customer.flag:
@@ -254,6 +278,26 @@ class CustomerService:
 
     # -------------------------------------------------------------- list ----
 
+    def search_query(self, search: str | None = None) -> sa.Select:
+        """Shared privacy-safe search for customer lists and CRM filters."""
+        from app.common.phone import try_normalize_bd_phone
+
+        stmt = sa.select(Customer).where(Customer.deleted_at.is_(None))
+        if not search or not search.strip():
+            return stmt
+        term = search.strip()
+        digits = re.sub(r"\D", "", normalize_digits(term))
+        number = try_normalize_bd_phone(term)
+        if number is not None:
+            return stmt.where(Customer.phone_search_hmac == self.phone_search_hash(number.e164))
+        if len(digits) == 4 and normalize_digits(term).isdigit():
+            return stmt.where(Customer.phone_last4 == digits)
+        return stmt.where(
+            sa.func.lower(sa.func.coalesce(Customer.name, "")).contains(
+                term.lower(), autoescape=True
+            )
+        )
+
     async def list_customers(
         self,
         *,
@@ -270,26 +314,7 @@ class CustomerService:
         search, because that would require storing the number in a form that
         could be scanned.
         """
-        stmt = sa.select(Customer).where(Customer.deleted_at.is_(None))
-
-        if search:
-            term = search.strip()
-            digits = re.sub(r"\D", "", normalize_digits(term))
-            conditions: list[sa.ColumnElement[bool]] = [
-                sa.func.lower(sa.func.coalesce(Customer.name, "")).like(f"%{term.lower()}%")
-            ]
-            if len(digits) >= 4:
-                # Last-four search: cheap, and reveals nothing beyond what the
-                # seller already sees in their own list.
-                conditions.append(Customer.phone_last4 == digits[-4:])
-            from app.common.phone import try_normalize_bd_phone
-
-            number = try_normalize_bd_phone(term)
-            if number is not None:
-                conditions.append(
-                    Customer.phone_search_hmac == self._hasher.phone_search_hash(number.e164)
-                )
-            stmt = stmt.where(sa.or_(*conditions))
+        stmt = self.search_query(search)
 
         if repeat_only:
             stmt = stmt.where(Customer.order_count >= 2)

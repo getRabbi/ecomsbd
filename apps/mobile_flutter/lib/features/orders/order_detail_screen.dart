@@ -13,6 +13,7 @@ import '../../design/components/cards.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../products/inventory_sheets.dart';
 import '../shared/data_state.dart';
 import 'courier_booking_sheet.dart';
 import 'dispatch_sheet.dart';
@@ -162,6 +163,11 @@ class _OrderBody extends ConsumerWidget {
             tone: Tone.warning,
             actionLabel: null,
           ),
+          const SizedBox(height: EcomsbdSpacing.sm),
+        ],
+        if (order.returnPendingUnits > 0 &&
+            order.consignmentId != null) ...<Widget>[
+          _ReturnPendingCard(order: order),
           const SizedBox(height: EcomsbdSpacing.sm),
         ],
         GlassCard(
@@ -334,6 +340,61 @@ class _OrderBody extends ConsumerWidget {
           _SendItSection(order: order, busy: busy),
         ],
       ],
+    );
+  }
+}
+
+/// A returned parcel whose units nobody has received back yet.
+///
+/// The courier's "returned" does not restock; the seller confirms what
+/// actually arrived — back to stock, damaged, or some of each.
+class _ReturnPendingCard extends ConsumerWidget {
+  const _ReturnPendingCard({required this.order});
+
+  final SellerOrder order;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(context.tr('rtn.title'), style: EcomsbdType.sectionTitle),
+          const SizedBox(height: 4),
+          Text(
+            context.tr('rtn.pending', <String, Object?>{
+              'count': order.returnPendingUnits,
+            }),
+            style: EcomsbdType.bodyStrong,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            context.tr('rtn.why'),
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+          const SizedBox(height: EcomsbdSpacing.sm),
+          FilledButton.icon(
+            onPressed: () async {
+              final done = await ReceiveReturnSheet.show(
+                context,
+                consignmentId: order.consignmentId!,
+                items: order.items,
+              );
+              if (done ?? false) {
+                ref.invalidate(orderProvider(order.id));
+              }
+            },
+            icon: const Icon(Icons.assignment_return_outlined, size: 18),
+            label: Text(context.tr('rtn.receive')),
+            style: FilledButton.styleFrom(
+              backgroundColor: EcomsbdColors.orange,
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

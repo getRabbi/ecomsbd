@@ -3,7 +3,7 @@ description: "ecomsbd — Bangladesh F-commerce seller financial operations."
 publish_to: "none"
 
 # version+build. The build number is what Play orders releases by.
-version: 0.1.0+1
+version: 2.3.0+230
 
 environment:
   sdk: ^3.12.0

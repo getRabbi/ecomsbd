@@ -218,8 +218,14 @@ void main() {
 
       // The Client ID identifies which credential is loaded and stays
       // readable; the secret is the half that must not be shoulder-surfable.
-      expect(obscured.map((f) => f.controller.text), contains('pathao-client-secret'));
-      expect(obscured.map((f) => f.controller.text), isNot(contains('pathao-client-id')));
+      expect(
+        obscured.map((f) => f.controller.text),
+        contains('pathao-client-secret'),
+      );
+      expect(
+        obscured.map((f) => f.controller.text),
+        isNot(contains('pathao-client-id')),
+      );
     });
 
     testWidgets('a connected account with no pickup store is not bookable', (
@@ -262,13 +268,17 @@ void main() {
 
     testWidgets('lists the pickup stores the courier reports', (tester) async {
       final harness = _harness(accounts: <dynamic>[_pathaoAccount()]);
-      harness.adapter.onJson('GET', '/couriers/accounts/pathao/stores', <dynamic>[
-        <String, dynamic>{
-          'provider_store_id': '12345',
-          'name': 'Mirpur Warehouse',
-          'address': 'Mirpur 10, Dhaka',
-        },
-      ]);
+      harness.adapter.onJson(
+        'GET',
+        '/couriers/accounts/pathao/stores',
+        <dynamic>[
+          <String, dynamic>{
+            'provider_store_id': '12345',
+            'name': 'Mirpur Warehouse',
+            'address': 'Mirpur 10, Dhaka',
+          },
+        ],
+      );
 
       await pumpCommerceScreen(
         tester,
@@ -308,22 +318,21 @@ void main() {
           _pathaoAccount(storeId: '12345', webhookConfigured: true),
         ],
       );
-      harness.adapter.onJson(
-        'GET',
-        '/couriers/accounts/pathao/webhook',
-        <String, dynamic>{
-          'provider': 'pathao',
-          'supported': true,
-          'callback_url':
-              'https://api.example.com/v1/webhooks/couriers/pathao/tok-123',
-          'secret_configured': true,
-          'help_en':
-              'Pathao does not offer a status lookup — parcel updates arrive '
-              'only by webhook.',
-          'help_bn':
-              'Pathao-তে স্ট্যাটাস লুকআপ নেই — পার্সেলের আপডেট শুধু webhook দিয়েই আসে।',
-        },
-      );
+      harness.adapter.onJson('GET', '/couriers/accounts/pathao/webhook', <
+        String,
+        dynamic
+      >{
+        'provider': 'pathao',
+        'supported': true,
+        'callback_url':
+            'https://api.example.com/v1/webhooks/couriers/pathao/tok-123',
+        'secret_configured': true,
+        'help_en':
+            'Pathao does not offer a status lookup — parcel updates arrive '
+            'only by webhook.',
+        'help_bn':
+            'Pathao-তে স্ট্যাটাস লুকআপ নেই — পার্সেলের আপডেট শুধু webhook দিয়েই আসে।',
+      });
 
       await pumpCommerceScreen(
         tester,
@@ -333,7 +342,9 @@ void main() {
 
       expect(find.text('Status updates are set up'), findsOneWidget);
       expect(
-        find.text('https://api.example.com/v1/webhooks/couriers/pathao/tok-123'),
+        find.text(
+          'https://api.example.com/v1/webhooks/couriers/pathao/tok-123',
+        ),
         findsOneWidget,
       );
       // The courier's own reason, so a seller reads why this matters for
@@ -348,16 +359,14 @@ void main() {
       final harness = _harness(
         accounts: <dynamic>[_pathaoAccount(storeId: '12345')],
       );
-      harness.adapter.onJson(
-        'GET',
-        '/couriers/accounts/pathao/webhook',
-        <String, dynamic>{
-          'provider': 'pathao',
-          'supported': true,
-          'callback_url': 'https://api.example.com/v1/webhooks/couriers/pathao/t',
-          'secret_configured': false,
-        },
-      );
+      harness.adapter
+          .onJson('GET', '/couriers/accounts/pathao/webhook', <String, dynamic>{
+            'provider': 'pathao',
+            'supported': true,
+            'callback_url':
+                'https://api.example.com/v1/webhooks/couriers/pathao/t',
+            'secret_configured': false,
+          });
 
       await pumpCommerceScreen(
         tester,

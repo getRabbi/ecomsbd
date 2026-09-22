@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +36,7 @@ from app.money.models import CodReceivable, ReceivableStatus, can_transition
 from app.orders.models import Order
 from app.profit.service import ProfitService
 
-__all__ = ["AGING_BUCKETS", "AgingBucket", "ReceivableService"]
+__all__ = ["AGING_BUCKETS", "OVERDUE_AFTER_DAYS", "AgingBucket", "ReceivableService"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,13 +56,21 @@ class AgingBucket:
 
 #: The aging bands the Money screen shows. Days, not weeks, because the
 #: difference between four days and eight is the difference between "normal"
-#: and "chase this" for a Bangladeshi courier.
+#: and "chase this" for a Bangladeshi courier. V2.2 split the old "15+" band at
+#: thirty days: a parcel unpaid for a fortnight is late, one unpaid for over a
+#: month is usually lost money, and one band hid the difference.
 AGING_BUCKETS: tuple[AgingBucket, ...] = (
     AgingBucket(label="0-3 days", min_days=0, max_days=3),
     AgingBucket(label="4-7 days", min_days=4, max_days=7),
     AgingBucket(label="8-14 days", min_days=8, max_days=14),
-    AgingBucket(label="15+ days", min_days=15, max_days=None),
+    AgingBucket(label="15-30 days", min_days=15, max_days=30),
+    AgingBucket(label="30+ days", min_days=31, max_days=None),
 )
+
+#: Money waiting longer than this since delivery is overdue. A week: couriers
+#: here typically pay within a few days of delivery, and the Money screen has
+#: always called out "over a week" as the point worth chasing.
+OVERDUE_AFTER_DAYS = 7
 
 
 class ReceivableService:
@@ -413,17 +421,39 @@ class ReceivableService:
             receivable.settled_at = occurred_at or utc_now()
         await self._db.flush()
 
+        # Two entries, like a settlement: the receivable shrinks by what the
+        # courier kept, and the charge lands in its own bucket. Without the
+        # first, the receivable bucket would keep counting money the parcel no
+        # longer owes, and the ledger would stop agreeing with the dashboard's
+        # outstanding total (section 81.10).
+        moment = occurred_at or utc_now()
+        await self._ledger.record(
+            event_type=event_type,
+            entity_type="cod_receivable",
+            entity_id=receivable.id,
+            amount_paisa=amount_paisa,
+            bucket=LedgerBucket.COD_RECEIVABLE,
+            direction=LedgerDirection.DEBIT,
+            source=LedgerSource.PAYOUT,
+            occurred_at=moment,
+            source_ref=source_ref,
+            metadata={"provider_label": label},
+        )
         await self._ledger.record(
             event_type=event_type,
             entity_type="cod_receivable",
             entity_id=receivable.id,
             amount_paisa=amount_paisa,
             source=LedgerSource.PAYOUT,
-            occurred_at=occurred_at or utc_now(),
+            occurred_at=moment,
             source_ref=source_ref,
             metadata={"provider_label": label},
         )
         return receivable
+
+    async def refresh_profit(self, receivable: CodReceivable, *, reason: str) -> None:
+        """Write a new profit revision after money about this parcel changed."""
+        await self._resnapshot(receivable, reason=reason)
 
     # --------------------------------------------------------- seller acts --
 
@@ -495,12 +525,32 @@ class ReceivableService:
         status: ReceivableStatus | None = None,
         provider: str | None = None,
         open_only: bool = False,
+        min_age_days: int | None = None,
+        max_age_days: int | None = None,
+        as_of: datetime | None = None,
     ) -> list[CodReceivable]:
+        """Receivables, newest first.
+
+        ``min_age_days`` / ``max_age_days`` select by days since delivery, the
+        same measure the aging bands use, so a click on "8-14 days" lists
+        exactly the parcels that band counted.
+        """
         stmt = sa.select(CodReceivable)
         if status is not None:
             stmt = stmt.where(CodReceivable.status == str(status))
         if provider is not None:
             stmt = stmt.where(CodReceivable.provider == provider)
+        moment = as_of or utc_now()
+        if min_age_days is not None:
+            stmt = stmt.where(
+                CodReceivable.eligible_at.is_not(None),
+                CodReceivable.eligible_at <= moment - timedelta(days=min_age_days),
+            )
+        if max_age_days is not None:
+            stmt = stmt.where(
+                CodReceivable.eligible_at.is_not(None),
+                CodReceivable.eligible_at > moment - timedelta(days=max_age_days + 1),
+            )
         if open_only:
             stmt = stmt.where(
                 CodReceivable.status.in_(

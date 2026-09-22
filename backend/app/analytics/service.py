@@ -19,12 +19,14 @@ discipline.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.rto import RTO_STATUSES, is_completed_status, is_rto_status
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.core.clock import business_date, ensure_utc, utc_now
 from app.expenses.service import ExpenseService
@@ -207,7 +209,11 @@ class ReturnReport:
 
 @dataclass(frozen=True, slots=True)
 class ProductLine:
-    """One product's contribution over a period."""
+    """One product's contribution over a period.
+
+    Catalogue lines group by product, so a renamed product stays one row;
+    free-text lines group by the name typed on the order.
+    """
 
     product_name: str
     parcel_count: int
@@ -215,6 +221,18 @@ class ProductLine:
     revenue_paisa: int
     profit_paisa: int
     return_count: int
+    product_id: uuid.UUID | None = None
+    #: Parcels behind this line whose profit is estimated / has no cost at all.
+    estimated_parcels: int = 0
+    missing_parcels: int = 0
+
+    @property
+    def quality(self) -> ProfitQuality:
+        if self.missing_parcels:
+            return ProfitQuality.MISSING
+        if self.estimated_parcels:
+            return ProfitQuality.ESTIMATED
+        return ProfitQuality.ACTUAL
 
     @property
     def margin_basis_points(self) -> int | None:
@@ -225,6 +243,10 @@ class ProductLine:
     @property
     def has_enough_sample(self) -> bool:
         return self.parcel_count >= MIN_RANKING_SAMPLE
+
+
+#: A product line's identity: the catalogue id, or the typed name when there is none.
+_Key = tuple[uuid.UUID | None, str | None]
 
 
 class AnalyticsService:
@@ -262,10 +284,12 @@ class AnalyticsService:
 
         return HomeMetrics(
             as_of=day,
-            orders_today=await self._order_count(day, day),
+            orders_today=await self.order_count(day, day),
             delivered_today=outcomes.get(str(ConsignmentStatus.DELIVERED), 0)
             + outcomes.get(str(ConsignmentStatus.PARTIAL_DELIVERED), 0),
-            returned_today=outcomes.get(str(ConsignmentStatus.RETURNED), 0),
+            returned_today=sum(
+                count for outcome, count in outcomes.items() if is_rto_status(outcome)
+            ),
             gross_sales_paisa=await self._gross_sales(day, day),
             realized_revenue_paisa=totals["realized_revenue_paisa"],
             contribution_profit_paisa=totals["contribution_profit_paisa"],
@@ -304,7 +328,7 @@ class AnalyticsService:
             unallocated_ad_spend_paisa=spend["unallocated_paisa"],
             fixed_cost_paisa=spend["fixed_paisa"] + spend["other_paisa"],
             quality=await self._profit.quality_breakdown(since=since, until=until),
-            series=await self._series(since, until),
+            series=await self.daily_series(since, until),
             funnel=await self._funnel(since, until),
         )
 
@@ -328,18 +352,23 @@ class AnalyticsService:
             .group_by(ProfitSnapshot.outcome)
         )
 
+        # The shared RTO definition (app.analytics.rto): returns are RETURNED
+        # and courier-CANCELLED parcels, over completed parcels only, so this
+        # rate is the same number the RTO screens show.
         for outcome, count, outward, back, packaging, write_off, profit in rows:
-            report.parcel_count += int(count)
-            if outcome != str(ConsignmentStatus.RETURNED):
+            if not is_completed_status(outcome):
                 continue
-            report.return_count = int(count)
+            report.parcel_count += int(count)
+            if not is_rto_status(outcome):
+                continue
+            report.return_count += int(count)
             # On a return the outward leg was paid and collected nothing, so
             # it is a loss rather than a cost of sale.
-            report.outward_delivery_cost_paisa = int(outward or 0)
-            report.return_delivery_cost_paisa = int(back or 0)
-            report.packaging_loss_paisa = int(packaging or 0)
-            report.write_off_paisa = int(write_off or 0)
-            report.direct_loss_paisa = -min(0, int(profit or 0))
+            report.outward_delivery_cost_paisa += int(outward or 0)
+            report.return_delivery_cost_paisa += int(back or 0)
+            report.packaging_loss_paisa += int(packaging or 0)
+            report.write_off_paisa += int(write_off or 0)
+            report.direct_loss_paisa += -min(0, int(profit or 0))
 
         report.by_reason, report.unknown_reason_count = await self._return_reasons(since, until)
         report.by_product = await self._returns_by_product(since, until)
@@ -350,7 +379,14 @@ class AnalyticsService:
     # --------------------------------------------------------- products --
 
     async def products(self, *, since: date, until: date, limit: int = 50) -> list[ProductLine]:
-        """Contribution profit by product, best first.
+        """Contribution profit by product, best first."""
+        lines = await self.product_economics(since=since, until=until)
+        # Name breaks ties so the list is stable between identical requests.
+        lines.sort(key=lambda line: (-line.profit_paisa, line.product_name, str(line.product_id)))
+        return lines[:limit]
+
+    async def product_economics(self, *, since: date, until: date) -> list[ProductLine]:
+        """Every product with a settled parcel in the window, unordered.
 
         A parcel's profit is split across its lines in proportion to what each
         line sold for. Crediting the whole parcel to each product would make
@@ -363,6 +399,8 @@ class AnalyticsService:
                 ProfitSnapshot.contribution_profit_paisa,
                 ProfitSnapshot.realized_revenue_paisa,
                 ProfitSnapshot.outcome,
+                ProfitSnapshot.quality,
+                OrderItem.product_id,
                 OrderItem.product_name,
                 OrderItem.quantity,
                 OrderItem.unit_price_paisa,
@@ -375,57 +413,70 @@ class AnalyticsService:
 
         from app.common.money import Money
 
-        parcels: dict[object, tuple[int, int, str, list[tuple[str, int, int]]]] = {}
+        parcels: dict[object, tuple[int, int, str, str, list[tuple[_Key, str, int, int]]]] = {}
         for (
             order_id,
             profit,
             revenue,
             outcome,
+            quality,
+            product_id,
             name,
             quantity,
             unit_price,
             discount,
         ) in rows:
             line_total = max(0, unit_price * quantity - discount)
-            entry = parcels.setdefault(order_id, (int(profit or 0), int(revenue or 0), outcome, []))
-            entry[3].append((name, line_total, int(quantity)))
+            entry = parcels.setdefault(
+                order_id, (int(profit or 0), int(revenue or 0), outcome, quality, [])
+            )
+            key: _Key = (product_id, None if product_id is not None else name)
+            entry[4].append((key, name, line_total, int(quantity)))
 
-        accumulated: dict[str, list[int]] = {}
-        for profit, revenue, outcome, lines in parcels.values():
-            weights = [weight for _, weight, _ in lines]
+        accumulated: dict[_Key, list[int]] = {}
+        names: dict[_Key, str] = {}
+        for profit, revenue, outcome, quality, lines in parcels.values():
+            weights = [weight for _, _, weight, _ in lines]
             profit_shares = Money(profit).allocate(weights)
             revenue_shares = Money(revenue).allocate(weights)
-            returned = outcome == str(ConsignmentStatus.RETURNED)
+            returned = is_rto_status(outcome)
             delivered = outcome in (
                 str(ConsignmentStatus.DELIVERED),
                 str(ConsignmentStatus.PARTIAL_DELIVERED),
             )
-            for (name, _, quantity), profit_share, revenue_share in zip(
+            seen: set[_Key] = set()
+            for (key, name, _, quantity), profit_share, revenue_share in zip(
                 lines, profit_shares, revenue_shares, strict=True
             ):
-                row = accumulated.setdefault(name, [0, 0, 0, 0, 0])
-                row[0] += 1  # parcels
+                row = accumulated.setdefault(key, [0, 0, 0, 0, 0, 0, 0])
+                # The newest-looking name wins deterministically.
+                names[key] = max(names.get(key, name), name)
+                first_line = key not in seen
+                seen.add(key)
+                row[0] += int(first_line)  # one parcel, even with multiple variants/lines
                 row[1] += quantity if delivered else 0
                 row[2] += revenue_share.paisa
                 row[3] += profit_share.paisa
-                row[4] += 1 if returned else 0
+                row[4] += int(first_line and returned)
+                row[5] += int(first_line and quality == str(ProfitQuality.ESTIMATED))
+                row[6] += int(first_line and quality == str(ProfitQuality.MISSING))
 
-        lines_out = [
+        return [
             ProductLine(
-                product_name=name,
+                product_name=names[key],
                 parcel_count=values[0],
                 units_delivered=values[1],
                 revenue_paisa=values[2],
                 profit_paisa=values[3],
                 return_count=values[4],
+                product_id=key[0],
+                estimated_parcels=values[5],
+                missing_parcels=values[6],
             )
-            for name, values in accumulated.items()
+            for key, values in accumulated.items()
         ]
-        # Name breaks ties so the list is stable between identical requests.
-        lines_out.sort(key=lambda line: (-line.profit_paisa, line.product_name))
-        return lines_out[:limit]
 
-    async def _series(self, since: date, until: date) -> list[DayPoint]:
+    async def daily_series(self, since: date, until: date) -> list[DayPoint]:
         """Daily contribution profit, with the empty days kept."""
         rows = await self._db.execute(
             sa.select(
@@ -527,13 +578,23 @@ class AnalyticsService:
         )
         return {outcome: int(count) for outcome, count in rows}
 
-    async def _order_count(self, since: date, until: date) -> int:
+    async def order_count(self, since: date, until: date) -> int:
+        """Orders taken on these business dates, whatever became of them."""
         result = await self._db.execute(
             sa.select(sa.func.count())
             .select_from(Order)
             .where(Order.business_date >= since, Order.business_date <= until)
         )
         return int(result.scalar_one())
+
+    async def orders_by_day(self, since: date, until: date) -> dict[date, int]:
+        """:meth:`order_count` per business date, days with no order omitted."""
+        rows = await self._db.execute(
+            sa.select(Order.business_date, sa.func.count())
+            .where(Order.business_date >= since, Order.business_date <= until)
+            .group_by(Order.business_date)
+        )
+        return {day: int(count) for day, count in rows}
 
     async def _gross_sales(self, since: date, until: date) -> int:
         """What was ordered, before anybody delivered anything.
@@ -647,7 +708,7 @@ class AnalyticsService:
                 sa.func.coalesce(sa.func.sum(-ProfitSnapshot.contribution_profit_paisa), 0)
             ).where(
                 *self._window(since, until),
-                ProfitSnapshot.outcome == str(ConsignmentStatus.RETURNED),
+                ProfitSnapshot.outcome.in_(RTO_STATUSES),
                 ProfitSnapshot.contribution_profit_paisa < 0,
             )
         )
@@ -658,7 +719,7 @@ class AnalyticsService:
             sa.select(ProfitSnapshot.return_reason, sa.func.count())
             .where(
                 *self._window(since, until),
-                ProfitSnapshot.outcome == str(ConsignmentStatus.RETURNED),
+                ProfitSnapshot.outcome.in_(RTO_STATUSES),
             )
             .group_by(ProfitSnapshot.return_reason)
         )
@@ -730,9 +791,11 @@ def _rate_lines(rows: sa.CursorResult | object) -> list[RateLine]:
     """Fold ``(label, outcome, count, profit)`` rows into one line per label."""
     totals: dict[str, list[int]] = {}
     for label, outcome, count, profit in rows:  # type: ignore[union-attr]
+        if not is_completed_status(outcome):
+            continue
         entry = totals.setdefault(str(label), [0, 0, 0])
         entry[0] += int(count)
-        if outcome == str(ConsignmentStatus.RETURNED):
+        if is_rto_status(outcome):
             entry[1] += int(count)
             entry[2] += -min(0, int(profit or 0))
 

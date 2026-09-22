@@ -112,7 +112,6 @@ Tone _toneFor(CourierAccountStatus status) => switch (status) {
   CourierAccountStatus.unknown => Tone.neutral,
 };
 
-
 /// The four validation outcomes, rendered as four different things.
 ///
 /// This is the whole point of the enum: "we could not check" must not look
@@ -189,8 +188,12 @@ class _WhatThisCourierSupports extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Icon(Icons.sync_rounded, size: 15, color: EcomsbdColors.muted2),
-                SizedBox(width: 6),
+                const Icon(
+                  Icons.sync_rounded,
+                  size: 15,
+                  color: EcomsbdColors.muted2,
+                ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     context.tr('ca.pollingNote'),
@@ -375,7 +378,8 @@ class _ProviderCardState extends ConsumerState<_ProviderCard> {
     final account = ref.watch(courierAccountProvider(_provider)).value;
     final status = account?.status ?? CourierAccountStatus.disconnected;
     final connected = account?.connected ?? false;
-    final needsStore = _form.requiresStore && connected && account?.storeId == null;
+    final needsStore =
+        _form.requiresStore && connected && account?.storeId == null;
 
     return GlassCard(
       child: Column(
@@ -437,7 +441,8 @@ class _ProviderCardState extends ConsumerState<_ProviderCard> {
           if (_form.requiresStore && connected)
             _DetailRow(
               label: context.tr('ca.pickupStore'),
-              value: account?.storeName ??
+              value:
+                  account?.storeName ??
                   account?.storeId ??
                   context.tr('ca.noStoreChosen'),
             ),
@@ -458,7 +463,9 @@ class _ProviderCardState extends ConsumerState<_ProviderCard> {
                 onPressed: _busy ? null : () => _connect(account),
                 style: _primaryButton,
                 child: Text(switch (status) {
-                  CourierAccountStatus.connected => context.tr('ca.replaceKeys'),
+                  CourierAccountStatus.connected => context.tr(
+                    'ca.replaceKeys',
+                  ),
                   CourierAccountStatus.needsReconnect => context.tr(
                     'ca.reconnect',
                   ),
@@ -483,7 +490,8 @@ class _ProviderCardState extends ConsumerState<_ProviderCard> {
                         : context.tr('ca.testConnection'),
                   ),
                 ),
-              if (account != null && status != CourierAccountStatus.disconnected)
+              if (account != null &&
+                  status != CourierAccountStatus.disconnected)
                 TextButton(
                   onPressed: _busy ? null : _disconnect,
                   child: Text(context.tr('common.disconnect')),
@@ -648,7 +656,10 @@ class _StorePickerSheet extends ConsumerWidget {
         children: <Widget>[
           const _SheetGrip(),
           const SizedBox(height: EcomsbdSpacing.md),
-          Text(context.tr('ca.choosePickupStore'), style: EcomsbdType.sectionTitle),
+          Text(
+            context.tr('ca.choosePickupStore'),
+            style: EcomsbdType.sectionTitle,
+          ),
           const SizedBox(height: 3),
           Text(
             context.tr('ca.pickupStoreNote', <String, Object?>{
@@ -684,27 +695,27 @@ class _StorePickerSheet extends ConsumerWidget {
                 : Material(
                     type: MaterialType.transparency,
                     child: Column(
-                    children: <Widget>[
-                      for (final store in rows)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(store.name, style: EcomsbdType.body),
-                          subtitle: store.address == null
-                              ? null
-                              : Text(
-                                  store.address!,
-                                  style: EcomsbdType.caption.copyWith(
-                                    color: EcomsbdColors.muted,
+                      children: <Widget>[
+                        for (final store in rows)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(store.name, style: EcomsbdType.body),
+                            subtitle: store.address == null
+                                ? null
+                                : Text(
+                                    store.address!,
+                                    style: EcomsbdType.caption.copyWith(
+                                      color: EcomsbdColors.muted,
+                                    ),
                                   ),
-                                ),
-                          trailing: const Icon(
-                            Icons.chevron_right,
-                            size: 18,
-                            color: EcomsbdColors.muted2,
+                            trailing: const Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: EcomsbdColors.muted2,
+                            ),
+                            onTap: () => Navigator.of(context).pop(store),
                           ),
-                          onTap: () => Navigator.of(context).pop(store),
-                        ),
-                    ],
+                      ],
                     ),
                   ),
           ),
@@ -828,17 +839,19 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
       _error = null;
     });
     try {
-      final result = await ref.read(courierRepositoryProvider).connect(
-        provider: widget.provider,
-        credentials: <String, String>{
-          for (final entry in _fields.entries)
-            entry.key: entry.value.text.trim(),
-        },
-        config: <String, dynamic>{
-          if (widget.form?.supportsSandbox ?? false) 'sandbox': _sandbox,
-        },
-        webhookSecret: _webhookSecret.text.trim(),
-      );
+      final result = await ref
+          .read(courierRepositoryProvider)
+          .connect(
+            provider: widget.provider,
+            credentials: <String, String>{
+              for (final entry in _fields.entries)
+                entry.key: entry.value.text.trim(),
+            },
+            config: <String, dynamic>{
+              if (widget.form?.supportsSandbox ?? false) 'sandbox': _sandbox,
+            },
+            webhookSecret: _webhookSecret.text.trim(),
+          );
       // Cleared immediately: the values have left the device and there is no
       // reason for them to stay in a controller behind a dismissed sheet.
       for (final controller in _fields.values) {
@@ -865,7 +878,8 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
     final name = form?.displayName ?? 'Steadfast';
     final canSubmit = _formFields.every(
       (field) =>
-          !field.required || (_fields[field.name]?.text.trim().isNotEmpty ?? false),
+          !field.required ||
+          (_fields[field.name]?.text.trim().isNotEmpty ?? false),
     );
 
     return Padding(
@@ -994,8 +1008,10 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
                   _busy
                       ? (form == null
                             ? context.tr('ca.checkingWith')
-                            : context.tr('ca.checkingWithProvider',
-                                <String, Object?>{'provider': name}))
+                            : context.tr(
+                                'ca.checkingWithProvider',
+                                <String, Object?>{'provider': name},
+                              ))
                       : context.tr('ca.saveAndCheck'),
                 ),
               ),
@@ -1013,8 +1029,10 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
                     child: Text(
                       form == null
                           ? context.tr('ca.readOnlyNote')
-                          : context.tr('ca.readOnlyNoteProvider',
-                              <String, Object?>{'provider': name}),
+                          : context.tr(
+                              'ca.readOnlyNoteProvider',
+                              <String, Object?>{'provider': name},
+                            ),
                       style: EcomsbdType.caption,
                     ),
                   ),

@@ -221,12 +221,15 @@ void main() {
 
   group('customers', () {
     test('the mirror never stores a plaintext phone', () async {
-      adapter.onJson('GET', '/customers', <String, dynamic>{
+      adapter.onJson('GET', '/customers/crm', <String, dynamic>{
         'items': <dynamic>[
           <String, dynamic>{
             ..._customerJson(id: 'c1'),
             // Even if a future server change leaked one, it stops at the cache.
             'phone': '+8801712345678',
+            'value': {'measured_profit_paisa': 123456},
+            'realized_revenue_paisa': 456789,
+            'segments': ['REPEAT', 'HIGH_VALUE'],
           },
         ],
       });
@@ -236,6 +239,9 @@ void main() {
       final row = await db.localCustomer(testTenantId, 'c1');
       final payload = jsonDecode(row!.payload) as Map<String, dynamic>;
       expect(payload.containsKey('phone'), isFalse);
+      expect(payload.containsKey('value'), isFalse);
+      expect(payload['realized_revenue_paisa'], isNull);
+      expect(payload['segments'], ['REPEAT']);
       expect(row.phoneMasked, '01712****78');
     });
 

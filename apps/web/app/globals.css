@@ -278,6 +278,13 @@ button:disabled {
   margin: 6px 0 0;
 }
 
+/* Two cards side by side on a desktop, stacked on a narrow screen. */
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+}
+
 /* -------------------------------------------------------------- tables --- */
 
 .tablewrap {
@@ -365,6 +372,24 @@ button:disabled {
 .chip--bad {
   background: var(--bad-soft);
   color: var(--bad);
+}
+
+/* A signed money figure: red when the seller received less, green when more. */
+.text--bad {
+  color: var(--bad);
+}
+
+.text--good {
+  color: var(--good);
+}
+
+/* A summary row that filters the table below it when clicked. */
+.table__row--clickable {
+  cursor: pointer;
+}
+
+.table__row--clickable:hover {
+  background: var(--stroke);
 }
 
 /* ------------------------------------------------------------- controls --- */

@@ -36,6 +36,8 @@ class Product {
     this.sku,
     this.description,
     this.lowStockThreshold,
+    this.hasVariants = false,
+    this.variants = const <ProductVariant>[],
   });
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -51,6 +53,12 @@ class Product {
     isLowStock: json['is_low_stock'] as bool? ?? false,
     isActive: json['is_active'] as bool? ?? true,
     isArchived: json['is_archived'] as bool? ?? false,
+    hasVariants: json['has_variants'] as bool? ?? false,
+    variants: <ProductVariant>[
+      for (final item
+          in (json['variants'] as List<dynamic>? ?? const <dynamic>[]))
+        ProductVariant.fromJson(item as Map<String, dynamic>),
+    ],
   );
 
   final String id;
@@ -66,8 +74,47 @@ class Product {
   final bool isActive;
   final bool isArchived;
 
+  /// Stock is held per variant; [stockOnHand] is then their sum.
+  final bool hasVariants;
+  final List<ProductVariant> variants;
+
+  List<ProductVariant> get activeVariants =>
+      variants.where((variant) => variant.isActive).toList();
+
   /// Indicative unit margin. Not profit — that needs a settled delivery.
   Money get margin => sellingPrice - cost;
+}
+
+/// One sellable version of a product — "Black / M" — with its own stock.
+@immutable
+class ProductVariant {
+  const ProductVariant({
+    required this.id,
+    required this.name,
+    required this.stockOnHand,
+    required this.isLowStock,
+    required this.isActive,
+    this.sku,
+    this.lowStockThreshold,
+  });
+
+  factory ProductVariant.fromJson(Map<String, dynamic> json) => ProductVariant(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    sku: json['sku'] as String?,
+    stockOnHand: json['stock_on_hand'] as int? ?? 0,
+    lowStockThreshold: json['low_stock_threshold'] as int?,
+    isLowStock: json['is_low_stock'] as bool? ?? false,
+    isActive: json['is_active'] as bool? ?? true,
+  );
+
+  final String id;
+  final String name;
+  final String? sku;
+  final int stockOnHand;
+  final int? lowStockThreshold;
+  final bool isLowStock;
+  final bool isActive;
 }
 
 @immutable
@@ -80,6 +127,10 @@ class StockMovement {
     required this.source,
     required this.occurredAt,
     this.note,
+    this.variantName,
+    this.orderNumber,
+    this.reference,
+    this.actorName,
   });
 
   factory StockMovement.fromJson(Map<String, dynamic> json) => StockMovement(
@@ -90,6 +141,10 @@ class StockMovement {
     source: json['source'] as String,
     note: json['note'] as String?,
     occurredAt: DateTime.parse(json['occurred_at'] as String),
+    variantName: json['variant_name'] as String?,
+    orderNumber: json['order_number'] as String?,
+    reference: json['reference'] as String?,
+    actorName: json['actor_name'] as String?,
   );
 
   final String id;
@@ -99,6 +154,10 @@ class StockMovement {
   final String source;
   final String? note;
   final DateTime occurredAt;
+  final String? variantName;
+  final String? orderNumber;
+  final String? reference;
+  final String? actorName;
 
   bool get isIncrease => quantityDelta > 0;
 
@@ -113,6 +172,7 @@ class StockMovement {
     'PARTIAL_RETURN_RESTORE' => _t('mv.partialReturn'),
     'DAMAGED_WRITE_OFF' => _t('mv.damagedWriteOff'),
     'IMPORT_ADJUSTMENT' => _t('mv.fromImport'),
+    'RESTOCK' => _t('mv.restock'),
     _ => reason,
   };
 }
@@ -141,6 +201,9 @@ class Customer {
     this.firstOrderAt,
     this.lastOrderAt,
     this.addresses = const <CustomerAddress>[],
+    this.crmTags = const <String>[],
+    this.crmSegments = const <String>[],
+    this.historicalRevenueAvailable = false,
   });
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
@@ -157,6 +220,13 @@ class Customer {
     cancelledCount: json['cancelled_count'] as int? ?? 0,
     successRateBasisPoints: json['success_rate_basis_points'] as int?,
     realizedRevenue: Money(json['realized_revenue_paisa'] as int? ?? 0),
+    historicalRevenueAvailable:
+        json['realized_revenue_paisa'] != null && json['value'] != null,
+    crmTags: [
+      for (final tag in json['tags'] as List? ?? [])
+        (tag as Map)['name'] as String,
+    ],
+    crmSegments: (json['segments'] as List? ?? []).cast<String>(),
     isRepeatBuyer: json['is_repeat_buyer'] as bool? ?? false,
     firstOrderAt: json['first_order_at'] == null
         ? null
@@ -196,6 +266,9 @@ class Customer {
   final DateTime? firstOrderAt;
   final DateTime? lastOrderAt;
   final List<CustomerAddress> addresses;
+  final List<String> crmTags;
+  final List<String> crmSegments;
+  final bool historicalRevenueAvailable;
 
   bool get isBlocked => flag == 'BLOCKED';
   bool get isStarred => flag == 'STARRED';
@@ -332,6 +405,9 @@ class SellerOrder {
     this.note,
     this.sourceText,
     this.items = const <OrderItem>[],
+    this.consignmentId,
+    this.consignmentStatus,
+    this.returnPendingUnits = 0,
   });
 
   factory SellerOrder.fromJson(Map<String, dynamic> json) => SellerOrder(
@@ -362,6 +438,9 @@ class SellerOrder {
       for (final item in (json['items'] as List<dynamic>? ?? const <dynamic>[]))
         OrderItem.fromJson(item as Map<String, dynamic>),
     ],
+    consignmentId: json['consignment_id'] as String?,
+    consignmentStatus: json['consignment_status'] as String?,
+    returnPendingUnits: json['return_pending_units'] as int? ?? 0,
   );
 
   final String id;
@@ -385,6 +464,14 @@ class SellerOrder {
   final int version;
   final DateTime createdAt;
   final List<OrderItem> items;
+
+  /// The order's newest parcel (detail reads only).
+  final String? consignmentId;
+  final String? consignmentStatus;
+
+  /// Returned units nobody has restocked or written off yet. A courier saying
+  /// "returned" never puts stock back by itself; the seller does.
+  final int returnPendingUnits;
 
   /// Placeholders until the engines that produce them exist. The server sends
   /// these explicitly so the UI shows "Not booked" / "Not checked" / "Pending"

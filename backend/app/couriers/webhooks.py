@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -109,10 +110,15 @@ class CourierWebhookVerifier(Protocol):
     def verify(self, *, headers: dict[str, str], body: bytes) -> bool: ...
 
 
+class ParsedWebhookEvent(Protocol):
+    @property
+    def provider_event_id(self) -> str | None: ...
+
+
 class CourierWebhookParser(Protocol):
     """Turns a verified body into normalized events."""
 
-    def parse(self, *, headers: dict[str, str], body: bytes) -> list[CourierWebhookEvent]: ...
+    def parse(self, *, headers: dict[str, str], body: bytes) -> Sequence[ParsedWebhookEvent]: ...
 
 
 def constant_time_signature_matches(expected: str, provided: str | None) -> bool:

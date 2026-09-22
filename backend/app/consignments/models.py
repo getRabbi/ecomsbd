@@ -260,6 +260,12 @@ class ConsignmentItem(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
         ),
         sa.CheckConstraint("unit_collectible_paisa >= 0", name="unit_collectible_non_negative"),
         sa.CheckConstraint("unit_cost_snapshot_paisa >= 0", name="unit_cost_snapshot_non_negative"),
+        # V2.2: a returned unit is restocked or not, once, never both.
+        sa.CheckConstraint(
+            "qty_restocked >= 0 AND qty_not_restocked >= 0 "
+            "AND qty_restocked + qty_not_restocked <= qty_returned",
+            name="return_decided_within_returned",
+        ),
     )
 
     consignment_id: Mapped[uuid.UUID] = mapped_column(
@@ -277,6 +283,16 @@ class ConsignmentItem(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     qty_shipped: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     qty_delivered: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
     qty_returned: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    #: V2.2: of the returned units, how many the seller physically received and
+    #: put back on the shelf, and how many were damaged or missing. A courier
+    #: saying RETURNED fills ``qty_returned``; only the seller fills these.
+    qty_restocked: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, default=0, server_default="0"
+    )
+    qty_not_restocked: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, default=0, server_default="0"
+    )
+    return_received_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 
     #: Collectible per unit, snapshotted so a later price change cannot alter
     #: what this parcel was supposed to collect.
@@ -286,6 +302,15 @@ class ConsignmentItem(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     unit_cost_snapshot_paisa: Mapped[int] = mapped_column(Paisa, nullable=False, default=0)
 
     consignment: Mapped[Consignment] = relationship(back_populates="items")
+
+    @property
+    def qty_return_pending(self) -> int:
+        """Returned units the seller has not yet restocked or written off."""
+        return self.qty_returned - self.qty_restocked - self.qty_not_restocked
+
+    @property
+    def not_restocked_cost_paisa(self) -> int:
+        return self.qty_not_restocked * self.unit_cost_snapshot_paisa
 
     @property
     def qty_unresolved(self) -> int:

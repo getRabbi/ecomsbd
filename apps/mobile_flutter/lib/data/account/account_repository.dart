@@ -49,6 +49,7 @@ class AccountRepository {
     bool? smsEnabled,
     bool? routineTrackingPush,
     List<String>? mutedKinds,
+    List<String>? mutedCategories,
   }) async {
     return NotificationPreferences.fromJson(
       await _api.patch(
@@ -59,6 +60,7 @@ class AccountRepository {
           if (routineTrackingPush != null)
             'routine_tracking_push': routineTrackingPush,
           if (mutedKinds != null) 'muted_kinds': mutedKinds,
+          if (mutedCategories != null) 'muted_categories': mutedCategories,
         },
       ),
     );

@@ -25,6 +25,7 @@ class CustomersRepository extends CachingRepository {
   });
 
   final OutboxWriter outbox;
+  bool moneyAvailable = false;
 
   @override
   final String? tenantId;
@@ -37,10 +38,12 @@ class CustomersRepository extends CachingRepository {
     String? search,
     bool repeatOnly = false,
     String? flag,
+    String? segment,
+    String? tagId,
   }) async {
     try {
       final json = await api.get(
-        '/customers',
+        '/customers/crm',
         query: pageQuery(
           cursor: cursor,
           limit: limit,
@@ -48,14 +51,17 @@ class CustomersRepository extends CachingRepository {
             'search': search,
             'repeat_only': repeatOnly,
             'flag': flag,
+            'segment': segment,
+            'tag_id': tagId,
           },
         ),
       );
       final page = parsePage<Customer>(json, Customer.fromJson);
+      moneyAvailable = json['money_locked'] == null;
       await _mirror(json['items'] as List<dynamic>? ?? const <dynamic>[]);
       return Sourced<PagedResult<Customer>>.live(page, DateTime.now().toUtc());
     } on ApiError catch (error) {
-      if (!error.isOffline) {
+      if (!error.isOffline || segment != null || tagId != null) {
         rethrow;
       }
       return _fromMirror(
@@ -199,7 +205,16 @@ class CustomersRepository extends CachingRepository {
   ) {
     // Belt and braces: the API never sends a plaintext number in a list or
     // detail response, and if a future change ever did, it stops here.
-    final safe = Map<String, dynamic>.from(json)..remove('phone');
+    final safe = Map<String, dynamic>.from(json)
+      ..remove('phone')
+      ..remove('value')
+      ..['realized_revenue_paisa'] = null;
+    // Offline data must not retain money after a role/plan change.
+    if (safe['segments'] is List) {
+      safe['segments'] = (safe['segments'] as List)
+          .where((value) => value != 'HIGH_VALUE')
+          .toList();
+    }
     return CachedCustomersCompanion.insert(
       id: safe['id'] as String,
       tenantId: tenant,

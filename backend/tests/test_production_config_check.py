@@ -78,8 +78,12 @@ class TestNoSecretsArePrinted:
         self,
         capsys,  # type: ignore[no-untyped-def]
         tmp_path,  # type: ignore[no-untyped-def]
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A rejected DATABASE_URL carries a password. It must not be echoed."""
+        # The suite's PostgreSQL URL otherwise overrides this deliberately
+        # invalid file value, as real environment variables correctly win.
+        monkeypatch.delenv("DATABASE_URL", raising=False)
         env_file = tmp_path / "broken.env"
         env_file.write_text(
             "APP_ENV=production\n"

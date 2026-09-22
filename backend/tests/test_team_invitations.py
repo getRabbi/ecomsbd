@@ -48,9 +48,7 @@ OTHER_PHONE = "+8801700000003"
 
 @pytest.fixture
 def service(db, settings) -> InvitationService:
-    return InvitationService(
-        db, hasher=get_hasher(settings), vault=CredentialVault(settings)
-    )
+    return InvitationService(db, hasher=get_hasher(settings), vault=CredentialVault(settings))
 
 
 async def _user(db, settings, phone: str) -> User:
@@ -75,9 +73,7 @@ async def _shop(db, settings, *, name: str = "Test Shop") -> tuple[Tenant, User]
     set_context(RequestContext(trace_id="test", tenant_id=tenant.id))
 
     owner = await _user(db, settings, OWNER_PHONE)
-    db.add(
-        TenantUser(tenant_id=tenant.id, user_id=owner.id, role=str(TenantRole.OWNER))
-    )
+    db.add(TenantUser(tenant_id=tenant.id, user_id=owner.id, role=str(TenantRole.OWNER)))
     await db.flush()
     return tenant, owner
 
@@ -135,9 +131,7 @@ def test_only_the_owner_holds_the_dangerous_permissions() -> None:
 
 def test_an_order_operator_can_book_but_never_sees_a_courier_key() -> None:
     assert has_permission(TenantRole.ORDER_OPERATOR, Permission.ORDER_BOOK)
-    assert not has_permission(
-        TenantRole.ORDER_OPERATOR, Permission.COURIER_CREDENTIAL_MANAGE
-    )
+    assert not has_permission(TenantRole.ORDER_OPERATOR, Permission.COURIER_CREDENTIAL_MANAGE)
     assert not has_permission(TenantRole.ORDER_OPERATOR, Permission.MONEY_VIEW)
 
 
@@ -195,9 +189,7 @@ async def test_an_invitation_never_stores_the_plain_number(db, settings, service
 
 
 @pytest.mark.asyncio
-async def test_a_bad_number_is_refused_before_anything_is_written(
-    db, settings, service
-) -> None:
+async def test_a_bad_number_is_refused_before_anything_is_written(db, settings, service) -> None:
     tenant, owner = await _shop(db, settings)
 
     with pytest.raises(ValidationError):
@@ -284,9 +276,7 @@ async def test_revoking_twice_is_refused(db, settings, service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_revoking_frees_the_number_to_be_invited_again(
-    db, settings, service
-) -> None:
+async def test_revoking_frees_the_number_to_be_invited_again(db, settings, service) -> None:
     tenant, owner = await _shop(db, settings)
     first = await service.invite(
         tenant_id=tenant.id,
@@ -348,9 +338,7 @@ async def test_only_the_invited_number_can_accept(db, settings, service) -> None
 
 
 @pytest.mark.asyncio
-async def test_a_wrong_id_and_someone_elses_give_the_same_answer(
-    db, settings, service
-) -> None:
+async def test_a_wrong_id_and_someone_elses_give_the_same_answer(db, settings, service) -> None:
     """Otherwise this endpoint becomes an oracle for which ids are real."""
     tenant, owner = await _shop(db, settings)
     invitation = await service.invite(
@@ -454,9 +442,7 @@ async def test_rejoining_reuses_the_same_membership_row(db, settings, service) -
 
 
 @pytest.mark.asyncio
-async def test_an_invitee_sees_only_invitations_addressed_to_them(
-    db, settings, service
-) -> None:
+async def test_an_invitee_sees_only_invitations_addressed_to_them(db, settings, service) -> None:
     tenant, owner = await _shop(db, settings)
     await service.invite(
         tenant_id=tenant.id,

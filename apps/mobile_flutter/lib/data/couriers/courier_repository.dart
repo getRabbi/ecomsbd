@@ -76,7 +76,8 @@ class CourierRepository {
   Future<List<CourierStore>> stores(String provider) async {
     final rows = await api.getList('/couriers/accounts/$provider/stores');
     return <CourierStore>[
-      for (final row in rows) CourierStore.fromJson(row as Map<String, dynamic>),
+      for (final row in rows)
+        CourierStore.fromJson(row as Map<String, dynamic>),
     ];
   }
 

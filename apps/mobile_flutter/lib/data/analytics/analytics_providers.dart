@@ -1,12 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../l10n/app_locale.dart';
 import '../commerce/commerce_providers.dart';
 import '../commerce/models.dart' show PagedResult;
 import '../commerce/paged_list_controller.dart';
 import '../commerce/repository_support.dart';
 import 'analytics_repository.dart';
+import 'insights_models.dart';
 import 'models.dart';
+import 'rto_models.dart';
 
 /// Wiring for Home, Insights, expenses and the notification centre.
 
@@ -31,6 +34,69 @@ final profitReportProvider = FutureProvider<Sourced<ProfitReport>>((ref) {
 /// Section 19's return economics.
 final returnReportProvider = FutureProvider<Sourced<ReturnReport>>((ref) {
   return ref.watch(analyticsRepositoryProvider).returns();
+});
+
+/// Return / RTO intelligence (V2.2). Every figure is the server's.
+final rtoSummaryProvider = FutureProvider<Sourced<RtoSummary>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoSummary();
+});
+
+final rtoTrendProvider = FutureProvider<Sourced<List<RtoWeek>>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoTrend();
+});
+
+final rtoCouriersProvider = FutureProvider<Sourced<CourierRtoReport>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoCouriers();
+});
+
+final rtoAreasProvider = FutureProvider<Sourced<AreaRtoReport>>((ref) {
+  return ref.watch(analyticsRepositoryProvider).rtoAreas();
+});
+
+final rtoPatternsProvider = FutureProvider<Sourced<List<CustomerPattern>>>((
+  ref,
+) {
+  return ref.watch(analyticsRepositoryProvider).rtoPatterns();
+});
+
+final rtoCustomerProvider = FutureProvider.autoDispose
+    .family<CustomerRtoHistory, String>((ref, customerId) {
+      return ref.watch(analyticsRepositoryProvider).rtoCustomer(customerId);
+    });
+
+/// Advanced Insights: the range the seller picked (7, 30 or 90 days), and
+/// each section for it. Changing the range refetches every section.
+final insightsDaysProvider = StateProvider<int>((ref) => 30);
+
+final insightsOverviewProvider = FutureProvider<Sourced<InsightsOverview>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsOverview(days: days);
+});
+
+final insightsTrendProvider = FutureProvider<Sourced<InsightsTrend>>((ref) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsTrend(days: days);
+});
+
+final insightsCouriersProvider = FutureProvider<Sourced<CourierInsights>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCouriers(days: days);
+});
+
+final insightsCashProvider = FutureProvider<Sourced<CashInsights>>((ref) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCash(days: days);
+});
+
+final insightsCustomersProvider = FutureProvider<Sourced<CustomerInsights>>((
+  ref,
+) {
+  final days = ref.watch(insightsDaysProvider);
+  return ref.watch(analyticsRepositoryProvider).insightsCustomers(days: days);
 });
 
 /// Contribution profit by product, best first.
@@ -128,23 +194,40 @@ final expenseListProvider =
     );
 
 class NotificationListController extends PagedListController<AppNotification> {
-  NotificationListController(this._repository) {
+  NotificationListController(this._repository, {this.lang}) {
     refresh();
   }
 
   final AnalyticsRepository _repository;
 
+  /// The app's language, so the server words each alert in it.
+  final String? lang;
+
   bool _unreadOnly = false;
+  String? _category;
 
   bool get unreadOnly => _unreadOnly;
 
+  /// Null for every category.
+  String? get category => _category;
+
   @override
   Future<Sourced<PagedResult<AppNotification>>> fetchPage({String? cursor}) {
-    return _repository.notifications(cursor: cursor, unreadOnly: _unreadOnly);
+    return _repository.notifications(
+      cursor: cursor,
+      unreadOnly: _unreadOnly,
+      category: _category,
+      lang: lang,
+    );
   }
 
   void setUnreadOnly(bool value) {
     _unreadOnly = value;
+    refresh();
+  }
+
+  void setCategory(String? value) {
+    _category = value;
     refresh();
   }
 
@@ -164,6 +247,8 @@ final notificationListProvider =
       NotificationListController,
       PagedListState<AppNotification>
     >(
-      (ref) =>
-          NotificationListController(ref.watch(analyticsRepositoryProvider)),
+      (ref) => NotificationListController(
+        ref.watch(analyticsRepositoryProvider),
+        lang: ref.watch(localeProvider).name,
+      ),
     );

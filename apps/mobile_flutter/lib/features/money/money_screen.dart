@@ -16,6 +16,7 @@ import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
 import 'cases_screen.dart';
+import 'cashflow_screen.dart';
 import 'payouts_screen.dart';
 import 'receivables_screen.dart';
 
@@ -186,6 +187,14 @@ class MoneyScreen extends ConsumerWidget {
               MaterialPageRoute<void>(builder: (_) => const PayoutsScreen()),
             ),
           ),
+          QuickActionTile(
+            icon: Icons.waterfall_chart_outlined,
+            title: context.tr('rcv.title'),
+            subtitle: context.tr('rcv.tileSub'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const CashflowScreen()),
+            ),
+          ),
         ],
       ),
     ];
@@ -252,7 +261,7 @@ class _AgingCard extends StatelessWidget {
                 label: context.trPlural(
                   'money.bandLabel',
                   band.parcelCount,
-                  <String, Object?>{'band': band.label},
+                  <String, Object?>{'band': band.displayLabel},
                 ),
                 amount: band.outstanding,
                 fraction: total.paisa == 0

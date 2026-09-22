@@ -1,546 +1,370 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../core/api/api_error.dart';
+import '../../core/money.dart';
 import '../../data/commerce/commerce_providers.dart';
+import '../../data/commerce/crm_repository.dart';
 import '../../data/commerce/list_controllers.dart';
-import '../../data/commerce/models.dart';
-import '../../design/components/badges.dart';
-import '../../design/components/cards.dart';
-import '../../design/components/states.dart';
-import '../../design/components/surfaces.dart';
-import '../../design/tokens.dart';
-import '../shared/data_state.dart';
-import '../shared/inputs.dart';
-import '../shared/responsive.dart';
 import '../../l10n/app_strings.dart';
+import '../risk/external_risk_card.dart';
+import 'crm_records_screen.dart';
+import 'crm_widgets.dart';
 
-/// One customer: history, private notes, and the audited phone reveal.
 class CustomerDetailScreen extends ConsumerStatefulWidget {
   const CustomerDetailScreen({required this.customerId, super.key});
-
   final String customerId;
-
   @override
-  ConsumerState<CustomerDetailScreen> createState() =>
-      _CustomerDetailScreenState();
+  ConsumerState<CustomerDetailScreen> createState() => _CustomerDetailState();
 }
 
-class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
-  /// Held in memory only, for as long as this screen is open.
-  String? _revealedPhone;
-
-  Future<void> _revealPhone() async {
-    final reason = await _RevealReasonDialog.show(context);
-    if (reason == null || !mounted) {
-      return;
-    }
+class _CustomerDetailState extends ConsumerState<CustomerDetailScreen> {
+  bool _busy = false;
+  String? _phone;
+  Future<void> _mutate(Future<void> Function() work) async {
+    setState(() => _busy = true);
     try {
+      await work();
+      if (!mounted) return;
+      ref.invalidate(crmCustomerProvider(widget.customerId));
+      ref.invalidate(customerListProvider);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('crm.error'))));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _tag() async {
+    final tag = await pickCrmItem(context);
+    if (tag != null && mounted) {
+      await _mutate(
+        () => ref
+            .read(crmRepositoryProvider)
+            .tag(widget.customerId, tag['id'] as String),
+      );
+    }
+  }
+
+  Future<void> _createTag() async {
+    final name = await crmTextDialog(
+      context,
+      context.tr('crm.tagName'),
+      maxLength: 60,
+    );
+    if (name != null && mounted) {
+      await _mutate(() async {
+        final tag = await ref.read(crmRepositoryProvider).add(
+          '/customers/crm/tags',
+          {'name': name},
+        );
+        await ref
+            .read(crmRepositoryProvider)
+            .tag(widget.customerId, tag['id'] as String);
+      });
+    }
+  }
+
+  Future<void> _flag(String flag) async {
+    String? reason;
+    if (flag == 'BLOCKED') {
+      reason = await crmTextDialog(
+        context,
+        context.tr('crm.blockReason'),
+        maxLength: 400,
+      );
+      if (reason == null) return;
+    }
+    if (!mounted) return;
+    await _mutate(() async {
+      await ref
+          .read(customersRepositoryProvider)
+          .update(widget.customerId, flag: flag, flagReason: reason);
+    });
+  }
+
+  Future<void> _reveal() async {
+    final reason = await crmTextDialog(
+      context,
+      context.tr('crm.revealReason'),
+      maxLength: 200,
+    );
+    if (reason == null || !mounted) return;
+    await _mutate(() async {
       final phone = await ref
           .read(customersRepositoryProvider)
           .revealPhone(widget.customerId, reason: reason);
-      if (mounted) {
-        setState(() => _revealedPhone = phone);
-      }
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    }
+      if (mounted) setState(() => _phone = phone);
+    });
   }
 
-  Future<void> _setFlag(Customer customer, String flag) async {
-    String? reason;
-    if (flag == 'BLOCKED') {
-      reason = await _FlagReasonDialog.show(context);
-      if (reason == null) {
-        return;
-      }
-    }
-    try {
-      await ref
-          .read(customersRepositoryProvider)
-          .update(customer.id, flag: flag, flagReason: reason);
-      ref.invalidate(customerProvider(customer.id));
-      unawaited(ref.read(customerListProvider.notifier).refresh());
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    }
-  }
-
-  Future<void> _editNotes(Customer customer) async {
-    final notes = await _NotesDialog.show(context, initial: customer.notes);
-    if (notes == null) {
-      return;
-    }
-    try {
-      await ref
-          .read(customersRepositoryProvider)
-          .update(customer.id, notes: notes);
-      ref.invalidate(customerProvider(customer.id));
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    }
-  }
-
+  Widget _fact(String label, Object? value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        Expanded(child: Text(context.tr('crm.$label'))),
+        Flexible(child: Text('$value', textAlign: TextAlign.end)),
+      ],
+    ),
+  );
+  String _money(Object? paisa) =>
+      paisa == null ? context.tr('crm.noValue') : Money(paisa as int).format();
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(customerProvider(widget.customerId));
-
-    return async.when(
-      loading: () => DetailScaffold(
-        title: 'Customer',
-        children: <Widget>[SkeletonLoader.card(height: 180)],
-      ),
-      error: (error, _) => DetailScaffold(
-        title: 'Customer',
-        children: <Widget>[
-          if (error is ApiError)
-            ErrorStateCard(
-              error: error,
-              onRetry: () =>
-                  ref.invalidate(customerProvider(widget.customerId)),
-            )
-          else
-            EmptyState(
-              icon: Icons.error_outline,
-              title: context.tr('common.couldNotLoad'),
-              message: '$error',
-            ),
-        ],
-      ),
-      data: (customer) => _CustomerBody(
-        customer: customer,
-        revealedPhone: _revealedPhone,
-        onReveal: _revealPhone,
-        onFlag: (flag) => _setFlag(customer, flag),
-        onEditNotes: () => _editNotes(customer),
-      ),
-    );
-  }
-}
-
-class _CustomerBody extends ConsumerWidget {
-  const _CustomerBody({
-    required this.customer,
-    required this.revealedPhone,
-    required this.onReveal,
-    required this.onFlag,
-    required this.onEditNotes,
-  });
-
-  final Customer customer;
-  final String? revealedPhone;
-  final VoidCallback onReveal;
-  final ValueChanged<String> onFlag;
-  final VoidCallback onEditNotes;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final history = ref.watch(customerOrdersProvider(customer.id));
-
-    return DetailScaffold(
-      title: customer.displayName,
-      subtitle: revealedPhone ?? customer.phoneMasked,
-      children: <Widget>[
-        if (customer.isBlocked) ...<Widget>[
-          ProviderHealthBanner(
-            provider: context.tr('cd.blockedTitle'),
-            detail: customer.flagReason?.isNotEmpty == true
-                ? customer.flagReason!
-                : context.tr('cd.blockedBody'),
-            tone: Tone.bad,
-          ),
-          const SizedBox(height: EcomsbdSpacing.sm),
-        ],
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      revealedPhone ?? customer.phoneMasked,
-                      style: EcomsbdType.sectionTitle,
-                    ),
-                  ),
-                  if (revealedPhone == null)
-                    TextButton.icon(
-                      onPressed: onReveal,
-                      icon: const Icon(Icons.visibility_outlined, size: 17),
-                      label: Text(context.tr('common.show')),
-                      style: TextButton.styleFrom(
-                        foregroundColor: EcomsbdColors.orange,
-                        minimumSize: const Size(0, EcomsbdTouch.minTarget),
-                        textStyle: EcomsbdType.chip,
-                      ),
-                    )
-                  else
-                    StatusChip(
-                      label: context.tr('cd.revealed'),
-                      tone: Tone.info,
-                      icon: Icons.receipt_long_outlined,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                revealedPhone == null
-                    ? context.tr('cd.maskNote')
-                    : context.tr('cd.revealRecorded'),
-                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-              ),
-            ],
+    final detail = ref.watch(crmCustomerProvider(widget.customerId));
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('crm.customer'))),
+      body: detail.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => Center(
+          child: TextButton(
+            onPressed: () =>
+                ref.invalidate(crmCustomerProvider(widget.customerId)),
+            child: Text(context.tr('common.retry')),
           ),
         ),
-        const SizedBox(height: EcomsbdSpacing.sm),
-        ResponsiveGrid(
-          minTileWidth: 150,
-          maxColumns: 2,
-          spacing: EcomsbdSpacing.xs,
-          children: <Widget>[
-            MetricTile(
-              label: context.tr('orders.title'),
-              value: '${customer.orderCount}',
-              caption: customer.isRepeatBuyer
-                  ? context.tr('cd.repeatBuyer')
-                  : context.tr('cd.firstTime'),
-            ),
-            MetricTile(
-              label: context.tr('status.delivered'),
-              value: '${customer.deliveredCount}',
-              caption: customer.successRateLabel,
-              tone: customer.successRateBasisPoints == null
-                  ? null
-                  : (customer.successRateBasisPoints! >= 7000
-                        ? Tone.good
-                        : Tone.warning),
-            ),
-            MetricTile(
-              label: context.tr('status.returned'),
-              value: '${customer.returnedCount}',
-              caption: 'parcels',
-              tone: customer.returnedCount > 0 ? Tone.bad : null,
-            ),
-            MetricTile(
-              label: context.tr('cd.revenue'),
-              value: customer.realizedRevenue.formatCompact(),
-              caption: context.tr('cd.settledOnly'),
-            ),
-          ],
-        ),
-        const SizedBox(height: EcomsbdSpacing.sm),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      context.tr('cd.yourNote'),
-                      style: EcomsbdType.bodyStrong,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: onEditNotes,
-                    style: TextButton.styleFrom(
-                      foregroundColor: EcomsbdColors.orange,
-                      minimumSize: const Size(0, EcomsbdTouch.minTarget),
-                      textStyle: EcomsbdType.chip,
-                    ),
-                    child: Text(
-                      customer.notes == null
-                          ? context.tr('common.add')
-                          : context.tr('common.edit'),
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                customer.notes?.isNotEmpty == true
-                    ? customer.notes!
-                    : context.tr('cd.notePrivate'),
-                style: EcomsbdType.caption.copyWith(
-                  color: customer.notes?.isNotEmpty == true
-                      ? EcomsbdColors.ink
-                      : EcomsbdColors.muted,
+        data: (customer) {
+          final canWrite = customer['can_write'] == true;
+          final value = customer['value'] as Map<String, dynamic>?;
+          final risk = customer['risk'] as Map<String, dynamic>?;
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(crmCustomerProvider(widget.customerId));
+              await ref.read(crmCustomerProvider(widget.customerId).future);
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  customer['name'] as String? ??
+                      customer['phone_masked'] as String,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: EcomsbdSpacing.sm),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: FilterToggle(
-                label: customer.isStarred
-                    ? context.tr('common.starred')
-                    : context.tr('common.star'),
-                selected: customer.isStarred,
-                onChanged: (selected) => onFlag(selected ? 'STARRED' : 'NONE'),
-              ),
-            ),
-            const SizedBox(width: EcomsbdSpacing.sm),
-            Expanded(
-              child: FilterToggle(
-                label: customer.isBlocked
-                    ? context.tr('common.blocked')
-                    : context.tr('common.block'),
-                selected: customer.isBlocked,
-                onChanged: (selected) => onFlag(selected ? 'BLOCKED' : 'NONE'),
-              ),
-            ),
-          ],
-        ),
-        if (customer.addresses.isNotEmpty) ...<Widget>[
-          SectionHeader(title: context.tr('cd.addresses')),
-          for (final address in customer.addresses)
-            Padding(
-              padding: const EdgeInsets.only(bottom: EcomsbdSpacing.xs),
-              child: GlassCard(
-                padding: const EdgeInsets.all(EcomsbdSpacing.md),
-                borderRadius: EcomsbdRadii.cardMedium,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    // The seller's own words, never a courier's rewrite.
-                    Text(address.rawAddress, style: EcomsbdType.body),
-                    if (address.district != null || address.area != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text(
-                          <String?>[
-                            address.area,
-                            address.district,
-                          ].whereType<String>().join(', '),
-                          style: EcomsbdType.caption.copyWith(
-                            color: EcomsbdColors.muted,
-                          ),
+                Text(_phone ?? customer['phone_masked'] as String),
+                for (final address in customer['addresses'] as List? ?? [])
+                  Text((address as Map)['raw_address'] as String),
+                if (customer['can_reveal'] == true && _phone == null)
+                  TextButton(
+                    onPressed: _busy ? null : _reveal,
+                    child: Text(context.tr('crm.reveal')),
+                  ),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        _fact(
+                          'firstOrder',
+                          crmDate(context, customer['first_order_at']),
                         ),
+                        _fact(
+                          'lastOrder',
+                          crmDate(context, customer['last_order_at']),
+                        ),
+                        _fact('orderCount', customer['order_count']),
+                        _fact('delivered', customer['delivered_count']),
+                        _fact('returned', customer['returned_count']),
+                        _fact('cancelled', customer['cancelled_count']),
+                        _fact('active', customer['active_orders']),
+                        _fact(
+                          'success',
+                          customer['success_rate_basis_points'] == null
+                              ? '—'
+                              : '${(customer['success_rate_basis_points'] as int) / 100}%',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (risk != null)
+                  Card(
+                    child: ExpansionTile(
+                      title: Text(context.tr('crm.risk')),
+                      subtitle: Text(
+                        context.tr(
+                          'crm.${{'LOW': 'LOW_RISK', 'MEDIUM': 'MEDIUM_RISK', 'HIGH': 'HIGH_RISK'}[risk['state']] ?? 'INSUFFICIENT_DATA'}',
+                        ),
+                      ),
+                      children: [
+                        for (final reason in risk['reasons'] as List? ?? [])
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(context.tr('crm.$reason')),
+                          ),
+                      ],
+                    ),
+                  ),
+                const ExternalRiskCard(),
+                ExpansionTile(
+                  title: Text(context.tr('crm.value')),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: value == null
+                          ? Text(context.tr('crm.locked'))
+                          : Column(
+                              children: [
+                                _fact(
+                                  'totalValue',
+                                  _money(value['total_order_value_paisa']),
+                                ),
+                                _fact(
+                                  'revenue',
+                                  _money(value['delivered_revenue_paisa']),
+                                ),
+                                _fact(
+                                  'profit',
+                                  _money(value['measured_profit_paisa']),
+                                ),
+                                _fact(
+                                  'average',
+                                  _money(
+                                    value['average_delivered_order_paisa'],
+                                  ),
+                                ),
+                                Text(
+                                  context.tr('crm.coverage', {
+                                    'measured': value['measured_parcels'],
+                                    'completed': value['completed_parcels'],
+                                  }),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+                Text(
+                  context.tr('crm.segment'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    for (final segment in customer['segments'] as List? ?? [])
+                      Chip(label: Text(context.tr('crm.$segment'))),
+                  ],
+                ),
+                CrmDefinitions(customer['definitions'] as Map<String, dynamic>),
+                Text(
+                  context.tr('crm.tags'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    for (final tag in customer['tags'] as List? ?? [])
+                      InputChip(
+                        label: Text((tag as Map)['name'] as String),
+                        onDeleted: !canWrite || _busy
+                            ? null
+                            : () => _mutate(
+                                () => ref
+                                    .read(crmRepositoryProvider)
+                                    .tag(
+                                      widget.customerId,
+                                      tag['id'] as String,
+                                      remove: true,
+                                    ),
+                              ),
+                        deleteButtonTooltipMessage: context.tr('crm.removeTag'),
                       ),
                   ],
                 ),
-              ),
-            ),
-        ],
-        SectionHeader(title: context.tr('cd.recentOrders')),
-        history.when(
-          loading: () => SkeletonLoader.card(height: 80),
-          error: (error, _) => Text(
-            context.tr('cd.ordersError'),
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-          data: (orders) {
-            if (orders.isEmpty) {
-              return Text(
-                context.tr('cd.noOrders'),
-                style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-              );
-            }
-            return Column(
-              children: <Widget>[
-                for (final order in orders)
-                  GlassListRow(
-                    title: order.orderNumber,
-                    subtitle:
-                        '${order.statusLabel} · ${formatRelative(order.createdAt)}',
-                    trailingTop: order.codAmount.format(),
-                    trailingBottom: order.itemSummary,
+                if (canWrite)
+                  Wrap(
+                    children: [
+                      TextButton(
+                        onPressed: _busy ? null : _tag,
+                        child: Text(context.tr('crm.addTag')),
+                      ),
+                      TextButton(
+                        onPressed: _busy ? null : _createTag,
+                        child: Text(context.tr('crm.createTag')),
+                      ),
+                    ],
+                  ),
+                if (customer['notes'] != null)
+                  ListTile(
+                    title: Text(context.tr('crm.legacy')),
+                    subtitle: Text(customer['notes'] as String),
+                  ),
+                for (final kind in [
+                  'orders',
+                  'notes',
+                  'follow-ups',
+                  'timeline',
+                ])
+                  Card(
+                    child: ListTile(
+                      title: Text(
+                        context.tr(
+                          'crm.${kind == 'follow-ups' ? 'followups' : kind}',
+                        ),
+                      ),
+                      subtitle:
+                          kind == 'follow-ups' &&
+                              customer['next_follow_up_at'] != null
+                          ? Text(
+                              crmDate(context, customer['next_follow_up_at']),
+                            )
+                          : null,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => CrmRecordsScreen(
+                            customerId: widget.customerId,
+                            kind: kind,
+                            canWrite: canWrite,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (canWrite)
+                  Wrap(
+                    children: [
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _flag(
+                                customer['flag'] == 'STARRED'
+                                    ? 'NONE'
+                                    : 'STARRED',
+                              ),
+                        child: Text(
+                          context.tr(
+                            customer['flag'] == 'STARRED'
+                                ? 'crm.unstar'
+                                : 'common.starred',
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _flag(
+                                customer['flag'] == 'BLOCKED'
+                                    ? 'NONE'
+                                    : 'BLOCKED',
+                              ),
+                        child: Text(
+                          context.tr(
+                            customer['flag'] == 'BLOCKED'
+                                ? 'crm.unblock'
+                                : 'common.blocked',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
               ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-/// Asks why the number is being revealed.
-///
-/// The reason is stored with the audit entry, which is the point: a seller's
-/// own access to their customers' numbers is traceable (master spec
-/// section 101).
-class _RevealReasonDialog extends StatefulWidget {
-  const _RevealReasonDialog();
-
-  static Future<String?> show(BuildContext context) => showDialog<String>(
-    context: context,
-    builder: (_) => const _RevealReasonDialog(),
-  );
-
-  @override
-  State<_RevealReasonDialog> createState() => _RevealReasonDialogState();
-}
-
-class _RevealReasonDialogState extends State<_RevealReasonDialog> {
-  final TextEditingController _reason = TextEditingController();
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.tr('cd.whyNumberTitle')),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            context.tr('cd.whyNumberBody'),
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-          const SizedBox(height: EcomsbdSpacing.md),
-          LabelledField(
-            label: 'Reason',
-            controller: _reason,
-            hint: context.tr('cd.whyNumberHint'),
-          ),
-        ],
+            ),
+          );
+        },
       ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.tr('common.cancel')),
-        ),
-        FilledButton(
-          onPressed: () {
-            final reason = _reason.text.trim();
-            // The server requires at least three characters; saying so here
-            // beats a round trip that fails.
-            if (reason.length < 3) {
-              return;
-            }
-            Navigator.of(context).pop(reason);
-          },
-          child: Text(context.tr('common.show')),
-        ),
-      ],
-    );
-  }
-}
-
-class _FlagReasonDialog extends StatefulWidget {
-  const _FlagReasonDialog();
-
-  static Future<String?> show(BuildContext context) => showDialog<String>(
-    context: context,
-    builder: (_) => const _FlagReasonDialog(),
-  );
-
-  @override
-  State<_FlagReasonDialog> createState() => _FlagReasonDialogState();
-}
-
-class _FlagReasonDialogState extends State<_FlagReasonDialog> {
-  final TextEditingController _reason = TextEditingController();
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.tr('cd.blockTitle')),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            context.tr('cd.blockBody'),
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-          const SizedBox(height: EcomsbdSpacing.md),
-          LabelledField(
-            label: 'Reason',
-            controller: _reason,
-            hint: context.tr('cd.blockHint'),
-          ),
-        ],
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.tr('common.cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_reason.text.trim()),
-          child: Text(context.tr('common.block')),
-        ),
-      ],
-    );
-  }
-}
-
-class _NotesDialog extends StatefulWidget {
-  const _NotesDialog({this.initial});
-
-  final String? initial;
-
-  static Future<String?> show(BuildContext context, {String? initial}) =>
-      showDialog<String>(
-        context: context,
-        builder: (_) => _NotesDialog(initial: initial),
-      );
-
-  @override
-  State<_NotesDialog> createState() => _NotesDialogState();
-}
-
-class _NotesDialogState extends State<_NotesDialog> {
-  late final TextEditingController _notes = TextEditingController(
-    text: widget.initial ?? '',
-  );
-
-  @override
-  void dispose() {
-    _notes.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.tr('cd.yourNote')),
-      content: LabelledField(
-        label: context.tr('common.note'),
-        controller: _notes,
-        maxLines: 4,
-        hint: context.tr('cd.noteHint'),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.tr('common.cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_notes.text.trim()),
-          child: Text(context.tr('common.save')),
-        ),
-      ],
     );
   }
 }

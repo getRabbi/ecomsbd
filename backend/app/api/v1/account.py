@@ -253,6 +253,11 @@ class NotificationPreferenceResponse(BaseModel):
     push_enabled: bool
     sms_enabled: bool
     muted_kinds: list[str]
+    #: Categories this member switched off: neither pushed nor listed.
+    muted_categories: list[str]
+    #: The categories this member's role receives at all, in display order.
+    #: The client offers a switch for these and no others.
+    categories: list[str]
     routine_tracking_push: bool
     quiet_hours_start: int | None
     quiet_hours_end: int | None
@@ -266,18 +271,34 @@ class NotificationPreferenceUpdate(BaseModel):
     push_enabled: bool | None = None
     sms_enabled: bool | None = None
     muted_kinds: list[str] | None = None
+    muted_categories: list[str] | None = None
     routine_tracking_push: bool | None = None
     quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
     quiet_hours_end: int | None = Field(default=None, ge=0, le=23)
 
 
+def _categories_for(principal: TenantPrincipal) -> list[str]:
+    """Categories whose audience this member's role carries."""
+    from app.notifications.models import NotificationCategory
+    from app.notifications.rules import CATEGORY_AUDIENCE
+
+    return [
+        str(category)
+        for category in NotificationCategory
+        if category is not NotificationCategory.SUMMARY
+        and principal.can(CATEGORY_AUDIENCE[category])
+    ]
+
+
 def _preference_response(
-    preference: NotificationPreference, settings: Any
+    preference: NotificationPreference, settings: Any, principal: TenantPrincipal
 ) -> NotificationPreferenceResponse:
     return NotificationPreferenceResponse(
         push_enabled=preference.push_enabled,
         sms_enabled=preference.sms_enabled,
         muted_kinds=list(preference.muted_kinds or []),
+        muted_categories=list(preference.muted_categories or []),
+        categories=_categories_for(principal),
         routine_tracking_push=preference.routine_tracking_push,
         quiet_hours_start=preference.quiet_hours_start,
         quiet_hours_end=preference.quiet_hours_end,
@@ -303,9 +324,13 @@ async def _dispatcher(db: DbSession, settings: Any) -> NotificationDispatcher:
 async def get_notification_preferences(
     principal: TenantPrincipal, db: DbSession, settings: SettingsDep
 ) -> NotificationPreferenceResponse:
-    dispatcher = await _dispatcher(db, settings)
-    preference = await dispatcher.preferences(principal.require_tenant())
-    return _preference_response(preference, settings)
+    from app.notifications.delivery import effective_preference
+
+    tenant_id = principal.require_tenant()
+    preference = await effective_preference(db, tenant_id, principal.user_id)
+    if preference is None:
+        preference = await (await _dispatcher(db, settings)).preferences(tenant_id)
+    return _preference_response(preference, settings, principal)
 
 
 @account_router.patch(
@@ -319,13 +344,15 @@ async def update_notification_preferences(
     db: DbSession,
     settings: SettingsDep,
 ) -> NotificationPreferenceResponse:
-    """Section 95's opt-out, server-side.
+    """Section 95's opt-out, server-side, for the caller alone.
 
-    A muted kind is refused delivery in the dispatcher, not hidden in the app —
-    a client that ignored the setting would otherwise still be pushed to.
+    Writes the caller's own preference row (seeded from the shop default the
+    first time); there is no way to address another member's. A muted kind is
+    refused push delivery; a muted category is also hidden from the caller's
+    centre — both enforced by the server, not by the app.
     """
     dispatcher = await _dispatcher(db, settings)
-    preference = await dispatcher.preferences(principal.require_tenant())
+    preference = await dispatcher.preferences(principal.require_tenant(), user_id=principal.user_id)
 
     if payload.push_enabled is not None:
         preference.push_enabled = payload.push_enabled
@@ -338,13 +365,20 @@ async def update_notification_preferences(
         # sit in the row forever muting nothing.
         known = {str(kind) for kind in NotificationKind}
         preference.muted_kinds = [k for k in payload.muted_kinds if k in known]
+    if payload.muted_categories is not None:
+        from app.notifications.models import NotificationCategory
+
+        categories = {str(category) for category in NotificationCategory}
+        preference.muted_categories = sorted(
+            {c for c in payload.muted_categories if c in categories}
+        )
     if payload.quiet_hours_start is not None:
         preference.quiet_hours_start = payload.quiet_hours_start
     if payload.quiet_hours_end is not None:
         preference.quiet_hours_end = payload.quiet_hours_end
 
     await db.flush()
-    return _preference_response(preference, settings)
+    return _preference_response(preference, settings, principal)
 
 
 # --------------------------------------------------------------------------- #

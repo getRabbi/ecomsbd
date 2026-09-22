@@ -16,18 +16,27 @@ from app.api.v1 import (
     admin,
     analytics,
     auth,
+    automation,
     billing,
     consignments,
     courier_webhooks,
     couriers,
+    crm,
     customers,
+    developers,
+    external_risk,
     imports,
+    insights,
+    messaging,
     money,
+    network,
+    order_sources,
     orders,
     payouts,
     products,
     providers,
     reconciliation,
+    rto,
     sync,
     team,
     tenants,
@@ -35,8 +44,15 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(messaging.router)
+api_router.include_router(order_sources.router)
+api_router.include_router(developers.router)
+api_router.include_router(external_risk.router)
+api_router.include_router(network.router)
+api_router.include_router(automation.router)
 api_router.include_router(tenants.router)
 api_router.include_router(products.router)
+api_router.include_router(crm.router)
 api_router.include_router(customers.router)
 api_router.include_router(orders.router)
 api_router.include_router(imports.router)
@@ -53,6 +69,8 @@ api_router.include_router(couriers.router)
 api_router.include_router(courier_webhooks.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
+api_router.include_router(rto.router)
+api_router.include_router(insights.router)
 api_router.include_router(team.router)
 api_router.include_router(account.account_router)
 api_router.include_router(account.export_router)

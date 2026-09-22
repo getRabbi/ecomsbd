@@ -14,6 +14,7 @@ from typing import Annotated
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     DbSession,
@@ -72,6 +73,7 @@ def _to_detail(order: Order) -> OrderDetailResponse:
                 product_name=item.product_name,
                 sku=item.sku,
                 variant_label=item.variant_label,
+                variant_id=item.variant_id,
                 quantity=item.quantity,
                 unit_price_paisa=item.unit_price_paisa,
                 unit_cost_snapshot_paisa=item.unit_cost_snapshot_paisa,
@@ -117,6 +119,7 @@ def _to_item_drafts(payload_items: list) -> list[OrderItemDraft]:
             discount_paisa=item.discount_paisa,
             variant_label=item.variant_label,
             note=item.note,
+            variant_id=item.variant_id,
         )
         for item in payload_items
     ]
@@ -330,8 +333,27 @@ async def get_order(
     order_id: uuid.UUID,
     principal: TenantPrincipal,
     orders: OrderServiceDep,
+    db: DbSession,
 ) -> OrderDetailResponse:
-    return _to_detail(await orders.get(order_id))
+    detail = _to_detail(await orders.get(order_id))
+    # The newest parcel, so the order screen can offer "receive the return"
+    # without a second round trip. One indexed query.
+    parcel = (
+        await db.execute(
+            sa.select(Consignment)
+            .where(Consignment.order_id == order_id)
+            .options(selectinload(Consignment.items))
+            .order_by(Consignment.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if parcel is not None:
+        detail.consignment_id = parcel.id
+        detail.consignment_status = parcel.status
+        detail.courier_provider = parcel.provider
+        detail.tracking_code = parcel.tracking_code
+        detail.return_pending_units = sum(item.qty_return_pending for item in parcel.items)
+    return detail
 
 
 @router.patch(

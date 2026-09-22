@@ -8,27 +8,61 @@ import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../shared/data_state.dart';
+import '../shared/inputs.dart';
 import '../../l10n/app_strings.dart';
 
 /// A product's stock movements, newest first.
 ///
 /// The answer to "where did my stock go?". Each row shows the change, the
-/// reason and the balance that resulted, because a running balance the seller
-/// can follow is what makes the ledger trustworthy rather than merely correct
-/// (master spec section 10.4).
-class StockHistoryScreen extends ConsumerWidget {
+/// reason, the order or reference behind it, who did it and the balance that
+/// resulted, because a running balance the seller can follow is what makes the
+/// ledger trustworthy rather than merely correct (master spec section 10.4).
+class StockHistoryScreen extends ConsumerStatefulWidget {
   const StockHistoryScreen({required this.product, super.key});
 
   final Product product;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final history = ref.watch(stockMovementsProvider(product.id));
+  ConsumerState<StockHistoryScreen> createState() => _StockHistoryScreenState();
+}
+
+/// Filter name -> label key. Order is the chip order.
+const Map<String, String> _filterLabels = <String, String>{
+  'all': 'inv.filterAll',
+  'sales': 'inv.filterSales',
+  'returns': 'inv.filterReturns',
+  'restock': 'inv.filterRestock',
+  'adjust': 'inv.filterAdjust',
+};
+
+class _StockHistoryScreenState extends ConsumerState<StockHistoryScreen> {
+  String _filter = 'all';
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+    final history = ref.watch(
+      stockHistoryProvider((productId: product.id, filter: _filter)),
+    );
 
     return DetailScaffold(
       title: context.tr('sh.title'),
-      subtitle: '${product.name} · ${product.stockOnHand} in stock',
+      subtitle:
+          '${product.name} · ${context.tr('inv.inStockCount', <String, Object?>{'count': product.stockOnHand})}',
       children: <Widget>[
+        Wrap(
+          spacing: EcomsbdSpacing.xs,
+          runSpacing: EcomsbdSpacing.xs,
+          children: <Widget>[
+            for (final entry in _filterLabels.entries)
+              FilterToggle(
+                label: context.tr(entry.value),
+                selected: _filter == entry.key,
+                onChanged: (_) => setState(() => _filter = entry.key),
+              ),
+          ],
+        ),
+        const SizedBox(height: EcomsbdSpacing.sm),
         history.when(
           loading: () => Column(
             children: <Widget>[
@@ -81,6 +115,21 @@ class _MovementRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tone = movement.isIncrease ? Tone.good : Tone.bad;
     final sign = movement.isIncrease ? '+' : '';
+    final title = movement.variantName == null
+        ? movement.reasonLabel
+        : '${movement.reasonLabel} · ${movement.variantName}';
+    final details = <String>[
+      formatRelative(movement.occurredAt),
+      if (movement.orderNumber != null)
+        context.tr('inv.orderRef', <String, Object?>{
+          'number': movement.orderNumber,
+        }),
+      if (movement.reference != null && movement.reference!.isNotEmpty)
+        movement.reference!,
+      if (movement.actorName != null && movement.actorName!.isNotEmpty)
+        movement.actorName!,
+      if (movement.note != null && movement.note!.isNotEmpty) movement.note!,
+    ];
 
     return GlassCard(
       padding: const EdgeInsets.all(EcomsbdSpacing.md),
@@ -109,14 +158,10 @@ class _MovementRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(movement.reasonLabel, style: EcomsbdType.bodyStrong),
+                Text(title, style: EcomsbdType.bodyStrong),
                 const SizedBox(height: 2),
                 Text(
-                  <String>[
-                    formatRelative(movement.occurredAt),
-                    if (movement.note != null && movement.note!.isNotEmpty)
-                      movement.note!,
-                  ].join(' · '),
+                  details.join(' · '),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),
@@ -136,7 +181,9 @@ class _MovementRow extends StatelessWidget {
                 style: EcomsbdType.bodyStrong.copyWith(color: tone.ink),
               ),
               Text(
-                '${movement.balanceAfter} left',
+                context.tr('inv.left', <String, Object?>{
+                  'count': movement.balanceAfter,
+                }),
                 style: EcomsbdType.caption.copyWith(
                   color: EcomsbdColors.muted2,
                 ),

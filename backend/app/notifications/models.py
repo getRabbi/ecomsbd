@@ -26,7 +26,9 @@ from app.db.types import GUID, JSONColumn, Paisa, TZDateTime
 
 __all__ = [
     "Notification",
+    "NotificationCategory",
     "NotificationKind",
+    "NotificationState",
     "Severity",
 ]
 
@@ -89,6 +91,52 @@ class NotificationKind(StrEnum):
     #: Section 95's "5 parcels need attention" instead of five notifications.
     BUNDLE = "BUNDLE"
 
+    # --- V2.2 smart alerts (app.notifications.smart) ----------------------
+    # The four case-derived kinds above stay for history; the V2.2 engine
+    # raises these instead, so one condition is never announced twice.
+
+    #: COD a courier holds past the Receivables overdue rule.
+    PAYOUT_OVERDUE = "PAYOUT_OVERDUE"
+    #: Open Reconciliation V2 cases: missing COD, amount or charge mismatch.
+    RECONCILIATION_DISCREPANCY = "RECONCILIATION_DISCREPANCY"
+    #: Parcels with no courier movement for far longer than normal.
+    COURIER_STATUS_STUCK = "COURIER_STATUS_STUCK"
+    #: RTO rate high or rising, by the canonical RTO definition.
+    HIGH_RTO = "HIGH_RTO"
+    #: Stock at or below the seller's own threshold.
+    LOW_STOCK = "LOW_STOCK"
+    #: Delivered parcels whose fully measured profit is negative.
+    NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
+    #: An import that failed, or finished with many rejected rows.
+    IMPORT_FAILURE = "IMPORT_FAILURE"
+    #: A courier account whose credentials need re-entering.
+    COURIER_ACCOUNT_PROBLEM = "COURIER_ACCOUNT_PROBLEM"
+    FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
+    AUTOMATION = "AUTOMATION"
+
+
+class NotificationCategory(StrEnum):
+    """What a seller switches on and off, and who in the team receives it."""
+
+    MONEY = "MONEY"
+    RECONCILIATION = "RECONCILIATION"
+    COURIER = "COURIER"
+    RETURNS = "RETURNS"
+    INVENTORY = "INVENTORY"
+    IMPORTS = "IMPORTS"
+    CRM = "CRM"
+    #: The Friday summary and bundles.
+    SUMMARY = "SUMMARY"
+
+
+class NotificationState(StrEnum):
+    """Where one notification is in its life. Derived, never stored."""
+
+    NEW = "NEW"
+    READ = "READ"
+    #: The condition it described has cleared. The row is kept as history.
+    RESOLVED = "RESOLVED"
+
 
 class Notification(Base, TenantOwned, PrimaryKeyMixin):
     """One thing the seller should see."""
@@ -107,14 +155,28 @@ class Notification(Base, TenantOwned, PrimaryKeyMixin):
         ),
         sa.Index("ix_notifications_tenant_unread", "tenant_id", "read_at"),
         sa.Index("ix_notifications_tenant_created", "tenant_id", "created_at"),
+        # The smart-alert lifecycle looks up "the open alert about this".
+        sa.Index("ix_notifications_tenant_kind_subject", "tenant_id", "kind", "subject_key"),
     )
 
-    #: Null for shop-wide notifications, which is all of them in V1: there is
-    #: no team UI yet, so everything addresses the shop rather than a person.
+    #: Null for shop-wide notifications. Set when one person is the audience —
+    #: the member whose import failed — and then only they see it.
     user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
 
     kind: Mapped[str] = mapped_column(sa.String(32), nullable=False)
     severity: Mapped[str] = mapped_column(sa.String(12), nullable=False)
+
+    #: :class:`NotificationCategory`. Empty on rows older than V2.2, which the
+    #: migration backfilled from their kind.
+    category: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="")
+    #: The permission a member needs to receive it, decided when it was
+    #: raised. Empty means every active member (the pre-V2.2 behaviour).
+    audience: Mapped[str] = mapped_column(sa.String(40), nullable=False, default="")
+    #: The condition this alert is about, without any time window: the
+    #: lifecycle's identity for "the same alert again". Empty for one-off rows.
+    subject_key: Mapped[str] = mapped_column(sa.String(120), nullable=False, default="")
+    #: Set when the condition cleared. The row stays, as history.
+    resolved_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 
     #: Seller-facing, already written. The UI shows these as they are, so
     #: support and the seller read the same words.
@@ -162,6 +224,12 @@ class Notification(Base, TenantOwned, PrimaryKeyMixin):
     @property
     def is_read(self) -> bool:
         return self.read_at is not None
+
+    @property
+    def state(self) -> NotificationState:
+        if self.resolved_at is not None:
+            return NotificationState.RESOLVED
+        return NotificationState.READ if self.read_at is not None else NotificationState.NEW
 
     @property
     def has_deep_link(self) -> bool:

@@ -11,19 +11,24 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.consignments.models import ConsignmentStatus
 from app.payouts.models import AdjustmentType, PayoutLineStatus, PayoutStatus
 from app.profit.models import ReturnReason
-from app.reconciliation.models import CaseKind, CaseStatus
+from app.reconciliation.models import CaseEventAction, CaseKind, CaseStatus, ItemStatus
 
 __all__ = [
+    "AcceptChargesPayload",
     "AgingBandResponse",
+    "CaseDetailResponse",
+    "CaseEventResponse",
+    "CaseNotePayload",
     "CaseResponse",
     "CaseUpdatePayload",
+    "ChargeAcceptanceResponse",
     "ConsignmentResponse",
     "DeliveryOutcomePayload",
     "DispatchPayload",
@@ -37,6 +42,11 @@ __all__ = [
     "PayoutResponse",
     "ReceivableResponse",
     "ReconcileResponse",
+    "ReconciliationItemDetailResponse",
+    "ReconciliationItemResponse",
+    "ReconciliationSummaryResponse",
+    "ReturnReceiptLinePayload",
+    "ReturnReceiptPayload",
     "StatementPreviewResponse",
     "UnmatchPayload",
 ]
@@ -78,6 +88,24 @@ class DeliveryOutcomePayload(BaseModel):
     return_reason: ReturnReason | None = None
 
 
+class ReturnReceiptLinePayload(BaseModel):
+    consignment_item_id: uuid.UUID
+    qty_restocked: int = Field(ge=0)
+    qty_not_restocked: int = Field(ge=0)
+
+
+class ReturnReceiptPayload(BaseModel):
+    """What physically came back from a returned parcel.
+
+    ``RESTOCK_ALL`` and ``RESTOCK_NONE`` (damaged / do not restock) cover the
+    common cases for every returned line; ``PARTIAL`` needs ``items``.
+    """
+
+    decision: Literal["RESTOCK_ALL", "RESTOCK_NONE", "PARTIAL"]
+    items: list[ReturnReceiptLinePayload] = Field(default_factory=list, max_length=200)
+    note: str | None = Field(default=None, max_length=400)
+
+
 class ConsignmentItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +115,12 @@ class ConsignmentItemResponse(BaseModel):
     qty_delivered: int
     qty_returned: int
     unit_collectible_paisa: int
+    #: V2.2 return receipt: what the seller put back on the shelf, what came
+    #: back unusable, and how many returned units still await a decision.
+    qty_restocked: int = 0
+    qty_not_restocked: int = 0
+    qty_return_pending: int = 0
+    return_received_at: datetime | None = None
 
 
 class ConsignmentResponse(BaseModel):
@@ -147,6 +181,75 @@ class AgingBandResponse(BaseModel):
     max_days: int | None
     parcel_count: int
     outstanding_paisa: int
+
+
+class PayoutDelayResponse(BaseModel):
+    """How long a courier has taken to pay, delivery to money recorded."""
+
+    provider: str
+    samples: int
+    average_days: float
+    median_days: int
+    #: False when there are too few paid parcels to call it "usual".
+    reliable: bool
+
+
+class CourierBalanceResponse(BaseModel):
+    """What one courier holds, from the receivables. Facts, not estimates."""
+
+    provider: str
+    outstanding_paisa: int
+    parcel_count: int
+    delivered_unpaid_count: int
+    delivered_unpaid_paisa: int
+    overdue_count: int
+    overdue_paisa: int
+    oldest_age_days: int | None
+    #: COD on parcels still on the road. Owed only once delivered.
+    in_transit_count: int
+    in_transit_paisa: int
+    last_payment_on: date | None
+    payout_delay: PayoutDelayResponse | None
+    aging: list[AgingBandResponse] = Field(default_factory=list)
+
+
+class ForecastWindowResponse(BaseModel):
+    #: ``next_7_days``, ``days_8_to_14``, ``later``, ``past_expected`` (the
+    #: usual payment date has passed; when it will arrive is unknown) or
+    #: ``no_history`` (too little payment history to estimate a date).
+    key: str
+    parcel_count: int
+    amount_paisa: int
+
+
+class CashflowForecastResponse(BaseModel):
+    """When today's receivable may arrive. An estimate, and labelled one.
+
+    The windows redistribute money that is already receivable — they always
+    add up to ``receivable_paisa`` — so the forecast cannot create income that
+    the receivables do not already hold.
+    """
+
+    quality: Literal["ESTIMATE"] = "ESTIMATE"
+    windows: list[ForecastWindowResponse] = Field(default_factory=list)
+
+
+class CashflowResponse(BaseModel):
+    since: date
+    until: date
+    #: From the ledger: COD that actually arrived in the period.
+    received_paisa: int
+    received_by_courier: dict[str, int] = Field(default_factory=dict)
+    #: From the receivables: what couriers hold right now.
+    receivable_paisa: int
+    overdue_paisa: int
+    overdue_after_days: int
+    delivered_unpaid_paisa: int
+    in_transit_paisa: int
+    in_transit_count: int
+    forecast: CashflowForecastResponse
+    payout_delays: list[PayoutDelayResponse] = Field(default_factory=list)
+    overall_delay: PayoutDelayResponse | None = None
 
 
 class MoneySummaryResponse(BaseModel):
@@ -272,6 +375,8 @@ class PayoutAdjustmentResponse(BaseModel):
     provider_label: str | None
     raw_text: str | None
     recognized_rule: str | None
+    #: When a person accepted this deduction into the ledger; null until then.
+    accepted_at: datetime | None = None
 
 
 class PayoutResponse(BaseModel):
@@ -316,6 +421,9 @@ class StatementPreviewResponse(BaseModel):
 
     detected_headers: list[str] = Field(default_factory=list)
     column_mapping: dict[str, str] = Field(default_factory=dict)
+    #: Every field a column can be mapped to, so a client can offer the choice
+    #: without hard-coding the list.
+    fields: list[str] = Field(default_factory=list)
     row_count: int
     invalid_row_count: int
     total_paisa: int
@@ -336,6 +444,10 @@ class ReconcileResponse(BaseModel):
     exact_matches: int
     suggested: int
     unresolved: int
+    #: Rows already paid in an earlier statement.
+    duplicates: int = 0
+    #: Rows carrying only a charge for a known parcel.
+    charge_only: int = 0
     applied_paisa: int
     cases_opened: int
 
@@ -379,3 +491,99 @@ class CaseUpdatePayload(BaseModel):
     #: Required when resolving or dismissing. A case closed with no explanation
     #: teaches nobody anything, and the same problem returns next month.
     resolution: str | None = Field(default=None, max_length=400)
+
+
+class CaseEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    action: CaseEventAction
+    from_status: str | None
+    to_status: str | None
+    note: str | None
+    #: Null for the engine's own actions, so a reviewer can tell them apart.
+    actor_user_id: uuid.UUID | None
+    created_at: datetime
+
+
+class CaseNotePayload(BaseModel):
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class ReconciliationItemResponse(BaseModel):
+    """Expected against actual for one parcel, or one unplaced statement row.
+
+    Every figure is backend-computed from the ledger's own records. Clients
+    display these; they never add them up into a truth of their own.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: ItemStatus
+    provider: str
+    payout_id: uuid.UUID | None
+    payout_line_id: uuid.UUID | None
+    receivable_id: uuid.UUID | None
+    consignment_id: uuid.UUID | None
+    case_id: uuid.UUID | None
+    case_status: CaseStatus | None = None
+    merchant_reference: str | None
+    tracking_code: str | None
+    settlement_date: date | None
+    expected_cod_paisa: int | None
+    actual_cod_paisa: int
+    expected_charge_paisa: int | None
+    #: Where the expected charge came from; null means nothing was on record
+    #: and the charge could not be verified.
+    expected_charge_source: str | None
+    actual_charge_paisa: int
+    expected_net_paisa: int | None
+    actual_net_paisa: int
+    difference_paisa: int | None
+    charges_pending_paisa: int
+    line_count: int
+    detail: dict[str, Any] = Field(default_factory=dict)
+    evaluated_at: datetime
+    created_at: datetime
+
+
+class ReconciliationItemDetailResponse(ReconciliationItemResponse):
+    lines: list[PayoutLineResponse] = Field(default_factory=list)
+    adjustments: list[PayoutAdjustmentResponse] = Field(default_factory=list)
+    case: CaseResponse | None = None
+
+
+class ReconciliationSummaryResponse(BaseModel):
+    """What the courier should have paid, what it paid, and the difference."""
+
+    counts: dict[str, int] = Field(default_factory=dict)
+    matched: int
+    discrepancies: int
+    unmatched: int
+    expected_paisa: int
+    actual_paisa: int
+    #: ``actual - expected``. Negative: the seller received less.
+    difference_paisa: int
+    #: Money on statement rows no parcel could be found for.
+    unmatched_paisa: int
+    duplicate_paisa: int
+    #: Courier deductions not yet accepted into the ledger.
+    charges_pending_paisa: int
+    open_cases: int
+    open_case_paisa: int
+
+
+class CaseDetailResponse(CaseResponse):
+    events: list[CaseEventResponse] = Field(default_factory=list)
+    item: ReconciliationItemResponse | None = None
+
+
+class AcceptChargesPayload(BaseModel):
+    reason: str | None = Field(default=None, max_length=400)
+
+
+class ChargeAcceptanceResponse(BaseModel):
+    accepted_paisa: int
+    adjustments: int
+    items: int

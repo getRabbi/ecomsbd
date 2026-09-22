@@ -75,12 +75,12 @@ class DuplicateWarningSheet extends StatelessWidget {
             const SizedBox(height: EcomsbdSpacing.md),
             Row(
               children: <Widget>[
-                Icon(
+                const Icon(
                   Icons.copy_all_outlined,
                   size: 20,
                   color: EcomsbdColors.amber,
                 ),
-                SizedBox(width: EcomsbdSpacing.sm),
+                const SizedBox(width: EcomsbdSpacing.sm),
                 Expanded(
                   child: Text(
                     context.tr('dup.title'),

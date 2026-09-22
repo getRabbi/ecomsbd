@@ -1,4 +1,6 @@
 import 'package:ecomsbd/features/money/cases_screen.dart';
+import 'package:ecomsbd/design/components/badges.dart';
+import 'package:ecomsbd/features/money/cashflow_screen.dart';
 import 'package:ecomsbd/features/money/money_screen.dart';
 import 'package:ecomsbd/features/money/payouts_screen.dart';
 import 'package:ecomsbd/features/money/receivables_screen.dart';
@@ -331,6 +333,58 @@ void main() {
     });
   });
 
+  group('Cashflow', () {
+    testWidgets('facts and the estimate are shown apart, each labelled', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson('GET', '/money/cashflow', cashflowJson())
+        ..adapter.onJson('GET', '/money/couriers', <Map<String, dynamic>>[
+          courierBalanceJson(),
+        ]);
+      await pumpCommerceScreen(
+        tester,
+        const CashflowScreen(),
+        harness: harness,
+      );
+
+      expect(find.text('Where your money is'), findsOneWidget);
+      expect(find.text('When it may arrive'), findsOneWidget);
+      // Facts carry the "actual" marker and the forecast the "estimate" one.
+      expect(find.byType(DataQualityBadge), findsNWidgets(2));
+      expect(find.text('Later than usual — date unknown'), findsOneWidget);
+      expect(find.textContaining('not a promise'), findsOneWidget);
+      expectNoOverflow(tester);
+
+      await tester.drag(find.byType(ListView), const Offset(0, -700));
+      await settle(tester);
+      expect(find.text('Steadfast'), findsOneWidget);
+      expect(find.textContaining('overdue across 2 parcels'), findsOneWidget);
+      expect(find.textContaining('Over 30 days'), findsOneWidget);
+    });
+
+    testWidgets('without payment history the date is not guessed', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson(
+          'GET',
+          '/money/cashflow',
+          cashflowJson(noHistory: true),
+        )
+        ..adapter.onJson('GET', '/money/couriers', <Map<String, dynamic>>[]);
+      await pumpCommerceScreen(
+        tester,
+        const CashflowScreen(),
+        harness: harness,
+      );
+
+      expect(find.text('Not enough history — date unknown'), findsOneWidget);
+      expect(find.text('In the next 7 days'), findsNothing);
+      expect(find.textContaining('Not enough payment history'), findsOneWidget);
+    });
+  });
+
   group('Cases', () {
     testWidgets('a case shows the server\'s own summary', (tester) async {
       final harness = CommerceHarness()
@@ -382,6 +436,158 @@ void main() {
         harness.adapter.to('PATCH', '/reconciliation/cases/case-1'),
         isEmpty,
       );
+    });
+
+    testWidgets('the summary shows expected against actual', (tester) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/cases',
+          page(<Map<String, dynamic>>[caseJson()]),
+        )
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/summary',
+          reconciliationSummaryJson(),
+        );
+      await pumpCommerceScreen(tester, const CasesScreen(), harness: harness);
+
+      expect(find.text('Courier payments, checked'), findsOneWidget);
+      expect(find.text('Should have paid'), findsOneWidget);
+      expect(find.text('৳2,810'), findsOneWidget);
+      expect(find.text('Discrepancies 1'), findsOneWidget);
+      expectNoOverflow(tester);
+    });
+
+    testWidgets('a parcel shows expected, actual and accepts its charges', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/cases',
+          page(<Map<String, dynamic>>[]),
+        )
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/items',
+          page(<Map<String, dynamic>>[reconciliationItemJson()]),
+        )
+        ..adapter.onJson(
+          'POST',
+          '/reconciliation/items/item-1/accept-charges',
+          <String, dynamic>{
+            'accepted_paisa': 8_000,
+            'adjustments': 1,
+            'items': 1,
+          },
+        );
+      await pumpCommerceScreen(tester, const CasesScreen(), harness: harness);
+
+      await tester.tap(find.text('Parcels'));
+      await settle(tester);
+
+      expect(find.text('CP-20260910-0001'), findsOneWidget);
+      expect(find.text('Charge differs'), findsOneWidget);
+      expect(find.text('Expected'), findsOneWidget);
+      expect(find.text('-৳40'), findsOneWidget);
+      expectNoOverflow(tester);
+
+      await tester.tap(find.text('Accept charges'));
+      await settle(tester);
+      // Writing to the ledger is confirmed first, with the amount.
+      expect(find.text('Accept courier charges?'), findsOneWidget);
+      expect(
+        harness.adapter.to(
+          'POST',
+          '/reconciliation/items/item-1/accept-charges',
+        ),
+        isEmpty,
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Accept charges'),
+        ),
+      );
+      await settle(tester);
+      expect(
+        harness.adapter.to(
+          'POST',
+          '/reconciliation/items/item-1/accept-charges',
+        ),
+        hasLength(1),
+      );
+    });
+
+    testWidgets('a case opens with its history and takes a note', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/cases',
+          page(<Map<String, dynamic>>[caseJson()]),
+        )
+        ..adapter.onJson(
+          'GET',
+          '/reconciliation/cases/case-1',
+          <String, dynamic>{
+            ...caseJson(),
+            'events': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'id': 'ev-1',
+                'action': 'OPENED',
+                'from_status': null,
+                'to_status': 'OPEN',
+                'note': null,
+                'actor_user_id': null,
+                'created_at': '2026-09-10T04:00:00Z',
+              },
+            ],
+            'item': null,
+          },
+        )
+        ..adapter.onJson(
+          'POST',
+          '/reconciliation/cases/case-1/notes',
+          <String, dynamic>{
+            'id': 'ev-2',
+            'action': 'NOTE',
+            'from_status': null,
+            'to_status': null,
+            'note': 'Hub will call back',
+            'actor_user_id': 'u1',
+            'created_at': '2026-09-11T04:00:00Z',
+          },
+        );
+      await pumpCommerceScreen(tester, const CasesScreen(), harness: harness);
+
+      await tester.tap(find.textContaining('has not arrived'));
+      await settle(tester);
+
+      expect(find.text('History'), findsOneWidget);
+      expect(find.text('Opened · Automatic'), findsOneWidget);
+
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(TextField),
+        ),
+        'Hub will call back',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Add note'));
+      await settle(tester);
+
+      final notes = harness.adapter.to(
+        'POST',
+        '/reconciliation/cases/case-1/notes',
+      );
+      expect(notes, hasLength(1));
+      expect(notes.single.body, <String, dynamic>{
+        'note': 'Hub will call back',
+      });
     });
 
     testWidgets('an empty case list is good news', (tester) async {
@@ -532,4 +738,120 @@ Map<String, dynamic> caseJson({
   'resolved_at': null,
   'resolution': null,
   'created_at': '2026-09-10T04:00:00Z',
+};
+
+Map<String, dynamic> reconciliationSummaryJson() => <String, dynamic>{
+  'counts': <String, int>{'MATCHED': 1, 'CHARGE_MISMATCH': 1},
+  'matched': 1,
+  'discrepancies': 1,
+  'unmatched': 0,
+  'expected_paisa': 281_000,
+  'actual_paisa': 277_000,
+  'difference_paisa': -4_000,
+  'unmatched_paisa': 0,
+  'duplicate_paisa': 0,
+  'charges_pending_paisa': 8_000,
+  'open_cases': 1,
+  'open_case_paisa': 4_000,
+};
+
+Map<String, dynamic> reconciliationItemJson() => <String, dynamic>{
+  'id': 'item-1',
+  'status': 'CHARGE_MISMATCH',
+  'provider': 'steadfast',
+  'payout_id': 'p1',
+  'payout_line_id': 'l1',
+  'receivable_id': 'r1',
+  'consignment_id': 'c1',
+  'case_id': 'case-1',
+  'case_status': 'OPEN',
+  'merchant_reference': 'CP-20260910-0001',
+  'tracking_code': 'TRK1',
+  'settlement_date': '2026-09-12',
+  'expected_cod_paisa': 140_500,
+  'actual_cod_paisa': 140_500,
+  'expected_charge_paisa': 6_000,
+  'expected_charge_source': 'BOOKED',
+  'actual_charge_paisa': 10_000,
+  'expected_net_paisa': 134_500,
+  'actual_net_paisa': 130_500,
+  'difference_paisa': -4_000,
+  'charges_pending_paisa': 10_000,
+  'line_count': 1,
+  'detail': <String, dynamic>{'unknown_deduction': false},
+  'evaluated_at': '2026-09-12T04:00:00Z',
+  'created_at': '2026-09-12T04:00:00Z',
+};
+
+Map<String, dynamic> cashflowJson({bool noHistory = false}) =>
+    <String, dynamic>{
+      'since': '2026-08-20',
+      'until': '2026-09-18',
+      'received_paisa': 1_250_000,
+      'received_by_courier': <String, int>{'steadfast': 1_250_000},
+      'receivable_paisa': 480_500,
+      'overdue_paisa': 140_500,
+      'overdue_after_days': 7,
+      'delivered_unpaid_paisa': 480_500,
+      'in_transit_paisa': 90_000,
+      'in_transit_count': 3,
+      'forecast': <String, dynamic>{
+        'quality': 'ESTIMATE',
+        'windows': noHistory
+            ? <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'key': 'next_7_days',
+                  'parcel_count': 0,
+                  'amount_paisa': 0,
+                },
+                <String, dynamic>{
+                  'key': 'no_history',
+                  'parcel_count': 3,
+                  'amount_paisa': 480_500,
+                },
+              ]
+            : <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'key': 'next_7_days',
+                  'parcel_count': 2,
+                  'amount_paisa': 340_000,
+                },
+                <String, dynamic>{
+                  'key': 'past_expected',
+                  'parcel_count': 1,
+                  'amount_paisa': 140_500,
+                },
+              ],
+      },
+      'payout_delays': noHistory
+          ? <Map<String, dynamic>>[]
+          : <Map<String, dynamic>>[delayJson()],
+      'overall_delay': noHistory ? null : delayJson(),
+    };
+
+Map<String, dynamic> delayJson() => <String, dynamic>{
+  'provider': 'steadfast',
+  'samples': 24,
+  'average_days': 3.4,
+  'median_days': 3,
+  'reliable': true,
+};
+
+Map<String, dynamic> courierBalanceJson() => <String, dynamic>{
+  'provider': 'steadfast',
+  'outstanding_paisa': 480_500,
+  'parcel_count': 3,
+  'delivered_unpaid_count': 3,
+  'delivered_unpaid_paisa': 480_500,
+  'overdue_count': 2,
+  'overdue_paisa': 140_500,
+  'oldest_age_days': 34,
+  'in_transit_count': 3,
+  'in_transit_paisa': 90_000,
+  'last_payment_on': '2026-09-15',
+  'payout_delay': delayJson(),
+  'aging': <Map<String, dynamic>>[
+    agingBandJson('0-3 days', 0, 3, 1, 340_000),
+    agingBandJson('30+ days', 31, null, 2, 140_500),
+  ],
 };

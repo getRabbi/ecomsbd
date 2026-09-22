@@ -376,6 +376,23 @@ class PrivacyService:
         delivery counts stay, because they are the shop's own trading history
         and identify nobody once the contact details are gone.
         """
+        from app.customers.crm_models import CustomerActivity, CustomerFollowUp, CustomerTag
+
+        # Free text can itself identify a person. Scrub CRM alongside the customer.
+        for model, values in (
+            (CustomerActivity, {"text": None, "actor_id": None}),
+            (CustomerFollowUp, {"text": "", "assignee_id": None, "completed_by": None}),
+            (CustomerTag, {"name": "", "archived": True}),
+        ):
+            await self._db.execute(
+                sa.update(model).where(model.tenant_id == tenant_id).values(**values)
+            )
+        # Normalised tag names are personal free text too; keep uniqueness via ID.
+        tags = (
+            await self._db.scalars(sa.select(CustomerTag).where(CustomerTag.tenant_id == tenant_id))
+        ).all()
+        for tag in tags:
+            tag.name_key = f"deleted:{tag.id}"
         customers = (
             (await self._db.execute(sa.select(Customer).where(Customer.tenant_id == tenant_id)))
             .scalars()

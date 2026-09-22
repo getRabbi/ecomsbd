@@ -18,6 +18,8 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app import __version__
+from app.analytics.network import build_network_benchmarks
+from app.automation.jobs import dispatch_automation
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -30,7 +32,9 @@ from app.couriers.jobs import (
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
+from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
+from app.public_api.webhooks import dispatch_webhooks
 from app.worker.jobs import dispatch_outbox
 from app.worker.maintenance import (
     dispatch_notifications,
@@ -83,6 +87,10 @@ class WorkerSettings:
     """ARQ configuration."""
 
     functions: ClassVar[list[Any]] = [
+        dispatch_messages,
+        dispatch_webhooks,
+        build_network_benchmarks,
+        dispatch_automation,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -103,16 +111,20 @@ class WorkerSettings:
     ]
 
     cron_jobs: ClassVar[list[Any]] = [
+        cron(dispatch_messages, second={5, 35}),
+        cron(dispatch_webhooks, second={10, 40}),
+        cron(build_network_benchmarks, day=8, hour=3, minute=45, run_at_startup=True),
+        cron(dispatch_automation, second={12, 42}),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),
-        # Once a day, early: alerts should be waiting when the seller opens
-        # the app, not arrive mid-afternoon. ARQ crons fire on host local
-        # time, so this is 09:30 Dhaka only when the worker runs with
-        # TZ=UTC, which the deployment sets. Getting that wrong shifts the
-        # hour; it cannot produce a duplicate, because the notifications
-        # deduplicate on the Dhaka business date.
-        cron(scan_alerts, hour=3, minute=30),
+        # Smart alerts, twice a day: 09:30 Dhaka so they are waiting when the
+        # seller opens the app, and 15:30 so a courier account that broke in
+        # the morning is not left until tomorrow. ARQ crons fire on host local
+        # time (the deployment sets TZ=UTC). Extra runs cannot duplicate
+        # anything: each alert identity is raised once and then held by its
+        # cooldown (app.notifications.rules).
+        cron(scan_alerts, hour={3, 9}, minute=30),
         # Hourly, because the job decides for itself whether the *tenant's*
         # clock has reached Friday 18:00 (master spec section 42). ARQ crons
         # fire on host local time, and pinning the weekly summary to one UTC

@@ -129,3 +129,56 @@ final caseListProvider =
       CaseListController,
       PagedListState<ReconciliationCase>
     >((ref) => CaseListController(ref.watch(moneyRepositoryProvider)));
+
+/// Expected, actual and the difference, for the reconciliation screen.
+final reconciliationSummaryProvider =
+    FutureProvider<Sourced<ReconciliationSummary>>((ref) {
+      return ref.watch(moneyRepositoryProvider).reconciliationSummary();
+    });
+
+/// Parcels compared expected-against-actual. Filtered and paged on the
+/// server; the device only ever holds the page it is showing.
+class ReconciliationItemListController
+    extends PagedListController<ReconciliationItem> {
+  ReconciliationItemListController(this._repository) {
+    refresh();
+  }
+
+  final MoneyRepository _repository;
+
+  /// `discrepancies`, `unmatched`, or null for everything.
+  String? _view = 'discrepancies';
+
+  String? get view => _view;
+
+  @override
+  Future<Sourced<PagedResult<ReconciliationItem>>> fetchPage({String? cursor}) {
+    return _repository.reconciliationItems(cursor: cursor, view: _view);
+  }
+
+  void setView(String? value) {
+    _view = value;
+    refresh();
+  }
+}
+
+final reconciliationItemListProvider =
+    StateNotifierProvider<
+      ReconciliationItemListController,
+      PagedListState<ReconciliationItem>
+    >(
+      (ref) =>
+          ReconciliationItemListController(ref.watch(moneyRepositoryProvider)),
+    );
+
+/// What each courier holds: outstanding, overdue, in transit, usual delay.
+final courierBalancesProvider = FutureProvider<Sourced<List<CourierBalance>>>((
+  ref,
+) {
+  return ref.watch(moneyRepositoryProvider).courierBalances();
+});
+
+/// Received, receivable, and the (estimated) timing of the receivable.
+final cashflowProvider = FutureProvider<Sourced<CashflowView>>((ref) {
+  return ref.watch(moneyRepositoryProvider).cashflow();
+});

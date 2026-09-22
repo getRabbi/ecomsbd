@@ -8,7 +8,8 @@ import '../../l10n/app_locale.dart';
 /// they resolve against the active locale directly — the same approach
 /// `formatRelative` uses. A language change rebuilds the tree, so the next
 /// paint is already in the new language.
-String _t(String key) => AppStrings(activeAppLocale).t(key);
+String _t(String key, [Map<String, Object?>? vars]) =>
+    AppStrings(activeAppLocale).t(key, vars);
 
 /// Wire models for the money core.
 ///
@@ -47,6 +48,12 @@ class AgingBand {
 
   /// Money sitting with a courier for over a week is worth chasing.
   bool get isOverdue => minDays >= 8;
+
+  /// "8-14 days" / "Over 30 days", in the reader's language. Built from the
+  /// band's own bounds rather than the server's English label.
+  String get displayLabel => maxDays == null
+      ? _t('rcv.bandOver', <String, Object?>{'days': minDays - 1})
+      : _t('rcv.bandRange', <String, Object?>{'min': minDays, 'max': maxDays});
 }
 
 @immutable
@@ -703,6 +710,9 @@ class ReconciliationCase {
     'UNMAPPABLE_PAYOUT' => _t('ck.unmappable'),
     'STALE_IN_TRANSIT' => _t('ck.staleInTransit'),
     'RETURNED_NOT_RESTOCKED' => _t('ck.returnNotRestocked'),
+    'CHARGE_MISMATCH' => _t('rv2.kind.chargeMismatch'),
+    'MISSING_COD' => _t('rv2.kind.missingCod'),
+    'RETURN_CHARGE_MISMATCH' => _t('rv2.kind.returnChargeMismatch'),
     _ => kind,
   };
 
@@ -713,4 +723,419 @@ class ReconciliationCase {
     'DISMISSED' => _t('cst.dismissed'),
     _ => status,
   };
+}
+
+// --------------------------------------------------------------------------- //
+// Reconciliation V2: expected against actual
+// --------------------------------------------------------------------------- //
+
+Money? _moneyOrNull(Object? value) =>
+    value == null ? null : Money(value as int);
+
+/// Headline figures for the reconciliation screen. Every number is the
+/// server's; nothing here is summed on the device.
+@immutable
+class ReconciliationSummary {
+  const ReconciliationSummary({
+    required this.matched,
+    required this.discrepancies,
+    required this.unmatched,
+    required this.expected,
+    required this.actual,
+    required this.difference,
+    required this.unmatchedAmount,
+    required this.chargesPending,
+    required this.openCases,
+  });
+
+  factory ReconciliationSummary.fromJson(Map<String, dynamic> json) =>
+      ReconciliationSummary(
+        matched: json['matched'] as int? ?? 0,
+        discrepancies: json['discrepancies'] as int? ?? 0,
+        unmatched: json['unmatched'] as int? ?? 0,
+        expected: Money(json['expected_paisa'] as int? ?? 0),
+        actual: Money(json['actual_paisa'] as int? ?? 0),
+        difference: Money(json['difference_paisa'] as int? ?? 0),
+        unmatchedAmount: Money(json['unmatched_paisa'] as int? ?? 0),
+        chargesPending: Money(json['charges_pending_paisa'] as int? ?? 0),
+        openCases: json['open_cases'] as int? ?? 0,
+      );
+
+  final int matched;
+  final int discrepancies;
+  final int unmatched;
+
+  /// What the courier should have paid, across the parcels compared.
+  final Money expected;
+
+  /// What it did pay for those parcels.
+  final Money actual;
+
+  /// `actual - expected`. Negative: the seller received less.
+  final Money difference;
+
+  /// Money on rows no parcel could be found for.
+  final Money unmatchedAmount;
+  final Money chargesPending;
+  final int openCases;
+
+  bool get isEmpty => matched == 0 && discrepancies == 0 && unmatched == 0;
+}
+
+/// One parcel's expected against actual, or one statement row nobody could
+/// place.
+@immutable
+class ReconciliationItem {
+  const ReconciliationItem({
+    required this.id,
+    required this.status,
+    required this.provider,
+    required this.actualCod,
+    required this.actualCharge,
+    required this.actualNet,
+    required this.chargesPending,
+    required this.lineCount,
+    this.reference,
+    this.trackingCode,
+    this.settlementDate,
+    this.expectedCod,
+    this.expectedCharge,
+    this.expectedChargeSource,
+    this.expectedNet,
+    this.difference,
+    this.caseId,
+    this.caseStatus,
+    this.unknownDeduction = false,
+  });
+
+  factory ReconciliationItem.fromJson(Map<String, dynamic> json) {
+    final detail = Map<String, dynamic>.from(
+      json['detail'] as Map? ?? const {},
+    );
+    return ReconciliationItem(
+      id: json['id'] as String,
+      status: json['status'] as String,
+      provider: json['provider'] as String? ?? '',
+      reference: json['merchant_reference'] as String?,
+      trackingCode: json['tracking_code'] as String?,
+      settlementDate: json['settlement_date'] == null
+          ? null
+          : DateTime.parse(json['settlement_date'] as String),
+      expectedCod: _moneyOrNull(json['expected_cod_paisa']),
+      actualCod: Money(json['actual_cod_paisa'] as int? ?? 0),
+      expectedCharge: _moneyOrNull(json['expected_charge_paisa']),
+      expectedChargeSource: json['expected_charge_source'] as String?,
+      actualCharge: Money(json['actual_charge_paisa'] as int? ?? 0),
+      expectedNet: _moneyOrNull(json['expected_net_paisa']),
+      actualNet: Money(json['actual_net_paisa'] as int? ?? 0),
+      difference: _moneyOrNull(json['difference_paisa']),
+      chargesPending: Money(json['charges_pending_paisa'] as int? ?? 0),
+      lineCount: json['line_count'] as int? ?? 0,
+      caseId: json['case_id'] as String?,
+      caseStatus: json['case_status'] as String?,
+      unknownDeduction: detail['unknown_deduction'] == true,
+    );
+  }
+
+  final String id;
+  final String status;
+  final String provider;
+  final String? reference;
+  final String? trackingCode;
+  final DateTime? settlementDate;
+  final Money? expectedCod;
+  final Money actualCod;
+
+  /// Null when no charge was on record: the charge is then unverified, not
+  /// zero.
+  final Money? expectedCharge;
+  final String? expectedChargeSource;
+  final Money actualCharge;
+  final Money? expectedNet;
+  final Money actualNet;
+  final Money? difference;
+  final Money chargesPending;
+  final int lineCount;
+  final String? caseId;
+  final String? caseStatus;
+  final bool unknownDeduction;
+
+  bool get chargeVerified => expectedCharge != null;
+  bool get hasPendingCharges => !chargesPending.isZero;
+
+  bool get isDiscrepancy => const <String>{
+    'PARTIAL',
+    'AMOUNT_MISMATCH',
+    'CHARGE_MISMATCH',
+    'MISSING_COD',
+  }.contains(status);
+
+  String get statusLabel => switch (status) {
+    'MATCHED' => _t('rv2.st.matched'),
+    'PARTIAL' => _t('rv2.st.partial'),
+    'UNMATCHED' => _t('rv2.st.unmatched'),
+    'DUPLICATE' => _t('rv2.st.duplicate'),
+    'AMOUNT_MISMATCH' => _t('rv2.st.amountMismatch'),
+    'CHARGE_MISMATCH' => _t('rv2.st.chargeMismatch'),
+    'MISSING_COD' => _t('rv2.st.missingCod'),
+    'RETURN_ADJUSTMENT' => _t('rv2.st.returnAdjustment'),
+    'NEEDS_REVIEW' => _t('rv2.st.needsReview'),
+    _ => status,
+  };
+}
+
+/// One thing that happened to a case.
+@immutable
+class CaseEvent {
+  const CaseEvent({
+    required this.id,
+    required this.action,
+    required this.createdAt,
+    this.note,
+    this.byPerson = true,
+  });
+
+  factory CaseEvent.fromJson(Map<String, dynamic> json) => CaseEvent(
+    id: json['id'] as String,
+    action: json['action'] as String,
+    note: json['note'] as String?,
+    byPerson: json['actor_user_id'] != null,
+    createdAt: DateTime.parse(json['created_at'] as String),
+  );
+
+  final String id;
+  final String action;
+  final String? note;
+
+  /// False for the engine's own actions, so they read differently.
+  final bool byPerson;
+  final DateTime createdAt;
+
+  String get actionLabel => switch (action) {
+    'OPENED' => _t('rv2.ev.opened'),
+    'NOTE' => _t('rv2.ev.note'),
+    'STATUS_CHANGED' => _t('rv2.ev.statusChanged'),
+    'REOPENED' => _t('rv2.ev.reopened'),
+    'AUTO_RESOLVED' => _t('rv2.ev.autoResolved'),
+    'MANUAL_MATCH' => _t('rv2.ev.manualMatch'),
+    'CHARGES_ACCEPTED' => _t('rv2.ev.chargesAccepted'),
+    _ => action,
+  };
+}
+
+/// A case with its history.
+@immutable
+class CaseDetail {
+  const CaseDetail({required this.item, required this.events, this.row});
+
+  factory CaseDetail.fromJson(Map<String, dynamic> json) => CaseDetail(
+    item: ReconciliationCase.fromJson(json),
+    events: <CaseEvent>[
+      for (final event in json['events'] as List? ?? const <Object>[])
+        CaseEvent.fromJson(event as Map<String, dynamic>),
+    ],
+    row: json['item'] == null
+        ? null
+        : ReconciliationItem.fromJson(json['item'] as Map<String, dynamic>),
+  );
+
+  final ReconciliationCase item;
+  final List<CaseEvent> events;
+
+  /// The expected-against-actual row the case is about, when there is one.
+  final ReconciliationItem? row;
+}
+
+// --------------------------------------------------------------------------- //
+// Receivables and cashflow (V2.2)
+// --------------------------------------------------------------------------- //
+
+/// A courier's name as a seller knows it. Brand names stay as they are;
+/// "manual" is the seller's own delivery.
+String courierLabel(String provider) => switch (provider) {
+  'steadfast' => 'Steadfast',
+  'pathao' => 'Pathao',
+  'redx' => 'RedX',
+  'manual' => _t('rcv.ownDelivery'),
+  _ => provider,
+};
+
+/// How long a courier has taken to pay, from delivery to money recorded.
+/// Measured from past payments; `reliable` is false below the minimum sample.
+@immutable
+class PayoutDelay {
+  const PayoutDelay({
+    required this.provider,
+    required this.samples,
+    required this.averageDays,
+    required this.medianDays,
+    required this.reliable,
+  });
+
+  factory PayoutDelay.fromJson(Map<String, dynamic> json) => PayoutDelay(
+    provider: json['provider'] as String,
+    samples: json['samples'] as int,
+    averageDays: (json['average_days'] as num).toDouble(),
+    medianDays: json['median_days'] as int,
+    reliable: json['reliable'] as bool? ?? false,
+  );
+
+  final String provider;
+  final int samples;
+  final double averageDays;
+  final int medianDays;
+  final bool reliable;
+}
+
+/// What one courier holds. Facts from the receivables, not estimates.
+@immutable
+class CourierBalance {
+  const CourierBalance({
+    required this.provider,
+    required this.outstanding,
+    required this.parcelCount,
+    required this.deliveredUnpaidCount,
+    required this.overdueCount,
+    required this.overdue,
+    required this.inTransitCount,
+    required this.inTransit,
+    required this.aging,
+    this.oldestAgeDays,
+    this.lastPaymentOn,
+    this.delay,
+  });
+
+  factory CourierBalance.fromJson(Map<String, dynamic> json) => CourierBalance(
+    provider: json['provider'] as String,
+    outstanding: Money(json['outstanding_paisa'] as int),
+    parcelCount: json['parcel_count'] as int,
+    deliveredUnpaidCount: json['delivered_unpaid_count'] as int,
+    overdueCount: json['overdue_count'] as int,
+    overdue: Money(json['overdue_paisa'] as int),
+    inTransitCount: json['in_transit_count'] as int? ?? 0,
+    inTransit: Money(json['in_transit_paisa'] as int? ?? 0),
+    oldestAgeDays: json['oldest_age_days'] as int?,
+    lastPaymentOn: json['last_payment_on'] == null
+        ? null
+        : DateTime.parse(json['last_payment_on'] as String),
+    delay: json['payout_delay'] == null
+        ? null
+        : PayoutDelay.fromJson(json['payout_delay'] as Map<String, dynamic>),
+    aging: <AgingBand>[
+      for (final band in json['aging'] as List<dynamic>? ?? const <dynamic>[])
+        AgingBand.fromJson(band as Map<String, dynamic>),
+    ],
+  );
+
+  final String provider;
+  final Money outstanding;
+  final int parcelCount;
+  final int deliveredUnpaidCount;
+  final int overdueCount;
+  final Money overdue;
+  final int inTransitCount;
+
+  /// COD still on the road. Owed only once delivered.
+  final Money inTransit;
+  final List<AgingBand> aging;
+  final int? oldestAgeDays;
+  final DateTime? lastPaymentOn;
+  final PayoutDelay? delay;
+
+  String get name => courierLabel(provider);
+}
+
+/// One slice of the forecast: part of today's receivable and when it may
+/// arrive.
+@immutable
+class ForecastWindow {
+  const ForecastWindow({
+    required this.key,
+    required this.parcelCount,
+    required this.amount,
+  });
+
+  factory ForecastWindow.fromJson(Map<String, dynamic> json) => ForecastWindow(
+    key: json['key'] as String,
+    parcelCount: json['parcel_count'] as int,
+    amount: Money(json['amount_paisa'] as int),
+  );
+
+  final String key;
+  final int parcelCount;
+  final Money amount;
+
+  /// The two slices whose date cannot be estimated.
+  bool get isUndated => key == 'past_expected' || key == 'no_history';
+
+  String get label => switch (key) {
+    'next_7_days' => _t('rcv.win.next7'),
+    'days_8_to_14' => _t('rcv.win.days8to14'),
+    'later' => _t('rcv.win.later'),
+    'past_expected' => _t('rcv.win.pastExpected'),
+    'no_history' => _t('rcv.win.noHistory'),
+    _ => key,
+  };
+}
+
+/// Received, receivable and expected. Received comes from the ledger and
+/// receivable from the receivables — both facts. `forecast` is the only
+/// estimate, and always adds up to `receivable`.
+@immutable
+class CashflowView {
+  const CashflowView({
+    required this.since,
+    required this.until,
+    required this.received,
+    required this.receivable,
+    required this.overdue,
+    required this.overdueAfterDays,
+    required this.deliveredUnpaid,
+    required this.inTransit,
+    required this.inTransitCount,
+    required this.forecast,
+    required this.delays,
+    this.overallDelay,
+  });
+
+  factory CashflowView.fromJson(Map<String, dynamic> json) {
+    final forecast = json['forecast'] as Map<String, dynamic>? ?? const {};
+    return CashflowView(
+      since: DateTime.parse(json['since'] as String),
+      until: DateTime.parse(json['until'] as String),
+      received: Money(json['received_paisa'] as int),
+      receivable: Money(json['receivable_paisa'] as int),
+      overdue: Money(json['overdue_paisa'] as int),
+      overdueAfterDays: json['overdue_after_days'] as int? ?? 7,
+      deliveredUnpaid: Money(json['delivered_unpaid_paisa'] as int? ?? 0),
+      inTransit: Money(json['in_transit_paisa'] as int? ?? 0),
+      inTransitCount: json['in_transit_count'] as int? ?? 0,
+      forecast: <ForecastWindow>[
+        for (final window
+            in forecast['windows'] as List<dynamic>? ?? const <dynamic>[])
+          ForecastWindow.fromJson(window as Map<String, dynamic>),
+      ],
+      delays: <PayoutDelay>[
+        for (final delay
+            in json['payout_delays'] as List<dynamic>? ?? const <dynamic>[])
+          PayoutDelay.fromJson(delay as Map<String, dynamic>),
+      ],
+      overallDelay: json['overall_delay'] == null
+          ? null
+          : PayoutDelay.fromJson(json['overall_delay'] as Map<String, dynamic>),
+    );
+  }
+
+  final DateTime since;
+  final DateTime until;
+  final Money received;
+  final Money receivable;
+  final Money overdue;
+  final int overdueAfterDays;
+  final Money deliveredUnpaid;
+  final Money inTransit;
+  final int inTransitCount;
+  final List<ForecastWindow> forecast;
+  final List<PayoutDelay> delays;
+  final PayoutDelay? overallDelay;
 }

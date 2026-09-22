@@ -38,6 +38,9 @@ class ApiErrorCode {
   static const String entitlementRequired = 'ENTITLEMENT_REQUIRED';
   static const String idempotencyConflict = 'IDEMPOTENCY_KEY_CONFLICT';
 
+  /// A sale or decrease would take stock below zero (Inventory V2).
+  static const String insufficientStock = 'INSUFFICIENT_STOCK';
+
   /// The courier outcome is unknown. The app must NOT offer a plain retry.
   static const String bookingAmbiguous = 'BOOKING_AMBIGUOUS';
   static const String courierUnavailable = 'COURIER_PROVIDER_UNAVAILABLE';

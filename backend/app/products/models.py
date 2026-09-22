@@ -31,6 +31,7 @@ from app.db.types import GUID, JSONColumn, Paisa, TZDateTime
 __all__ = [
     "MOVEMENT_SIGN",
     "Product",
+    "ProductVariant",
     "StockMovement",
     "StockMovementReason",
     "StockMovementSource",
@@ -68,6 +69,10 @@ class StockMovementReason(StrEnum):
     #: found and reversed as a unit.
     IMPORT_ADJUSTMENT = "IMPORT_ADJUSTMENT"
 
+    #: V2.2: new goods arrived on the shelf. Not a purchase order and not a
+    #: payable — only the quantity, with an optional unit cost for reference.
+    RESTOCK = "RESTOCK"
+
 
 #: Expected sign of each reason's delta, or ``None`` where either direction is
 #: legitimate. Enforced by the service so a "restore" can never quietly remove
@@ -82,6 +87,7 @@ MOVEMENT_SIGN: dict[StockMovementReason, int | None] = {
     StockMovementReason.PARTIAL_RETURN_RESTORE: +1,
     StockMovementReason.DAMAGED_WRITE_OFF: -1,
     StockMovementReason.IMPORT_ADJUSTMENT: None,
+    StockMovementReason.RESTOCK: +1,
 }
 
 
@@ -142,9 +148,25 @@ class Product(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
 
     attributes: Mapped[dict] = mapped_column(JSONColumn, nullable=False, default=dict)
 
+    #: V2.2: stock is held per variant rather than on the product. Once set it
+    #: stays set — variants are deactivated, never deleted, because orders
+    #: reference them — and ``stock_on_hand`` is then the sum of the variants'.
+    has_variants: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+
     movements: Mapped[list[StockMovement]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    #: Eager: every product read that shows stock needs its variants, and a
+    #: lazy load is an error under asyncio. ``selectin`` is one query per batch
+    #: of products, never one per product.
+    variants: Mapped[list[ProductVariant]] = relationship(
+        back_populates="product",
+        lazy="selectin",
+        order_by="(ProductVariant.position, ProductVariant.created_at)",
         passive_deletes=True,
     )
 
@@ -154,7 +176,13 @@ class Product(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
 
     @property
     def is_low_stock(self) -> bool:
-        if not self.stock_tracking_enabled or self.low_stock_threshold is None:
+        """Low on the product's own threshold or, with variants, on any active
+        variant's. A variant product's own threshold is not consulted."""
+        if not self.stock_tracking_enabled:
+            return False
+        if self.has_variants:
+            return any(variant.is_low_stock for variant in self.variants if variant.is_active)
+        if self.low_stock_threshold is None:
             return False
         return self.stock_on_hand <= self.low_stock_threshold
 
@@ -162,6 +190,52 @@ class Product(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     def margin_paisa(self) -> int:
         """Indicative unit margin. Not a profit figure — that needs settlement."""
         return self.default_selling_price_paisa - self.cost_paisa
+
+
+class ProductVariant(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """One sellable version of a product — "Black / M".
+
+    Deliberately small: a display name, optional option values, its own SKU,
+    stock and threshold, and optional price/cost overrides. Not an attribute
+    engine. Never deleted: an order line may point at it.
+    """
+
+    __tablename__ = "product_variants"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "sku", name="uq_product_variants_tenant_id_sku"),
+        sa.UniqueConstraint("product_id", "name", name="uq_product_variants_product_id_name"),
+        sa.CheckConstraint("price_paisa IS NULL OR price_paisa >= 0", name="price_non_negative"),
+        sa.CheckConstraint("cost_paisa IS NULL OR cost_paisa >= 0", name="cost_non_negative"),
+    )
+
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    #: {"color": "Black", "size": "M"}. Informational; ``name`` is what is shown.
+    options: Mapped[dict] = mapped_column(JSONColumn, nullable=False, default=dict)
+    sku: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    #: Override the product's price/cost when set. Snapshotted onto the order
+    #: line exactly like the product's, so a later change never rewrites history.
+    price_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+    cost_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+
+    #: Running total of this variant's movements. Same rules as the product's.
+    stock_on_hand: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    low_stock_threshold: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    position: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+    product: Mapped[Product] = relationship(back_populates="variants")
+
+    @property
+    def is_low_stock(self) -> bool:
+        if self.low_stock_threshold is None:
+            return False
+        return self.stock_on_hand <= self.low_stock_threshold
 
 
 class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
@@ -177,7 +251,13 @@ class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
         sa.Index("ix_stock_movements_product_occurred", "product_id", "occurred_at"),
         sa.Index("ix_stock_movements_tenant_occurred", "tenant_id", "occurred_at"),
         sa.Index("ix_stock_movements_order_id", "order_id"),
+        sa.Index("ix_stock_movements_variant_occurred", "variant_id", "occurred_at"),
         sa.CheckConstraint("quantity_delta <> 0", name="quantity_delta_non_zero"),
+        # A retried request, a re-run dispatch or a resumed import carries the
+        # same key, and the database refuses the second row.
+        sa.UniqueConstraint(
+            "tenant_id", "idempotency_key", name="uq_stock_movements_tenant_id_idempotency_key"
+        ),
     )
 
     product_id: Mapped[uuid.UUID] = mapped_column(
@@ -185,6 +265,11 @@ class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
         sa.ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    #: The variant whose stock moved. Required on a product with variants.
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("product_variants.id", ondelete="RESTRICT"), nullable=True
     )
 
     #: Set when the movement came from an order's lifecycle.
@@ -197,7 +282,8 @@ class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
     #: Signed. Negative removes stock, positive restores it.
     quantity_delta: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     #: Running balance immediately after this movement, so history can be read
-    #: without summing every prior row.
+    #: without summing every prior row. The variant's balance when the movement
+    #: is for a variant, the product's otherwise.
     balance_after: Mapped[int] = mapped_column(sa.Integer, nullable=False)
 
     reason: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
@@ -209,6 +295,13 @@ class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
     #: Required for MANUAL_ADJUSTMENT: an unexplained correction to stock is
     #: indistinguishable from a bug.
     note: Mapped[str | None] = mapped_column(sa.String(400), nullable=True)
+    #: A seller's own reference for a restock ("Invoice 42"). Free text.
+    reference: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+    #: What one unit cost on a restock. Informational: V2.2 does no inventory
+    #: valuation, and profit keeps using the order line's cost snapshot.
+    unit_cost_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
+    #: Makes a retried write a no-op rather than a second movement.
+    idempotency_key: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
 
     #: When the change happened in the real world, which is not always when the
     #: row was written (an import backfills history).

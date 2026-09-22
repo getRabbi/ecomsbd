@@ -1,5 +1,6 @@
 import '../../core/api/api_client.dart';
 import '../../design/components/badges.dart';
+import '../analytics/rto_models.dart';
 
 /// Why a band came out the way it did, in the server's machine codes.
 ///
@@ -65,6 +66,10 @@ class RiskCheck {
     this.firstOrderAt,
     this.lastOrderAt,
     this.checksRemaining,
+    this.parcels,
+    this.inTransitCount = 0,
+    this.recent = const <ParcelEvent>[],
+    this.observations = const <RtoObservation>[],
   });
 
   factory RiskCheck.fromJson(Map<String, dynamic> json) {
@@ -87,6 +92,12 @@ class RiskCheck {
           RiskReason.parse(code as String),
       ],
       checksRemaining: json['checks_remaining'] as int?,
+      parcels: json['parcels'] == null
+          ? null
+          : RtoCounts.fromJson(json['parcels'] as Map<String, dynamic>),
+      inTransitCount: json['in_transit_count'] as int? ?? 0,
+      recent: ParcelEvent.listFrom(json['recent']),
+      observations: RtoObservation.listFrom(json['observations']),
     );
   }
 
@@ -114,6 +125,13 @@ class RiskCheck {
 
   /// Checks left in today's quota; `null` when the plan is unlimited.
   final int? checksRemaining;
+
+  /// The same history as parcels (V2.2): RTO = returned + cancelled at the
+  /// courier, over completed parcels only. `null` for an unknown number.
+  final RtoCounts? parcels;
+  final int inTransitCount;
+  final List<ParcelEvent> recent;
+  final List<RtoObservation> observations;
 
   /// How the badge should render this.
   ///

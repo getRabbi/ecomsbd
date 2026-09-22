@@ -48,7 +48,7 @@ from app.orders.numbering import (
     allocate_order_number,
     parse_order_number,
 )
-from app.products.models import Product
+from app.products.models import Product, ProductVariant
 from app.products.service import StockService
 
 __all__ = ["OrderDraft", "OrderItemDraft", "OrderService"]
@@ -66,6 +66,8 @@ class OrderItemDraft:
     discount_paisa: int = 0
     variant_label: str | None = None
     note: str | None = None
+    #: Required for a product with variants: stock is deducted per variant.
+    variant_id: uuid.UUID | None = None
 
 
 @dataclass(slots=True)
@@ -300,31 +302,64 @@ class OrderService:
                         "Product not found", details={"product_id": str(line.product_id)}
                     )
 
+            variant = await self._resolve_variant(product, line.variant_id)
+
             name = (line.name or (product.name if product else "")).strip()
             if not name:
                 raise ValidationError("Each item needs a product or a name")
 
             unit_price = line.unit_price_paisa
             if unit_price is None:
-                unit_price = product.default_selling_price_paisa if product else 0
+                if variant is not None and variant.price_paisa is not None:
+                    unit_price = variant.price_paisa
+                else:
+                    unit_price = product.default_selling_price_paisa if product else 0
+
+            unit_cost = product.cost_paisa if product else 0
+            if variant is not None and variant.cost_paisa is not None:
+                unit_cost = variant.cost_paisa
 
             items.append(
                 OrderItem(
                     product_id=product.id if product else None,
+                    variant_id=variant.id if variant else None,
                     position=position,
                     product_name=name,
-                    sku=product.sku if product else None,
-                    variant_label=line.variant_label,
+                    sku=(variant.sku if variant and variant.sku else None)
+                    or (product.sku if product else None),
+                    variant_label=variant.name if variant else line.variant_label,
                     quantity=line.quantity,
                     unit_price_paisa=unit_price,
                     # The snapshot that keeps historical profit correct when the
                     # product's cost changes later (section 18.2).
-                    unit_cost_snapshot_paisa=product.cost_paisa if product else 0,
+                    unit_cost_snapshot_paisa=unit_cost,
                     discount_paisa=line.discount_paisa,
                     note=line.note,
                 )
             )
         return items
+
+    async def _resolve_variant(
+        self, product: Product | None, variant_id: uuid.UUID | None
+    ) -> ProductVariant | None:
+        """The variant a line sells, which a variant product must name.
+
+        A line for a variant product without one would have no stock to deduct
+        at dispatch, and guessing a size is how a shelf stops matching the app.
+        """
+        if product is None or not product.has_variants:
+            if variant_id is not None and (product is None or not product.has_variants):
+                raise ValidationError("That product has no variants")
+            return None
+        if variant_id is None:
+            raise ValidationError(
+                f"Choose a variant of {product.name}",
+                details={"product_id": str(product.id)},
+            )
+        variant = await self._db.get(ProductVariant, variant_id)
+        if variant is None or variant.product_id != product.id:
+            raise NotFoundError("Variant not found", details={"variant_id": str(variant_id)})
+        return variant
 
     # -------------------------------------------------------------- read ----
 

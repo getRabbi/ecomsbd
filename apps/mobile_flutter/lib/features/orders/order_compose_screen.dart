@@ -793,7 +793,7 @@ class _CheckThis extends StatelessWidget {
       children: <Widget>[
         child,
         Padding(
-          padding: EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: 4),
           child: StatusChip(
             label: context.tr('imp.checkThis'),
             tone: Tone.warning,

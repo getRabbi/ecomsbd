@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_error.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/risk_repository.dart';
+import 'external_risk_card.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
+import '../insights/rto_screen.dart';
 import '../shared/inputs.dart';
 
 /// Risk check.
@@ -86,6 +88,7 @@ class _RiskCheckScreenState extends ConsumerState<RiskCheckScreen> {
       title: context.tr('rc.title'),
       subtitle: context.tr('rc.subtitle'),
       children: <Widget>[
+        const ExternalRiskCard(),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,6 +129,14 @@ class _RiskCheckScreenState extends ConsumerState<RiskCheckScreen> {
           _VerdictCard(result: result),
           const SizedBox(height: EcomsbdSpacing.md),
           _HistoryCard(result: result),
+          if (result.parcels != null) ...<Widget>[
+            const SizedBox(height: EcomsbdSpacing.md),
+            _ParcelsCard(result: result),
+            const SizedBox(height: EcomsbdSpacing.md),
+            RtoObservationsCard(observations: result.observations),
+            const SizedBox(height: EcomsbdSpacing.md),
+            RtoRecentCard(recent: result.recent),
+          ],
           const SizedBox(height: EcomsbdSpacing.md),
           _WhyCard(result: result),
         ],
@@ -244,6 +255,49 @@ class _HistoryCard extends StatelessWidget {
               label: context.tr('rc.lastOrder'),
               value: formatRelative(result.lastOrderAt),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The same history counted as parcels: what the RTO screens use.
+///
+/// Kept beside the order-based band rather than replacing it: the band is the
+/// V1 rule (cancellations count against it), the RTO line is parcels that
+/// went out and came back. Both are facts; neither is hidden.
+class _ParcelsCard extends StatelessWidget {
+  const _ParcelsCard({required this.result});
+
+  final RiskCheck result;
+
+  @override
+  Widget build(BuildContext context) {
+    final parcels = result.parcels!;
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(context.tr('rc.parcelsTitle'), style: EcomsbdType.bodyStrong),
+          const SizedBox(height: EcomsbdSpacing.xs),
+          Text(
+            parcels.completed == 0
+                ? context.tr('rto.noCompleted')
+                : context.tr('rto.rateOf', <String, Object?>{
+                    'rto': parcels.rto,
+                    'completed': parcels.completed,
+                  }),
+            style: EcomsbdType.body,
+          ),
+          _Stat(label: context.tr('rc.rtoRate'), value: parcels.rateLabel),
+          _Stat(
+            label: context.tr('rto.courierCancelled'),
+            value: '${parcels.courierCancelled}',
+          ),
+          _Stat(
+            label: context.tr('rto.onTheWay'),
+            value: '${result.inTransitCount}',
+          ),
         ],
       ),
     );

@@ -45,12 +45,17 @@ __all__ = [
     "ProductCreatePayload",
     "ProductResponse",
     "ProductUpdatePayload",
+    "ProductVariantResponse",
+    "RestockPayload",
     "StockAdjustmentPayload",
     "StockMovementResponse",
+    "StockSummaryResponse",
     "SyncChangesResponse",
     "SyncMutationPayload",
     "SyncMutationResult",
     "SyncPushResponse",
+    "VariantCreatePayload",
+    "VariantUpdatePayload",
 ]
 
 
@@ -81,6 +86,24 @@ class ProductUpdatePayload(BaseModel):
     archived: bool | None = None
 
 
+class ProductVariantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    name: str
+    options: dict[str, Any] = Field(default_factory=dict)
+    sku: str | None
+    #: ``None`` means "use the product's".
+    price_paisa: int | None
+    cost_paisa: int | None
+    stock_on_hand: int
+    low_stock_threshold: int | None
+    is_low_stock: bool
+    is_active: bool
+    position: int
+
+
 class ProductResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,13 +114,59 @@ class ProductResponse(BaseModel):
     cost_paisa: int
     default_selling_price_paisa: int
     stock_tracking_enabled: bool
+    #: With variants, the sum of the variants' stock.
     stock_on_hand: int
     low_stock_threshold: int | None
+    #: With variants, true when any active variant is low.
     is_low_stock: bool
     is_active: bool
     is_archived: bool
     created_at: datetime
     updated_at: datetime
+    has_variants: bool = False
+    variants: list[ProductVariantResponse] = Field(default_factory=list)
+
+
+class VariantCreatePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    sku: str | None = Field(default=None, max_length=64)
+    options: dict[str, str] = Field(default_factory=dict, max_length=5)
+    price_paisa: int | None = Field(default=None, ge=0)
+    cost_paisa: int | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)
+    opening_stock: int = Field(default=0, ge=0, le=1_000_000)
+
+
+class VariantUpdatePayload(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    sku: str | None = Field(default=None, max_length=64)
+    price_paisa: int | None = Field(default=None, ge=0)
+    cost_paisa: int | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
+class RestockPayload(BaseModel):
+    """New goods on the shelf. Not a purchase order and not a payable."""
+
+    variant_id: uuid.UUID | None = None
+    quantity: int = Field(ge=1, le=1_000_000)
+    #: Informational unless ``update_cost`` is set, in which case it becomes the
+    #: cost snapshotted onto orders from now on. No averaging, no FIFO.
+    unit_cost_paisa: int | None = Field(default=None, ge=0)
+    update_cost: bool = False
+    reference: str | None = Field(default=None, max_length=120)
+    note: str | None = Field(default=None, max_length=400)
+    received_at: datetime | None = None
+    #: A client-minted id; the same id twice records one restock.
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=80)
+
+
+class StockSummaryResponse(BaseModel):
+    tracked_products: int
+    total_units: int
+    low_stock_items: int
+    out_of_stock_items: int
 
 
 class StockAdjustmentPayload(BaseModel):
@@ -113,6 +182,10 @@ class StockAdjustmentPayload(BaseModel):
     reason: StockMovementReason = StockMovementReason.MANUAL_ADJUSTMENT
     note: str | None = Field(default=None, max_length=400)
     allow_negative: bool = False
+    #: Required when the product has variants.
+    variant_id: uuid.UUID | None = None
+    #: A client-minted id; the same id twice records one adjustment.
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=80)
 
     @field_validator("quantity_delta")
     @classmethod
@@ -140,6 +213,7 @@ class StockMovementResponse(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID
     quantity_delta: int
+    #: The variant's balance for a variant movement, the product's otherwise.
     balance_after: int
     reason: str
     source: str
@@ -148,6 +222,13 @@ class StockMovementResponse(BaseModel):
     consignment_id: uuid.UUID | None
     occurred_at: datetime
     created_at: datetime
+    variant_id: uuid.UUID | None = None
+    variant_name: str | None = None
+    order_number: str | None = None
+    reference: str | None = None
+    unit_cost_paisa: int | None = None
+    actor_user_id: uuid.UUID | None = None
+    actor_name: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -224,6 +305,8 @@ class OrderItemPayload(BaseModel):
     discount_paisa: int = Field(default=0, ge=0)
     variant_label: str | None = Field(default=None, max_length=120)
     note: str | None = Field(default=None, max_length=300)
+    #: Required for a product with variants.
+    variant_id: uuid.UUID | None = None
 
 
 class OrderCreatePayload(BaseModel):
@@ -268,6 +351,7 @@ class OrderItemResponse(BaseModel):
     product_name: str
     sku: str | None
     variant_label: str | None
+    variant_id: uuid.UUID | None = None
     quantity: int
     unit_price_paisa: int
     unit_cost_snapshot_paisa: int
@@ -321,6 +405,11 @@ class OrderDetailResponse(OrderResponse):
     items: list[OrderItemResponse] = Field(default_factory=list)
     source_text: str | None = None
     estimated_item_cost_paisa: int = 0
+    #: The order's newest parcel, when it has one.
+    consignment_id: uuid.UUID | None = None
+    consignment_status: str | None = None
+    #: Returned units the seller has not yet restocked or written off (V2.2).
+    return_pending_units: int = 0
 
 
 class DuplicateCandidateResponse(BaseModel):

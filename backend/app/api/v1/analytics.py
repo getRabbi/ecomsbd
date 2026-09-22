@@ -52,9 +52,10 @@ from app.entitlements.service import EntitlementService
 from app.expenses.models import ALLOCATION_VERSION, Expense, ExpenseKind
 from app.expenses.service import ExpenseService
 from app.notifications.alerts import AlertService, AlertSummary
-from app.notifications.models import Severity
-from app.notifications.service import NotificationService
-from app.tenants.roles import Permission
+from app.notifications.delivery import effective_preference
+from app.notifications.models import Notification, NotificationCategory, Severity
+from app.notifications.service import NotificationService, Viewer, localized
+from app.tenants.roles import Permission, permissions_for
 
 router = APIRouter(tags=["analytics"])
 
@@ -439,6 +440,30 @@ async def allocate_expense(
 # --------------------------------------------------------------------------- #
 
 
+async def _viewer(principal: TenantPrincipal, db: DbSession) -> Viewer:
+    """What this member may see in the centre, decided server-side.
+
+    Role permissions pick the audiences, the member's own preference hides the
+    categories they switched off, and a notification addressed to someone else
+    is never theirs.
+    """
+    preference = await effective_preference(db, principal.require_tenant(), principal.user_id)
+    return Viewer(
+        user_id=principal.user_id,
+        permissions=permissions_for(principal.role) if principal.role else frozenset(),
+        muted_categories=tuple(preference.muted_categories or []) if preference else (),
+    )
+
+
+ViewerDep = Annotated[Viewer, Depends(_viewer)]
+
+
+def _notification(row: Notification, locale: str | None) -> NotificationResponse:
+    title, body = localized(row, locale)
+    response = NotificationResponse.model_validate(row)
+    return response.model_copy(update={"title": title, "body": body})
+
+
 @router.get(
     "/notifications",
     response_model=Page[NotificationResponse],
@@ -447,20 +472,30 @@ async def allocate_expense(
 async def list_notifications(
     principal: TenantPrincipal,
     notifications: NotificationsDep,
+    viewer: ViewerDep,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     unread_only: Annotated[bool, Query()] = False,
     severity: Annotated[Severity | None, Query()] = None,
+    category: Annotated[NotificationCategory | None, Query()] = None,
+    lang: Annotated[str | None, Query(max_length=8)] = None,
 ) -> Page[NotificationResponse]:
-    """Section 94: push is not enough, so everything is also here."""
+    """Section 94: push is not enough, so everything is also here.
+
+    Only what this member receives, worded in ``lang`` (else their account
+    language) from the facts each alert stores.
+    """
     rows = await notifications.list_notifications(
         limit=limit,
         cursor=decode_cursor(cursor) if cursor else None,
         unread_only=unread_only,
         severity=severity,
+        category=category,
+        viewer=viewer,
     )
+    locale = lang or principal.user.locale
     return Page[NotificationResponse].build(
-        rows, limit=limit, serializer=NotificationResponse.model_validate
+        rows, limit=limit, serializer=lambda row: _notification(row, locale)
     )
 
 
@@ -472,8 +507,9 @@ async def list_notifications(
 async def unread_count(
     principal: TenantPrincipal,
     notifications: NotificationsDep,
+    viewer: ViewerDep,
 ) -> UnreadCountResponse:
-    return UnreadCountResponse(unread=await notifications.unread_count())
+    return UnreadCountResponse(unread=await notifications.unread_count(viewer=viewer))
 
 
 @router.post(
@@ -485,11 +521,13 @@ async def mark_read(
     notification_id: uuid.UUID,
     principal: TenantPrincipal,
     notifications: NotificationsDep,
+    viewer: ViewerDep,
     db: DbSession,
+    lang: Annotated[str | None, Query(max_length=8)] = None,
 ) -> NotificationResponse:
-    notification = await notifications.mark_read(notification_id)
+    notification = await notifications.mark_read(notification_id, viewer=viewer)
     await db.commit()
-    return NotificationResponse.model_validate(notification)
+    return _notification(notification, lang or principal.user.locale)
 
 
 @router.post(
@@ -500,6 +538,7 @@ async def mark_read(
 async def mark_all_read(
     principal: TenantPrincipal,
     notifications: NotificationsDep,
+    viewer: ViewerDep,
     db: DbSession,
 ) -> UnreadCountResponse:
     """Returns the number still unread, which after this is zero.
@@ -507,9 +546,9 @@ async def mark_all_read(
     Phrased as the remaining count rather than "ok" so a client that raced
     another device sees the truth instead of assuming it won.
     """
-    await notifications.mark_all_read()
+    await notifications.mark_all_read(viewer=viewer)
     await db.commit()
-    return UnreadCountResponse(unread=await notifications.unread_count())
+    return UnreadCountResponse(unread=await notifications.unread_count(viewer=viewer))
 
 
 @router.get(

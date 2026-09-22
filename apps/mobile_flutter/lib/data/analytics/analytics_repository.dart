@@ -1,7 +1,9 @@
 import '../../core/api/api_error.dart';
 import '../commerce/models.dart' show PagedResult;
 import '../commerce/repository_support.dart';
+import 'insights_models.dart';
 import 'models.dart';
+import 'rto_models.dart';
 
 /// Home, Insights, expenses and the notification centre.
 ///
@@ -91,6 +93,166 @@ class AnalyticsRepository extends CachingRepository {
       ),
     );
     return sourced.map(WeeklySummary.fromJson);
+  }
+
+  // --- return / RTO intelligence -------------------------------------------
+
+  /// RTO rate, counts and 7/30/90-day windows. Same endpoint as the web.
+  Future<Sourced<RtoSummary>> rtoSummary({int days = 30}) async {
+    final sourced = await readThrough(
+      'analytics.rto.summary.$days',
+      () => api.get(
+        '/analytics/rto/summary',
+        query: <String, dynamic>{'days': days},
+      ),
+    );
+    return sourced.map(RtoSummary.fromJson);
+  }
+
+  Future<Sourced<List<RtoWeek>>> rtoTrend({int weeks = 12}) async {
+    final sourced = await readThrough(
+      'analytics.rto.trend.$weeks',
+      () => api.get(
+        '/analytics/rto/trend',
+        query: <String, dynamic>{'weeks': weeks},
+      ),
+    );
+    return sourced.map(
+      (json) => <RtoWeek>[
+        for (final row in json['points'] as List<dynamic>? ?? const <dynamic>[])
+          RtoWeek.fromJson(row as Map<String, dynamic>),
+      ],
+    );
+  }
+
+  /// One server page. Only the first page is cached; later pages are read
+  /// live because they are only ever asked for while online and scrolling.
+  Future<ProductRtoPage> rtoProducts({int offset = 0, int limit = 20}) async {
+    final query = <String, dynamic>{'offset': offset, 'limit': limit};
+    if (offset > 0) {
+      return ProductRtoPage.fromJson(
+        await api.get('/analytics/rto/products', query: query),
+      );
+    }
+    final sourced = await readThrough(
+      'analytics.rto.products.$limit',
+      () => api.get('/analytics/rto/products', query: query),
+    );
+    return ProductRtoPage.fromJson(sourced.value);
+  }
+
+  Future<Sourced<CourierRtoReport>> rtoCouriers() async {
+    final sourced = await readThrough(
+      'analytics.rto.couriers',
+      () => api.get('/analytics/rto/couriers'),
+    );
+    return sourced.map(CourierRtoReport.fromJson);
+  }
+
+  Future<Sourced<AreaRtoReport>> rtoAreas() async {
+    final sourced = await readThrough(
+      'analytics.rto.areas',
+      () => api.get('/analytics/rto/areas'),
+    );
+    return sourced.map(AreaRtoReport.fromJson);
+  }
+
+  Future<Sourced<List<CustomerPattern>>> rtoPatterns() async {
+    final sourced = await readThrough(
+      'analytics.rto.patterns',
+      () => api.get('/analytics/rto/patterns'),
+    );
+    return sourced.map(
+      (json) => <CustomerPattern>[
+        for (final row in json['items'] as List<dynamic>? ?? const <dynamic>[])
+          CustomerPattern.fromJson(row as Map<String, dynamic>),
+      ],
+    );
+  }
+
+  /// One customer's parcels. Read live: it is opened from a tap, online.
+  Future<CustomerRtoHistory> rtoCustomer(String customerId) async {
+    return CustomerRtoHistory.fromJson(
+      await api.get('/analytics/rto/customers/$customerId'),
+    );
+  }
+
+  // --- advanced insights --------------------------------------------------
+
+  /// One section of `/analytics/insights`, cached per range for the offline
+  /// label. Every figure is the server's; this only carries it.
+  Future<Sourced<Map<String, dynamic>>> _insight(String section, int days) {
+    return readThrough(
+      'analytics.insights.$section.$days',
+      () => api.get(
+        '/analytics/insights/$section',
+        query: <String, dynamic>{'days': days},
+      ),
+    );
+  }
+
+  Future<Sourced<InsightsOverview>> insightsOverview({int days = 30}) async =>
+      (await _insight('overview', days)).map(InsightsOverview.fromJson);
+
+  Future<Sourced<InsightsTrend>> insightsTrend({int days = 30}) async =>
+      (await _insight('trend', days)).map(InsightsTrend.fromJson);
+
+  Future<Sourced<CourierInsights>> insightsCouriers({int days = 30}) async =>
+      (await _insight('couriers', days)).map(CourierInsights.fromJson);
+
+  Future<Sourced<CashInsights>> insightsCash({int days = 30}) async =>
+      (await _insight('cash', days)).map(CashInsights.fromJson);
+
+  Future<Sourced<CustomerInsights>> insightsCustomers({int days = 30}) async =>
+      (await _insight('customers', days)).map(CustomerInsights.fromJson);
+
+  /// One server page of products. Later pages are read live, like RTO's.
+  Future<ProductInsightPage> insightsProducts({
+    required int days,
+    String category = 'all',
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final query = <String, dynamic>{
+      'days': days,
+      'category': category,
+      'offset': offset,
+      'limit': limit,
+    };
+    if (offset > 0) {
+      return ProductInsightPage.fromJson(
+        await api.get('/analytics/insights/products', query: query),
+      );
+    }
+    final sourced = await readThrough(
+      'analytics.insights.products.$days.$category.$limit',
+      () => api.get('/analytics/insights/products', query: query),
+    );
+    return ProductInsightPage.fromJson(sourced.value);
+  }
+
+  Future<InventoryInsights> insightsInventory({
+    required int days,
+    String filter = 'all',
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final query = <String, dynamic>{
+      'days': days,
+      'filter': filter,
+      'offset': offset,
+      'limit': limit,
+    };
+    if (offset > 0) {
+      return InventoryInsights.fromJson(
+        await api.get('/analytics/insights/inventory', query: query),
+      );
+    }
+    final sourced = await readThrough(
+      'analytics.insights.inventory.$days.$filter.$limit',
+      () => api.get('/analytics/insights/inventory', query: query),
+    );
+    return InventoryInsights.fromJson(sourced.value);
   }
 
   // --- expenses -------------------------------------------------------------
@@ -203,20 +365,30 @@ class AnalyticsRepository extends CachingRepository {
 
   // --- notifications --------------------------------------------------------
 
+  /// The centre, as this member receives it. [lang] asks the server to word
+  /// each alert in the app's language; [category] narrows the list.
   Future<Sourced<PagedResult<AppNotification>>> notifications({
     String? cursor,
     int limit = 30,
     bool unreadOnly = false,
+    String? category,
+    String? lang,
   }) async {
     final sourced = await readThrough(
       'analytics.notifications${cursor == null ? '' : '.$cursor'}'
-      '${unreadOnly ? '.unread' : ''}',
+      '${unreadOnly ? '.unread' : ''}'
+      '${category == null ? '' : '.$category'}'
+      '${lang == null ? '' : '.$lang'}',
       () => api.get(
         '/notifications',
         query: pageQuery(
           cursor: cursor,
           limit: limit,
-          extra: <String, dynamic>{'unread_only': unreadOnly},
+          extra: <String, dynamic>{
+            'unread_only': unreadOnly,
+            if (category != null) 'category': category,
+            if (lang != null) 'lang': lang,
+          },
         ),
       ),
     );

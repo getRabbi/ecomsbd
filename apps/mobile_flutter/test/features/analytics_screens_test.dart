@@ -3,7 +3,7 @@ import 'package:ecomsbd/design/charts/donut_chart.dart';
 import 'package:ecomsbd/design/charts/line_chart.dart';
 import 'package:ecomsbd/features/expenses/expenses_screen.dart';
 import 'package:ecomsbd/features/home/home_screen.dart';
-import 'package:ecomsbd/features/insights/insights_screen.dart';
+import 'package:ecomsbd/features/insights/profit_detail_screen.dart';
 import 'package:ecomsbd/features/notifications/notification_centre_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -126,7 +126,7 @@ void main() {
     });
   });
 
-  group('Insights', () {
+  group('Insights → Profit & costs', () {
     testWidgets('the headline carries how much of it is measured', (
       tester,
     ) async {
@@ -138,7 +138,7 @@ void main() {
       );
       await pumpCommerceScreen(
         tester,
-        const InsightsScreen(),
+        const ProfitDetailScreen(),
         harness: harness,
       );
 
@@ -155,7 +155,7 @@ void main() {
       );
       await pumpCommerceScreen(
         tester,
-        const InsightsScreen(),
+        const ProfitDetailScreen(),
         harness: harness,
       );
 
@@ -179,7 +179,7 @@ void main() {
       );
       await pumpCommerceScreen(
         tester,
-        const InsightsScreen(),
+        const ProfitDetailScreen(),
         harness: harness,
       );
       await scrollTo(tester, find.text('No rank yet'));
@@ -201,7 +201,7 @@ void main() {
       );
       await pumpCommerceScreen(
         tester,
-        const InsightsScreen(),
+        const ProfitDetailScreen(),
         harness: harness,
       );
       await scrollTo(tester, find.text('Customer refused'));

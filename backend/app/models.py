@@ -10,6 +10,11 @@ and the test suite all import this module rather than individual model files.
 
 from __future__ import annotations
 
+import app.analytics.network_models
+import app.automation.models
+import app.messaging.models
+import app.order_sources.models
+import app.public_api.models  # noqa: F401
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken
@@ -37,6 +42,12 @@ from app.couriers.models import (
     CourierWebhookDelivery,
     ProviderPayment,
 )
+from app.customers.crm_models import (
+    CustomerActivity,
+    CustomerFollowUp,
+    CustomerTag,
+    CustomerTagLink,
+)
 from app.customers.models import Customer, CustomerAddress
 from app.db.base import Base
 from app.entitlements.models import Subscription
@@ -58,7 +69,7 @@ from app.payouts.models import (
 from app.privacy.models import DeletionRequest
 from app.products.models import Product, StockMovement
 from app.profit.models import ConsignmentCharge, ProfitSnapshot
-from app.reconciliation.models import ReconciliationCase
+from app.reconciliation.models import CaseEvent, ReconciliationCase, ReconciliationItem
 from app.sync.models import SyncMutation
 from app.tenants.models import Tenant, TenantUser
 from app.users.models import User
@@ -73,6 +84,7 @@ __all__ = [
     "BillingProviderCustomer",
     "BillingTransaction",
     "BillingWebhookEvent",
+    "CaseEvent",
     "CodReceivable",
     "Consignment",
     "ConsignmentCharge",
@@ -85,7 +97,11 @@ __all__ = [
     "CourierSyncCursor",
     "CourierWebhookDelivery",
     "Customer",
+    "CustomerActivity",
     "CustomerAddress",
+    "CustomerFollowUp",
+    "CustomerTag",
+    "CustomerTagLink",
     "DeletionRequest",
     "Device",
     "Expense",
@@ -114,6 +130,7 @@ __all__ = [
     "ProviderHealth",
     "ProviderPayment",
     "ReconciliationCase",
+    "ReconciliationItem",
     "RefreshToken",
     "RepairActionRecord",
     "StockMovement",

@@ -92,3 +92,8 @@ regexes = [
   '''sfk-live-0000-1111-2222-abcd''',
   '''sfs-live-3333-4444-5555-wxyz''',
 ]
+
+[[allowlists]]
+description = "Pathao's published webhook response protocol constant; authenticates no merchant. Scoped to the documented handshake value."
+paths = ['''docs/providers/pathao/CONTRACT\.md''']
+regexes = ['''f3992ecc\-59da\-4cbe\-a049\-a13da2018d51''']

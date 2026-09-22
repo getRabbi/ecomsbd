@@ -14,6 +14,7 @@ import csv
 import hashlib
 import io
 import uuid
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -309,7 +310,9 @@ class ImportService:
 
             if row.fingerprint is not None:
                 seen_in_file.add(row.fingerprint)
-                if await self._already_imported(batch, row.fingerprint):
+                if await self._already_imported(
+                    batch, row.fingerprint
+                ) and not await self._is_new_count(spec.template, parsed.values):
                     row.status = ImportRowStatus.DUPLICATE
                     row.warnings = [
                         *row.warnings,
@@ -334,6 +337,17 @@ class ImportService:
 
         await self._db.flush()
         return batch
+
+    async def _is_new_count(self, template: ImportTemplate, values: dict[str, Any]) -> bool:
+        """A re-imported product row that states a *different* stock count.
+
+        Such a row is a stock take, not a duplicate: committing it records the
+        difference as one adjustment. The same count again is still a duplicate.
+        """
+        if template is not ImportTemplate.PRODUCTS or not values.get("stock_given"):
+            return False
+        change = await self._products.counted_change(values.get("sku"), values.get("opening_stock"))
+        return bool(change)
 
     async def _already_imported(self, batch: ImportBatch, fingerprint: str) -> bool:
         """Whether a previous committed import already created this record."""
@@ -448,15 +462,11 @@ class ImportService:
         values = row.parsed
 
         if template is ImportTemplate.PRODUCTS:
-            product = await self._products.create(
-                name=values["name"],
-                sku=values.get("sku"),
-                description=values.get("description"),
-                cost_paisa=values.get("cost_paisa", 0),
-                default_selling_price_paisa=values.get("default_selling_price_paisa", 0),
-                opening_stock=values.get("opening_stock", 0),
+            # Keyed on the import row, so a resumed or retried commit can never
+            # move the same row's stock twice.
+            return await self._products.import_row(
+                values, idempotency_key=f"import:{row.import_id}:{row.row_number}"
             )
-            return product.id
 
         order, _ = await self._orders.create(
             OrderDraft(

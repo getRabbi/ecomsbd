@@ -233,7 +233,11 @@ void main() {
         'NEEDS_RECONNECT',
         'NEEDS_PICKUP_STORE',
       ]) {
-        expect(BookableBlock.parse(reason).isFixableInSettings, isTrue, reason: reason);
+        expect(
+          BookableBlock.parse(reason).isFixableInSettings,
+          isTrue,
+          reason: reason,
+        );
       }
       for (final reason in <String>['NOT_ENABLED', 'PROVIDER_UNAVAILABLE']) {
         expect(
@@ -244,16 +248,19 @@ void main() {
       }
     });
 
-    test('a missing delivery-type declaration defaults to not offering one', () {
-      final courier = BookableCourier.fromJson(const <String, dynamic>{
-        'provider': 'x',
-        'display_name': 'X',
-        'bookable': true,
-      });
+    test(
+      'a missing delivery-type declaration defaults to not offering one',
+      () {
+        final courier = BookableCourier.fromJson(const <String, dynamic>{
+          'provider': 'x',
+          'display_name': 'X',
+          'bookable': true,
+        });
 
-      // Safer default: sending one courier's service codes to another books
-      // the wrong class of delivery.
-      expect(courier.supportsDeliveryType, isFalse);
-    });
+        // Safer default: sending one courier's service codes to another books
+        // the wrong class of delivery.
+        expect(courier.supportsDeliveryType, isFalse);
+      },
+    );
   });
 }

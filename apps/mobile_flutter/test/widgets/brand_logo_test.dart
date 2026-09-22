@@ -73,7 +73,9 @@ void main() {
     ) async {
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);
-      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
 
       await pumpAtSize(tester, _centred(const EcomsAnimatedLogo()));
       expect(tester.hasRunningAnimations, isFalse);

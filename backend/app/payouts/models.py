@@ -78,6 +78,10 @@ class PayoutLineStatus(StrEnum):
     UNMAPPABLE = "UNMAPPABLE"
     #: Was matched, then unmatched. Section 81.8: reversal, not deletion.
     REVERSED = "REVERSED"
+    #: Pays nothing and carries only a charge for a parcel identified by an
+    #: exact reference — a return fee, typically. Linked to the parcel so the
+    #: charge is explained, but nothing is settled from it.
+    CHARGE_ONLY = "CHARGE_ONLY"
 
     @property
     def is_applied(self) -> bool:
@@ -90,6 +94,7 @@ class PayoutLineStatus(StrEnum):
             PayoutLineStatus.MATCHED,
             PayoutLineStatus.MANUAL_MATCHED,
             PayoutLineStatus.DUPLICATE,
+            PayoutLineStatus.CHARGE_ONLY,
         )
 
 
@@ -364,6 +369,17 @@ class PayoutAdjustment(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
 
     #: Which recognition rule classified it, or null if none did.
     recognized_rule: Mapped[str | None] = mapped_column(sa.String(80), nullable=True)
+
+    #: Set when a person accepted this deduction and it was written to the
+    #: ledger. Goes from null to a value once and never back, which is what
+    #: makes accepting the same statement's charges twice a no-op.
+    accepted_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    accepted_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+
+    @property
+    def is_deduction(self) -> bool:
+        """Whether the courier kept this money, as opposed to adding it."""
+        return self.adjustment_type is not AdjustmentType.BONUS
 
     @property
     def adjustment_type(self) -> AdjustmentType:

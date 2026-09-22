@@ -13,15 +13,12 @@ from __future__ import annotations
 
 import uuid
 
-import sqlalchemy as sa
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest_commerce import signed_in_shop
 from tests.test_auth_flow import auth_header
 from tests.test_customers import create_customer
 
 from app.customers import risk
-from app.customers.models import Customer
 
 
 class _Counters:
@@ -76,25 +73,21 @@ class TestRules:
         assert risk.RiskReason.HAS_CANCELLATIONS in assessed.reasons
 
 
-async def _set_counters(
-    db: AsyncSession, customer_id: str, *, delivered: int, returned: int, cancelled: int
+async def _history(
+    client: AsyncClient, session: dict, phone: str, *, delivered: int, returned: int
 ) -> None:
-    # Through the mapped column rather than raw SQL: the id arrives as the
-    # API's hyphenated string, and only the column type knows how the database
-    # stores it. A raw comparison matched no row and silently changed nothing.
-    result = await db.execute(
-        sa.update(Customer)
-        .where(Customer.id == uuid.UUID(customer_id))
-        .values(
-            delivered_count=delivered,
-            returned_count=returned,
-            cancelled_count=cancelled,
-            order_count=delivered + returned + cancelled,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    assert result.rowcount == 1
-    await db.commit()
+    """Real parcels, through the real outcome path.
+
+    The band reads parcel outcomes now, not denormalised counters (which were
+    never moved by a delivery), so the fixture has to create the parcels.
+    """
+    from tests.test_rto import _Shop
+
+    shop = _Shop(client, session)
+    for _ in range(delivered):
+        await shop.parcel("DELIVERED", phone=phone)
+    for _ in range(returned):
+        await shop.parcel("RETURNED", phone=phone)
 
 
 class TestRiskCheckApi:
@@ -116,11 +109,11 @@ class TestRiskCheckApi:
         assert body["terminal_count"] == 0
 
     async def test_history_drives_the_band_and_is_shown_in_full(
-        self, client: AsyncClient, unique_phone: str, system_db: AsyncSession
+        self, client: AsyncClient, unique_phone: str
     ) -> None:
         session = await signed_in_shop(client, unique_phone)
-        customer = await create_customer(client, session, phone="01712345678", name="Nusrat")
-        await _set_counters(system_db, customer["id"], delivered=4, returned=1, cancelled=0)
+        await create_customer(client, session, phone="01712345678", name="Nusrat")
+        await _history(client, session, "01712345678", delivered=4, returned=1)
 
         response = await client.get(
             "/v1/customers/risk-check",
@@ -139,11 +132,10 @@ class TestRiskCheckApi:
         assert "STRONG_DELIVERY_RATE" in body["reasons"]
 
     async def test_a_returning_customer_bands_high(
-        self, client: AsyncClient, unique_phone: str, system_db: AsyncSession
+        self, client: AsyncClient, unique_phone: str
     ) -> None:
         session = await signed_in_shop(client, unique_phone)
-        customer = await create_customer(client, session, phone="01712345679")
-        await _set_counters(system_db, customer["id"], delivered=1, returned=3, cancelled=0)
+        await _history(client, session, "01712345679", delivered=1, returned=3)
 
         response = await client.get(
             "/v1/customers/risk-check",
@@ -175,11 +167,9 @@ class TestTenantIsolation:
         self,
         client: AsyncClient,
         unique_phone: str,
-        system_db: AsyncSession,
     ) -> None:
         seller_a = await signed_in_shop(client, unique_phone)
-        customer = await create_customer(client, seller_a, phone="01798765432")
-        await _set_counters(system_db, customer["id"], delivered=0, returned=6, cancelled=0)
+        await _history(client, seller_a, "01798765432", delivered=0, returned=6)
 
         # The same number, asked by a different shop. Shop B has never sold to
         # them, so shop B learns nothing -- not the band, not the count.

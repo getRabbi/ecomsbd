@@ -12,7 +12,9 @@ import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import 'inventory_sheets.dart';
 import 'stock_adjustment_sheet.dart';
+import 'stock_history_screen.dart';
 
 /// Add or edit a product.
 ///
@@ -151,11 +153,19 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     }
   }
 
-  Future<void> _adjustStock() async {
-    final changed = await StockAdjustmentSheet.show(
-      context,
-      product: widget.product!,
-    );
+  Future<void> _adjustStock() =>
+      _afterSheet(StockAdjustmentSheet.show(context, product: widget.product!));
+
+  Future<void> _restock() =>
+      _afterSheet(RestockSheet.show(context, product: widget.product!));
+
+  Future<void> _addVariant() =>
+      _afterSheet(AddVariantSheet.show(context, product: widget.product!));
+
+  /// A stock change makes this screen's copy of the product stale; closing it
+  /// hands the list a reason to reload, as adjusting always has.
+  Future<void> _afterSheet(Future<bool?> sheet) async {
+    final changed = await sheet;
     if ((changed ?? false) && mounted) {
       Navigator.of(context).pop(true);
     }
@@ -336,8 +346,32 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                             ),
                           ),
                         ],
-                      )
-                    else
+                      ),
+                    if (widget.isEditing) ...<Widget>[
+                      const SizedBox(height: EcomsbdSpacing.xs),
+                      Wrap(
+                        spacing: EcomsbdSpacing.xs,
+                        children: <Widget>[
+                          TextButton.icon(
+                            onPressed: _restock,
+                            icon: const Icon(Icons.add_box_outlined, size: 18),
+                            label: Text(context.tr('inv.restock')),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    StockHistoryScreen(product: product!),
+                              ),
+                            ),
+                            icon: const Icon(Icons.history_rounded, size: 18),
+                            label: Text(context.tr('sh.title')),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: EcomsbdSpacing.sm),
+                      _VariantList(product: product!, onAdd: _addVariant),
+                    ] else
                       LabelledField(
                         label: context.tr('imp.colOpeningStock'),
                         controller: _opening,
@@ -377,6 +411,66 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A product's variants with their own stock and low-stock state.
+class _VariantList extends StatelessWidget {
+  const _VariantList({required this.product, required this.onAdd});
+
+  final Product product;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          context.tr('inv.variants'),
+          style: EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
+        ),
+        const SizedBox(height: 4),
+        for (final variant in product.variants)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    variant.sku == null
+                        ? variant.name
+                        : '${variant.name} · ${variant.sku}',
+                    style: EcomsbdType.body.copyWith(
+                      color: variant.isActive ? null : EcomsbdColors.muted2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (variant.isActive && variant.stockOnHand <= 0)
+                  StatusChip(
+                    label: context.tr('inv.outOfStock'),
+                    tone: Tone.bad,
+                  )
+                else if (variant.isActive && variant.isLowStock)
+                  StatusChip(
+                    label: context.tr('inv.lowStock'),
+                    tone: Tone.warning,
+                  ),
+                const SizedBox(width: EcomsbdSpacing.xs),
+                Text('${variant.stockOnHand}', style: EcomsbdType.bodyStrong),
+              ],
+            ),
+          ),
+        TextButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: Text(context.tr('inv.addVariant')),
         ),
       ],
     );

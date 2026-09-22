@@ -614,9 +614,11 @@ class AppNotification {
     required this.businessDate,
     required this.createdAt,
     required this.payload,
+    this.category = 'SUMMARY',
     this.entityType,
     this.entityId,
     this.readAt,
+    this.resolvedAt,
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) =>
@@ -626,6 +628,7 @@ class AppNotification {
         severity: NotificationSeverity.parse(json['severity'] as String),
         title: json['title'] as String,
         body: json['body'] as String,
+        category: json['category'] as String? ?? 'SUMMARY',
         entityType: json['entity_type'] as String?,
         entityId: json['entity_id'] as String?,
         amount: Money(json['amount_paisa'] as int),
@@ -634,6 +637,9 @@ class AppNotification {
         readAt: json['read_at'] == null
             ? null
             : DateTime.parse(json['read_at'] as String),
+        resolvedAt: json['resolved_at'] == null
+            ? null
+            : DateTime.parse(json['resolved_at'] as String),
         payload: json['payload'] as Map<String, dynamic>? ?? const {},
         createdAt: DateTime.parse(json['created_at'] as String),
       );
@@ -641,18 +647,38 @@ class AppNotification {
   final String id;
   final String kind;
   final NotificationSeverity severity;
+
+  /// Worded by the server in the language the list was requested in.
   final String title;
   final String body;
+
+  /// MONEY, RECONCILIATION, COURIER, RETURNS, INVENTORY, IMPORTS or SUMMARY.
+  final String category;
   final String? entityType;
   final String? entityId;
   final Money amount;
   final int itemCount;
   final DateTime businessDate;
   final DateTime? readAt;
+
+  /// Set when the condition it described has cleared. Kept as history.
+  final DateTime? resolvedAt;
   final Map<String, dynamic> payload;
   final DateTime createdAt;
 
   bool get isRead => readAt != null;
+
+  bool get isResolved => resolvedAt != null;
+
+  Map<String, dynamic> get _target =>
+      payload['target'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+
+  /// The screen a tap opens, decided by the server: `receivables`, `order`,
+  /// `reconciliation_case`, `returns`, `import`, `courier_account`, …
+  String? get targetRoute => _target['route'] as String?;
+
+  /// The record [targetRoute] is about, when it is about one.
+  String? get targetId => _target['id'] as String?;
 
   /// Whether tapping it can open the thing it is about. Master spec section
   /// 94: a notification that lands on a dashboard makes the seller hunt for
