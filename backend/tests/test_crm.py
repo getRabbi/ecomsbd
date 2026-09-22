@@ -5,14 +5,14 @@ from datetime import timedelta
 
 import pytest
 import sqlalchemy as sa
+
+from app.core.clock import utc_now
+from app.tenants.roles import TenantRole
 from tests.conftest_commerce import signed_in_shop
 from tests.test_auth_flow import auth_header
 from tests.test_customers import create_customer
 from tests.test_rto import _Shop
 from tests.test_team import _member_session
-
-from app.core.clock import utc_now
-from app.tenants.roles import TenantRole
 
 
 def phone():

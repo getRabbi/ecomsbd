@@ -14,11 +14,11 @@ from __future__ import annotations
 import uuid
 
 from httpx import AsyncClient
+
+from app.customers import risk
 from tests.conftest_commerce import signed_in_shop
 from tests.test_auth_flow import auth_header
 from tests.test_customers import create_customer
-
-from app.customers import risk
 
 
 class _Counters:

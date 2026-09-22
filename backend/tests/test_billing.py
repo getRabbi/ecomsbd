@@ -26,18 +26,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_billing import (
-    PLAY_PACKAGE,
-    PLAY_PRODUCT_PRO,
-    PLAY_PRODUCT_STARTER,
-    FakeBkashApi,
-    FakePlayApi,
-    billing_settings,
-    install_registry,
-    play_response,
-)
-from tests.conftest_commerce import signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.billing.models import (
     BillingProviderKind,
@@ -56,6 +44,18 @@ from app.common.audit import AuditAction, AuditLog
 from app.core.errors import BillingVerificationError
 from app.entitlements.catalog import PlanCode
 from app.entitlements.models import Subscription, SubscriptionStatus
+from tests.conftest_billing import (
+    PLAY_PACKAGE,
+    PLAY_PRODUCT_PRO,
+    PLAY_PRODUCT_STARTER,
+    FakeBkashApi,
+    FakePlayApi,
+    billing_settings,
+    install_registry,
+    play_response,
+)
+from tests.conftest_commerce import signed_in_shop
+from tests.test_auth_flow import auth_header
 
 # --------------------------------------------------------------------------- #
 # Helpers

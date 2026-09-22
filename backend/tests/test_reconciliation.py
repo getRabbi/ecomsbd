@@ -16,7 +16,6 @@ from datetime import timedelta
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import dispatched_parcel, signed_in_shop
 
 from app.consignments.models import ConsignmentStatus
 from app.consignments.service import DeliveryOutcome, ItemOutcome
@@ -35,6 +34,7 @@ from app.reconciliation.scoring import (
     decide,
 )
 from app.reconciliation.service import ReconciliationService
+from tests.conftest_commerce import dispatched_parcel, signed_in_shop
 
 
 @pytest.fixture

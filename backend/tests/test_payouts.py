@@ -15,7 +15,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import signed_in_shop
 
 from app.core.context import RequestContext, set_context
 from app.core.errors import ConflictError, ValidationError
@@ -32,6 +31,7 @@ from app.payouts.statements import (
     classify_adjustment,
     parse_statement,
 )
+from tests.conftest_commerce import signed_in_shop
 
 STATEMENT = b"""Consignment ID,Invoice,Collected Amount,Delivery Date,Charge,Charge Type
 CN-1001,CP-20260901-0001,1405.00,2026-09-05,80,Delivery charge

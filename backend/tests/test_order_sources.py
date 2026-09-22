@@ -2,11 +2,11 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
-from tests.conftest_commerce import signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.db.session import system_session
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 async def source(client, phone, **extra):

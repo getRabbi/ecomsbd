@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 
 from httpx import AsyncClient
+
 from tests.conftest_commerce import create_order, create_product, signed_in_shop
 from tests.test_auth_flow import auth_header
 

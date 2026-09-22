@@ -21,12 +21,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import (
-    create_order,
-    create_product,
-    dispatched_parcel,
-    signed_in_shop,
-)
 
 from app.consignments.models import ConsignmentStatus
 from app.consignments.service import DeliveryOutcome
@@ -40,6 +34,12 @@ from app.notifications.service import NotificationService
 from app.profit.service import ProfitService
 from app.reconciliation.models import CaseKind, CaseStatus
 from app.reconciliation.service import ReconciliationService
+from tests.conftest_commerce import (
+    create_order,
+    create_product,
+    dispatched_parcel,
+    signed_in_shop,
+)
 
 
 @pytest.fixture

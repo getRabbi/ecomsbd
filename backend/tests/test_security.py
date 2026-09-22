@@ -23,8 +23,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header, sign_in
 
 from app.common.audit import AuditAction, AuditLog
 from app.common.safe_csv import SafeCsvWriter, escape_cell, rows_to_csv
@@ -32,6 +30,8 @@ from app.common.uploads import DetectedFormat, safe_filename, validate_upload
 from app.core.clock import utc_now
 from app.core.errors import ValidationError
 from app.exports.models import ExportJob, ExportStatus
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header, sign_in
 
 # --------------------------------------------------------------------------- #
 # CSV formula injection (Phase F brief section 28)

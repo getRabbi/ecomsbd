@@ -1,12 +1,12 @@
 import uuid
 
 import sqlalchemy as sa
-from tests.conftest_commerce import create_order, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.customers.external_risk import BLOCKER, configured_provider
 from app.db.session import system_session
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import create_order, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 async def test_external_risk_gated_and_first_party_unchanged(client, unique_phone):

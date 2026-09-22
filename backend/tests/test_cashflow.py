@@ -15,10 +15,6 @@ from datetime import timedelta
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import dispatched_parcel, signed_in_shop
-from tests.test_auth_flow import auth_header
-from tests.test_reconciliation import delivered_parcel, statement
-from tests.test_team import _member_session
 
 from app.core.clock import business_date, utc_now
 from app.core.context import RequestContext, set_context
@@ -27,6 +23,10 @@ from app.money.cashflow import MIN_DELAY_SAMPLES, CashflowService
 from app.payouts.service import PayoutService
 from app.reconciliation.service import ReconciliationService
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import dispatched_parcel, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_reconciliation import delivered_parcel, statement
+from tests.test_team import _member_session
 
 
 @pytest.fixture

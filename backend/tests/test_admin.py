@@ -20,8 +20,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.admin.models import (
     ADMIN_PERMISSIONS,
@@ -41,6 +39,8 @@ from app.common.provider_health import (
     ProviderKind,
 )
 from app.tenants.roles import Permission, TenantRole, has_permission, permissions_for
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 BOOTSTRAP_TOKEN = "INSECURE_DEV_admin_bootstrap_token_for_tests_only_0123456789"
 

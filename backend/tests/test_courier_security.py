@@ -19,9 +19,6 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.fixtures.steadfast import bodies
-from tests.test_auth_flow import auth_header, sign_in
 
 from app.common.audit import AuditLog
 from app.consignments.models import Consignment, ConsignmentStatus
@@ -40,6 +37,9 @@ from app.couriers.steadfast.transport import FakeSteadfastTransport
 from app.money.service import ReceivableService
 from app.tenants.models import TenantUser
 from app.tenants.roles import Permission, TenantRole, has_permission
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.fixtures.steadfast import bodies
+from tests.test_auth_flow import auth_header, sign_in
 
 API_KEY = "sfk-security-test-key-abcd"
 SECRET_KEY = "sfs-security-test-secret-wxyz"

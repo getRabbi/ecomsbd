@@ -16,13 +16,13 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.core.clock import business_date, utc_now
 from app.core.context import RequestContext, set_context
 from app.notifications.models import NotificationKind, Severity
 from app.notifications.service import NotificationService
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 @pytest.fixture

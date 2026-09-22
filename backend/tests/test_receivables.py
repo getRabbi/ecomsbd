@@ -15,7 +15,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import dispatched_parcel, signed_in_shop
 
 from app.consignments.models import ConsignmentStatus
 from app.consignments.service import DeliveryOutcome, ItemOutcome, ReturnReceiptLine
@@ -25,6 +24,7 @@ from app.core.errors import ConflictError, ValidationError
 from app.ledger.models import LedgerBucket, LedgerEventType
 from app.money.models import CodReceivable, ReceivableStatus, can_transition
 from app.products.models import Product, StockMovement, StockMovementReason
+from tests.conftest_commerce import dispatched_parcel, signed_in_shop
 
 
 @pytest.fixture

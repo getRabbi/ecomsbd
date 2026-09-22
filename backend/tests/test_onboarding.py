@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from httpx import AsyncClient
+
 from tests.test_auth_flow import auth_header, sign_in
 
 

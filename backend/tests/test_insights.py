@@ -23,12 +23,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header
-from tests.test_cashflow import _pay
-from tests.test_reconciliation import delivered_parcel
-from tests.test_rto import _Shop
-from tests.test_team import _member_session
 
 from app.analytics.insights import Window, compare, resolve_window
 from app.core.clock import business_date, utc_now
@@ -37,6 +31,12 @@ from app.core.errors import ValidationError
 from app.orders.models import Order
 from app.products.models import Product
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_cashflow import _pay
+from tests.test_reconciliation import delivered_parcel
+from tests.test_rto import _Shop
+from tests.test_team import _member_session
 
 BASE = "/v1/analytics/insights"
 

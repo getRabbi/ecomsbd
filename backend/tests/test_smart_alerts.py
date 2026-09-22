@@ -22,10 +22,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_product, dispatched_parcel, signed_in_shop
-from tests.test_auth_flow import auth_header
-from tests.test_rto import _Shop
-from tests.test_team import _member_session
 
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.consignments.service import DeliveryOutcome
@@ -45,6 +41,10 @@ from app.notifications.templates import render
 from app.notifications.transport import MockPushTransport, PushMessage, build_sms_transport
 from app.reconciliation.models import CaseKind, CaseStatus, ReconciliationCase
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import create_product, dispatched_parcel, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_rto import _Shop
+from tests.test_team import _member_session
 
 
 @pytest.fixture

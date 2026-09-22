@@ -25,16 +25,16 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header
-from tests.test_imports_sync import dry_run, upload
-from tests.test_team import _member_session
 
 from app.core.clock import utc_now
 from app.core.context import RequestContext, set_context
 from app.products.models import Product, StockMovement, StockMovementReason
 from app.products.service import StockAdjustment, StockService
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_imports_sync import dry_run, upload
+from tests.test_team import _member_session
 
 # --------------------------------------------------------------------------- #
 # helpers

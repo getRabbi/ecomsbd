@@ -107,7 +107,7 @@ ignore = [
 "app/couriers/pathao/contract.py" = ["S105"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app"]
+known-first-party = ["app", "tests"]
 
 [tool.mypy]
 python_version = "3.12"

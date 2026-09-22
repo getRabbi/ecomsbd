@@ -5,8 +5,6 @@ from datetime import timedelta
 
 import pytest
 import sqlalchemy as sa
-from tests.conftest_commerce import create_order, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.core.clock import utc_now
 from app.core.errors import ValidationError
@@ -14,6 +12,8 @@ from app.db.session import system_session
 from app.public_api import webhooks
 from app.public_api.models import ApiKey, WebhookDelivery, WebhookEndpoint
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import create_order, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 async def test_delivery_pins_dns_and_keeps_original_tls_name(monkeypatch):

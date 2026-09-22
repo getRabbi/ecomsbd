@@ -13,11 +13,11 @@ from typing import Any
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_product, grant_plan, signed_in_shop
-from tests.test_auth_flow import auth_header, sign_in
 
 from app.entitlements.catalog import Entitlement
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import create_product, grant_plan, signed_in_shop
+from tests.test_auth_flow import auth_header, sign_in
 
 
 async def _member_session(

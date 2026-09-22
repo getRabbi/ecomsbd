@@ -13,6 +13,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from tests.conftest_commerce import signed_in_shop
 from tests.test_auth_flow import auth_header
 

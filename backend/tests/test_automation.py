@@ -3,8 +3,6 @@ from datetime import timedelta
 
 import pytest
 import sqlalchemy as sa
-from tests.conftest_commerce import create_order, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.automation import jobs, service
 from app.automation.models import AutomationExecution, AutomationTask
@@ -16,6 +14,8 @@ from app.messaging.models import Message
 from app.notifications.models import Notification
 from app.notifications.service import localized
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import create_order, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 async def rule(client, headers, action="CREATE_TASK", config=None, **extra):

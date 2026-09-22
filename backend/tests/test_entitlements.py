@@ -19,8 +19,6 @@ import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest_commerce import create_order, create_product, grant_plan, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.billing.models import BillingProviderKind
 from app.core.errors import EntitlementRequiredError
@@ -40,6 +38,8 @@ from app.entitlements.usage import (
     increment_atomically,
     period_key_for,
 )
+from tests.conftest_commerce import create_order, create_product, grant_plan, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 def _subscription(**kwargs: object) -> Subscription:

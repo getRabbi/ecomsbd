@@ -3,13 +3,13 @@ from datetime import UTC, datetime
 
 import pytest
 import sqlalchemy as sa
-from tests.conftest_commerce import signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.analytics import network
 from app.analytics.network_models import NetworkBenchmark
 from app.db.session import system_session
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 @pytest.mark.parametrize(

@@ -20,7 +20,6 @@ import json
 import uuid
 
 import pytest
-from tests.fixtures.steadfast import bodies
 
 from app.common.money import Money
 from app.consignments.models import ConsignmentStatus
@@ -59,6 +58,7 @@ from app.couriers.steadfast.mapping import (
     map_delivery_status,
 )
 from app.couriers.steadfast.transport import FakeSteadfastTransport
+from tests.fixtures.steadfast import bodies
 
 CREDS = SteadfastCredentials(api_key="test-api-key-value", secret_key="test-secret-key-value")
 

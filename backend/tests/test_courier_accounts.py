@@ -17,9 +17,6 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
-from tests.conftest_commerce import signed_in_shop
-from tests.fixtures.steadfast import bodies
-from tests.test_auth_flow import auth_header, sign_in
 
 from app.core.security import CredentialVault
 from app.couriers.accounts import ConnectRequest, CourierAccountService
@@ -33,6 +30,9 @@ from app.couriers.registry import CourierAdapterRegistry
 from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
 from app.couriers.steadfast.transport import FakeSteadfastTransport
+from tests.conftest_commerce import signed_in_shop
+from tests.fixtures.steadfast import bodies
+from tests.test_auth_flow import auth_header, sign_in
 
 # Synthetic. Deliberately *not* shaped like a live key: a test constant that
 # looks production-shaped trains reviewers to wave the pattern through, and a

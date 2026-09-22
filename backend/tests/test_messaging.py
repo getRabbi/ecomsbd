@@ -3,8 +3,6 @@ from datetime import timedelta
 
 import pytest
 import sqlalchemy as sa
-from tests.conftest_commerce import create_order, signed_in_shop
-from tests.test_auth_flow import auth_header
 
 from app.core.clock import utc_now
 from app.db.session import system_session
@@ -12,6 +10,8 @@ from app.messaging import jobs, service
 from app.messaging.models import Message, MessageAttempt
 from app.notifications.transport import DeliveryOutcome, TransportResult
 from app.tenants.models import TenantUser
+from tests.conftest_commerce import create_order, signed_in_shop
+from tests.test_auth_flow import auth_header
 
 
 async def test_viewer_cannot_send_or_manage_channels(client, unique_phone, monkeypatch):

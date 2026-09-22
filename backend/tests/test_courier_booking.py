@@ -19,8 +19,6 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.fixtures.steadfast import bodies
 
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.consignments.service import ConsignmentService
@@ -44,6 +42,8 @@ from app.couriers.steadfast.transport import FakeSteadfastTransport
 from app.money.models import CodReceivable
 from app.money.service import ReceivableService
 from app.products.models import Product
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.fixtures.steadfast import bodies
 
 API_KEY = "sfk-booking-test-key-abcd"
 SECRET_KEY = "sfs-booking-test-secret-wxyz"

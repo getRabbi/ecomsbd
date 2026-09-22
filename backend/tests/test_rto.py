@@ -24,15 +24,15 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from tests.conftest_commerce import create_order, create_product, signed_in_shop
-from tests.test_auth_flow import auth_header
-from tests.test_team import _member_session
 
 from app.analytics import rto
 from app.analytics.rto import ObservationCode, OutcomeCounts, ParcelOutcome
 from app.consignments.models import ConsignmentStatus
 from app.core.clock import utc_now
 from app.tenants.roles import TenantRole
+from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_team import _member_session
 
 D, R = ParcelOutcome.DELIVERED, ParcelOutcome.RTO
 
