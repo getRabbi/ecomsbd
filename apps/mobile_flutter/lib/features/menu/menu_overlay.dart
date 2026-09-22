@@ -267,9 +267,12 @@ class MenuOverlay extends ConsumerWidget {
               const SizedBox(height: EcomsbdSpacing.lg),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final navigator = Navigator.of(context);
-                  await ref.read(authControllerProvider.notifier).signOut();
-                  navigator.pop();
+                  // Close the menu first. Signing out redirects to login and
+                  // replaces the route stack, so a later pop would remove the
+                  // login page and leave a blank screen.
+                  final auth = ref.read(authControllerProvider.notifier);
+                  Navigator.of(context).pop();
+                  await auth.signOut();
                 },
                 icon: const Icon(Icons.logout_rounded, size: 18),
                 label: Text(context.tr('common.signOut')),
