@@ -604,6 +604,13 @@ button:disabled {
   margin: 0 0 10px;
 }
 
+.authdivider {
+  margin: 12px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .row {
   display: flex;
   align-items: center;

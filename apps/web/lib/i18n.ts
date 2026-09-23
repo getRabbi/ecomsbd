@@ -60,13 +60,17 @@ export const strings = {
     'nav.shop': 'Shop',
 
     'auth.title': 'Sign in',
-    'auth.subtitle': 'Use the email and password for your ecomsbd account.',
+    'auth.subtitle': 'Use Google, or the email and password for your ecomsbd account.',
+    'auth.continueWithGoogle': 'Continue with Google',
+    'auth.or': 'or',
     'auth.email': 'Email',
     'auth.password': 'Password',
     'auth.signIn': 'Sign in',
     'auth.signingIn': 'Signing in…',
     'auth.signOut': 'Sign out',
     'auth.failed': 'That email and password did not match.',
+    'auth.googleIncomplete':
+      'Google sign-in did not finish. You can try again, or sign in with your email.',
     'auth.needed': 'Please sign in to continue.',
 
     'common.loading': 'Loading…',
@@ -678,13 +682,17 @@ export const strings = {
     'nav.shop': 'দোকান',
 
     'auth.title': 'সাইন ইন',
-    'auth.subtitle': 'আপনার ecomsbd অ্যাকাউন্টের ইমেইল ও পাসওয়ার্ড দিন।',
+    'auth.subtitle': 'Google দিয়ে, অথবা আপনার ecomsbd অ্যাকাউন্টের ইমেইল ও পাসওয়ার্ড দিয়ে সাইন ইন করুন।',
+    'auth.continueWithGoogle': 'Google দিয়ে চালিয়ে যান',
+    'auth.or': 'অথবা',
     'auth.email': 'ইমেইল',
     'auth.password': 'পাসওয়ার্ড',
     'auth.signIn': 'সাইন ইন',
     'auth.signingIn': 'সাইন ইন হচ্ছে…',
     'auth.signOut': 'সাইন আউট',
     'auth.failed': 'এই ইমেইল ও পাসওয়ার্ড মেলেনি।',
+    'auth.googleIncomplete':
+      'Google সাইন ইন শেষ হয়নি। আবার চেষ্টা করতে পারেন, বা ইমেইল দিয়ে সাইন ইন করুন।',
     'auth.needed': 'চালিয়ে যেতে সাইন ইন করুন।',
 
     'common.loading': 'লোড হচ্ছে…',
