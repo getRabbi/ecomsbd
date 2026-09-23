@@ -52,6 +52,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+# Courier capability manifests are read at runtime, so an installed copy of the
+# package needs them as much as the source tree does.
+[tool.setuptools.package-data]
+"app.couriers" = ["manifests/*.yaml"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

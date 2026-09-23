@@ -35,9 +35,11 @@ __all__ = [
 
 log = get_logger(__name__)
 
-#: Manifests live in the repository next to the redacted provider notes so a
-#: capability change and its evidence are reviewed together.
-MANIFEST_DIR = Path(__file__).resolve().parents[3] / "docs" / "provider_notes"
+#: Manifests ship inside the ``app`` package. The production image is built
+#: from the ``backend`` directory alone, and anything outside ``app`` is not in
+#: it: when they lived under the repository's ``docs/``, production had no
+#: manifests at all, and every courier read as unsupported.
+MANIFEST_DIR = Path(__file__).resolve().parent / "manifests"
 
 
 class Capability(StrEnum):
@@ -251,6 +253,10 @@ def load_all_manifests(*, directory: Path | None = None) -> dict[str, ProviderMa
     """Load every provider manifest in the directory, keyed by provider id."""
     base = directory or MANIFEST_DIR
     if not base.is_dir():
+        # Not a normal state. An empty answer here makes every courier
+        # unsupported everywhere, so it is logged loudly rather than passing
+        # for "this shop has no couriers".
+        log.error("courier manifest directory is missing", extra={"directory": str(base)})
         return {}
     manifests: dict[str, ProviderManifest] = {}
     for path in sorted(base.glob("*.yaml")):

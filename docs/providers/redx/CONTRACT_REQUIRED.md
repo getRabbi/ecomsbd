@@ -132,7 +132,7 @@ The work is bounded, and no shared or V1 code needs to change:
 4. Add a `redx` entry to `backend/app/couriers/credentials.py`; the mobile and
    web connect forms render from it with no client change.
 5. Promote only the capabilities the document describes in
-   `docs/provider_notes/redx.yaml`, each with its evidence.
+   `backend/app/couriers/manifests/redx.yaml`, each with its evidence.
 6. Turn on the `redx_enabled` feature flag per tenant.
 
 Every capability the document does **not** describe stays `unknown` and keeps

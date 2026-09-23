@@ -78,10 +78,10 @@ backend/                 FastAPI modular monolith — SQLAlchemy 2 async, Alembi
   app/notifications/     the alerts, the notification centre, the Friday summary
   app/analytics/         the figures behind Home and Insights
   app/couriers/          adapter Protocol + provider capability manifests
+                         (manifests/*.yaml, verified vs UNVERIFIED)
   app/api/               middleware, dependencies, error handlers, /v1 routers
   app/worker/            ARQ bootstrap + outbox dispatcher
 docs/ADR/                architecture decision records
-docs/provider_notes/     provider capability manifests (verified vs UNVERIFIED)
 docs/CODPILOT_*.md/html  the frozen master specification and UI prototype
 infra/docker/            backend image
 ```

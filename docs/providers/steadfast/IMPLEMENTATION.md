@@ -13,7 +13,7 @@ what it actually does.
 | **Sanitized copy** | [`API_Documentation_V1.sanitized.html`](API_Documentation_V1.sanitized.html) |
 | **Normalized reading** | [`CONTRACT.md`](CONTRACT.md) |
 | **Contract as code** | `backend/app/couriers/steadfast/contract.py` |
-| **Manifest** | `docs/provider_notes/steadfast.yaml` |
+| **Manifest** | `backend/app/couriers/manifests/steadfast.yaml` |
 | **Date read and transcribed** | 2026-09-11 |
 | **Base URL** | `https://portal.packzy.com/api/v1` |
 | **Auth model** | Static merchant headers `Api-Key`, `Secret-Key`, `Content-Type: application/json` on every request |
@@ -393,7 +393,7 @@ The tool never takes a credential on the command line, refuses to run with
 | Return request (real) | — | not yet run |
 
 When a check runs, update this table **and** the corresponding entry in
-`docs/provider_notes/steadfast.yaml`. A capability only moves from `unknown` to
+`backend/app/couriers/manifests/steadfast.yaml`. A capability only moves from `unknown` to
 `true` with a date and evidence.
 
 ---
