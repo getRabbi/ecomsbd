@@ -315,6 +315,9 @@ class SteadfastAdapter:
             message="Connected to Steadfast.",
             detected_capabilities=frozenset(SUPPORTED_CAPABILITIES),
             account_label=credentials.masked_identifier,
+            # The check *is* the balance read, so the figure is kept rather
+            # than fetched again for the settings screen.
+            reported_balance_paisa=int(result.value),
         )
 
     # -------------------------------------------------------------- booking --

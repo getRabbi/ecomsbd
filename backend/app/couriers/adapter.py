@@ -107,6 +107,9 @@ class ValidationResult:
     #: ``True`` for a deterministic rejection the provider actually answered
     #: with; never inferred from a transport failure.
     rejected: bool = False
+    #: The provider's own account balance, when the call that validated the
+    #: credentials read it anyway. Stored as the provider's figure only.
+    reported_balance_paisa: int | None = None
 
     @property
     def is_inconclusive(self) -> bool:

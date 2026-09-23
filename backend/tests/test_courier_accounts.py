@@ -299,6 +299,29 @@ async def test_reported_balance_is_kept_separate_from_cod(db, settings, shop) ->
     assert "cod" not in str(view).lower()
 
 
+async def test_a_successful_check_records_the_balance_it_read(db, settings, shop) -> None:
+    """Steadfast's credential check is ``GET /get_balance``; the figure is kept.
+
+    It used to be read and discarded, so a connected account never showed its
+    balance even though the capability is listed as supported.
+    """
+    transport = FakeSteadfastTransport().always(body=bodies.BALANCE_OK)
+    service = _service(db, transport, settings)
+    account, _ = await service.connect(_connect())
+
+    assert account.reported_balance_paisa == 123_456
+    assert account.reported_balance_at is not None
+
+    transport.always(body='{"status": 200, "current_balance": 20}')
+    await service.test_connection("steadfast")
+    assert account.reported_balance_paisa == 2_000
+
+    # A check that did not get through leaves the last known figure alone.
+    transport.always(status_code=500, body="{}")
+    await service.test_connection("steadfast")
+    assert account.reported_balance_paisa == 2_000
+
+
 # ------------------------------------------------------------------ API ---
 
 

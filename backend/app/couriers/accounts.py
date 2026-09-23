@@ -126,6 +126,8 @@ class ValidationOutcome:
     capabilities: frozenset[Capability] = frozenset()
     masked_identifier: str | None = None
     checked_at: datetime | None = None
+    #: The provider's balance as read during the check, if it was.
+    reported_balance_paisa: int | None = None
 
     @property
     def is_valid(self) -> bool:
@@ -420,6 +422,7 @@ class CourierAccountService:
                 capabilities=result.detected_capabilities,
                 masked_identifier=result.account_label,
                 checked_at=started,
+                reported_balance_paisa=result.reported_balance_paisa,
             )
 
         # The adapter states this explicitly rather than us inferring it from
@@ -738,6 +741,9 @@ class CourierAccountService:
             }
         if outcome.masked_identifier and not account.masked_identifier:
             account.masked_identifier = outcome.masked_identifier
+        if outcome.is_valid and outcome.reported_balance_paisa is not None:
+            account.reported_balance_paisa = outcome.reported_balance_paisa
+            account.reported_balance_at = outcome.checked_at or utc_now()
 
 
 def _mask(api_key: str) -> str:
