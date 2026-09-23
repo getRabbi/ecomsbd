@@ -272,6 +272,51 @@ void main() {
     });
   });
 
+  group('Freshness', () {
+    testWidgets('reopening the screen asks the server again', (tester) async {
+      // Before the fix it went live, production answered with no couriers.
+      // That first answer must not outlive the screen that asked for it.
+      final server = _Server(
+        providers: <Map<String, dynamic>>[],
+        accounts: <Map<String, dynamic>>[],
+      );
+      await pumpCommerceScreen(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const CourierAccountsScreen(),
+              ),
+            ),
+            child: const Text('open couriers'),
+          ),
+        ),
+        harness: server.harness,
+        size: _tall,
+      );
+
+      await _open(tester, 'open couriers');
+      expect(find.text('Steadfast'), findsNothing);
+
+      await tester.pageBack();
+      await settle(tester, frames: 20, step: const Duration(milliseconds: 60));
+
+      // The courier comes back on the server: a deploy, or a flag switched on.
+      server.harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
+        _steadfast(),
+      ]);
+      await _open(tester, 'open couriers');
+
+      expect(find.text('Steadfast'), findsOneWidget);
+      expect(find.text('Connect'), findsOneWidget);
+      expect(
+        server.harness.adapter.to('GET', '/couriers/providers'),
+        hasLength(2),
+      );
+    });
+  });
+
   group('Managing Steadfast', () {
     testWidgets('shows the key masked and the secret only as configured', (
       tester,

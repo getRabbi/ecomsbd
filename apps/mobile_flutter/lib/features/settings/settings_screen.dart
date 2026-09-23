@@ -172,7 +172,10 @@ class SettingsScreen extends ConsumerWidget {
                           CourierAccountStatus.needsReconnect => context.tr(
                             'settings.steadfastReconnect',
                           ),
-                          _ => context.tr('settings.connectSteadfast'),
+                          // Not "connect Steadfast": the courier may be
+                          // switched off for this shop, and the screen this
+                          // opens is where each courier's real state is shown.
+                          _ => context.tr('settings.courierDefault'),
                         },
                         orElse: () => context.tr('settings.courierDefault'),
                       ),
