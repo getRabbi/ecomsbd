@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/money.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
@@ -65,6 +66,11 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
   _Stage _stage = _Stage.review;
   int _deliveryType = 0;
 
+  /// The delivery area picked from the courier's own list, for a courier
+  /// that requires one on every booking. Cleared when the courier changes:
+  /// one courier's area ids mean nothing to another.
+  DeliveryArea? _area;
+
   /// The courier this booking goes to. Chosen from the couriers the server
   /// says are bookable, never defaulted to a hard-coded provider name.
   String? _provider;
@@ -90,6 +96,9 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
       // server just told us is unavailable.
       return;
     }
+    if (courier.requiresDeliveryArea && _area == null) {
+      return;
+    }
     setState(() {
       _stage = _Stage.submitting;
       _error = null;
@@ -106,6 +115,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
             // 0/1 to a courier with different codes would book the wrong
             // service class.
             deliveryType: courier.supportsDeliveryType ? _deliveryType : null,
+            deliveryArea: courier.requiresDeliveryArea ? _area : null,
           );
       final item = report.items.isEmpty ? null : report.items.first;
       _invalidateAfterBooking();
@@ -188,7 +198,9 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
           EcomsbdSpacing.xl,
         ),
         child: switch (_stage) {
-          _Stage.review => _buildReview(),
+          // Scrollable: with several couriers, a delivery area and its quote,
+          // the form can be taller than a small phone.
+          _Stage.review => SingleChildScrollView(child: _buildReview()),
           _Stage.submitting => _buildSubmitting(),
           _Stage.done => _buildDone(),
         },
@@ -244,8 +256,24 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
         const SizedBox(height: EcomsbdSpacing.md),
         _CourierPicker(
           selected: selected?.provider,
-          onChanged: (provider) => setState(() => _provider = provider),
+          onChanged: (provider) => setState(() {
+            if (provider != selected?.provider) {
+              _area = null;
+            }
+            _provider = provider;
+          }),
         ),
+        // Shown only for a courier that declares it, like the delivery type
+        // below: this sheet never checks which courier needs an area.
+        if (selected != null && selected.requiresDeliveryArea) ...<Widget>[
+          const SizedBox(height: EcomsbdSpacing.md),
+          _DeliveryAreaField(
+            orderId: order.id,
+            courier: selected,
+            area: _area,
+            onChanged: (area) => setState(() => _area = area),
+          ),
+        ],
         // Shown only for a courier that declares it, so this generic sheet
         // never has to know which couriers have which service classes.
         if (selected?.supportsDeliveryType ?? false) ...<Widget>[
@@ -301,8 +329,13 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
               flex: 2,
               child: FilledButton(
                 // No bookable courier means no booking. Manual courier mode
-                // is how a parcel still ships in that state.
-                onPressed: (selected?.bookable ?? false) ? _confirm : null,
+                // is how a parcel still ships in that state. A courier that
+                // needs a delivery area waits until one is chosen.
+                onPressed:
+                    (selected?.bookable ?? false) &&
+                        (!selected!.requiresDeliveryArea || _area != null)
+                    ? _confirm
+                    : null,
                 style: _primaryButton,
                 child: Text(context.tr('book.confirm')),
               ),
@@ -694,6 +727,257 @@ class _CourierOption extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The delivery area for a courier that needs one picked from its own list,
+/// and — once one is picked — what the courier says the parcel will cost.
+///
+/// The area is never guessed from the address: a wrong area id is a parcel
+/// routed to the wrong hub, not an error the courier would catch.
+class _DeliveryAreaField extends ConsumerWidget {
+  const _DeliveryAreaField({
+    required this.orderId,
+    required this.courier,
+    required this.area,
+    required this.onChanged,
+  });
+
+  final String orderId;
+  final BookableCourier courier;
+  final DeliveryArea? area;
+  final ValueChanged<DeliveryArea> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final chosen = await _AreaPickerSheet.show(
+      context,
+      provider: courier.provider,
+    );
+    if (chosen != null) {
+      onChanged(chosen);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = <String, Object?>{'provider': courier.displayName};
+    final muted = EcomsbdType.caption.copyWith(color: EcomsbdColors.muted);
+    final chosen = area;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(context.tr('book.deliveryArea'), style: EcomsbdType.label),
+        const SizedBox(height: EcomsbdSpacing.xs),
+        if (chosen == null) ...<Widget>[
+          Text(context.tr('book.areaNeeded', name), style: muted),
+          const SizedBox(height: EcomsbdSpacing.xs),
+          OutlinedButton.icon(
+            onPressed: () => _pick(context),
+            icon: const Icon(Icons.place_outlined, size: 16),
+            label: Text(context.tr('book.chooseArea')),
+          ),
+        ] else ...<Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  chosen.postCode == null
+                      ? chosen.name
+                      : '${chosen.name} · ${chosen.postCode}',
+                  style: EcomsbdType.bodyStrong,
+                ),
+              ),
+              TextButton(
+                onPressed: () => _pick(context),
+                child: Text(context.tr('book.changeArea')),
+              ),
+            ],
+          ),
+          _QuoteLine(orderId: orderId, courier: courier, areaId: chosen.id),
+        ],
+      ],
+    );
+  }
+}
+
+/// The courier's own quote for this parcel. A quote, never a cost: nothing is
+/// recorded from it, and a failed quote never blocks the booking.
+class _QuoteLine extends ConsumerWidget {
+  const _QuoteLine({
+    required this.orderId,
+    required this.courier,
+    required this.areaId,
+  });
+
+  final String orderId;
+  final BookableCourier courier;
+  final String areaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quote = ref.watch(
+      courierQuoteProvider((orderId, courier.provider, areaId)),
+    );
+    final muted = EcomsbdType.caption.copyWith(color: EcomsbdColors.muted);
+
+    return quote.when(
+      loading: () => Text(context.tr('book.checkingCharge'), style: muted),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (value) {
+        if (!value.available || value.deliveryFeePaisa == null) {
+          final reason = value.reason;
+          return reason == null
+              ? const SizedBox.shrink()
+              : Text(reason, style: muted);
+        }
+        return _ReviewRow(
+          label: context.tr('book.courierCharge', <String, Object?>{
+            'provider': courier.displayName,
+          }),
+          value: context.tr('book.chargeValue', <String, Object?>{
+            'delivery': Money(value.deliveryFeePaisa!).format(),
+            'cod': Money(value.codFeePaisa ?? 0).format(),
+          }),
+        );
+      },
+    );
+  }
+}
+
+/// Search and pick one area from the courier's own list.
+class _AreaPickerSheet extends ConsumerStatefulWidget {
+  const _AreaPickerSheet({required this.provider});
+
+  final String provider;
+
+  static Future<DeliveryArea?> show(
+    BuildContext context, {
+    required String provider,
+  }) {
+    return showModalBottomSheet<DeliveryArea>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AreaPickerSheet(provider: provider),
+    );
+  }
+
+  @override
+  ConsumerState<_AreaPickerSheet> createState() => _AreaPickerSheetState();
+}
+
+class _AreaPickerSheetState extends ConsumerState<_AreaPickerSheet> {
+  final TextEditingController _query = TextEditingController();
+
+  /// Rows drawn at once. The whole list is searched; only this many matches
+  /// are rendered, so a long national list stays cheap to scroll.
+  static const int _shown = 80;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final areas = ref.watch(deliveryAreasProvider(widget.provider));
+    final insets = MediaQuery.viewInsetsOf(context).bottom;
+    final height = MediaQuery.sizeOf(context).height * 0.75;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: insets),
+      child: Container(
+        height: height,
+        decoration: const BoxDecoration(
+          color: EcomsbdColors.backgroundLight,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(EcomsbdRadii.lg),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          EcomsbdSpacing.lg,
+          EcomsbdSpacing.md,
+          EcomsbdSpacing.lg,
+          EcomsbdSpacing.md,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const _SheetGrip(),
+            const SizedBox(height: EcomsbdSpacing.md),
+            Text(
+              context.tr('book.chooseArea'),
+              style: EcomsbdType.sectionTitle,
+            ),
+            const SizedBox(height: EcomsbdSpacing.sm),
+            LabelledField(
+              label: context.tr('book.deliveryArea'),
+              controller: _query,
+              hint: context.tr('book.searchArea'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: EcomsbdSpacing.sm),
+            Expanded(
+              child: areas.when(
+                loading: () => SkeletonLoader.card(height: 120),
+                error: (error, _) => error is ApiError
+                    ? ErrorStateCard(
+                        error: error,
+                        onRetry: () => ref.invalidate(
+                          deliveryAreasProvider(widget.provider),
+                        ),
+                      )
+                    : EmptyState(
+                        icon: Icons.error_outline,
+                        title: context.tr('common.couldNotLoad'),
+                        message: '$error',
+                      ),
+                data: (rows) {
+                  final matches = <DeliveryArea>[
+                    for (final area in rows)
+                      if (area.matches(_query.text)) area,
+                  ];
+                  if (matches.isEmpty) {
+                    return EmptyState(
+                      icon: Icons.place_outlined,
+                      title: context.tr('book.noAreas'),
+                      message: '',
+                    );
+                  }
+                  final shown = matches.take(_shown).toList();
+                  return Material(
+                    type: MaterialType.transparency,
+                    child: ListView.builder(
+                      itemCount: shown.length,
+                      itemBuilder: (context, index) {
+                        final area = shown[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: Text(area.name, style: EcomsbdType.body),
+                          subtitle: Text(
+                            <String>[
+                              if (area.postCode != null) area.postCode!,
+                              if (area.divisionName != null) area.divisionName!,
+                            ].join(' · '),
+                            style: EcomsbdType.caption.copyWith(
+                              color: EcomsbdColors.muted,
+                            ),
+                          ),
+                          onTap: () => Navigator.of(context).pop(area),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

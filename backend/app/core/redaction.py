@@ -63,6 +63,13 @@ _PHONE_KEY_PARTS: tuple[str, ...] = ("phone", "msisdn", "mobile", "recipient_num
 _BD_PHONE_RE = re.compile(r"(?:\+?880|0)1[3-9]\d{8}")
 _BEARER_RE = re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._\-=/+]{8,}")
 _LONG_SECRET_RE = re.compile(r"\b(?:sk|pk|key|tok)_[A-Za-z0-9]{12,}\b")
+#: A credential carried as a URL query parameter. RedX authenticates its
+#: callbacks with ``?token=…`` in the callback URL, and the server's access log
+#: writes every request line with its query string. The value is removed and
+#: the name kept, so a reader still sees that one was present.
+_QUERY_SECRET_RE = re.compile(
+    r"(?i)([?&](?:token|access_token|secret|signature|api_key|apikey|key)=)[^&\s\"'#]+"
+)
 
 
 def is_sensitive_key(key: str) -> bool:
@@ -111,6 +118,7 @@ def redact_text(value: str) -> str:
     """Scrub secrets and phone numbers that appear inside free text."""
     scrubbed = _BEARER_RE.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
     scrubbed = _LONG_SECRET_RE.sub(REDACTED, scrubbed)
+    scrubbed = _QUERY_SECRET_RE.sub(lambda m: f"{m.group(1)}{REDACTED}", scrubbed)
     return _BD_PHONE_RE.sub(lambda m: mask_phone(m.group(0)) or REDACTED, scrubbed)
 
 

@@ -157,6 +157,14 @@ class BookingRequest:
     note: str | None = None
     store_reference: str | None = None
     recipient_alternate_phone_e164: str | None = None
+    #: A delivery area the seller picked from the provider's own area list,
+    #: for providers whose create requires one (RedX). Both halves travel
+    #: together: RedX takes the area's name *and* its id on every create.
+    delivery_area_id: str | None = None
+    delivery_area_name: str | None = None
+    #: The value of the goods, for providers that ask for a declared value
+    #: (RedX's ``value``, used for compensation). ``None`` when not known.
+    declared_value: Money | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -60,8 +60,11 @@ from app.couriers.adapter import (
     BookingRequest,
     BookingResult,
     CourierAdapter,
+    Quote,
+    Unavailable,
 )
 from app.couriers.capabilities import Capability
+from app.couriers.http import ProviderError, to_app_error
 from app.couriers.metrics import CourierMetric, record_metric
 from app.couriers.models import (
     BookingAttemptState,
@@ -228,6 +231,8 @@ class CourierBookingService:
         note: str | None = None,
         item_description: str | None = None,
         delivery_type: int | None = None,
+        delivery_area_id: str | None = None,
+        delivery_area_name: str | None = None,
     ) -> BookingReport:
         """Book one order with a courier.
 
@@ -235,6 +240,11 @@ class CourierBookingService:
         failed booking and an ambiguous one are both results the seller needs
         to see, and an exception would collapse them into "something went
         wrong".
+
+        ``delivery_area_id``/``delivery_area_name`` carry an area the seller
+        picked from the courier's own list, for a courier that requires one on
+        every create. Generic here: whether one is needed is the adapter's
+        call, made in ``describe_booking``.
         """
         account, adapter = await self._require_account(provider)
 
@@ -246,6 +256,8 @@ class CourierBookingService:
             note=note,
             item_description=item_description,
             delivery_type=delivery_type,
+            delivery_area_id=delivery_area_id,
+            delivery_area_name=delivery_area_name,
         )
 
         # The attempt — and the invoice on it — is durable from here on. See
@@ -393,6 +405,42 @@ class CourierBookingService:
 
         return report
 
+    # -------------------------------------------------------------- quote --
+
+    async def quote(
+        self,
+        order_id: uuid.UUID,
+        *,
+        provider: str,
+        delivery_area_id: str | None = None,
+    ) -> Quote | Unavailable:
+        """What the courier says booking this order would cost.
+
+        A read. Nothing is reserved, persisted or sent to be created: the order
+        is turned into the same normalized request a booking would build, and
+        the adapter asks its provider's quote endpoint — or answers
+        ``Unavailable`` with the reason, for a courier that has none.
+        """
+        account, adapter = await self._require_account(provider)
+        order = (
+            await self._db.execute(sa.select(Order).where(Order.id == order_id))
+        ).scalar_one_or_none()
+        if order is None:
+            raise NotFoundError("Order not found")
+        request = await self._booking_request(
+            order,
+            note=None,
+            item_description=None,
+            account=account,
+            delivery_area_id=delivery_area_id,
+        )
+        try:
+            return await adapter.quote(self._accounts.credentials_for(account), request)
+        except ProviderError as exc:
+            raise to_app_error(exc) from exc
+        except ValueError as exc:
+            raise ValidationError(str(exc), details={"provider": provider}) from exc
+
     # ------------------------------------------------------------ prepare --
 
     async def _prepare(
@@ -407,6 +455,8 @@ class CourierBookingService:
         delivery_type: int | None,
         is_bulk: bool = False,
         batch_id: uuid.UUID | None = None,
+        delivery_area_id: str | None = None,
+        delivery_area_name: str | None = None,
     ) -> _Prepared:
         """Reserve a consignment and a booking attempt for one order.
 
@@ -467,11 +517,32 @@ class CourierBookingService:
             note=note,
             item_description=item_description,
             account=account,
+            delivery_area_id=delivery_area_id,
+            delivery_area_name=delivery_area_name,
         )
 
         if consignment is None:
             sequence = await self._next_consignment_sequence(order_id, provider)
             reference = merchant_reference_for(order.order_number, sequence)
+        else:
+            reference = consignment.merchant_reference
+
+        request = _with_reference(request, reference)
+        # The adapter describes its own payload and validates it locally, so
+        # this method never has to know which provider it is preparing for.
+        # It raises ValueError when the provider would refuse the booking
+        # itself. That is checked *before* the consignment row is created or
+        # reset, so a refused booking leaves nothing behind — in particular no
+        # BOOKING row that a bulk run would otherwise commit and strand.
+        try:
+            preview = adapter.describe_booking(request, reference)
+        except ValueError as exc:
+            raise ValidationError(
+                str(exc),
+                details={"order_id": str(order_id), "provider": provider},
+            ) from exc
+
+        if consignment is None:
             consignment = Consignment(
                 order_id=order_id,
                 provider=provider,
@@ -488,13 +559,6 @@ class CourierBookingService:
             consignment.status = str(ConsignmentStatus.BOOKING)
             consignment.provider = provider
             consignment.courier_account_id = account.id
-
-        request = _with_reference(request, consignment.merchant_reference)
-        # The adapter describes its own payload and validates it locally, so
-        # this method never has to know which provider it is preparing for.
-        # It raises ValueError when the provider would refuse the booking
-        # itself — before an attempt row exists and before anything is sent.
-        preview = adapter.describe_booking(request, consignment.merchant_reference)
 
         consignment.booking_attempt_count += 1
         attempt = CourierBookingAttempt(
@@ -812,6 +876,8 @@ class CourierBookingService:
         note: str | None,
         item_description: str | None,
         account: CourierAccount | None = None,
+        delivery_area_id: str | None = None,
+        delivery_area_name: str | None = None,
     ) -> BookingRequest:
         """Build the normalized booking input from the order.
 
@@ -847,6 +913,10 @@ class CourierBookingService:
             )
         )
         quantity = int(items.scalar_one() or 0)
+        # What the goods are worth, for a courier that asks for a declared
+        # value. `None` when the order records none, and the adapter decides
+        # its own fallback.
+        goods_value = max(order.subtotal_paisa - order.discount_paisa, 0)
 
         return BookingRequest(
             order_id=order.id,
@@ -862,6 +932,9 @@ class CourierBookingService:
             item_quantity=max(1, quantity),
             note=note or order.note,
             store_reference=_store_reference_of(account),
+            delivery_area_id=(delivery_area_id or "").strip() or None,
+            delivery_area_name=(delivery_area_name or "").strip() or None,
+            declared_value=Money(goods_value) if goods_value > 0 else None,
         )
 
     def _recipient_phone(self, customer: Customer | None) -> str | None:

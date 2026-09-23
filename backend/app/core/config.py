@@ -428,6 +428,11 @@ class Settings(BaseSettings):
     #: without one is treated as not configured.
     pathao_webhook_enabled: bool = True
 
+    # RedX. Both hosts are the ones RedX's developer page lists; each has its
+    # own merchant token, and sandbox is chosen per courier account.
+    redx_base_url: str = "https://openapi.redx.com.bd/v1.0.0-beta"
+    redx_sandbox_base_url: str = "https://sandbox.redx.com.bd/v1.0.0-beta"
+
     # Adaptive status polling, in minutes. A fresh parcel changes state within
     # hours; a two-week-old one will not change in the next ten minutes.
     courier_poll_interval_fresh_minutes: int = 20

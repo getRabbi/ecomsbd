@@ -1,115 +1,322 @@
-"""The RedX contract — deliberately empty, and the record of why.
+"""The RedX Open API contract, as data.
 
-This module contains **no endpoint, no field name, no status string and no
-header**. That is not an oversight or a stub awaiting a spare afternoon; it is
-the only honest state until RedX documentation is supplied, and this file exists
-so that fact is reviewable rather than implicit in an absence.
+Every host, path, header, field name, status string and delivery type in this
+module is transcribed from **RedX's own developer documentation** —
+``https://redx.com.bd/developer-api/``, the "Open API" and "Webhook" sections
+of the RedX merchant site. The page renders in the browser from a script RedX
+serves, so it was read from that script: the endpoint table, the status table
+and the delivery-type table are data in it, not prose. The normalized reading
+is committed at ``docs/providers/redx/CONTRACT.md``.
 
-What was checked, on 2026-09-18:
+None of it comes from a community package, a blog post or memory. The earlier
+version of this module recorded that no RedX documentation could be found; the
+developer page is where RedX publishes it, and it is the only source used here.
 
-*   ``openapi.redx.com.bd`` is live and answers JSON, so the host is real. It
-    serves ``404 {"message": "Please check your specified endpoint and request
-    method"}`` for ``/``, ``/docs``, ``/api-docs``, ``/swagger.json``,
-    ``/openapi.json``, ``/redoc`` and ``/.well-known/openapi.json``. No
-    machine-readable spec is published.
-*   ``redx.com.bd/api-documentation`` answers ``301`` to ``/404/``. There is no
-    public documentation page.
-*   The RedX Shopify app is published by ShopUp — RedX's parent — but an app
-    store listing carries no contract.
-*   Everything else discoverable is third party: Laravel packages, a
-    community WooCommerce plugin, a nopCommerce plugin, blog posts.
+Two things the documentation says that shape the whole integration:
 
-Several of those third-party integrations agree with each other on a base URL,
-an ``API-ACCESS-TOKEN`` header and a handful of paths. **Agreement between
-community implementations is not documentation.** Two reasons this repository
-refuses to promote it:
+*   **A parcel is created against a structured delivery area.** ``delivery_area``
+    (a name) and ``delivery_area_id`` (an integer) are both *required* on
+    create. RedX publishes the area list, and nowhere says a free-text address
+    is resolved for you. So a RedX booking carries an area the seller picked
+    from RedX's own list; ecomsbd never guesses one from an address, because a
+    wrong area id is a parcel routed to the wrong hub, not an error.
 
-1.  It is the exact category :mod:`app.couriers.steadfast.contract` and
-    :mod:`app.couriers.pathao.contract` both name and exclude. Pathao was
-    implemented from Pathao's *own* published source, and the difference was
-    not academic — the community contract for Pathao's own login endpoint is
-    wrong. Applying a weaker standard to RedX would void the guarantee the
-    capability manifest exists to make.
-2.  The failure is asymmetric and expensive. A wrong field name on a read
-    fails harmlessly. A wrong field name on a create either fails, or ships a
-    real parcel to the wrong place and bills the seller for it. RedX pairs a
-    delivery-area name with an area id, which is precisely the shape that
-    misroutes silently rather than erroring.
+*   **The credential is one bearer token per environment.** The merchant
+    generates it on the developer page ("Request token"), separately for the
+    sandbox and production hosts, and sends it as
+    ``API-ACCESS-TOKEN: Bearer <token>`` on every call. There is no login call
+    and no refresh contract.
 
-So RedX is *registered and known*, reports every capability as unavailable with
-a reason a seller can act on, and cannot have credentials stored against it.
-Manual courier mode covers RedX completely in the meantime, exactly as it does
-for any provider outage.
-
-``docs/providers/redx/CONTRACT_REQUIRED.md`` is the request to send RedX. When
-the answer arrives, this module becomes a transcription of it and the adapter
-fills in behind the interface it already implements.
+What the documentation deliberately does **not** say, and is therefore not
+assumed anywhere (see :data:`UNDOCUMENTED`): rate limits, the error body,
+pagination, the token's lifetime, and what happens when the same
+``merchant_invoice_id`` is sent twice — the idempotency answer.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
+from types import MappingProxyType
 from typing import Final
 
 __all__ = [
-    "CONTRACT_BLOCKER",
-    "CONTRACT_REQUEST_DOC",
-    "DOCUMENTATION_CHECKED_ON",
+    "CANCEL_ENTITY_TYPE",
+    "CANCEL_PROPERTY",
+    "CANCEL_VALUE",
+    "CONTRACT_VERIFIED_ON",
+    "CREATE_PARCEL_REQUIRED",
+    "DOCUMENTATION_SOURCE",
+    "DOCUMENTATION_VERSION",
+    "ENDPOINT_METHODS",
+    "HEADER_AUTH",
+    "LIVE_BASE_URL",
     "PROVIDER",
-    "REQUIRED_CONTRACT_ITEMS",
-    "UNAVAILABLE_REASON_BN",
-    "UNAVAILABLE_REASON_EN",
+    "SAFE_TO_RETRY",
+    "SANDBOX_BASE_URL",
+    "UNDOCUMENTED",
+    "WEBHOOK_PAYLOAD_FIELDS",
+    "WEBHOOK_TOKEN_PARAM",
+    "DeliveryType",
+    "Endpoint",
+    "RedxStatus",
+    "bearer",
+    "is_documented_status",
 ]
 
 PROVIDER: Final = "redx"
 
-#: The operator-facing identifier. Appears verbatim in the provider manifest,
-#: in docs/RELEASE_READINESS.md and in the admin console, so all three read the
-#: same string.
-CONTRACT_BLOCKER: Final = "REDX_API_DOCUMENTATION_REQUIRED"
+#: The two environments the developer page lists, each with its own token.
+#: The page gives ``openapi.redx.com.bd/v1.0.0-beta`` and
+#: ``sandbox.redx.com.bd/v1.0.0-beta``; every example request is HTTPS.
+LIVE_BASE_URL: Final = "https://openapi.redx.com.bd/v1.0.0-beta"
+SANDBOX_BASE_URL: Final = "https://sandbox.redx.com.bd/v1.0.0-beta"
 
-#: When the search above was performed. Re-check before assuming it still holds.
-DOCUMENTATION_CHECKED_ON: Final = "2026-09-18"
+DOCUMENTATION_SOURCE: Final = (
+    "RedX developer documentation, https://redx.com.bd/developer-api/ "
+    "(Open API: Configuration, Track Parcel, Get Parcel Details, Create Parcel, "
+    "Update Parcel, Get Areas, Get Pickup Stores, Pickup Store Details, "
+    "Calculate Parcel Charge; Webhook: Callback URL Structure, Sample Request "
+    "Format, Status Updates and Meanings, Delivery Type Reference Table). "
+    "Normalized reading committed at docs/providers/redx/CONTRACT.md."
+)
+DOCUMENTATION_VERSION: Final = "Open API v1.0.0-beta (redx.com.bd/developer-api)"
+CONTRACT_VERIFIED_ON: Final = "2026-09-23"
 
-CONTRACT_REQUEST_DOC: Final = "docs/providers/redx/CONTRACT_REQUIRED.md"
+# ------------------------------------------------------------------- headers --
 
-#: Exactly what has to be supplied before any RedX call may be written. Each
-#: entry is a question the documentation must answer, not a feature request.
-#: The admin console renders this list, so an operator chasing RedX knows what
-#: to ask for in one message rather than three rounds of email.
-REQUIRED_CONTRACT_ITEMS: Final[tuple[str, ...]] = (
-    "Base URL(s), and whether a sandbox host exists.",
-    "Authentication: header or parameter name, credential format, and whether "
-    "the credential expires or is refreshed.",
-    "Create parcel: path, method, every request field with which are required, "
-    "and the success response shape including the parcel/tracking identifier.",
-    "Whether a merchant-supplied reference is accepted on create, and what "
-    "happens when the same one is sent twice — the idempotency answer.",
-    "Status lookup: path, method, and the complete list of status strings with "
-    "what each one means for the parcel and for money.",
-    "Delivery-area handling: whether a free-text address is accepted, or an "
-    "area id is required, and where the area list comes from.",
-    "Pickup stores: whether one must be selected, and how to list them.",
-    "Cancel and return: whether either is supported, and the exact contract.",
-    "Delivery charge and COD: which figures the API reports, and whether a "
-    "create response carries a fee.",
-    "Webhook: whether callbacks exist, the signature scheme, the payload "
-    "shape, and the event list.",
-    "Payments/settlement: whether payouts can be read, and the response shape.",
-    "Rate limits, pagination, and the error response body.",
+#: The one authentication header. Its value is ``Bearer <token>`` exactly as
+#: every example on the developer page writes it.
+HEADER_AUTH: Final = "API-ACCESS-TOKEN"
+
+
+def bearer(token: str) -> str:
+    """The ``API-ACCESS-TOKEN`` header value for a merchant token."""
+    return f"Bearer {token}"
+
+
+class Endpoint(StrEnum):
+    """Documented paths, relative to the environment base URL.
+
+    ``{reference}`` is the single path parameter where an endpoint has one.
+    """
+
+    TRACK_PARCEL = "/parcel/track/{reference}"
+    PARCEL_INFO = "/parcel/info/{reference}"
+    CREATE_PARCEL = "/parcel"
+    UPDATE_PARCEL = "/parcels"
+    AREAS = "/areas"
+    PICKUP_STORES = "/pickup/stores"
+    PICKUP_STORE_INFO = "/pickup/store/info/{reference}"
+    CHARGE_CALCULATOR = "/charge/charge_calculator"
+
+    def with_reference(self, reference: str) -> str:
+        return str(self).replace("{reference}", reference)
+
+
+ENDPOINT_METHODS: Final[MappingProxyType[Endpoint, str]] = MappingProxyType(
+    {
+        Endpoint.TRACK_PARCEL: "GET",
+        Endpoint.PARCEL_INFO: "GET",
+        Endpoint.CREATE_PARCEL: "POST",
+        Endpoint.UPDATE_PARCEL: "PATCH",
+        Endpoint.AREAS: "GET",
+        Endpoint.PICKUP_STORES: "GET",
+        Endpoint.PICKUP_STORE_INFO: "GET",
+        Endpoint.CHARGE_CALCULATOR: "GET",
+    }
 )
 
-#: Shown to a seller. Says what to do instead, not which section is missing.
-UNAVAILABLE_REASON_EN: Final = (
-    "RedX has not published its API documentation, and ecomsbd will not call a "
-    "courier using guessed field names — a wrong guess can ship a real parcel "
-    "to the wrong place. Record RedX parcels by hand and upload the RedX "
-    "statement; everything else works exactly as it does for a connected "
-    "courier."
+#: Reads. Only these may be retried, and only a read is ever retried. The
+#: parcel update (cancel) is a write and is sent exactly once.
+SAFE_TO_RETRY: Final[frozenset[Endpoint]] = frozenset(
+    {
+        Endpoint.TRACK_PARCEL,
+        Endpoint.PARCEL_INFO,
+        Endpoint.AREAS,
+        Endpoint.PICKUP_STORES,
+        Endpoint.PICKUP_STORE_INFO,
+        Endpoint.CHARGE_CALCULATOR,
+    }
 )
 
-UNAVAILABLE_REASON_BN: Final = (
-    "RedX তাদের API ডকুমেন্টেশন প্রকাশ করেনি, আর অনুমান করা ফিল্ড দিয়ে ecomsbd "
-    "কোনো কুরিয়ারে অনুরোধ পাঠায় না — একটি ভুল অনুমানে আসল পার্সেল ভুল জায়গায় "
-    "চলে যেতে পারে। RedX পার্সেল নিজে লিখে রাখুন আর RedX স্টেটমেন্ট আপলোড করুন; "
-    "বাকি সব যুক্ত কুরিয়ারের মতোই কাজ করবে।"
+#: ``POST /pickup/store`` is documented too. ecomsbd never calls it: creating a
+#: pickup location at RedX is the seller's decision to make in RedX's own
+#: panel, not a side effect of connecting an account.
+
+# ------------------------------------------------------------- create parcel --
+
+#: The fields the documentation marks ``Required: Yes`` on create.
+CREATE_PARCEL_REQUIRED: Final[tuple[str, ...]] = (
+    "customer_name",
+    "customer_phone",
+    "delivery_area",
+    "delivery_area_id",
+    "customer_address",
+    "cash_collection_amount",
+    "parcel_weight",
+    "value",
+)
+
+#: Optional create fields ecomsbd sends when it has a value for them.
+#: ``type``, ``parcel_details_json`` and the ``is_closed_box`` that appears only
+#: in the example request are never sent: ``type`` is for reverse shipments,
+#: and the other two are shaped inconsistently between the field table and the
+#: example (an object in one, an array in the other; absent from the table in
+#: the second case), so there is no single documented shape to send.
+CREATE_PARCEL_OPTIONAL_SENT: Final[tuple[str, ...]] = (
+    "merchant_invoice_id",
+    "instruction",
+    "pickup_store_id",
+)
+
+#: ecomsbd's own ceilings, applied so an over-long value is trimmed at our
+#: boundary rather than refused by RedX after a parcel might exist. RedX
+#: publishes no length limits; these are conservative policy, not its claim.
+FIELD_LIMITS: Final[MappingProxyType[str, int]] = MappingProxyType(
+    {
+        "customer_name": 100,
+        "customer_address": 250,
+        "instruction": 250,
+        "merchant_invoice_id": 64,
+        "delivery_area": 120,
+    }
+)
+
+#: ecomsbd's merchant reference shape — the same conservative one Steadfast and
+#: Pathao use, so one order's reference is valid at every provider. RedX
+#: publishes no format rule for ``merchant_invoice_id``.
+MERCHANT_INVOICE_PATTERN: Final = r"^[A-Za-z0-9_-]+$"
+
+# -------------------------------------------------------------------- cancel --
+
+#: ``PATCH /parcels`` changes one property of one parcel. The documentation's
+#: only example is a cancellation, and that is the only use ecomsbd makes of it.
+CANCEL_ENTITY_TYPE: Final = "parcel-tracking-id"
+CANCEL_PROPERTY: Final = "status"
+CANCEL_VALUE: Final = "cancelled"
+
+# ------------------------------------------------------------------- statuses --
+
+
+class RedxStatus(StrEnum):
+    """Parcel statuses RedX publishes.
+
+    The first eight are the "Status Updates and Meanings" table, verbatim, with
+    RedX's own meaning beside each. ``PICKUP_PENDING`` is the one other status
+    string the documentation contains: it is the ``status`` in the sample
+    response of *Get Parcel Details*. RedX states no meaning for it.
+    """
+
+    READY_FOR_DELIVERY = "ready-for-delivery"
+    DELIVERY_IN_PROGRESS = "delivery-in-progress"
+    DELIVERED = "delivered"
+    AGENT_HOLD = "agent-hold"
+    AGENT_RETURNING = "agent-returning"
+    RETURNED = "returned"
+    AGENT_AREA_CHANGE = "agent-area-change"
+    PAID = "paid"
+    PICKUP_PENDING = "pickup-pending"
+
+
+#: RedX's own words for each status, from the documentation's meaning column.
+STATUS_MEANINGS: Final[MappingProxyType[RedxStatus, str]] = MappingProxyType(
+    {
+        RedxStatus.READY_FOR_DELIVERY: "Parcel received from merchants",
+        RedxStatus.DELIVERY_IN_PROGRESS: "Parcels have been dispatched to rider",
+        RedxStatus.DELIVERED: "Parcels delivered by rider",
+        RedxStatus.AGENT_HOLD: "Parcels are on hold to agent",
+        RedxStatus.AGENT_RETURNING: "Parcel return-in-progress",
+        RedxStatus.RETURNED: "Parcels returned",
+        RedxStatus.AGENT_AREA_CHANGE: "Area change requested & in progress",
+        RedxStatus.PAID: "Parcel amount is paid",
+        # Not in the meanings table. It appears only as the sample value of
+        # `status` in the Get Parcel Details response, with no meaning stated.
+        RedxStatus.PICKUP_PENDING: "",
+    }
+)
+
+_STATUS_VALUES: Final[frozenset[str]] = frozenset(str(status) for status in RedxStatus)
+
+
+def is_documented_status(value: str | None) -> bool:
+    return value is not None and value in _STATUS_VALUES
+
+
+class DeliveryType(StrEnum):
+    """The "Delivery Type Reference Table", verbatim.
+
+    Carried on a parcel (``parcel.delivery_type``) and on every webhook
+    (``delivery_type``). It qualifies a status: ``delivered`` on a
+    ``partial-delivery`` parcel is not the same outcome as ``delivered`` on a
+    ``regular`` one, which is why the status mapping takes both.
+    """
+
+    REGULAR = "regular"
+    REVERSE = "reverse"
+    EXCHANGE_DELIVERY = "exchange-delivery"
+    EXCHANGE_RETURN = "exchange-return"
+    PARTIAL_DELIVERY = "partial-delivery"
+    PARTIAL_RETURN = "partial-return"
+
+
+DELIVERY_TYPE_MEANINGS: Final[MappingProxyType[DeliveryType, str]] = MappingProxyType(
+    {
+        DeliveryType.REGULAR: "Regular forward delivery",
+        DeliveryType.REVERSE: "Regular reverse delivery",
+        DeliveryType.EXCHANGE_DELIVERY: "Forward exchange parcel",
+        DeliveryType.EXCHANGE_RETURN: "Reverse exchange parcel",
+        DeliveryType.PARTIAL_DELIVERY: "Partial delivery parcel",
+        DeliveryType.PARTIAL_RETURN: "Partial return parcel",
+    }
+)
+
+# -------------------------------------------------------------------- webhook --
+
+#: "Any required credentials should be included in the query parameters of the
+#: URL", with ``https://example.com/callback?token=<token>`` as the example.
+#: That is RedX's whole authentication story for callbacks: no signature
+#: header, no HMAC. ecomsbd uses the documented example's parameter name.
+WEBHOOK_TOKEN_PARAM: Final = "token"  # noqa: S105 - a query parameter *name*
+
+#: The documented callback body, sent as ``application/json`` via POST.
+WEBHOOK_PAYLOAD_FIELDS: Final[tuple[str, ...]] = (
+    "tracking_number",
+    "timestamp",
+    "status",
+    "message_en",
+    "message_bn",
+    "invoice_number",
+    "delivery_type",
+)
+
+# ----------------------------------------------------------------- unknowns --
+
+#: What the documentation is silent on. These are answers, not a backlog: each
+#: one names a behaviour ecomsbd therefore does not rely on.
+UNDOCUMENTED: Final[MappingProxyType[str, str]] = MappingProxyType(
+    {
+        "PROVIDER_CREATE_IDEMPOTENCY": (
+            "What RedX does with a repeated merchant_invoice_id is not stated. "
+            "An ambiguous create is BOOKING_UNKNOWN and is never re-sent."
+        ),
+        "LOOKUP_BY_MERCHANT_INVOICE": (
+            "No endpoint finds a parcel by merchant_invoice_id, so an unconfirmed "
+            "booking cannot be resolved automatically; a person resolves it."
+        ),
+        "ERROR_BODY_CONTRACT": "No error response shape is published.",
+        "RATE_LIMIT_CONTRACT": "No rate limit is published.",
+        "PAGINATION_CONTRACT": "No list endpoint documents pagination.",
+        "TOKEN_LIFETIME": "Whether the API token expires is not stated.",
+        "CREATE_FIELD_TYPES": (
+            "The field table and the example request disagree on the JSON type "
+            "of parcel_weight, value and pickup_store_id; the example's numbers "
+            "are sent."
+        ),
+        "WEIGHT_UNIT_ON_CREATE": (
+            "Create says 'appropriate units (e.g., kg, g)'; Get Parcel Details "
+            "and the charge calculator both say grams, so grams are sent."
+        ),
+        "WEBHOOK_RESPONSE_CONTRACT": "What reply RedX expects, and whether it retries, is not stated.",
+        "WEBHOOK_EVENT_ID": "Callbacks carry no event id; the body hash is the dedupe key.",
+    }
 )

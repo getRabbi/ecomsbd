@@ -30,6 +30,8 @@ from app.couriers.pathao.webhooks import (
     PathaoWebhookVerifier,
     is_integration_handshake,
 )
+from app.couriers.redx.contract import WEBHOOK_TOKEN_PARAM as REDX_WEBHOOK_TOKEN_PARAM
+from app.couriers.redx.webhooks import RedxWebhookParser, RedxWebhookVerifier
 from app.couriers.webhooks import WEBHOOK_BLOCKER, WebhookReceiver, build_receiver
 
 router = APIRouter(prefix="/webhooks/couriers", tags=["webhooks"])
@@ -183,6 +185,92 @@ async def pathao_webhook(
         received=True,
         processed=result.was_processed,
         blocker=None if secret else "PATHAO_WEBHOOK_SECRET_NOT_CONFIGURED",
+        detail=result.message,
+    )
+
+
+#: Reported when a RedX callback reaches a shop that has no callback secret
+#: issued — the URL it came to was never handed out by ecomsbd.
+REDX_WEBHOOK_BLOCKER = "REDX_WEBHOOK_TOKEN_NOT_ISSUED"
+
+
+@router.post(
+    "/redx/{token}",
+    response_model=WebhookAck,
+    summary="RedX parcel status callback",
+    # Excluded from the public schema for the same reason as Pathao's: the
+    # path carries a per-shop routing token.
+    include_in_schema=False,
+)
+async def redx_webhook(
+    token: str,
+    request: Request,
+    response: Response,
+    db: DbSession,
+) -> WebhookAck:
+    """Receive a RedX callback for one shop.
+
+    RedX documents its callback authentication as a credential in the URL's
+    query string (``?token=<token>``) and nothing else — no signature header.
+    The order is the same as Pathao's, for the same reasons:
+
+    1.  **Resolve the shop from the path token, across tenants**, before any
+        body is read as anything but bytes.
+    2.  **Become that tenant**, so everything stored lands in the right shop.
+    3.  **Compare the query token with that shop's issued secret**, in constant
+        time.
+    4.  Only then is the body parsed.
+
+    The query token never reaches a log line: the request logger records the
+    path alone, and the shared redactor strips ``token=`` values from the
+    server's access log.
+    """
+    body = await request.body()
+    headers = {key.lower(): value for key, value in request.headers.items()}
+    provided = request.query_params.get(REDX_WEBHOOK_TOKEN_PARAM)
+
+    account = await resolve_account_by_webhook_token(db, provider="redx", token=token)
+    if account is None:
+        # The same answer an unconfigured account gets: a callback URL must
+        # not become an oracle for which shops exist.
+        response.status_code = 202
+        log.warning(
+            "redx webhook for unknown token",
+            extra={"provider": "redx", "operation": "webhook_ingest"},
+        )
+        return WebhookAck(
+            received=True,
+            processed=False,
+            blocker=None,
+            detail="Received. This callback URL is not active.",
+        )
+
+    from app.api.deps import get_vault
+    from app.couriers.accounts import CourierAccountService
+
+    with use_context(tenant_id=account.tenant_id):
+        service = CourierAccountService(db, vault=get_vault())
+        secret = service.webhook_secret_for(account)
+
+        receiver = WebhookReceiver(
+            db,
+            verifier=RedxWebhookVerifier(secret, provided_token=provided),
+            parser=RedxWebhookParser(),
+            provider="redx",
+            blocker=REDX_WEBHOOK_BLOCKER,
+            unconfigured_detail=(
+                "Open RedX in Courier Accounts to get this shop's callback URL, "
+                "then paste it into RedX. Parcel status is also checked with RedX "
+                "regularly."
+            ),
+        )
+        result = await receiver.ingest(headers=headers, body=body)
+
+    response.status_code = result.http_status
+    return WebhookAck(
+        received=True,
+        processed=result.was_processed,
+        blocker=None if secret else REDX_WEBHOOK_BLOCKER,
         detail=result.message,
     )
 

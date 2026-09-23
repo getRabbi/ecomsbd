@@ -35,7 +35,7 @@ from app.couriers.models import (
     CourierEventKind,
     CourierEventSource,
 )
-from app.couriers.steadfast.mapping import map_delivery_status
+from app.couriers.status_maps import map_courier_status
 
 __all__ = ["recent_events_for", "record_courier_event"]
 
@@ -56,11 +56,15 @@ async def record_courier_event(
     raw_payload_id: uuid.UUID | None = None,
     correlation_id: str | None = None,
     courier_account_id: uuid.UUID | None = None,
+    status_detail: str | None = None,
 ) -> CourierEvent:
     """Append an observation, or recognise one we already hold.
 
     Returns the row either way, so a caller can tell a genuine change from a
     repeat by checking ``observation_count``.
+
+    ``status_detail`` is the provider's qualifier for the status, where it has
+    one (RedX's delivery type), and is read by that provider's status table.
     """
     reference = (
         provider_consignment_id
@@ -72,7 +76,11 @@ async def record_courier_event(
         or ""
     )
 
-    mapping = map_delivery_status(raw_status) if raw_status is not None else None
+    mapping = (
+        map_courier_status(provider, raw_status, detail=status_detail)
+        if raw_status is not None
+        else None
+    )
     dedupe_key = CourierEvent.build_dedupe_key(
         kind=kind,
         reference=reference,

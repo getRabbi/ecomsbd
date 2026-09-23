@@ -520,6 +520,7 @@ class CourierAccountService:
                 requires_store=requires_store,
                 store_name=store_name,
                 supports_delivery_type=spec.supports_delivery_type,
+                requires_delivery_area=spec.requires_delivery_area,
             )
 
             if not flags.get(provider, True):
@@ -556,6 +557,7 @@ class CourierAccountService:
                     requires_store=requires_store,
                     store_name=store_name,
                     supports_delivery_type=spec.supports_delivery_type,
+                    requires_delivery_area=spec.requires_delivery_area,
                 )
             )
 
@@ -616,6 +618,33 @@ class CourierAccountService:
         account.webhook_token = secrets.token_urlsafe(32)
         await self._db.flush()
         return account.webhook_token
+
+    async def ensure_webhook_secret(self, account: CourierAccount) -> str:
+        """This account's ecomsbd-issued callback secret, minting one if it has none.
+
+        For a provider whose callbacks authenticate with a credential *we* put
+        in the callback URL (RedX documents exactly that) rather than one the
+        seller copies out of the provider's panel. Stored in the same encrypted
+        slot a seller-supplied secret would use, and stable once issued, so a
+        URL already pasted into the provider keeps working. Disconnecting the
+        account erases it, which is how it is rotated.
+        """
+        existing = self.webhook_secret_for(account)
+        if existing:
+            return existing
+        secret = secrets.token_urlsafe(32)
+        account.webhook_secret_encrypted = self._vault.encrypt(
+            secret, context=account.vault_context
+        )
+        await self._db.flush()
+        await record_audit(
+            self._db,
+            AuditAction.COURIER_CREDENTIAL_SAVED,
+            entity_type="courier_account",
+            entity_id=account.id,
+            context={"provider": account.provider, "change": "webhook_secret_issued"},
+        )
+        return secret
 
     def webhook_secret_for(self, account: CourierAccount) -> str | None:
         """This account's webhook signing secret, or ``None`` if it has none.
@@ -686,13 +715,24 @@ class CourierAccountService:
         secondary_label = "secret key"
         if spec is not None:
             primary_field = spec.field_named(spec.primary)
-            secondary_field = spec.field_named(spec.secondary)
+            secondary_field = spec.field_named(spec.secondary) if spec.secondary else None
             if primary_field is not None:
                 primary_label = primary_field.label_en
             if secondary_field is not None:
                 secondary_label = secondary_field.label_en
 
-        if not request.api_key or not request.secret_key:
+        if spec is not None and spec.is_single_secret:
+            # One secret. The second slot is filled with an encrypted empty
+            # value so the account keeps its two-slot shape; a value arriving
+            # for it anyway is refused rather than silently stored.
+            if not request.api_key:
+                raise ValidationError(f"The {primary_label} is required")
+            if request.secret_key:
+                raise ValidationError(
+                    f"{spec.display_name} takes only the {primary_label}",
+                    details={"provider": request.provider},
+                )
+        elif not request.api_key or not request.secret_key:
             raise ValidationError(
                 f"Both the {primary_label} and the {secondary_label} are required"
             )
@@ -793,7 +833,7 @@ class BookableReason(StrEnum):
 
     #: The shop has not been given this courier.
     NOT_ENABLED = "NOT_ENABLED"
-    #: No verified create exists for this provider yet (RedX today).
+    #: No verified create exists for this provider yet.
     NO_VERIFIED_CREATE = "NO_VERIFIED_CREATE"
     #: No credentials stored.
     NOT_CONNECTED = "NOT_CONNECTED"
@@ -822,6 +862,9 @@ class BookableCourier:
     #: courier. The booking sheet reads this instead of checking a provider
     #: name, which is what keeps the generic order UI provider-independent.
     supports_delivery_type: bool = False
+    #: Whether each booking must carry a delivery area from the courier's own
+    #: list. The booking sheet shows an area picker when this is set.
+    requires_delivery_area: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -832,4 +875,5 @@ class BookableCourier:
             "requires_store": self.requires_store,
             "store_name": self.store_name,
             "supports_delivery_type": self.supports_delivery_type,
+            "requires_delivery_area": self.requires_delivery_area,
         }

@@ -142,6 +142,7 @@ class CourierRepository {
     String? note,
     String? itemDescription,
     int? deliveryType,
+    DeliveryArea? deliveryArea,
   }) async {
     final json = await api.post(
       '/couriers/orders/$orderId/book',
@@ -151,9 +152,41 @@ class CourierRepository {
         if (itemDescription != null && itemDescription.isNotEmpty)
           'item_description': itemDescription,
         if (deliveryType != null) 'delivery_type': deliveryType,
+        if (deliveryArea != null) ...<String, dynamic>{
+          'delivery_area_id': int.tryParse(deliveryArea.id) ?? deliveryArea.id,
+          'delivery_area_name': deliveryArea.name,
+        },
       },
     );
     return BookingReport.fromJson(json);
+  }
+
+  /// The courier's own delivery areas, read live from the courier.
+  ///
+  /// Empty for a courier that has no area list. Booking operators may read
+  /// it: whoever books a parcel has to pick its area.
+  Future<List<DeliveryArea>> deliveryAreas(String provider) async {
+    final rows = await api.getList('/couriers/accounts/$provider/areas');
+    return <DeliveryArea>[
+      for (final row in rows)
+        DeliveryArea.fromJson(row as Map<String, dynamic>),
+    ];
+  }
+
+  /// What the courier says booking [orderId] would cost. Books nothing.
+  Future<CourierQuote> quote(
+    String orderId, {
+    required String provider,
+    String? deliveryAreaId,
+  }) async {
+    final json = await api.get(
+      '/couriers/orders/$orderId/quote',
+      query: <String, dynamic>{
+        'provider': provider,
+        if (deliveryAreaId != null) 'delivery_area_id': deliveryAreaId,
+      },
+    );
+    return CourierQuote.fromJson(json);
   }
 
   Future<BookingReport> bookBulk(

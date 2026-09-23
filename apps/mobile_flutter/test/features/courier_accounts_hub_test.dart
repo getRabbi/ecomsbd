@@ -79,15 +79,49 @@ Map<String, dynamic> _pathao() => <String, dynamic>{
   ]),
 };
 
-const Map<String, dynamic> _redx = <String, dynamic>{
+/// RedX as the server declares it: one API token, a sandbox, an optional
+/// pickup store, a delivery area on every booking, and a callback URL whose
+/// token ecomsbd issues — so the seller types no webhook secret.
+Map<String, dynamic> _redx({bool enabled = true}) => <String, dynamic>{
   'provider': 'redx',
   'display_name': 'RedX',
-  'capabilities': <String, dynamic>{'create_single': 'unknown'},
-  'enabled': false,
-  'fully_unverified': true,
-  'unknowns': <String, dynamic>{'REDX_API_DOCUMENTATION_REQUIRED': 'unknown'},
-  'manual_fallback': 'Manual courier mode.',
+  'capabilities': <String, dynamic>{
+    'create_single': 'true',
+    'status_lookup': 'true',
+    'webhook': 'true',
+    'create_bulk': 'false',
+  },
+  'enabled': enabled,
+  'fully_unverified': false,
+  'unknowns': <String, dynamic>{},
+  'connect_form': <String, dynamic>{
+    'provider': 'redx',
+    'display_name': 'RedX',
+    'fields': <dynamic>[
+      <String, dynamic>{
+        'name': 'api_token',
+        'label_en': 'API Token',
+        'label_bn': 'API Token',
+        'secret': true,
+        'required': true,
+        'input_type': 'password',
+        'help_en': 'RedX merchant panel → Developer API → Token.',
+        'help_bn': 'RedX মার্চেন্ট প্যানেল → Developer API → Token।',
+      },
+    ],
+    'supports_sandbox': true,
+    'requires_store': false,
+    'supports_store': true,
+    'requires_delivery_area': true,
+    'uses_webhook': true,
+    'webhook_secret_generated': true,
+    'webhook_help_en': 'Optional. Paste this URL into RedX.',
+    'webhook_help_bn': 'ঐচ্ছিক। এই URL টি RedX-এ বসান।',
+  },
 };
+
+const String _redxCallback =
+    'https://api.example.com/v1/webhooks/couriers/redx/route-abc?token=cb-xyz';
 
 /// Manual mode is in the server's list, but is not a courier to connect.
 const Map<String, dynamic> _manual = <String, dynamic>{
@@ -135,7 +169,8 @@ class _Server {
     List<Map<String, dynamic>>? accounts,
     this.accountsForbidden = false,
   }) : providers =
-           providers ?? <Map<String, dynamic>>[_steadfast(), _pathao(), _redx],
+           providers ??
+           <Map<String, dynamic>>[_steadfast(), _pathao(), _redx()],
        accounts = accounts ?? <Map<String, dynamic>>[_account()] {
     harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
       ...this.providers,
@@ -148,7 +183,16 @@ class _Server {
           ? const FakeReply(_forbidden, statusCode: 403)
           : FakeReply(this.accounts),
     );
-    for (final provider in <String>['steadfast', 'pathao']) {
+    harness.adapter
+        .onJson('GET', '/couriers/accounts/redx/webhook', <String, dynamic>{
+          'provider': 'redx',
+          'supported': true,
+          'callback_url': _redxCallback,
+          'secret_configured': true,
+          'help_en': 'Optional. Paste this URL into RedX.',
+          'help_bn': 'ঐচ্ছিক। এই URL টি RedX-এ বসান।',
+        });
+    for (final provider in <String>['steadfast', 'pathao', 'redx']) {
       harness.adapter.onJson(
         'GET',
         '/couriers/providers/$provider/evidence',
@@ -167,6 +211,49 @@ class _Server {
   final List<Map<String, dynamic>> providers;
   List<Map<String, dynamic>> accounts;
   final bool accountsForbidden;
+}
+
+/// Fields a seller can type into. The callback URL is a `SelectableText`,
+/// which is a read-only `EditableText` and holds nothing typed.
+Finder _writableFields() => find.byWidgetPredicate(
+  (widget) => widget is EditableText && !widget.readOnly,
+);
+
+/// The accounts screen under a real Bangla `MaterialApp`.
+Future<void> _pumpInBangla(WidgetTester tester, _Server server) async {
+  addTearDown(() async {
+    await settle(tester, frames: 3);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await server.harness.dispose();
+    activeAppLocale = AppLocale.en;
+  });
+  tester.view.physicalSize = referencePhone * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
+  activeAppLocale = AppLocale.bn;
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        effectsModeProvider.overrideWith((ref) => EffectsMode.reduced),
+        ...server.harness.overrides,
+      ],
+      child: MaterialApp(
+        theme: buildEcomsbdTheme(),
+        locale: const Locale('bn'),
+        supportedLocales: const <Locale>[Locale('bn'), Locale('en')],
+        localizationsDelegates: const <LocalizationsDelegate<Object>>[
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const Scaffold(body: CourierAccountsScreen()),
+      ),
+    ),
+  );
+  await settle(tester, frames: 6, step: const Duration(milliseconds: 50));
 }
 
 Future<void> _open(WidgetTester tester, String label, {int at = 0}) async {
@@ -195,24 +282,28 @@ void main() {
       expect(find.text('••••••••AB12'), findsOneWidget);
 
       expect(find.text('Pathao'), findsOneWidget);
-      expect(find.text('Not connected'), findsOneWidget);
+      // Pathao and RedX.
+      expect(find.text('Not connected'), findsNWidgets(2));
 
+      // RedX is a real integration now: connectable, never "unavailable".
       expect(find.text('RedX'), findsOneWidget);
-      expect(find.text('Unavailable'), findsOneWidget);
-      expect(find.text('Official integration required'), findsOneWidget);
+      expect(find.text('Unavailable'), findsNothing);
+      expect(find.text('Official integration required'), findsNothing);
 
       // Manual mode has its own card, not a courier row.
       expect(find.text('Manual courier'), findsNothing);
       expect(find.text('Manual courier mode'), findsOneWidget);
 
-      // One Manage (Steadfast), one Connect (Pathao), nothing for RedX.
+      // One Manage (Steadfast), a Connect each for Pathao and RedX.
       expect(find.text('Manage'), findsOneWidget);
-      expect(find.text('Connect'), findsOneWidget);
+      expect(find.text('Connect'), findsNWidgets(2));
 
-      // Capabilities are the verified ones only: "unknown" is not a feature.
-      expect(find.text('Book parcels'), findsNWidgets(2));
-      expect(find.text('Track status'), findsOneWidget);
-      expect(find.text('Live status updates'), findsOneWidget);
+      // Capabilities are the verified ones only: "unknown" and "false" are
+      // not features.
+      expect(find.text('Book parcels'), findsNWidgets(3));
+      expect(find.text('Track status'), findsNWidgets(2));
+      expect(find.text('Live status updates'), findsNWidgets(2));
+      expect(find.text('Book in bulk'), findsNothing);
     });
 
     testWidgets('lays out at 360dp without overflowing', (tester) async {
@@ -497,7 +588,7 @@ void main() {
       );
       expect(find.text('Steadfast disconnected'), findsOneWidget);
       expect(find.text('Credentials'), findsNothing);
-      expect(find.text('Not connected'), findsNWidgets(2));
+      expect(find.text('Not connected'), findsNWidgets(3));
       // The erased key's old hint is not shown for a disconnected account.
       expect(find.text('••••••••AB12'), findsNothing);
       expect(find.text('Manage'), findsNothing);
@@ -556,6 +647,174 @@ void main() {
     });
   });
 
+  group('RedX', () {
+    testWidgets('switched off for this shop, it is Disabled with no Connect', (
+      tester,
+    ) async {
+      final server = _Server(
+        providers: <Map<String, dynamic>>[_steadfast(), _redx(enabled: false)],
+      );
+      await pumpCommerceScreen(
+        tester,
+        const CourierAccountsScreen(),
+        harness: server.harness,
+        size: _tall,
+      );
+
+      expect(find.text('RedX'), findsOneWidget);
+      expect(find.text('Disabled'), findsOneWidget);
+      expect(find.text('Connect'), findsNothing);
+      expect(find.text('Unavailable'), findsNothing);
+    });
+
+    testWidgets(
+      'connects with its one API token and lands on a masked account',
+      (tester) async {
+        const token = 'redx-widget-token-9f3a';
+        final server = _Server();
+        Object? sent;
+        server.harness.adapter.on('POST', '/couriers/accounts/redx/connect', (
+          request,
+        ) {
+          sent = request.body;
+          server.accounts = <Map<String, dynamic>>[
+            _account(),
+            _account(provider: 'redx', masked: '****9f3a'),
+          ];
+          return FakeReply(<String, dynamic>{
+            'result': 'VALID',
+            'message': 'Connected to RedX.',
+            'account': _account(provider: 'redx', masked: '****9f3a'),
+          }, statusCode: 201);
+        });
+
+        await pumpCommerceScreen(
+          tester,
+          const CourierAccountsScreen(),
+          harness: server.harness,
+          size: _tall,
+        );
+        // Pathao's Connect comes first; RedX's is the second.
+        await _open(tester, 'Connect', at: 1);
+
+        expect(find.text('Connect RedX'), findsOneWidget);
+        expect(find.text('API TOKEN'), findsOneWidget);
+        expect(find.text('Use the sandbox'), findsOneWidget);
+        // RedX's callback secret is issued by ecomsbd inside the URL, so there
+        // is nothing for the seller to type here.
+        expect(find.text('WEBHOOK SECRET'), findsNothing);
+        final fields = find.byType(EditableText);
+        expect(fields, findsOneWidget);
+        // The token is masked while typed.
+        expect(tester.widget<EditableText>(fields).obscureText, isTrue);
+
+        await tester.enterText(fields, token);
+        await tester.pump();
+        await _open(tester, 'Save and check');
+
+        expect(sent, <String, dynamic>{
+          'credentials': <String, dynamic>{'api_token': token},
+          'config': <String, dynamic>{'sandbox': false},
+        });
+
+        expect(find.text('Connection successful'), findsOneWidget);
+        expect(find.text('API Token'), findsOneWidget);
+        expect(find.text('••••••••9f3a'), findsOneWidget);
+        expect(find.text(token), findsNothing);
+        expect(_writableFields(), findsNothing);
+        expect(find.text('Pickup store (optional)'), findsOneWidget);
+        expect(find.text('Choose store'), findsOneWidget);
+        expect(find.text('Status update URL for RedX'), findsOneWidget);
+        expect(find.text(_redxCallback), findsOneWidget);
+        expect(find.text('Copy URL'), findsOneWidget);
+        // Never claimed before RedX has actually been pointed at the URL.
+        expect(find.text('Status updates are set up'), findsNothing);
+        expect(find.text('Test connection'), findsOneWidget);
+        expect(find.text('Update credentials'), findsOneWidget);
+        expect(find.text('Disconnect'), findsOneWidget);
+      },
+    );
+
+    testWidgets('update starts blank; test and disconnect work', (
+      tester,
+    ) async {
+      final server = _Server(
+        accounts: <Map<String, dynamic>>[
+          _account(),
+          _account(provider: 'redx', masked: '****9f3a'),
+        ],
+      );
+      server.harness.adapter.on(
+        'POST',
+        '/couriers/accounts/redx/test',
+        (_) => FakeReply(<String, dynamic>{
+          'result': 'VALID',
+          'message': 'Connected to RedX.',
+          'account': _account(provider: 'redx', masked: '****9f3a'),
+        }),
+      );
+      server.harness.adapter.on('DELETE', '/couriers/accounts/redx', (_) {
+        server.accounts = <Map<String, dynamic>>[
+          _account(),
+          _account(provider: 'redx', status: 'DISCONNECTED'),
+        ];
+        return FakeReply(_account(provider: 'redx', status: 'DISCONNECTED'));
+      });
+
+      await pumpCommerceScreen(
+        tester,
+        const CourierAccountsScreen(),
+        harness: server.harness,
+        size: _tall,
+      );
+      expect(find.text('••••••••9f3a'), findsOneWidget);
+      await _open(tester, 'Manage', at: 1);
+
+      await _open(tester, 'Update credentials');
+      expect(find.text('Update RedX credentials'), findsOneWidget);
+      final fields = _writableFields();
+      expect(fields, findsOneWidget);
+      expect(tester.widget<EditableText>(fields).controller.text, isEmpty);
+      await tester.tapAt(const Offset(10, 10));
+      await settle(tester, frames: 20, step: const Duration(milliseconds: 60));
+
+      await _open(tester, 'Test connection');
+      expect(find.text('Connection successful'), findsOneWidget);
+      expect(
+        server.harness.adapter.to('POST', '/couriers/accounts/redx/test'),
+        hasLength(1),
+      );
+
+      await _open(tester, 'Disconnect');
+      expect(find.text('Disconnect RedX?'), findsOneWidget);
+      await _open(tester, 'Disconnect', at: 1);
+      expect(
+        server.harness.adapter.to('DELETE', '/couriers/accounts/redx'),
+        hasLength(1),
+      );
+      expect(find.text('RedX disconnected'), findsOneWidget);
+      expect(find.text('••••••••9f3a'), findsNothing);
+    });
+
+    testWidgets('reads in Bangla', (tester) async {
+      final server = _Server(
+        accounts: <Map<String, dynamic>>[
+          _account(),
+          _account(provider: 'redx', masked: '****9f3a'),
+        ],
+      );
+      await _pumpInBangla(tester, server);
+
+      await _open(tester, 'পরিচালনা করুন', at: 1);
+      expect(find.text('API Token'), findsOneWidget);
+      expect(find.text('••••••••9f3a'), findsOneWidget);
+      expect(find.text('পিকআপ স্টোর (ঐচ্ছিক)'), findsOneWidget);
+      expect(find.text('RedX-এর স্টেটাস আপডেট URL'), findsOneWidget);
+      expect(find.text('সংযোগ পরীক্ষা করুন'), findsOneWidget);
+      expectNoOverflow(tester);
+    });
+  });
+
   group('Someone who may not manage credentials', () {
     testWidgets('sees each courier\'s state and no way to change it', (
       tester,
@@ -594,7 +853,10 @@ void main() {
       );
       expect(find.text('Connected'), findsOneWidget);
       expect(find.text('Not connected'), findsOneWidget);
-      expect(find.text('Unavailable'), findsOneWidget);
+      // RedX is absent from what this role was told, so its state is unknown
+      // — never guessed.
+      expect(find.text('Unknown'), findsOneWidget);
+      expect(find.text('Unavailable'), findsNothing);
       expect(find.text('Connect'), findsNothing);
       expect(find.text('Manage'), findsNothing);
       expect(find.textContaining('••••'), findsNothing);
@@ -625,7 +887,7 @@ void main() {
         size: _tall,
       );
 
-      expect(find.text('Unknown'), findsNWidgets(2));
+      expect(find.text('Unknown'), findsNWidgets(3));
       expect(find.text('Connected'), findsNothing);
       expect(find.text('Not connected'), findsNothing);
       expect(find.text('Connect'), findsNothing);

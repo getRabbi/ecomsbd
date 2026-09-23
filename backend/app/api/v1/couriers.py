@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import (
@@ -36,9 +37,11 @@ from app.common.feature_flags import COURIER_PROVIDER_FLAGS
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.couriers.accounts import ConnectRequest
+from app.couriers.adapter import Unavailable
 from app.couriers.capabilities import load_manifest
 from app.couriers.credentials import spec_for
 from app.couriers.events import recent_events_for
+from app.couriers.http import ProviderError, to_app_error
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/couriers", tags=["couriers"])
@@ -218,7 +221,18 @@ def _resolve_credential_slots(provider: str, payload: CourierConnectPayload) -> 
     place instead of being re-derived by every client and every route.
     """
     spec = spec_for(provider)
-    if spec is not None and payload.credentials:
+    if spec is not None and spec.is_single_secret:
+        # One secret (RedX's API token). The second slot is stored as an
+        # encrypted empty value by the account service.
+        primary = (payload.credentials.get(spec.primary) or "").strip()
+        if not primary:
+            field = spec.field_named(spec.primary)
+            raise ValidationError(
+                f"{provider} needs its {field.label_en if field else spec.primary}",
+                details={"provider": provider},
+            )
+        return primary, ""
+    if spec is not None and spec.secondary is not None and payload.credentials:
         primary = (payload.credentials.get(spec.primary) or "").strip()
         secondary = (payload.credentials.get(spec.secondary) or "").strip()
         if not primary or not secondary:
@@ -264,6 +278,9 @@ class BookableCourierResponse(BaseModel):
     #: Whether the booking form may offer a delivery-type choice for this
     #: courier. Read by the booking sheet so it never checks a provider name.
     supports_delivery_type: bool = False
+    #: Whether each booking needs a delivery area picked from the courier's
+    #: own list. Read by the booking sheet, which then shows an area picker.
+    requires_delivery_area: bool = False
 
 
 @router.get(
@@ -385,10 +402,19 @@ async def webhook_setup(
     token = await accounts.ensure_webhook_token(account)
     settings = get_settings()
     base = (settings.public_base_url or "").rstrip("/")
+    callback_url = f"{base}/v1/webhooks/couriers/{provider}/{token}" if base else None
+    if spec.webhook_secret_generated and spec.webhook_secret_param:
+        # The provider authenticates callbacks by a credential in the URL
+        # (RedX: "include credentials in the query parameters"), so the URL the
+        # seller pastes *is* where the secret lives. Issued here, stored
+        # encrypted, and shown only to someone who may manage credentials.
+        secret = await accounts.ensure_webhook_secret(account)
+        if callback_url is not None:
+            callback_url = f"{callback_url}?{urlencode({spec.webhook_secret_param: secret})}"
     return WebhookSetupResponse(
         provider=provider,
         supported=True,
-        callback_url=f"{base}/v1/webhooks/couriers/{provider}/{token}" if base else None,
+        callback_url=callback_url,
         secret_configured=bool(account.webhook_secret_encrypted),
         help_en=spec.webhook_help_en,
         help_bn=spec.webhook_help_bn,
@@ -498,6 +524,11 @@ class BookOrderPayload(BaseModel):
     #: 0 = home delivery, 1 = point delivery / hub pick-up. The only two values
     #: the documentation defines.
     delivery_type: int | None = Field(default=None, ge=0, le=1)
+    #: A delivery area picked from the courier's own list (``/areas``), for a
+    #: courier whose bookable entry says ``requires_delivery_area``. Both
+    #: halves are sent: RedX takes the area's id *and* its name on a create.
+    delivery_area_id: int | None = Field(default=None, ge=1)
+    delivery_area_name: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class BulkBookPayload(BaseModel):
@@ -555,8 +586,109 @@ async def book_order(
         note=payload.note,
         item_description=payload.item_description,
         delivery_type=payload.delivery_type,
+        delivery_area_id=(
+            str(payload.delivery_area_id) if payload.delivery_area_id is not None else None
+        ),
+        delivery_area_name=payload.delivery_area_name,
     )
     return BookingReportResponse(**report.as_dict())
+
+
+class DeliveryAreaResponse(BaseModel):
+    """One delivery area from the courier's own list."""
+
+    id: str
+    name: str
+    post_code: str | None = None
+    division_name: str | None = None
+    zone_id: str | None = None
+
+
+@router.get(
+    "/accounts/{provider}/areas",
+    response_model=list[DeliveryAreaResponse],
+    summary="Delivery areas a booking with this courier may name",
+)
+async def delivery_areas(
+    provider: str,
+    principal: Booker,
+    accounts: CourierAccountsDep,
+    district_name: Annotated[str | None, Query(max_length=80)] = None,
+    post_code: Annotated[int | None, Query(ge=1000, le=9999)] = None,
+) -> list[DeliveryAreaResponse]:
+    """The courier's area list, read live from the courier.
+
+    ``ORDER_BOOK`` rather than ``COURIER_CREDENTIAL_MANAGE``: whoever books a
+    parcel has to pick its area. A courier without an area list answers an
+    empty list, not an error, so the client needs no provider check.
+    """
+    account = await accounts.usable_account(provider)
+    if account is None:
+        raise NotFoundError("No usable courier account is connected for that provider")
+    adapter = accounts.adapter_for(provider)
+    lister = getattr(adapter, "list_delivery_areas", None)
+    if lister is None:
+        return []
+    try:
+        areas = await lister(
+            accounts.credentials_for(account),
+            district_name=(district_name or "").strip() or None,
+            post_code=post_code,
+        )
+    except ProviderError as exc:
+        raise to_app_error(exc) from exc
+    return [
+        DeliveryAreaResponse(
+            id=str(area.id),
+            name=area.name,
+            post_code=str(area.post_code) if area.post_code is not None else None,
+            division_name=area.division_name,
+            zone_id=str(area.zone_id) if area.zone_id is not None else None,
+        )
+        for area in areas
+    ]
+
+
+class QuoteResponse(BaseModel):
+    """The courier's own charge for one parcel, or why there is none.
+
+    A quote, not a cost: nothing here is recorded against the order. The
+    courier's settled charge arrives with its payment data.
+    """
+
+    provider: str
+    available: bool
+    delivery_fee_paisa: int | None = None
+    cod_fee_paisa: int | None = None
+    reason: str | None = None
+
+
+@router.get(
+    "/orders/{order_id}/quote",
+    response_model=QuoteResponse,
+    summary="The courier's charge for booking this order",
+)
+async def quote_order(
+    order_id: uuid.UUID,
+    principal: Booker,
+    booking: CourierBookingDep,
+    provider: str,
+    delivery_area_id: Annotated[int | None, Query(ge=1)] = None,
+) -> QuoteResponse:
+    """Ask the courier what this parcel would cost. A read; it books nothing."""
+    result = await booking.quote(
+        order_id,
+        provider=provider,
+        delivery_area_id=str(delivery_area_id) if delivery_area_id is not None else None,
+    )
+    if isinstance(result, Unavailable):
+        return QuoteResponse(provider=provider, available=False, reason=result.reason)
+    return QuoteResponse(
+        provider=provider,
+        available=True,
+        delivery_fee_paisa=result.delivery_fee.paisa,
+        cod_fee_paisa=result.cod_fee.paisa if result.cod_fee is not None else None,
+    )
 
 
 @router.post(

@@ -42,8 +42,8 @@ final courierAccountProvider = FutureProvider.autoDispose
 /// Drives the honest copy on the connection screen — "status arrives by
 /// polling because this courier documents no webhook" reads very differently
 /// from a status section that is simply empty.
-final providerEvidenceProvider =
-    FutureProvider.family<ProviderEvidence, String>((ref, provider) {
+final providerEvidenceProvider = FutureProvider.autoDispose
+    .family<ProviderEvidence, String>((ref, provider) {
       return ref.watch(courierRepositoryProvider).evidence(provider);
     });
 
@@ -99,6 +99,24 @@ final webhookSetupProvider = FutureProvider.autoDispose
 final bookableCouriersProvider =
     FutureProvider.autoDispose<List<BookableCourier>>((ref) {
       return ref.watch(courierRepositoryProvider).bookable();
+    });
+
+/// A courier's delivery areas, for the booking sheet's area picker.
+///
+/// Read once per picker opening and filtered on the device as the seller
+/// types, so searching costs no further requests.
+final deliveryAreasProvider = FutureProvider.autoDispose
+    .family<List<DeliveryArea>, String>((ref, provider) {
+      return ref.watch(courierRepositoryProvider).deliveryAreas(provider);
+    });
+
+/// The courier's own charge for one booking: (order id, provider, area id).
+final courierQuoteProvider = FutureProvider.autoDispose
+    .family<CourierQuote, (String, String, String?)>((ref, key) {
+      final (orderId, provider, areaId) = key;
+      return ref
+          .watch(courierRepositoryProvider)
+          .quote(orderId, provider: provider, deliveryAreaId: areaId);
     });
 
 /// Whether this shop can book with *any* courier right now.

@@ -617,7 +617,7 @@ class ProviderPayment {
 ///
 /// The form is **described by the backend**, not hard-coded here. Steadfast
 /// wants an API key and a secret key; Pathao wants a Client ID and a Client
-/// Secret; RedX will want something else again. Rendering from a declaration
+/// Secret; RedX wants a single API token. Rendering from a declaration
 /// means adding a courier is a backend change, not an app release — and it
 /// means the labels a seller reads come from the same place the server's
 /// validation errors do, so the two can never disagree.
@@ -678,7 +678,10 @@ class ProviderConnectForm {
     required this.fields,
     this.supportsSandbox = false,
     this.requiresStore = false,
+    this.supportsStore = false,
+    this.requiresDeliveryArea = false,
     this.usesWebhook = false,
+    this.webhookSecretGenerated = false,
     this.webhookHelpEn,
     this.webhookHelpBn,
   });
@@ -695,7 +698,14 @@ class ProviderConnectForm {
       ],
       supportsSandbox: (json['supports_sandbox'] as bool?) ?? false,
       requiresStore: (json['requires_store'] as bool?) ?? false,
+      supportsStore:
+          (json['supports_store'] as bool?) ??
+          (json['requires_store'] as bool?) ??
+          false,
+      requiresDeliveryArea: (json['requires_delivery_area'] as bool?) ?? false,
       usesWebhook: (json['uses_webhook'] as bool?) ?? false,
+      webhookSecretGenerated:
+          (json['webhook_secret_generated'] as bool?) ?? false,
       webhookHelpEn: json['webhook_help_en'] as String?,
       webhookHelpBn: json['webhook_help_bn'] as String?,
     );
@@ -713,9 +723,25 @@ class ProviderConnectForm {
   /// so a connected account is not yet a bookable one.
   final bool requiresStore;
 
+  /// Whether a pickup store may be chosen at all. True whenever
+  /// [requiresStore] is; for RedX a store is optional.
+  final bool supportsStore;
+
+  /// Whether every booking must name a delivery area picked from the
+  /// courier's own list. The booking sheet reads this, not a provider name.
+  final bool requiresDeliveryArea;
+
   /// Whether this courier sends callbacks ecomsbd can verify, which means the
   /// seller is given a URL and asked for a webhook secret.
   final bool usesWebhook;
+
+  /// Whether ecomsbd issues the webhook secret itself, inside the callback
+  /// URL. Then the seller has nothing to type — only a URL to paste — so the
+  /// connect form shows no webhook-secret field.
+  final bool webhookSecretGenerated;
+
+  /// Whether the seller types a webhook secret from the courier's panel.
+  bool get asksForWebhookSecret => usesWebhook && !webhookSecretGenerated;
 
   final String? webhookHelpEn;
   final String? webhookHelpBn;
@@ -892,6 +918,7 @@ class BookableCourier {
     this.requiresStore = false,
     this.storeName,
     this.supportsDeliveryType = false,
+    this.requiresDeliveryArea = false,
   });
 
   factory BookableCourier.fromJson(Map<String, dynamic> json) {
@@ -905,6 +932,7 @@ class BookableCourier {
       requiresStore: (json['requires_store'] as bool?) ?? false,
       storeName: json['store_name'] as String?,
       supportsDeliveryType: (json['supports_delivery_type'] as bool?) ?? false,
+      requiresDeliveryArea: (json['requires_delivery_area'] as bool?) ?? false,
     );
   }
 
@@ -922,4 +950,77 @@ class BookableCourier {
   /// courier. Read instead of checking a provider name, which is what keeps
   /// the generic order UI free of provider specifics.
   final bool supportsDeliveryType;
+
+  /// Whether a booking with this courier needs a delivery area picked from
+  /// the courier's own list. The booking sheet shows an area picker for it.
+  final bool requiresDeliveryArea;
+}
+
+/// One delivery area from a courier's own list.
+///
+/// Both halves travel into the booking: RedX takes the area's id *and* its
+/// name on every create, so neither is reconstructed from the other.
+@immutable
+class DeliveryArea {
+  const DeliveryArea({
+    required this.id,
+    required this.name,
+    this.postCode,
+    this.divisionName,
+  });
+
+  factory DeliveryArea.fromJson(Map<String, dynamic> json) {
+    return DeliveryArea(
+      id: '${json['id']}',
+      name: json['name'] as String,
+      postCode: json['post_code'] as String?,
+      divisionName: json['division_name'] as String?,
+    );
+  }
+
+  final String id;
+  final String name;
+  final String? postCode;
+  final String? divisionName;
+
+  /// Whether this area matches what a seller typed into the picker.
+  bool matches(String query) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) {
+      return true;
+    }
+    return name.toLowerCase().contains(needle) ||
+        (postCode ?? '').contains(needle) ||
+        (divisionName ?? '').toLowerCase().contains(needle);
+  }
+}
+
+/// What the courier says a booking would cost — a quote, never a cost.
+@immutable
+class CourierQuote {
+  const CourierQuote({
+    required this.provider,
+    required this.available,
+    this.deliveryFeePaisa,
+    this.codFeePaisa,
+    this.reason,
+  });
+
+  factory CourierQuote.fromJson(Map<String, dynamic> json) {
+    return CourierQuote(
+      provider: json['provider'] as String,
+      available: (json['available'] as bool?) ?? false,
+      deliveryFeePaisa: json['delivery_fee_paisa'] as int?,
+      codFeePaisa: json['cod_fee_paisa'] as int?,
+      reason: json['reason'] as String?,
+    );
+  }
+
+  final String provider;
+  final bool available;
+  final int? deliveryFeePaisa;
+  final int? codFeePaisa;
+
+  /// Why no quote could be asked for, in the courier integration's words.
+  final String? reason;
 }

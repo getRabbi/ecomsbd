@@ -242,10 +242,14 @@ class TestProviderCapabilities:
         assert pathao["fully_unverified"] is False
         assert pathao["enabled"] is False
 
-        # RedX has no documentation on file, so it still claims nothing at all.
-        assert providers["redx"]["fully_unverified"] is True
-        assert set(providers["redx"]["capabilities"].values()) == {"unknown"}
-        assert providers["redx"]["enabled"] is False
+        # RedX is implemented from its own developer documentation, is
+        # connectable, and stays behind its flag until a shop is given it.
+        redx = providers["redx"]
+        assert redx["fully_unverified"] is False
+        assert redx["capabilities"]["create_single"] == "true"
+        assert redx["capabilities"]["create_bulk"] == "false"
+        assert redx["connect_form"]["fields"][0]["name"] == "api_token"
+        assert redx["enabled"] is False
 
         # Manual mode always works and is never gated.
         assert providers["manual"]["enabled"] is True

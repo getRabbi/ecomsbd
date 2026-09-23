@@ -1535,6 +1535,16 @@ const Map<String, String> _secEn = <String, String>{
   'bookable.unavailable': 'Not accepting bookings right now',
   'bookable.unknown': 'Not available right now',
   'book.courier': 'Courier',
+  'book.deliveryArea': 'Delivery area',
+  'book.chooseArea': 'Choose delivery area',
+  'book.changeArea': 'Change area',
+  'book.areaNeeded':
+      '{provider} needs the delivery area, picked from {provider}\'s own list.',
+  'book.searchArea': 'Search area or post code',
+  'book.noAreas': 'No area matches that search',
+  'book.courierCharge': '{provider} charge',
+  'book.chargeValue': '{delivery} delivery + {cod} COD charge',
+  'book.checkingCharge': 'Checking the charge…',
   'common.courier': 'the courier',
   'book.noCouriers': 'No courier connected',
   'book.noCouriersBody':
@@ -1651,6 +1661,10 @@ const Map<String, String> _secEn = <String, String>{
       '{provider} does not publish a callback, so ecomsbd checks each parcel on a schedule instead. Status still stays up to date — it just arrives a few minutes later.',
   'ca.capWebhook': 'Live status updates',
   'ca.disconnected': '{provider} disconnected',
+  'ca.pickupStoreOptional': 'Pickup store (optional)',
+  'ca.pickupStoreOptionalNote':
+      '{provider} does not require a store. Choosing one tells {provider} where to collect from, and lets ecomsbd show {provider}\'s delivery charge before you book.',
+  'ca.webhookUrlReady': 'Status update URL for {provider}',
   'case.checkAgain': 'Check again',
   'case.description':
       'Money that did not arrive, arrived short, or could not be placed.',
@@ -2349,6 +2363,16 @@ const Map<String, String> _secBn = <String, String>{
   'bookable.unavailable': 'এখন বুকিং নিচ্ছে না',
   'bookable.unknown': 'এখন পাওয়া যাচ্ছে না',
   'book.courier': 'কুরিয়ার',
+  'book.deliveryArea': 'ডেলিভারি এলাকা',
+  'book.chooseArea': 'ডেলিভারি এলাকা বাছুন',
+  'book.changeArea': 'এলাকা বদলান',
+  'book.areaNeeded':
+      '{provider}-এর নিজের তালিকা থেকে ডেলিভারি এলাকা বাছতে হবে।',
+  'book.searchArea': 'এলাকা বা পোস্ট কোড খুঁজুন',
+  'book.noAreas': 'এই নামে কোনো এলাকা নেই',
+  'book.courierCharge': '{provider} চার্জ',
+  'book.chargeValue': 'ডেলিভারি {delivery} + COD চার্জ {cod}',
+  'book.checkingCharge': 'চার্জ দেখা হচ্ছে…',
   'common.courier': 'কুরিয়ার',
   'book.noCouriers': 'কোনো কুরিয়ার যুক্ত নেই',
   'book.noCouriersBody':
@@ -2464,6 +2488,10 @@ const Map<String, String> _secBn = <String, String>{
       '{provider} কোনো callback দেয় না, তাই ecomsbd নিজেই নির্দিষ্ট সময় পর পর প্রতিটি পার্সেল দেখে নেয়। স্টেটাস আপডেটই থাকে — শুধু কয়েক মিনিট পরে আসে।',
   'ca.capWebhook': 'লাইভ স্টেটাস আপডেট',
   'ca.disconnected': '{provider}-এর সংযোগ বিচ্ছিন্ন হয়েছে',
+  'ca.pickupStoreOptional': 'পিকআপ স্টোর (ঐচ্ছিক)',
+  'ca.pickupStoreOptionalNote':
+      '{provider}-এ স্টোর বাছা বাধ্যতামূলক নয়। বাছলে {provider} জানবে কোথা থেকে পার্সেল নিতে হবে, আর বুক করার আগেই ecomsbd {provider}-এর ডেলিভারি চার্জ দেখাতে পারবে।',
+  'ca.webhookUrlReady': '{provider}-এর স্টেটাস আপডেট URL',
   'case.checkAgain': 'আবার দেখুন',
   'case.description': 'যে টাকা আসেনি, কম এসেছে, বা কোথায় বসবে ঠিক করা যায়নি।',
   'case.dismiss': 'বাদ দিন',

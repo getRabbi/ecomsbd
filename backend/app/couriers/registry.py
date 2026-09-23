@@ -23,6 +23,7 @@ from app.couriers.pathao.adapter import PathaoAdapter
 from app.couriers.pathao.client import PathaoClient, PathaoConfig
 from app.couriers.redx.adapter import PROVIDER as REDX
 from app.couriers.redx.adapter import RedxAdapter
+from app.couriers.redx.client import RedxClient, RedxConfig
 from app.couriers.steadfast.adapter import PROVIDER as STEADFAST
 from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
@@ -132,18 +133,35 @@ def _pathao_factory(settings: Settings) -> AdapterFactory:
     return build
 
 
+def _redx_factory(settings: Settings) -> AdapterFactory:
+    def build() -> CourierAdapter:
+        transport: ProviderTransport = HttpxProviderTransport(
+            provider=REDX,
+            timeouts=ProviderTimeouts(
+                connect=settings.courier_connect_timeout_seconds,
+                read=settings.courier_read_timeout_seconds,
+                write=settings.courier_write_timeout_seconds,
+                pool=settings.courier_pool_timeout_seconds,
+            ),
+            max_connections=settings.courier_max_connections,
+        )
+        config = RedxConfig(
+            live_base_url=settings.redx_base_url,
+            sandbox_base_url=settings.redx_sandbox_base_url,
+            max_read_retries=settings.courier_read_retries,
+        )
+        return RedxAdapter(RedxClient(transport, config=config))
+
+    return build
+
+
 def build_registry(settings: Settings | None = None) -> CourierAdapterRegistry:
     resolved = settings or get_settings()
     return CourierAdapterRegistry(
         {
             STEADFAST: _steadfast_factory(resolved),
             PATHAO: _pathao_factory(resolved),
-            # Registered on purpose despite supporting nothing. A `None` here
-            # made every caller say "redx is not a courier ecomsbd can connect
-            # to", which reads as *never will be*; the adapter answers
-            # Unavailable with a reason instead. It has no transport, because
-            # it makes no calls.
-            REDX: lambda: RedxAdapter(),
+            REDX: _redx_factory(resolved),
         }
     )
 

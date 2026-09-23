@@ -41,17 +41,20 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ConflictError
 from app.core.logging import get_logger
 from app.couriers.accounts import CourierAccountService
+from app.couriers.adapter import Unavailable
 from app.couriers.capabilities import Capability
 from app.couriers.events import record_courier_event
+from app.couriers.http import ProviderError
 from app.couriers.metrics import CourierMetric, observe_latency, record_metric
 from app.couriers.models import (
     CourierAccount,
     CourierEventKind,
     CourierEventSource,
 )
+from app.couriers.status_maps import CourierStatusMapping, map_courier_status
+from app.couriers.steadfast.adapter import PROVIDER as STEADFAST
 from app.couriers.steadfast.client import StatusLookupKind
 from app.couriers.steadfast.errors import SteadfastError
-from app.couriers.steadfast.mapping import StatusMapping, map_delivery_status
 
 __all__ = ["PollReport", "StatusSyncService", "next_poll_at"]
 
@@ -204,12 +207,19 @@ class StatusSyncService:
         *,
         account: CourierAccount,
         report: PollReport | None = None,
-    ) -> StatusMapping | None:
+    ) -> CourierStatusMapping | None:
         """Ask about one parcel and apply the answer.
 
         Returns the mapping that was applied, or ``None`` if the provider could
         not be reached — in which case the parcel keeps its current status and
         is simply asked again later.
+
+        Steadfast keeps its own three-way lookup (consignment id, tracking
+        code, invoice) through its typed client, exactly as V1 shipped it.
+        Every other provider answers through the generic
+        :meth:`~app.couriers.adapter.CourierAdapter.get_status`, and a provider
+        that has no status lookup takes the parcel off the schedule rather than
+        asking again for an answer that cannot come.
         """
         report = report or PollReport(provider=consignment.provider)
         adapter = self._accounts.adapter_for(consignment.provider)
@@ -229,9 +239,26 @@ class StatusSyncService:
 
         credentials = self._accounts.credentials_for(account)
         started = utc_now()
+        detail: str | None = None
         try:
-            call = await adapter.client.get_status(credentials, reference, kind=kind)  # type: ignore[attr-defined]
-        except SteadfastError as exc:
+            if consignment.provider == STEADFAST:
+                call = await adapter.client.get_status(credentials, reference, kind=kind)  # type: ignore[attr-defined]
+                raw_status = str(call.value.delivery_status)
+                correlation_id: str | None = call.correlation_id
+            else:
+                status = await adapter.get_status(credentials, reference)
+                if isinstance(status, Unavailable):
+                    consignment.next_poll_at = None
+                    report.skipped += 1
+                    await self._db.flush()
+                    return None
+                raw_status = status.raw_status
+                # The provider's qualifier for the status, where it has one:
+                # RedX's delivery type tells a whole delivery from a partial.
+                raw_type = status.raw.get("delivery_type")
+                detail = str(raw_type) if raw_type is not None else None
+                correlation_id = None
+        except (SteadfastError, ProviderError) as exc:
             await self._on_poll_failure(consignment, account, exc, started)
             report.errors += 1
             return None
@@ -268,13 +295,13 @@ class StatusSyncService:
             capability=str(Capability.STATUS_LOOKUP),
         )
 
-        raw_status = str(call.value.delivery_status)
         return await self.apply_status(
             consignment,
             raw_status=raw_status,
             source=CourierEventSource.POLL,
-            correlation_id=call.correlation_id,
+            correlation_id=correlation_id,
             report=report,
+            status_detail=detail,
         )
 
     # -------------------------------------------------------------- applying --
@@ -287,17 +314,20 @@ class StatusSyncService:
         source: CourierEventSource,
         correlation_id: str | None = None,
         report: PollReport | None = None,
-    ) -> StatusMapping:
+        status_detail: str | None = None,
+    ) -> CourierStatusMapping:
         """Record an observation and move the parcel, if the status says to.
 
         Shared by polling and — once a webhook contract exists — by the webhook
-        processor, so both paths apply exactly the same rules.
+        processor, so both paths apply exactly the same rules. The status is
+        read against the parcel's own provider's table, together with
+        ``status_detail`` where that provider qualifies its statuses.
         """
         report = report or PollReport(provider=consignment.provider)
         report.checked += 1
 
         now = utc_now()
-        mapping = map_delivery_status(raw_status)
+        mapping = map_courier_status(consignment.provider, raw_status, detail=status_detail)
 
         await record_courier_event(
             self._db,
@@ -307,6 +337,7 @@ class StatusSyncService:
             consignment=consignment,
             raw_status=raw_status,
             correlation_id=correlation_id,
+            status_detail=status_detail,
         )
 
         previous_raw = consignment.provider_raw_status
@@ -319,10 +350,12 @@ class StatusSyncService:
             report.changed += 1
 
         if mapping.canonical is None:
-            # A status the documentation does not list. Stored verbatim, and
+            # A status the documentation does not list — or one it lists that
+            # makes no claim about where the parcel is. Stored verbatim, and
             # the parcel keeps the state it had. Never guessed at, never
-            # allowed near money.
-            report.unknown_status += 1
+            # allowed near money. Only the first kind counts as unknown.
+            if not mapping.is_documented:
+                report.unknown_status += 1
             consignment.next_poll_at = next_poll_at(
                 self._settings, booked_at=consignment.booked_at, now=now
             )
@@ -370,7 +403,7 @@ class StatusSyncService:
         return mapping
 
     async def _settle(
-        self, consignment: Consignment, mapping: StatusMapping, *, occurred_at: datetime
+        self, consignment: Consignment, mapping: CourierStatusMapping, *, occurred_at: datetime
     ) -> bool:
         """Record a final outcome through the existing money path.
 
@@ -399,7 +432,7 @@ class StatusSyncService:
         self,
         consignment: Consignment,
         account: CourierAccount,
-        exc: SteadfastError,
+        exc: SteadfastError | ProviderError,
         started: datetime,
     ) -> None:
         """A failed status check changes nothing about the parcel.
@@ -479,7 +512,7 @@ class StatusSyncService:
 
 
 def _visible_status_for(
-    mapping: StatusMapping, current: ConsignmentStatus
+    mapping: CourierStatusMapping, current: ConsignmentStatus
 ) -> ConsignmentStatus | None:
     """The status to show the seller for an observation that settled nothing.
 

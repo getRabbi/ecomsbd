@@ -1,21 +1,26 @@
-"""RedX courier integration — registered, and supporting nothing yet.
+"""RedX courier integration.
 
-RedX has published no API documentation that ecomsbd can verify against, so the
-adapter reports every capability as unavailable with a reason and no RedX call
-is ever made. :mod:`app.couriers.redx.contract` records what was checked, when,
-and why agreement between community packages is not promoted to a contract.
-
-``REDX_API_DOCUMENTATION_REQUIRED`` is the blocker. The request to send RedX is
-``docs/providers/redx/CONTRACT_REQUIRED.md``.
+Implemented against RedX's own developer documentation
+(``https://redx.com.bd/developer-api/``), transcribed in
+:mod:`app.couriers.redx.contract` and normalized in
+``docs/providers/redx/CONTRACT.md``. The capability split follows that
+documentation exactly: parcels are created against a delivery area the seller
+picks from RedX's list, looked up, tracked and cancelled; areas, pickup stores
+and a charge quote are read; status callbacks are verified by a per-shop token
+in the callback URL. Bulk create, returns, balance and payouts are not in
+RedX's API and are reported unavailable.
 """
 
+from __future__ import annotations
+
 from app.couriers.redx.adapter import PROVIDER, SUPPORTED_CAPABILITIES, RedxAdapter
-from app.couriers.redx.contract import CONTRACT_BLOCKER, REQUIRED_CONTRACT_ITEMS
+from app.couriers.redx.client import RedxClient, RedxConfig, RedxCredentials
 
 __all__ = [
-    "CONTRACT_BLOCKER",
     "PROVIDER",
-    "REQUIRED_CONTRACT_ITEMS",
     "SUPPORTED_CAPABILITIES",
     "RedxAdapter",
+    "RedxClient",
+    "RedxConfig",
+    "RedxCredentials",
 ]

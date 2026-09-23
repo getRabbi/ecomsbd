@@ -61,8 +61,16 @@ log = get_logger("app.couriers.jobs")
 
 PROVIDER = "steadfast"
 
+#: Providers whose parcels the status job polls. Steadfast documents no
+#: webhook, so polling is its whole sync path; RedX documents a status lookup,
+#: and polling keeps its parcels current whether or not a shop has pasted the
+#: callback URL into RedX. Pathao publishes no status lookup and is absent.
+POLLED_PROVIDERS: tuple[str, ...] = (PROVIDER, "redx")
 
-async def _connected_accounts(session: Any) -> list[tuple[uuid.UUID, uuid.UUID]]:
+
+async def _connected_accounts(
+    session: Any, provider: str = PROVIDER
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
     """``(tenant_id, account_id)`` for every shop with a usable courier account.
 
     Read under an explicit cross-tenant escape hatch, which logs its reason —
@@ -72,7 +80,7 @@ async def _connected_accounts(session: Any) -> list[tuple[uuid.UUID, uuid.UUID]]
     with allow_cross_tenant("courier job: find connected accounts"):
         rows = await session.execute(
             sa.select(CourierAccount.tenant_id, CourierAccount.id).where(
-                CourierAccount.provider == PROVIDER,
+                CourierAccount.provider == provider,
                 CourierAccount.status == str(CourierAccountStatus.CONNECTED),
                 CourierAccount.api_key_encrypted.is_not(None),
             )
@@ -83,8 +91,10 @@ async def _connected_accounts(session: Any) -> list[tuple[uuid.UUID, uuid.UUID]]
 async def _per_tenant(
     job_name: str,
     handler: Callable[[Any, uuid.UUID], Awaitable[dict[str, int]]],
+    *,
+    provider: str = PROVIDER,
 ) -> dict[str, int]:
-    """Run ``handler`` once per shop with a connected account.
+    """Run ``handler`` once per shop with a connected account for ``provider``.
 
     One shop's failure never stops the others: the exception is logged with the
     shop it belongs to and the loop continues. A courier job that aborts on the
@@ -94,7 +104,7 @@ async def _per_tenant(
     totals: dict[str, int] = {"tenants": 0, "errors": 0}
 
     async with system_session(f"worker: {job_name}") as session:
-        accounts = await _connected_accounts(session)
+        accounts = await _connected_accounts(session, provider)
 
         for tenant_id, _account_id in accounts:
             token = set_context(
@@ -106,7 +116,7 @@ async def _per_tenant(
                 )
             )
             try:
-                with log_duration(log, job_name, provider=PROVIDER):
+                with log_duration(log, job_name, provider=provider):
                     result = await handler(session, tenant_id)
                 for key, value in result.items():
                     totals[key] = totals.get(key, 0) + value
@@ -117,7 +127,7 @@ async def _per_tenant(
                 log.error(
                     "courier job failed for a shop",
                     extra={
-                        "provider": PROVIDER,
+                        "provider": provider,
                         "job_name": job_name,
                         "error": type(exc).__name__,
                     },
@@ -144,29 +154,41 @@ async def poll_courier_statuses(ctx: dict[str, Any] | None = None) -> dict[str, 
 
     The production synchronisation path. Steadfast documents no webhook, so
     nothing else keeps a parcel's status current, and this job is written to be
-    sufficient on its own rather than as a safety net under one.
+    sufficient on its own rather than as a safety net under one. RedX parcels
+    are polled the same way, one provider after the other, each only for shops
+    with that provider connected.
     """
     settings = get_settings()
 
-    async def handle(session: Any, _tenant_id: uuid.UUID) -> dict[str, int]:
-        accounts, consignments = _services(session)
-        sync = StatusSyncService(
-            session, accounts=accounts, consignments=consignments, settings=settings
-        )
-        report = await sync.poll_due(provider=PROVIDER)
-        lag = await sync.sync_lag_seconds(provider=PROVIDER)
-        if lag:
-            record_metric(CourierMetric.STATUS_SYNC_LAG, value=lag, provider=PROVIDER)
-        return {
-            "checked": report.checked,
-            "changed": report.changed,
-            "settled": report.settled,
-            "poll_errors": report.errors,
-            "unknown_status": report.unknown_status,
-            "needs_quantities": report.needs_quantities,
-        }
+    def handler_for(provider: str) -> Callable[[Any, uuid.UUID], Awaitable[dict[str, int]]]:
+        async def handle(session: Any, _tenant_id: uuid.UUID) -> dict[str, int]:
+            accounts, consignments = _services(session)
+            sync = StatusSyncService(
+                session, accounts=accounts, consignments=consignments, settings=settings
+            )
+            report = await sync.poll_due(provider=provider)
+            lag = await sync.sync_lag_seconds(provider=provider)
+            if lag:
+                record_metric(CourierMetric.STATUS_SYNC_LAG, value=lag, provider=provider)
+            return {
+                "checked": report.checked,
+                "changed": report.changed,
+                "settled": report.settled,
+                "poll_errors": report.errors,
+                "unknown_status": report.unknown_status,
+                "needs_quantities": report.needs_quantities,
+            }
 
-    return await _per_tenant("courier:poll_statuses", handle)
+        return handle
+
+    totals: dict[str, int] = {}
+    for provider in POLLED_PROVIDERS:
+        result = await _per_tenant(
+            "courier:poll_statuses", handler_for(provider), provider=provider
+        )
+        for key, value in result.items():
+            totals[key] = totals.get(key, 0) + value
+    return totals
 
 
 # -------------------------------------------------------------- recovery --

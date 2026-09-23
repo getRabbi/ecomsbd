@@ -25,6 +25,7 @@ from app.couriers.http import FakeProviderTransport
 from app.couriers.pathao.adapter import PathaoAdapter
 from app.couriers.pathao.client import PathaoClient, PathaoConfig
 from app.couriers.redx.adapter import RedxAdapter
+from app.couriers.redx.client import RedxClient, RedxConfig
 from app.couriers.registry import build_registry
 from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
@@ -57,6 +58,10 @@ def _pathao() -> PathaoAdapter:
     return PathaoAdapter(
         PathaoClient(FakeProviderTransport(provider="pathao"), config=PathaoConfig())
     )
+
+
+def _redx() -> RedxAdapter:
+    return RedxAdapter(RedxClient(FakeProviderTransport(provider="redx"), config=RedxConfig()))
 
 
 # ------------------------------------------------------------- coexistence --
@@ -175,10 +180,28 @@ def test_steadfast_does_not_care_about_a_pickup_store() -> None:
     assert preview.redacted_payload["invoice"] == "CP-1"
 
 
-def test_redx_refuses_to_describe_a_booking_it_cannot_make() -> None:
-    """Rather than returning an empty payload and a meaningless evidence row."""
-    with pytest.raises(ValueError):
-        RedxAdapter().describe_booking(_booking(), "CP-1")
+def test_redx_refuses_a_booking_with_no_delivery_area() -> None:
+    """RedX requires a delivery area id and name on every create.
+
+    Refused here, before anything is persisted, rather than sent without one
+    and discovered after a parcel might exist.
+    """
+    with pytest.raises(ValueError, match="delivery area"):
+        _redx().describe_booking(_booking(), "CP-1")
+
+
+def test_redx_describes_its_own_payload_shape() -> None:
+    preview = _redx().describe_booking(
+        _booking(delivery_area_id="12", delivery_area_name="Mirpur DOHS"), "CP-20260918-0042"
+    )
+
+    assert preview.redacted_payload["merchant_invoice_id"] == "CP-20260918-0042"
+    assert preview.redacted_payload["delivery_area_id"] == 12
+    assert preview.redacted_payload["delivery_area"] == "Mirpur DOHS"
+    assert preview.redacted_payload["cash_collection_amount"] == "1050"
+    # Stored as evidence, so it must already be masked at rest.
+    assert "01712345678" not in repr(preview.redacted_payload)
+    assert preview.cod_taka == 1050
 
 
 # ------------------------------------------------------------- readiness --
@@ -187,14 +210,14 @@ def test_redx_refuses_to_describe_a_booking_it_cannot_make() -> None:
 def test_only_couriers_with_a_verified_create_can_be_offered() -> None:
     """The UI reacts to capability, not to a provider name.
 
-    Steadfast and Pathao have a verified create; RedX and manual mode do not,
+    Steadfast, Pathao and RedX have a documented create; manual mode does not,
     and must never appear as a booking option.
     """
     manifests = load_all_manifests()
 
     assert manifests["steadfast"].supports(Capability.CREATE_SINGLE)
     assert manifests["pathao"].supports(Capability.CREATE_SINGLE)
-    assert not manifests["redx"].supports(Capability.CREATE_SINGLE)
+    assert manifests["redx"].supports(Capability.CREATE_SINGLE)
     assert not manifests["manual"].supports(Capability.CREATE_SINGLE)
 
 
@@ -202,12 +225,17 @@ def test_a_courier_needing_a_store_says_so_in_its_declaration() -> None:
     """So the client can tell "connected" from "bookable" without a provider check."""
     pathao = spec_for("pathao")
     steadfast = spec_for("steadfast")
-    assert pathao is not None and steadfast is not None
+    redx = spec_for("redx")
+    assert pathao is not None and steadfast is not None and redx is not None
 
     assert pathao.requires_store
     assert not steadfast.requires_store
-    # RedX has no declaration at all: there is nothing to connect yet.
-    assert spec_for("redx") is None
+    # RedX's pickup_store_id is optional: a store may be chosen, never must be.
+    assert not redx.requires_store
+    assert redx.as_dict()["supports_store"] is True
+    # ...but every RedX booking must name a delivery area.
+    assert redx.requires_delivery_area
+    assert not pathao.requires_delivery_area and not steadfast.requires_delivery_area
 
 
 # ------------------------------------------------- which couriers can book --
@@ -270,7 +298,7 @@ def _by_provider(rows) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_a_courier_with_nothing_to_connect_is_not_a_booking_option() -> None:
-    """Manual mode and RedX are absent entirely, not listed as broken.
+    """Manual mode is absent entirely, not listed as broken.
 
     Offering a courier that cannot be connected would make the picker a list of
     disappointments.
@@ -278,8 +306,7 @@ async def test_a_courier_with_nothing_to_connect_is_not_a_booking_option() -> No
     rows = _by_provider(await _service([]).bookable_couriers())
 
     assert "manual" not in rows
-    assert "redx" not in rows
-    assert set(rows) == {"steadfast", "pathao"}
+    assert set(rows) == {"steadfast", "pathao", "redx"}
 
 
 @pytest.mark.asyncio
@@ -288,7 +315,7 @@ async def test_an_unconnected_courier_reports_exactly_that() -> None:
 
     rows = _by_provider(await _service([]).bookable_couriers())
 
-    for provider in ("steadfast", "pathao"):
+    for provider in ("steadfast", "pathao", "redx"):
         assert not rows[provider].bookable  # type: ignore[attr-defined]
         assert rows[provider].reason is BookableReason.NOT_CONNECTED  # type: ignore[attr-defined]
 
@@ -398,3 +425,26 @@ async def test_a_courier_declares_whether_a_delivery_type_may_be_offered() -> No
 
     assert rows["steadfast"].supports_delivery_type is True  # type: ignore[attr-defined]
     assert rows["pathao"].supports_delivery_type is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_a_connected_redx_account_is_bookable_without_a_store() -> None:
+    """RedX needs no pickup store, but tells the booking sheet to ask for an area."""
+    rows = _by_provider(await _service([_FakeAccount("redx")]).bookable_couriers())
+
+    assert rows["redx"].bookable  # type: ignore[attr-defined]
+    assert rows["redx"].requires_store is False  # type: ignore[attr-defined]
+    assert rows["redx"].requires_delivery_area is True  # type: ignore[attr-defined]
+    assert rows["redx"].as_dict()["requires_delivery_area"] is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_redx_stays_off_for_a_shop_that_was_not_given_it() -> None:
+    from app.couriers.accounts import BookableReason
+
+    rows = _by_provider(
+        await _service([_FakeAccount("redx")]).bookable_couriers(enabled={"redx": False})
+    )
+
+    assert not rows["redx"].bookable  # type: ignore[attr-defined]
+    assert rows["redx"].reason is BookableReason.NOT_ENABLED  # type: ignore[attr-defined]

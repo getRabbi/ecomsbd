@@ -438,17 +438,18 @@ void main() {
       );
       harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
         _steadfastProvider,
-        // RedX as the server reports it today: enabled, but with every
-        // capability unknown and therefore no connect form. It is listed so
-        // the seller can see where it stands, with nothing to connect.
+        // A courier as the server reports one with no verified contract:
+        // enabled, but with every capability unknown and therefore no connect
+        // form. It is listed so the seller can see where it stands, with
+        // nothing to connect.
         <String, dynamic>{
-          'provider': 'redx',
-          'display_name': 'RedX',
+          'provider': 'othercourier',
+          'display_name': 'Other Courier',
           'capabilities': <String, dynamic>{},
           'enabled': true,
           'fully_unverified': true,
           'unknowns': <String, dynamic>{
-            'REDX_API_DOCUMENTATION_REQUIRED': 'unknown',
+            'OTHER_COURIER_DOCUMENTATION_REQUIRED': 'unknown',
           },
           'manual_fallback': 'Manual courier mode.',
         },
@@ -460,7 +461,7 @@ void main() {
         harness: harness,
       );
 
-      expect(find.text('RedX'), findsOneWidget);
+      expect(find.text('Other Courier'), findsOneWidget);
       expect(find.text('Unavailable'), findsOneWidget);
       expect(find.text('Official integration required'), findsOneWidget);
       // No capability is drawn from an all-unknown manifest, and the only

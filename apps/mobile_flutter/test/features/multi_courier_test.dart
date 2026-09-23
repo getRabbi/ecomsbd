@@ -30,6 +30,7 @@ Map<String, dynamic> _courier(
   bool requiresStore = false,
   String? storeName,
   bool supportsDeliveryType = false,
+  bool requiresDeliveryArea = false,
 }) {
   return <String, dynamic>{
     'provider': provider,
@@ -39,8 +40,52 @@ Map<String, dynamic> _courier(
     'requires_store': requiresStore,
     'store_name': storeName,
     'supports_delivery_type': supportsDeliveryType,
+    'requires_delivery_area': requiresDeliveryArea,
   };
 }
+
+const List<dynamic> _redxAreas = <dynamic>[
+  <String, dynamic>{
+    'id': '1',
+    'name': 'Mohammadpur(Dhaka)',
+    'post_code': '1207',
+    'division_name': 'Dhaka',
+    'zone_id': '1',
+  },
+  <String, dynamic>{
+    'id': '2',
+    'name': 'Dhanmondi',
+    'post_code': '1209',
+    'division_name': 'Dhaka',
+    'zone_id': '1',
+  },
+];
+
+Map<String, dynamic> _booked(String provider) => <String, dynamic>{
+  'provider': provider,
+  'batch_id': null,
+  'booked': 1,
+  'ambiguous': 0,
+  'failed': 0,
+  'items': <dynamic>[
+    <String, dynamic>{
+      'order_id': 'order-1',
+      'consignment_id': '33333333-3333-3333-3333-333333333333',
+      'merchant_reference': 'CP-20260918-0042',
+      'outcome': 'BOOKED',
+      'tracking_code': '20A312THJDJ8',
+      'error_code': null,
+      'message': null,
+    },
+  ],
+};
+
+FilledButton _confirmButton(WidgetTester tester) => tester.widget<FilledButton>(
+  find.ancestor(
+    of: find.text('Confirm booking'),
+    matching: find.byType(FilledButton),
+  ),
+);
 
 SellerOrder _order() {
   return SellerOrder.fromJson(const <String, dynamic>{
@@ -262,5 +307,147 @@ void main() {
         expect(courier.supportsDeliveryType, isFalse);
       },
     );
+    test('a missing delivery-area declaration defaults to not asking', () {
+      final courier = BookableCourier.fromJson(const <String, dynamic>{
+        'provider': 'x',
+        'display_name': 'X',
+        'bookable': true,
+      });
+
+      expect(courier.requiresDeliveryArea, isFalse);
+    });
+  });
+
+  group('A courier that needs a delivery area', () {
+    testWidgets('holds Confirm until an area is picked, then sends it', (
+      tester,
+    ) async {
+      final harness = _harness(<dynamic>[
+        _courier('redx', 'RedX', requiresDeliveryArea: true),
+      ]);
+      harness.adapter.onJson(
+        'GET',
+        '/couriers/accounts/redx/areas',
+        _redxAreas,
+      );
+      harness.adapter
+          .onJson('GET', '/couriers/orders/order-1/quote', <String, dynamic>{
+            'provider': 'redx',
+            'available': true,
+            'delivery_fee_paisa': 6000,
+            'cod_fee_paisa': 1050,
+            'reason': null,
+          });
+      harness.adapter.onJson(
+        'POST',
+        '/couriers/orders/order-1/book',
+        _booked('redx'),
+      );
+
+      await _openSheet(tester, harness);
+
+      // Nothing can be booked without the area RedX requires.
+      expect(_confirmButton(tester).onPressed, isNull);
+      expect(
+        find.text("RedX needs the delivery area, picked from RedX's own list."),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Choose delivery area'));
+      await settle(tester, frames: 10, step: const Duration(milliseconds: 60));
+      expect(find.text('Mohammadpur(Dhaka)'), findsOneWidget);
+      expect(find.text('Dhanmondi'), findsOneWidget);
+
+      // Searched on the device: one request for the list, none per keystroke.
+      await tester.enterText(find.byType(EditableText).last, 'dhan');
+      await tester.pump();
+      expect(find.text('Mohammadpur(Dhaka)'), findsNothing);
+      await tester.tap(find.text('Dhanmondi'));
+      await settle(tester, frames: 10, step: const Duration(milliseconds: 60));
+
+      expect(find.text('Dhanmondi · 1209'), findsOneWidget);
+      expect(
+        harness.adapter.to('GET', '/couriers/accounts/redx/areas'),
+        hasLength(1),
+      );
+
+      // RedX's own quote for the chosen area, shown before anything is booked.
+      expect(find.text('RedX charge'), findsOneWidget);
+      final quoted = harness.adapter.to(
+        'GET',
+        '/couriers/orders/order-1/quote',
+      );
+      expect(quoted, isNotEmpty);
+      expect(quoted.last.query['provider'], 'redx');
+      expect(quoted.last.query['delivery_area_id'], '2');
+      expect(
+        harness.adapter.to('POST', '/couriers/orders/order-1/book'),
+        isEmpty,
+      );
+
+      expect(_confirmButton(tester).onPressed, isNotNull);
+      await tester.tap(find.text('Confirm booking'));
+      await settle(tester, frames: 8, step: const Duration(milliseconds: 60));
+
+      final booked = harness.adapter.to(
+        'POST',
+        '/couriers/orders/order-1/book',
+      );
+      expect(booked, hasLength(1));
+      expect(booked.single.query['provider'], 'redx');
+      expect(booked.single.jsonBody['delivery_area_id'], 2);
+      expect(booked.single.jsonBody['delivery_area_name'], 'Dhanmondi');
+    });
+
+    testWidgets(
+      'a quote that cannot be asked for says why, and does not block',
+      (tester) async {
+        final harness = _harness(<dynamic>[
+          _courier('redx', 'RedX', requiresDeliveryArea: true),
+        ]);
+        harness.adapter.onJson(
+          'GET',
+          '/couriers/accounts/redx/areas',
+          _redxAreas,
+        );
+        harness.adapter
+            .onJson('GET', '/couriers/orders/order-1/quote', <String, dynamic>{
+              'provider': 'redx',
+              'available': false,
+              'reason': 'Choose a RedX pickup store to see its charge.',
+            });
+
+        await _openSheet(tester, harness);
+        await tester.tap(find.text('Choose delivery area'));
+        await settle(
+          tester,
+          frames: 10,
+          step: const Duration(milliseconds: 60),
+        );
+        await tester.tap(find.text('Dhanmondi'));
+        await settle(
+          tester,
+          frames: 10,
+          step: const Duration(milliseconds: 60),
+        );
+
+        expect(
+          find.text('Choose a RedX pickup store to see its charge.'),
+          findsOneWidget,
+        );
+        expect(_confirmButton(tester).onPressed, isNotNull);
+      },
+    );
+
+    testWidgets('a courier that needs no area shows no area picker', (
+      tester,
+    ) async {
+      final harness = _harness(<dynamic>[_courier('steadfast', 'Steadfast')]);
+
+      await _openSheet(tester, harness);
+
+      expect(find.text('Choose delivery area'), findsNothing);
+      expect(_confirmButton(tester).onPressed, isNotNull);
+    });
   });
 }

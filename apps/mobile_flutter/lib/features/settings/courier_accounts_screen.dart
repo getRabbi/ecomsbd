@@ -679,6 +679,7 @@ class _CourierAccountManageScreenState
       context,
       provider: _provider,
       displayName: _name,
+      optional: !(_form?.requiresStore ?? false),
     );
     if (chosen == null) {
       return;
@@ -706,6 +707,9 @@ class _CourierAccountManageScreenState
     final hasCredentials = _hasCredentials(account);
     final connected = status == CourierAccountStatus.connected;
     final requiresStore = form?.requiresStore ?? false;
+    // A courier where a store may be chosen but need not be (RedX) gets the
+    // same row and button, labelled as optional.
+    final supportsStore = requiresStore || (form?.supportsStore ?? false);
     final needsStore = requiresStore && connected && account?.storeId == null;
 
     // Credentials are not entered for a courier the shop may not use. Ones
@@ -763,9 +767,11 @@ class _CourierAccountManageScreenState
                   ),
                   value: Money(account!.reportedBalancePaisa!).format(),
                 ),
-              if (requiresStore && connected)
+              if (supportsStore && connected)
                 _DetailRow(
-                  label: context.tr('ca.pickupStore'),
+                  label: requiresStore
+                      ? context.tr('ca.pickupStore')
+                      : context.tr('ca.pickupStoreOptional'),
                   value:
                       account?.storeName ??
                       account?.storeId ??
@@ -813,7 +819,7 @@ class _CourierAccountManageScreenState
                       : context.tr('ca.testConnection'),
                 ),
               ),
-            if (requiresStore && connected)
+            if (supportsStore && connected)
               OutlinedButton(
                 onPressed: _busy ? null : _chooseStore,
                 child: Text(
@@ -1067,6 +1073,9 @@ class _WebhookPanel extends ConsumerWidget {
         if (!value.supported) {
           return const SizedBox.shrink();
         }
+        if (form.webhookSecretGenerated) {
+          return _GeneratedWebhookUrl(setup: value, form: form);
+        }
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(EcomsbdSpacing.sm),
@@ -1145,24 +1154,109 @@ class _WebhookPanel extends ConsumerWidget {
   }
 }
 
+/// The callback URL for a courier whose callbacks authenticate by a token that
+/// ecomsbd puts in the URL itself (RedX).
+///
+/// Worded as "here is the URL", never "status updates are set up": issuing
+/// the URL says nothing about whether the seller has pasted it into the
+/// courier's panel yet, and status is kept current by polling either way.
+class _GeneratedWebhookUrl extends StatelessWidget {
+  const _GeneratedWebhookUrl({required this.setup, required this.form});
+
+  final WebhookSetup setup;
+  final ProviderConnectForm form;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = setup.callbackUrl;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(EcomsbdSpacing.sm),
+      decoration: BoxDecoration(
+        color: EcomsbdColors.blueSoft,
+        borderRadius: BorderRadius.circular(EcomsbdRadii.sm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(
+                Icons.link_rounded,
+                size: 15,
+                color: EcomsbdColors.blue,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  context.tr('ca.webhookUrlReady', <String, Object?>{
+                    'provider': form.displayName,
+                  }),
+                  style: EcomsbdType.bodyStrong,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            setup.help ?? form.webhookHelp ?? '',
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+          if (url != null) ...<Widget>[
+            const SizedBox(height: EcomsbdSpacing.xs),
+            SelectableText(
+              url,
+              style: EcomsbdType.caption.copyWith(fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: EcomsbdSpacing.xs),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.tr('ca.urlCopied'))),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined, size: 15),
+              label: Text(context.tr('ca.copyUrl')),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Pick the pickup store bookings are made from.
 class _StorePickerSheet extends ConsumerWidget {
-  const _StorePickerSheet({required this.provider, required this.displayName});
+  const _StorePickerSheet({
+    required this.provider,
+    required this.displayName,
+    this.optional = false,
+  });
 
   final String provider;
   final String displayName;
+
+  /// Whether the courier books without a chosen store too (RedX).
+  final bool optional;
 
   static Future<CourierStore?> show(
     BuildContext context, {
     required String provider,
     required String displayName,
+    bool optional = false,
   }) {
     return showModalBottomSheet<CourierStore>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          _StorePickerSheet(provider: provider, displayName: displayName),
+      builder: (_) => _StorePickerSheet(
+        provider: provider,
+        displayName: displayName,
+        optional: optional,
+      ),
     );
   }
 
@@ -1195,9 +1289,10 @@ class _StorePickerSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            context.tr('ca.pickupStoreNote', <String, Object?>{
-              'provider': displayName,
-            }),
+            context.tr(
+              optional ? 'ca.pickupStoreOptionalNote' : 'ca.pickupStoreNote',
+              <String, Object?>{'provider': displayName},
+            ),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.md),
@@ -1517,7 +1612,10 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
                     ),
                   ],
                 ),
-              if (form?.usesWebhook ?? false) ...<Widget>[
+              // Only where the seller copies a secret out of the courier's
+              // panel. A courier whose secret ecomsbd issues inside the
+              // callback URL (RedX) has nothing to type here.
+              if (form?.asksForWebhookSecret ?? false) ...<Widget>[
                 const SizedBox(height: EcomsbdSpacing.xs),
                 LabelledField(
                   label: context.tr('ca.webhookSecretField'),
