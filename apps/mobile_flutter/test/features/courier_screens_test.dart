@@ -145,6 +145,17 @@ const List<dynamic> _bookableSteadfast = <dynamic>[
   },
 ];
 
+/// Open the management screen for the one courier on the list.
+Future<void> _openManage(WidgetTester tester) async {
+  final manage = find.text('Manage');
+  await tester.ensureVisible(manage);
+  await tester.pump();
+  await tester.tap(manage);
+  // Long enough for the page transition to finish, so the list underneath
+  // goes offstage and only the management screen is found.
+  await settle(tester, frames: 20, step: const Duration(milliseconds: 60));
+}
+
 void _stubCourierLists(CommerceHarness harness) {
   harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
     _steadfastProvider,
@@ -173,7 +184,9 @@ void main() {
       );
 
       expect(find.text('Connected'), findsWidgets);
-      expect(find.text('****abcd'), findsOneWidget);
+      // The server's `****abcd`, restyled; never more of the key than that.
+      expect(find.text('••••••••abcd'), findsOneWidget);
+      expect(find.text('****abcd'), findsNothing);
       // There is no widget on this screen that could hold a key, and no
       // response that carries one.
       expect(find.text('sfk-live-0000'), findsNothing);
@@ -198,6 +211,7 @@ void main() {
         const CourierAccountsScreen(),
         harness: harness,
       );
+      await _openManage(tester);
 
       expect(
         find.textContaining('does not publish a callback'),
@@ -253,11 +267,14 @@ void main() {
       );
 
       expect(find.text('Needs reconnect'), findsOneWidget);
-      expect(find.text('Reconnect'), findsOneWidget);
       expect(
         find.textContaining('stopped accepting these details'),
         findsOneWidget,
       );
+
+      await _openManage(tester);
+      expect(find.text('Needs reconnect'), findsOneWidget);
+      expect(find.text('Reconnect'), findsOneWidget);
     });
 
     testWidgets('shows the courier balance labelled as the courier\'s', (
@@ -279,6 +296,7 @@ void main() {
         const CourierAccountsScreen(),
         harness: harness,
       );
+      await _openManage(tester);
 
       // Named as Steadfast's figure so it can never be read as a COD total.
       expect(find.text('Steadfast reported balance'), findsOneWidget);

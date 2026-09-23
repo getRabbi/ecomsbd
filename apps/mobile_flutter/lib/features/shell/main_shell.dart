@@ -19,6 +19,9 @@ import '../shared/responsive.dart';
 
 /// The signed-in shell: four tabs plus the menu overlay.
 ///
+/// The menu opens from the hamburger in the top bar and from nowhere else in
+/// the chrome — not from a bottom-bar tab, and not from the title pill.
+///
 /// Tab state is kept in an [IndexedStack] so scroll position and any in-progress
 /// form survive switching tabs — a seller mid-way through entering an order must
 /// not lose it by glancing at Money.
@@ -44,20 +47,11 @@ class MainShellState extends ConsumerState<MainShell> {
     widget.initialTab,
   };
 
-  static const List<MainDestination> _tabs = <MainDestination>[
-    MainDestination.home,
-    MainDestination.orders,
-    MainDestination.money,
-    MainDestination.insights,
-  ];
+  static const List<MainDestination> _tabs = MainDestination.values;
 
   int get _index => _tabs.indexOf(_current).clamp(0, _tabs.length - 1);
 
   void _select(MainDestination destination) {
-    if (destination == MainDestination.menu) {
-      _openMenu();
-      return;
-    }
     setState(() {
       _current = destination;
       _opened.add(destination);
@@ -102,8 +96,6 @@ class MainShellState extends ConsumerState<MainShell> {
       MainDestination.orders => OrdersScreen(onNavigate: _navigateByName),
       MainDestination.money => MoneyScreen(onNavigate: _navigateByName),
       MainDestination.insights => const InsightsScreen(),
-      // Menu is an overlay, never a tab body.
-      MainDestination.menu => const SizedBox.shrink(),
     };
   }
 
@@ -116,9 +108,9 @@ class MainShellState extends ConsumerState<MainShell> {
       overlayStyle: isHome ? ecomsbdDarkOverlay : ecomsbdLightOverlay,
       extendBehindTopBar: isHome,
       topBar: GlassTopBar(
-        leading: isHome
-            ? BrandPill(onTap: _openMenu)
-            : BrandPill(label: _current.labelIn(context), onTap: _openMenu),
+        // The current section's name, as a label. Every tab reads the same
+        // way, and the hamburger on the right is the menu's only entry.
+        leading: BrandPill(label: _current.labelIn(context)),
         actions: <Widget>[
           GlassIconButton(
             icon: Icons.add_rounded,
@@ -160,6 +152,12 @@ class MainShellState extends ConsumerState<MainShell> {
 /// The count is a plain number rather than a red dot: master spec section 94
 /// is about the seller being able to find out how much needs them, and "3"
 /// answers that where a dot only says "something".
+///
+/// The badge sits *inside* the button's 48dp square. The action pill clips to
+/// its rounded outline, so a badge hung off the corner of the button (as it
+/// once was) had its top sliced off by the pill edge. Keeping it within the
+/// square keeps it within the pill, on every tab and at every width, without
+/// moving the header.
 class _NotificationButton extends ConsumerWidget {
   const _NotificationButton({required this.onPressed});
 
@@ -169,44 +167,89 @@ class _NotificationButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        GlassIconButton(
-          icon: unread > 0
-              ? Icons.notifications_active_rounded
-              : Icons.notifications_none_rounded,
-          tooltip: unread > 0
-              ? context.tr('nav.unreadTooltip', <String, Object?>{
-                  'count': unread,
-                })
-              : context.tr('nav.notificationsTooltip'),
-          onPressed: onPressed,
-        ),
-        if (unread > 0)
-          Positioned(
-            top: -2,
-            right: -2,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                constraints: const BoxConstraints(minWidth: 18),
-                decoration: BoxDecoration(
-                  color: EcomsbdColors.red,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Text(
-                  unread > 9 ? '9+' : '$unread',
-                  textAlign: TextAlign.center,
-                  style: EcomsbdType.chip.copyWith(
-                    color: Colors.white,
-                    fontSize: 10,
-                  ),
+    return SizedBox.square(
+      dimension: EcomsbdTouch.minTarget,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned.fill(
+            child: GlassIconButton(
+              icon: unread > 0
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_none_rounded,
+              tooltip: unread > 0
+                  ? context.tr('nav.unreadTooltip', <String, Object?>{
+                      'count': unread,
+                    })
+                  : context.tr('nav.notificationsTooltip'),
+              onPressed: onPressed,
+            ),
+          ),
+          if (unread > 0)
+            PositionedDirectional(
+              top: NotificationCountBadge.inset,
+              end: NotificationCountBadge.inset,
+              // The tooltip already carries the count for a screen reader.
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: NotificationCountBadge(count: unread),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The red count on the bell: `1`–`9`, `10`–`99`, then `99+`.
+///
+/// A fixed-height capsule that grows sideways only, so a three-character count
+/// never pushes it past the top of the bar. Its text ignores the system font
+/// scale: at 200% a 10sp digit would outgrow any badge that still fits the bar,
+/// and the count is read out in full from the button's tooltip regardless.
+class NotificationCountBadge extends StatelessWidget {
+  const NotificationCountBadge({required this.count, super.key});
+
+  final int count;
+
+  /// Distance from the top and trailing edges of the 48dp button square.
+  static const double inset = 5;
+
+  static const double height = 16;
+
+  /// The text shown for [count].
+  static String labelFor(int count) => count > 99 ? '99+' : '$count';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      constraints: const BoxConstraints(minWidth: height),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: EcomsbdColors.red,
+        borderRadius: BorderRadius.circular(height / 2),
+        // A hairline in the bar's own colour, so the badge reads as sitting on
+        // the bell rather than merging into it.
+        border: Border.all(color: Colors.white, width: 1.2),
+      ),
+      child: Text(
+        labelFor(count),
+        maxLines: 1,
+        softWrap: false,
+        textAlign: TextAlign.center,
+        textScaler: TextScaler.noScaling,
+        style: EcomsbdType.chip.copyWith(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          height: 1,
+          letterSpacing: 0,
+          leadingDistribution: TextLeadingDistribution.even,
+        ),
+      ),
     );
   }
 }

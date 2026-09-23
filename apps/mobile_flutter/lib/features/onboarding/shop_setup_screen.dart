@@ -107,7 +107,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
           children: <Widget>[
             const Row(
               children: <Widget>[
-                BrandPill(showChevron: false),
+                BrandPill(),
                 Spacer(),
                 LanguageTogglePill(),
               ],

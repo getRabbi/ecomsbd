@@ -13,15 +13,17 @@ import '../../design/tokens.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
 import '../../l10n/app_strings.dart';
-import '../../l10n/app_locale.dart';
 
-/// Read where no `BuildContext` exists, so the active locale is resolved
-/// directly -- the same approach `formatRelative` and `order_status.dart` use.
-String _t(String key) => AppStrings(activeAppLocale).t(key);
-
-/// Courier accounts.
+/// Courier accounts: the one place a seller sees and manages every courier.
 ///
-/// Brief sections 4 and 5. Three things this screen refuses to do:
+/// Brief sections 4 and 5. The list shows every courier ecomsbd knows about —
+/// connected or not, switched on for this shop or not, integrated or still
+/// waiting on an official contract — and each connectable one leads to a
+/// single management screen. Nothing here is decided by a courier's name: the
+/// connect form, the capabilities and the on/off state all come from the
+/// server, so a courier the server does not offer cannot be offered here.
+///
+/// Three things these screens refuse to do:
 ///
 /// * **Show a secret after it is saved.** There is no field for it, because
 ///   there is no response that carries one. The masked identifier is all a
@@ -29,73 +31,197 @@ String _t(String key) => AppStrings(activeAppLocale).t(key);
 /// * **Say "your key is wrong" when it does not know.** A courier outage and a
 ///   rejected credential look identical if you only have a boolean, so the four
 ///   validation outcomes are rendered as four different things.
-/// * **Hide what the integration cannot do.** A courier with no documented
-///   webhook says so, in plain words, next to the fact that status therefore
-///   arrives by polling.
+/// * **Offer a courier that cannot work.** One without a verified contract is
+///   listed as unavailable, with no Connect button, rather than hidden or
+///   dressed up as connectable.
 class CourierAccountsScreen extends ConsumerWidget {
   const CourierAccountsScreen({super.key});
 
   static const String steadfast = 'steadfast';
 
+  /// Manual mode. The server lists it beside the couriers, but it has nothing
+  /// to connect; it has its own card at the foot of the screen instead.
+  static const String manual = 'manual';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final evidence = ref.watch(providerEvidenceProvider(steadfast));
+    final viewOnly = _isForbidden(ref.watch(courierAccountsProvider).error);
 
     return DetailScaffold(
       title: context.tr('ca.title'),
       children: <Widget>[
-        // Every courier, rendered from the server's own declaration of how to
-        // connect it. There is no per-courier widget any more: adding RedX,
-        // once its documentation exists, needs no change in this file.
-        const _Couriers(),
-        evidence.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (value) => _WhatThisCourierSupports(evidence: value),
+        Text(
+          context.tr('ca.intro'),
+          style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
         ),
         const SizedBox(height: EcomsbdSpacing.md),
+        if (viewOnly) ...<Widget>[
+          const _OwnerOnlyNotice(),
+          const SizedBox(height: EcomsbdSpacing.md),
+        ],
+        _CourierList(viewOnly: viewOnly),
         const _ManualModeAlwaysWorks(),
       ],
     );
   }
 }
 
-/// Every connectable courier, driven entirely by `/couriers/providers`.
+/// True when the server refused because of the person's role.
 ///
-/// Couriers with nothing to connect — manual mode, or one with no verified
-/// contract — are absent from the server's list, so they are absent here
-/// without this widget knowing why.
-class _Couriers extends ConsumerWidget {
-  const _Couriers();
+/// The accounts list is owner-only (`courier.credential_manage`), so a refusal
+/// there is how this screen learns it is being read by someone who may look
+/// but not change anything. The role matrix stays on the server; the app hides
+/// what the server would refuse, and the server refuses it regardless.
+bool _isForbidden(Object? error) =>
+    error is ApiError && error.code == ApiErrorCode.forbidden;
+
+/// Where one courier stands for this shop.
+enum CourierConnection {
+  connected,
+  needsReconnect,
+  notConnected,
+
+  /// Integrated, but not switched on for this shop.
+  disabled,
+
+  /// No verified contract, so nothing to connect.
+  unavailable,
+  unknown;
+
+  String label(BuildContext context) => switch (this) {
+    CourierConnection.connected => context.tr('provider.connected'),
+    CourierConnection.needsReconnect => context.tr('provider.needsReconnect'),
+    CourierConnection.notConnected => context.tr('provider.notConnected'),
+    CourierConnection.disabled => context.tr('ca.stateDisabled'),
+    CourierConnection.unavailable => context.tr('ca.stateUnavailable'),
+    CourierConnection.unknown => context.tr('provider.unknown'),
+  };
+
+  Tone get tone => switch (this) {
+    CourierConnection.connected => Tone.good,
+    CourierConnection.needsReconnect => Tone.warning,
+    _ => Tone.neutral,
+  };
+}
+
+/// Work out a courier's state from what the server said.
+///
+/// Someone who may manage credentials has the account itself. Anyone else has
+/// only the booking-availability list, which says the same thing in booking
+/// terms — and is itself withheld from roles that cannot book, in which case
+/// the honest answer is "unknown".
+CourierConnection _connectionFor(
+  CourierProviderInfo info, {
+  CourierAccount? account,
+  BookableCourier? bookable,
+  bool viewOnly = false,
+}) {
+  if (info.connectForm == null) {
+    return CourierConnection.unavailable;
+  }
+  if (!info.enabled) {
+    return CourierConnection.disabled;
+  }
+  if (viewOnly) {
+    if (bookable == null) {
+      return CourierConnection.unknown;
+    }
+    if (bookable.bookable) {
+      return CourierConnection.connected;
+    }
+    return switch (bookable.block) {
+      BookableBlock.needsPickupStore ||
+      BookableBlock.providerUnavailable => CourierConnection.connected,
+      BookableBlock.needsReconnect => CourierConnection.needsReconnect,
+      BookableBlock.notConnected => CourierConnection.notConnected,
+      BookableBlock.notEnabled => CourierConnection.disabled,
+      _ => CourierConnection.unknown,
+    };
+  }
+  return switch (account?.status) {
+    CourierAccountStatus.connected => CourierConnection.connected,
+    CourierAccountStatus.needsReconnect => CourierConnection.needsReconnect,
+    CourierAccountStatus.unknown => CourierConnection.unknown,
+    _ => CourierConnection.notConnected,
+  };
+}
+
+/// Whether stored credentials exist for this account.
+///
+/// A disconnected account keeps its row (bookings reference it) and even its
+/// old masked identifier, but its credentials are erased, so nothing about
+/// them is shown.
+bool _hasCredentials(CourierAccount? account) =>
+    account != null && account.status != CourierAccountStatus.disconnected;
+
+/// The saved identifier as a seller sees it: `••••••••AB12`.
+///
+/// The server sends `****AB12` — the last four characters of the key and
+/// nothing else — so this only restyles what is already safe to show.
+String maskedForDisplay(String masked) {
+  final visible = masked.replaceFirst(RegExp(r'^\*+'), '');
+  return '••••••••$visible';
+}
+
+/// Every courier ecomsbd knows about, as one row each.
+class _CourierList extends ConsumerWidget {
+  const _CourierList({required this.viewOnly});
+
+  final bool viewOnly;
+
+  Widget _loadError(
+    BuildContext context,
+    WidgetRef ref,
+    Object error,
+    ProviderOrFamily provider,
+  ) {
+    return error is ApiError
+        ? ErrorStateCard(error: error, onRetry: () => ref.invalidate(provider))
+        : EmptyState(
+            icon: Icons.error_outline,
+            title: context.tr('common.couldNotLoad'),
+            message: '$error',
+          );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final providers = ref.watch(courierProvidersProvider);
+    final accounts = ref.watch(courierAccountsProvider);
+    final bookable = viewOnly
+        ? ref.watch(bookableCouriersProvider).valueOrNull
+        : null;
+
     return providers.when(
       loading: () => SkeletonLoader.card(height: 180),
-      error: (error, _) => error is ApiError
-          ? ErrorStateCard(
-              error: error,
-              onRetry: () => ref.invalidate(courierProvidersProvider),
-            )
-          : EmptyState(
-              icon: Icons.error_outline,
-              title: context.tr('common.couldNotLoad'),
-              message: '$error',
-            ),
+      error: (error, _) =>
+          _loadError(context, ref, error, courierProvidersProvider),
       data: (rows) {
-        final connectable = <CourierProviderInfo>[
-          for (final row in rows)
-            if (row.isConnectable) row,
-        ];
-        if (connectable.isEmpty) {
-          return const SizedBox.shrink();
+        if (!viewOnly && accounts.hasError) {
+          return _loadError(
+            context,
+            ref,
+            accounts.error!,
+            courierAccountsProvider,
+          );
         }
+        if (!viewOnly && !accounts.hasValue) {
+          return SkeletonLoader.card(height: 180);
+        }
+        final couriers = <CourierProviderInfo>[
+          for (final row in rows)
+            if (row.provider != CourierAccountsScreen.manual) row,
+        ];
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            for (final info in connectable) ...<Widget>[
-              _ProviderCard(info: info),
+            for (final info in couriers) ...<Widget>[
+              _CourierRow(
+                info: info,
+                account: _accountFor(accounts.valueOrNull, info.provider),
+                bookable: _bookableFor(bookable, info.provider),
+                viewOnly: viewOnly,
+              ),
               const SizedBox(height: EcomsbdSpacing.md),
             ],
           ],
@@ -103,14 +229,680 @@ class _Couriers extends ConsumerWidget {
       },
     );
   }
+
+  static CourierAccount? _accountFor(
+    List<CourierAccount>? rows,
+    String provider,
+  ) {
+    for (final row in rows ?? const <CourierAccount>[]) {
+      if (row.provider == provider) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  static BookableCourier? _bookableFor(
+    List<BookableCourier>? rows,
+    String provider,
+  ) {
+    for (final row in rows ?? const <BookableCourier>[]) {
+      if (row.provider == provider) {
+        return row;
+      }
+    }
+    return null;
+  }
 }
 
-Tone _toneFor(CourierAccountStatus status) => switch (status) {
-  CourierAccountStatus.connected => Tone.good,
-  CourierAccountStatus.needsReconnect => Tone.warning,
-  CourierAccountStatus.disconnected => Tone.neutral,
-  CourierAccountStatus.unknown => Tone.neutral,
-};
+/// One courier in the list: its state, how it is identified, what it can do,
+/// and the one action that moves it forward.
+class _CourierRow extends ConsumerWidget {
+  const _CourierRow({
+    required this.info,
+    required this.account,
+    required this.bookable,
+    required this.viewOnly,
+  });
+
+  final CourierProviderInfo info;
+  final CourierAccount? account;
+  final BookableCourier? bookable;
+  final bool viewOnly;
+
+  Future<void> _connect(BuildContext context, WidgetRef ref) async {
+    final result = await ConnectCourierSheet.show(
+      context,
+      provider: info.provider,
+      form: info.connectForm,
+    );
+    if (result == null || !context.mounted) {
+      return;
+    }
+    _invalidateCourierState(ref, info.provider);
+    // Straight on to the account, where the outcome of the check is shown and
+    // anything still missing — a pickup store, the callback URL — is set up.
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            CourierAccountManageScreen(info: info, initialCheck: result),
+      ),
+    );
+  }
+
+  void _manage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CourierAccountManageScreen(info: info),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connection = _connectionFor(
+      info,
+      account: account,
+      bookable: bookable,
+      viewOnly: viewOnly,
+    );
+    final form = info.connectForm;
+    final hasCredentials =
+        !viewOnly && form != null && _hasCredentials(account);
+    final canConnect =
+        !viewOnly && connection == CourierConnection.notConnected;
+    final needsStore = viewOnly
+        ? bookable?.block == BookableBlock.needsPickupStore
+        : (form?.requiresStore ?? false) &&
+              connection == CourierConnection.connected &&
+              account?.storeId == null;
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const _CourierMark(),
+              const SizedBox(width: EcomsbdSpacing.sm),
+              Expanded(
+                child: Text(info.displayName, style: EcomsbdType.sectionTitle),
+              ),
+              StatusChip(
+                label: connection.label(context),
+                tone: connection.tone,
+              ),
+            ],
+          ),
+          // A sandbox account books nothing real, so it is never allowed to
+          // pass for a live one at a glance.
+          if (hasCredentials && (account?.sandbox ?? false))
+            const _SandboxMarker(),
+          const SizedBox(height: EcomsbdSpacing.xs),
+          _StatusLine(
+            connection: connection,
+            info: info,
+            needsStore: needsStore,
+            unavailableAtCourier:
+                viewOnly &&
+                bookable?.block == BookableBlock.providerUnavailable,
+          ),
+          if (hasCredentials && account?.maskedIdentifier != null)
+            _DetailRow(
+              label: _primaryLabel(context, form),
+              value: maskedForDisplay(account!.maskedIdentifier!),
+            ),
+          if (hasCredentials && account?.lastVerifiedAt != null)
+            _DetailRow(
+              label: context.tr('ca.lastChecked'),
+              value: formatRelative(account!.lastVerifiedAt),
+            ),
+          if (connection != CourierConnection.unavailable)
+            _CapabilityChips(capabilities: info.capabilities),
+          if (hasCredentials || canConnect) ...<Widget>[
+            const SizedBox(height: EcomsbdSpacing.md),
+            if (hasCredentials)
+              OutlinedButton(
+                onPressed: () => _manage(context),
+                style: _secondaryButton,
+                child: Text(context.tr('ca.manage')),
+              )
+            else
+              FilledButton(
+                onPressed: () => _connect(context, ref),
+                style: _primaryButton,
+                child: Text(context.tr('common.connect')),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The label of the field the masked identifier was taken from.
+String _primaryLabel(BuildContext context, ProviderConnectForm? form) =>
+    form == null || form.fields.isEmpty
+    ? context.tr('ca.apiKeyLabel')
+    : form.fields.first.label;
+
+/// Stand-in for a courier logo. The app ships no courier artwork, and a
+/// borrowed brand logo is not ours to use.
+class _CourierMark extends StatelessWidget {
+  const _CourierMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: EcomsbdColors.orangeSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(
+        Icons.local_shipping_outlined,
+        size: 18,
+        color: EcomsbdColors.orange,
+      ),
+    );
+  }
+}
+
+/// The Sandbox chip, on a line of its own under the courier's name so the
+/// header row never has to fit two chips beside a long name on a small phone.
+class _SandboxMarker extends StatelessWidget {
+  const _SandboxMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: EcomsbdSpacing.xs),
+      child: StatusChip(
+        label: context.tr('ca.sandboxChip'),
+        tone: Tone.warning,
+      ),
+    );
+  }
+}
+
+/// One sentence on what a courier's state means for the seller.
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({
+    required this.connection,
+    required this.info,
+    this.needsStore = false,
+    this.unavailableAtCourier = false,
+  });
+
+  final CourierConnection connection;
+  final CourierProviderInfo info;
+  final bool needsStore;
+  final bool unavailableAtCourier;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = <String, Object?>{'provider': info.displayName};
+    final muted = EcomsbdType.caption.copyWith(color: EcomsbdColors.muted);
+
+    if (connection == CourierConnection.unavailable) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(context.tr('ca.officialRequired'), style: EcomsbdType.label),
+          const SizedBox(height: 2),
+          Text(context.tr('ca.unavailableSub', name), style: muted),
+        ],
+      );
+    }
+
+    // "Connected" is not the whole truth when a mandatory pickup store is
+    // missing, so this says what is actually blocking a booking.
+    if (needsStore) {
+      return Text(
+        context.tr('ca.needsStoreSub'),
+        style: EcomsbdType.caption.copyWith(color: EcomsbdColors.red),
+      );
+    }
+
+    final text = switch (connection) {
+      CourierConnection.connected =>
+        unavailableAtCourier
+            ? context.tr('bookable.unavailable')
+            : info.supports('create_single')
+            ? context.tr('ca.readyToBook')
+            : null,
+      CourierConnection.needsReconnect => context.tr(
+        'ca.needsReconnectProviderSub',
+        name,
+      ),
+      CourierConnection.notConnected => context.tr(
+        'ca.notConnectedProviderSub',
+        name,
+      ),
+      CourierConnection.disabled => context.tr('ca.disabledSub', name),
+      CourierConnection.unknown => context.tr('ca.unreadable'),
+      CourierConnection.unavailable => null,
+    };
+    return text == null ? const SizedBox.shrink() : Text(text, style: muted);
+  }
+}
+
+/// What a courier is verified to do, from the server's manifest.
+///
+/// Only capabilities the documentation positively confirms are shown. An
+/// "unknown" is not a feature, so it is not drawn as one.
+class _CapabilityChips extends StatelessWidget {
+  const _CapabilityChips({required this.capabilities});
+
+  final Map<String, String> capabilities;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = <(String, String)>[
+      for (final entry in _shownCapabilities)
+        if (capabilities[entry.$1] == 'true') entry,
+    ];
+    if (shown.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: EcomsbdSpacing.sm),
+      child: Wrap(
+        spacing: EcomsbdSpacing.xs,
+        runSpacing: EcomsbdSpacing.xs,
+        children: <Widget>[
+          for (final entry in shown)
+            StatusChip(
+              label: context.tr(entry.$2),
+              tone: Tone.neutral,
+              showIcon: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OwnerOnlyNotice extends StatelessWidget {
+  const _OwnerOnlyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Icon(Icons.lock_outline, size: 18, color: EcomsbdColors.muted),
+          const SizedBox(width: EcomsbdSpacing.sm),
+          Expanded(
+            child: Text(context.tr('ca.ownerOnly'), style: EcomsbdType.caption),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _invalidateCourierState(WidgetRef ref, String provider) {
+  ref.invalidate(courierAccountsProvider);
+  ref.invalidate(bookableCouriersProvider);
+  ref.invalidate(webhookSetupProvider(provider));
+}
+
+/// One courier account: its credentials (masked), its checks, and every
+/// change a seller can make to it.
+///
+/// Reached from the accounts list. Only someone who may manage credentials
+/// gets here, and the server re-checks that on every call regardless.
+class CourierAccountManageScreen extends ConsumerStatefulWidget {
+  const CourierAccountManageScreen({
+    required this.info,
+    super.key,
+    this.initialCheck,
+  });
+
+  final CourierProviderInfo info;
+
+  /// The outcome of the connect that led here, shown until the next check.
+  final ConnectionTestResult? initialCheck;
+
+  @override
+  ConsumerState<CourierAccountManageScreen> createState() =>
+      _CourierAccountManageScreenState();
+}
+
+class _CourierAccountManageScreenState
+    extends ConsumerState<CourierAccountManageScreen> {
+  bool _busy = false;
+  late ConnectionTestResult? _lastCheck = widget.initialCheck;
+
+  String get _provider => widget.info.provider;
+  String get _name => widget.info.displayName;
+  ProviderConnectForm? get _form => widget.info.connectForm;
+
+  Future<void> _guard(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } on ApiError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  /// Enter credentials: first ones, replacements, or the same ones again after
+  /// the courier stopped accepting them. The form always starts empty — there
+  /// is nothing saved that could be put back into it.
+  Future<void> _enterCredentials(CourierAccount? account) async {
+    final status = account?.status;
+    final result = await ConnectCourierSheet.show(
+      context,
+      provider: _provider,
+      form: _form,
+      isReconnect: status == CourierAccountStatus.needsReconnect,
+      isUpdate: status == CourierAccountStatus.connected,
+      sandbox: account?.sandbox ?? false,
+    );
+    if (result != null && mounted) {
+      _invalidateCourierState(ref, _provider);
+      setState(() => _lastCheck = result);
+    }
+  }
+
+  Future<void> _test() async {
+    setState(() => _lastCheck = null);
+    await _guard(() async {
+      final result = await ref
+          .read(courierRepositoryProvider)
+          .testConnection(_provider);
+      _invalidateCourierState(ref, _provider);
+      if (mounted) {
+        setState(() => _lastCheck = result);
+      }
+    });
+  }
+
+  Future<void> _disconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          context.tr('ca.disconnectProviderTitle', <String, Object?>{
+            'provider': _name,
+          }),
+        ),
+        content: Text(context.tr('ca.disconnectProviderBody')),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('common.keepIt')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('common.disconnect')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final done = context.tr('ca.disconnected', <String, Object?>{
+      'provider': _name,
+    });
+    var disconnected = false;
+    await _guard(() async {
+      await ref.read(courierRepositoryProvider).disconnect(_provider);
+      _invalidateCourierState(ref, _provider);
+      disconnected = true;
+    });
+    if (disconnected && mounted) {
+      // Back to the list, which now shows this courier as not connected.
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+      navigator.pop();
+    }
+  }
+
+  Future<void> _chooseStore() async {
+    final chosen = await _StorePickerSheet.show(
+      context,
+      provider: _provider,
+      displayName: _name,
+    );
+    if (chosen == null) {
+      return;
+    }
+    await _guard(() async {
+      await ref
+          .read(courierRepositoryProvider)
+          .selectStore(
+            _provider,
+            providerStoreId: chosen.providerStoreId,
+            name: chosen.name,
+          );
+      ref.invalidate(courierAccountsProvider);
+      ref.invalidate(bookableCouriersProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final account = ref.watch(courierAccountProvider(_provider)).valueOrNull;
+    final evidence = ref.watch(providerEvidenceProvider(_provider));
+    final form = _form;
+    final connection = _connectionFor(widget.info, account: account);
+    final status = account?.status ?? CourierAccountStatus.disconnected;
+    final hasCredentials = _hasCredentials(account);
+    final connected = status == CourierAccountStatus.connected;
+    final requiresStore = form?.requiresStore ?? false;
+    final needsStore = requiresStore && connected && account?.storeId == null;
+
+    // Credentials are not entered for a courier the shop may not use. Ones
+    // saved before it was switched off can still be tested and removed.
+    final String? primaryAction = !widget.info.enabled
+        ? null
+        : switch (status) {
+            CourierAccountStatus.connected => context.tr(
+              'ca.updateCredentials',
+            ),
+            CourierAccountStatus.needsReconnect => context.tr('ca.reconnect'),
+            CourierAccountStatus.unknown => context.tr('ca.updateCredentials'),
+            CourierAccountStatus.disconnected => context.tr('common.connect'),
+          };
+
+    return DetailScaffold(
+      title: _name,
+      subtitle: context.tr('ca.title'),
+      children: <Widget>[
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const _CourierMark(),
+                  const SizedBox(width: EcomsbdSpacing.sm),
+                  Expanded(child: Text(_name, style: EcomsbdType.sectionTitle)),
+                  StatusChip(
+                    label: connection.label(context),
+                    tone: connection.tone,
+                  ),
+                ],
+              ),
+              if (account?.sandbox ?? false) const _SandboxMarker(),
+              const SizedBox(height: EcomsbdSpacing.xs),
+              _StatusLine(
+                connection: connection,
+                info: widget.info,
+                needsStore: needsStore,
+              ),
+              if (hasCredentials && account?.lastVerifiedAt != null)
+                _DetailRow(
+                  label: context.tr('ca.lastChecked'),
+                  value: formatRelative(account!.lastVerifiedAt),
+                ),
+              if (hasCredentials && account?.reportedBalancePaisa != null)
+                _DetailRow(
+                  // Labelled as the courier's own number, never merged with
+                  // the COD outstanding total on the Money screen: they
+                  // measure different things (brief section 19).
+                  label: context.tr(
+                    'ca.providerReportedBalance',
+                    <String, Object?>{'provider': _name},
+                  ),
+                  value: Money(account!.reportedBalancePaisa!).format(),
+                ),
+              if (requiresStore && connected)
+                _DetailRow(
+                  label: context.tr('ca.pickupStore'),
+                  value:
+                      account?.storeName ??
+                      account?.storeId ??
+                      context.tr('ca.noStoreChosen'),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: EcomsbdSpacing.md),
+        if (form != null) ...<Widget>[
+          _CredentialsCard(
+            form: form,
+            account: account,
+            hasCredentials: hasCredentials,
+            providerName: _name,
+          ),
+          const SizedBox(height: EcomsbdSpacing.md),
+        ],
+        if (_lastCheck != null) ...<Widget>[
+          _CheckResultBanner(result: _lastCheck!, providerName: _name),
+          const SizedBox(height: EcomsbdSpacing.md),
+        ],
+        if ((form?.usesWebhook ?? false) && connected) ...<Widget>[
+          _WebhookPanel(provider: _provider, form: form!),
+          const SizedBox(height: EcomsbdSpacing.md),
+        ],
+        if (primaryAction != null) ...<Widget>[
+          FilledButton(
+            onPressed: _busy ? null : () => _enterCredentials(account),
+            style: _primaryButton,
+            child: Text(primaryAction),
+          ),
+          const SizedBox(height: EcomsbdSpacing.xs),
+        ],
+        Wrap(
+          spacing: EcomsbdSpacing.xs,
+          runSpacing: EcomsbdSpacing.xs,
+          children: <Widget>[
+            if (hasCredentials)
+              OutlinedButton(
+                onPressed: _busy ? null : _test,
+                child: Text(
+                  _busy
+                      ? context.tr('settings.checking')
+                      : context.tr('ca.testConnection'),
+                ),
+              ),
+            if (requiresStore && connected)
+              OutlinedButton(
+                onPressed: _busy ? null : _chooseStore,
+                child: Text(
+                  account?.storeId == null
+                      ? context.tr('ca.chooseStore')
+                      : context.tr('ca.changeStore'),
+                ),
+              ),
+            if (hasCredentials)
+              TextButton(
+                onPressed: _busy ? null : _disconnect,
+                style: TextButton.styleFrom(foregroundColor: EcomsbdColors.red),
+                child: Text(context.tr('common.disconnect')),
+              ),
+          ],
+        ),
+        const SizedBox(height: EcomsbdSpacing.md),
+        evidence.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (value) =>
+              _WhatThisCourierSupports(evidence: value, providerName: _name),
+        ),
+      ],
+    );
+  }
+}
+
+/// The saved credentials, as far as they can be shown: which key is loaded,
+/// and that the secret is in place. Never the secret itself.
+class _CredentialsCard extends StatelessWidget {
+  const _CredentialsCard({
+    required this.form,
+    required this.account,
+    required this.hasCredentials,
+    required this.providerName,
+  });
+
+  final ProviderConnectForm form;
+  final CourierAccount? account;
+  final bool hasCredentials;
+  final String providerName;
+
+  @override
+  Widget build(BuildContext context) {
+    final masked = account?.maskedIdentifier;
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(context.tr('ca.credentialsTitle'), style: EcomsbdType.label),
+          for (final (index, field) in form.fields.indexed)
+            _DetailRow(
+              label: field.label,
+              value: !hasCredentials
+                  ? context.tr('ca.notSet')
+                  // The first field is the one the server masks for display.
+                  : index == 0 && masked != null
+                  ? maskedForDisplay(masked)
+                  : context.tr('ca.configured'),
+            ),
+          const SizedBox(height: EcomsbdSpacing.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Icon(
+                Icons.lock_outline,
+                size: 14,
+                color: EcomsbdColors.muted2,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  context.tr('ca.credentialsNote', <String, Object?>{
+                    'provider': providerName,
+                  }),
+                  style: EcomsbdType.caption.copyWith(
+                    color: EcomsbdColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// The four validation outcomes, rendered as four different things.
 ///
@@ -118,18 +910,21 @@ Tone _toneFor(CourierAccountStatus status) => switch (status) {
 /// like "your key is wrong". A seller who re-types a working key because the
 /// courier had a bad minute has been failed by this widget.
 class _CheckResultBanner extends StatelessWidget {
-  const _CheckResultBanner({required this.result});
+  const _CheckResultBanner({required this.result, required this.providerName});
 
   final ConnectionTestResult result;
+  final String providerName;
 
   @override
   Widget build(BuildContext context) {
     final (tone, title) = switch (result.result) {
-      CredentialCheck.valid => (Tone.good, context.tr('provider.connected')),
-      CredentialCheck.invalid => (Tone.bad, context.tr('ca.rejectedKeys')),
+      CredentialCheck.valid => (Tone.good, context.tr('ca.connectionOk')),
+      CredentialCheck.invalid => (Tone.bad, context.tr('ca.connectionFailed')),
       CredentialCheck.providerUnavailable => (
         Tone.warning,
-        context.tr('ca.noAnswer'),
+        context.tr('ca.noAnswerProvider', <String, Object?>{
+          'provider': providerName,
+        }),
       ),
       CredentialCheck.unknown => (Tone.warning, context.tr('ca.couldNotCheck')),
     };
@@ -145,8 +940,10 @@ class _CheckResultBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(title, style: EcomsbdType.label.copyWith(color: tone.ink)),
-          const SizedBox(height: 2),
-          Text(result.message, style: EcomsbdType.caption),
+          if (result.message.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 2),
+            Text(result.message, style: EcomsbdType.caption),
+          ],
         ],
       ),
     );
@@ -155,22 +952,32 @@ class _CheckResultBanner extends StatelessWidget {
 
 /// What the courier's own documentation supports — and what it does not say.
 class _WhatThisCourierSupports extends StatelessWidget {
-  const _WhatThisCourierSupports({required this.evidence});
+  const _WhatThisCourierSupports({
+    required this.evidence,
+    required this.providerName,
+  });
 
   final ProviderEvidence evidence;
+  final String providerName;
 
   @override
   Widget build(BuildContext context) {
+    final name = <String, Object?>{'provider': providerName};
+
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(context.tr('ca.supportsTitle'), style: EcomsbdType.label),
+          Text(
+            context.tr('ca.supportsProvider', name),
+            style: EcomsbdType.label,
+          ),
           const SizedBox(height: 3),
           Text(
-            'Read from Steadfast API documentation '
-            '${evidence.documentationVersion ?? ''}. Anything not listed there '
-            'is not guessed at.',
+            context.tr('ca.supportsSource', <String, Object?>{
+              ...name,
+              'version': evidence.documentationVersion ?? '',
+            }),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
           ),
           const SizedBox(height: EcomsbdSpacing.sm),
@@ -196,7 +1003,7 @@ class _WhatThisCourierSupports extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    context.tr('ca.pollingNote'),
+                    context.tr('ca.pollingNoteProvider', name),
                     style: EcomsbdType.caption,
                   ),
                 ),
@@ -215,6 +1022,7 @@ const List<(String, String)> _shownCapabilities = <(String, String)>[
   ('create_single', 'ca.capBookParcels'),
   ('create_bulk', 'ca.capBookBulk'),
   ('status_lookup', 'ca.capTrackStatus'),
+  ('webhook', 'ca.capWebhook'),
   ('returns', 'ca.capRequestReturns'),
   ('payments', 'ca.capImportPayments'),
   ('balance', 'ca.capAccountBalance'),
@@ -240,281 +1048,6 @@ class _ManualModeAlwaysWorks extends StatelessWidget {
     );
   }
 }
-
-/// A courier card driven entirely by the server's declaration.
-///
-/// Nothing in here names a courier. The fields to ask for, whether a pickup
-/// store is needed, whether there is a sandbox and whether callbacks are
-/// verified all come from `/couriers/providers`, so this one widget serves
-/// Pathao today and RedX next without changing.
-///
-/// Two states it treats as first-class, because for Pathao they are not edge
-/// cases:
-///
-/// * **Connected but not bookable.** Pathao's `store_id` is mandatory on every
-///   booking and Pathao supplies no default, so an account with valid
-///   credentials and no pickup store cannot book. That is shown as its own
-///   state with the action that fixes it, rather than left to fail later at
-///   booking time.
-/// * **Connected but not receiving updates.** Pathao publishes no status
-///   lookup, so without a callback a parcel's status never advances. The card
-///   says so and hands over the URL.
-class _ProviderCard extends ConsumerStatefulWidget {
-  const _ProviderCard({required this.info});
-
-  final CourierProviderInfo info;
-
-  @override
-  ConsumerState<_ProviderCard> createState() => _ProviderCardState();
-}
-
-class _ProviderCardState extends ConsumerState<_ProviderCard> {
-  bool _busy = false;
-  ConnectionTestResult? _lastCheck;
-
-  String get _provider => widget.info.provider;
-  ProviderConnectForm get _form => widget.info.connectForm!;
-
-  Future<void> _guard(Future<void> Function() action) async {
-    setState(() => _busy = true);
-    try {
-      await action();
-    } on ApiError catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  Future<void> _connect(CourierAccount? account) async {
-    final result = await ConnectCourierSheet.show(
-      context,
-      provider: _provider,
-      isReconnect: account?.needsReconnect ?? false,
-      form: _form,
-      sandbox: account?.sandbox ?? false,
-    );
-    if (result != null && mounted) {
-      ref.invalidate(courierAccountsProvider);
-      ref.invalidate(webhookSetupProvider(_provider));
-      setState(() => _lastCheck = result);
-    }
-  }
-
-  Future<void> _test() async {
-    setState(() => _lastCheck = null);
-    await _guard(() async {
-      final result = await ref
-          .read(courierRepositoryProvider)
-          .testConnection(_provider);
-      ref.invalidate(courierAccountsProvider);
-      if (mounted) {
-        setState(() => _lastCheck = result);
-      }
-    });
-  }
-
-  Future<void> _disconnect() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          context.tr('ca.disconnectProviderTitle', <String, Object?>{
-            'provider': widget.info.displayName,
-          }),
-        ),
-        content: Text(context.tr('ca.disconnectProviderBody')),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.tr('common.keepIt')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.tr('common.disconnect')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-    await _guard(() async {
-      await ref.read(courierRepositoryProvider).disconnect(_provider);
-      ref.invalidate(courierAccountsProvider);
-      ref.invalidate(webhookSetupProvider(_provider));
-    });
-  }
-
-  Future<void> _chooseStore() async {
-    final chosen = await _StorePickerSheet.show(
-      context,
-      provider: _provider,
-      displayName: widget.info.displayName,
-    );
-    if (chosen == null) {
-      return;
-    }
-    await _guard(() async {
-      await ref
-          .read(courierRepositoryProvider)
-          .selectStore(
-            _provider,
-            providerStoreId: chosen.providerStoreId,
-            name: chosen.name,
-          );
-      ref.invalidate(courierAccountsProvider);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final account = ref.watch(courierAccountProvider(_provider)).value;
-    final status = account?.status ?? CourierAccountStatus.disconnected;
-    final connected = account?.connected ?? false;
-    final needsStore =
-        _form.requiresStore && connected && account?.storeId == null;
-
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  widget.info.displayName,
-                  style: EcomsbdType.sectionTitle,
-                ),
-              ),
-              if (account?.sandbox ?? false) ...<Widget>[
-                StatusChip(
-                  label: context.tr('ca.sandboxChip'),
-                  tone: Tone.warning,
-                ),
-                const SizedBox(width: EcomsbdSpacing.xs),
-              ],
-              StatusChip(label: status.label, tone: _toneFor(status)),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            // "Connected" is not the whole truth when a mandatory pickup store
-            // is missing, so this says what is actually blocking a booking.
-            needsStore
-                ? context.tr('ca.needsStoreSub')
-                : _providerSubtitle(status, widget.info.displayName),
-            style: EcomsbdType.caption.copyWith(
-              color: needsStore ? EcomsbdColors.red : EcomsbdColors.muted,
-            ),
-          ),
-          if (account?.maskedIdentifier != null) ...<Widget>[
-            const SizedBox(height: EcomsbdSpacing.sm),
-            _DetailRow(
-              label: _form.fields.isEmpty
-                  ? context.tr('ca.apiKeyLabel')
-                  : _form.fields.first.label,
-              value: account!.maskedIdentifier!,
-            ),
-          ],
-          if (account?.lastVerifiedAt != null)
-            _DetailRow(
-              label: context.tr('ca.lastChecked'),
-              value: _relative(account!.lastVerifiedAt!),
-            ),
-          if (account?.reportedBalancePaisa != null)
-            _DetailRow(
-              // Labelled as the courier's own number, never merged with the
-              // COD outstanding total on the Money screen: they measure
-              // different things (brief section 19).
-              label: context.tr('ca.providerReportedBalance', <String, Object?>{
-                'provider': widget.info.displayName,
-              }),
-              value: Money(account!.reportedBalancePaisa!).format(),
-            ),
-          if (_form.requiresStore && connected)
-            _DetailRow(
-              label: context.tr('ca.pickupStore'),
-              value:
-                  account?.storeName ??
-                  account?.storeId ??
-                  context.tr('ca.noStoreChosen'),
-            ),
-          if (_lastCheck != null) ...<Widget>[
-            const SizedBox(height: EcomsbdSpacing.sm),
-            _CheckResultBanner(result: _lastCheck!),
-          ],
-          if (_form.usesWebhook && connected) ...<Widget>[
-            const SizedBox(height: EcomsbdSpacing.sm),
-            _WebhookPanel(provider: _provider, form: _form),
-          ],
-          const SizedBox(height: EcomsbdSpacing.md),
-          Wrap(
-            spacing: EcomsbdSpacing.xs,
-            runSpacing: EcomsbdSpacing.xs,
-            children: <Widget>[
-              FilledButton(
-                onPressed: _busy ? null : () => _connect(account),
-                style: _primaryButton,
-                child: Text(switch (status) {
-                  CourierAccountStatus.connected => context.tr(
-                    'ca.replaceKeys',
-                  ),
-                  CourierAccountStatus.needsReconnect => context.tr(
-                    'ca.reconnect',
-                  ),
-                  _ => context.tr('common.connect'),
-                }),
-              ),
-              if (_form.requiresStore && connected)
-                OutlinedButton(
-                  onPressed: _busy ? null : _chooseStore,
-                  child: Text(
-                    account?.storeId == null
-                        ? context.tr('ca.chooseStore')
-                        : context.tr('ca.changeStore'),
-                  ),
-                ),
-              if (connected)
-                OutlinedButton(
-                  onPressed: _busy ? null : _test,
-                  child: Text(
-                    _busy
-                        ? context.tr('settings.checking')
-                        : context.tr('ca.testConnection'),
-                  ),
-                ),
-              if (account != null &&
-                  status != CourierAccountStatus.disconnected)
-                TextButton(
-                  onPressed: _busy ? null : _disconnect,
-                  child: Text(context.tr('common.disconnect')),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String _providerSubtitle(CourierAccountStatus status, String name) =>
-    switch (status) {
-      CourierAccountStatus.connected => _t('ca.connectedSub'),
-      CourierAccountStatus.needsReconnect => AppStrings(
-        activeAppLocale,
-      ).t('ca.needsReconnectProviderSub', <String, Object?>{'provider': name}),
-      CourierAccountStatus.disconnected => AppStrings(
-        activeAppLocale,
-      ).t('ca.notConnectedProviderSub', <String, Object?>{'provider': name}),
-      CourierAccountStatus.unknown => _t('ca.unreadable'),
-    };
 
 /// The callback URL, and an honest statement of what happens without it.
 class _WebhookPanel extends ConsumerWidget {
@@ -734,6 +1267,9 @@ class _StorePickerSheet extends ConsumerWidget {
 /// place the server's validation errors do, so the two cannot disagree — and a
 /// new courier does not need an app release to become connectable.
 ///
+/// It always opens empty. Updating credentials means typing replacements; the
+/// saved ones are never read back to fill it, because nothing can read them.
+///
 /// When no form is supplied, the sheet falls back to the two-field layout V1
 /// shipped, so the Steadfast path is unchanged.
 class ConnectCourierSheet extends ConsumerStatefulWidget {
@@ -741,12 +1277,16 @@ class ConnectCourierSheet extends ConsumerStatefulWidget {
     required this.provider,
     super.key,
     this.isReconnect = false,
+    this.isUpdate = false,
     this.form,
     this.sandbox = false,
   });
 
   final String provider;
   final bool isReconnect;
+
+  /// Replacing credentials on an account that is connected and working.
+  final bool isUpdate;
 
   /// The server's description of this courier's connect form.
   final ProviderConnectForm? form;
@@ -758,6 +1298,7 @@ class ConnectCourierSheet extends ConsumerStatefulWidget {
     BuildContext context, {
     required String provider,
     bool isReconnect = false,
+    bool isUpdate = false,
     ProviderConnectForm? form,
     bool sandbox = false,
   }) {
@@ -768,6 +1309,7 @@ class ConnectCourierSheet extends ConsumerStatefulWidget {
       builder: (_) => ConnectCourierSheet(
         provider: provider,
         isReconnect: isReconnect,
+        isUpdate: isUpdate,
         form: form,
         sandbox: sandbox,
       ),
@@ -871,6 +1413,20 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
     }
   }
 
+  String _title(BuildContext context, String name) {
+    if (widget.form == null && !widget.isUpdate) {
+      return widget.isReconnect
+          ? context.tr('ca.reconnectSteadfast')
+          : context.tr('ca.connectSteadfast');
+    }
+    final key = widget.isReconnect
+        ? 'ca.reconnectProvider'
+        : widget.isUpdate
+        ? 'ca.updateProvider'
+        : 'ca.connectProvider';
+    return context.tr(key, <String, Object?>{'provider': name});
+  }
+
   @override
   Widget build(BuildContext context) {
     final insets = MediaQuery.viewInsetsOf(context).bottom;
@@ -904,19 +1460,7 @@ class _ConnectCourierSheetState extends ConsumerState<ConnectCourierSheet> {
             children: <Widget>[
               const _SheetGrip(),
               const SizedBox(height: EcomsbdSpacing.md),
-              Text(
-                form == null
-                    ? (widget.isReconnect
-                          ? context.tr('ca.reconnectSteadfast')
-                          : context.tr('ca.connectSteadfast'))
-                    : context.tr(
-                        widget.isReconnect
-                            ? 'ca.reconnectProvider'
-                            : 'ca.connectProvider',
-                        <String, Object?>{'provider': name},
-                      ),
-                style: EcomsbdType.sectionTitle,
-              ),
+              Text(_title(context, name), style: EcomsbdType.sectionTitle),
               const SizedBox(height: 3),
               Text(
                 form == null
@@ -1064,7 +1608,16 @@ class _DetailRow extends StatelessWidget {
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ),
-          Text(value, style: EcomsbdType.label),
+          const SizedBox(width: EcomsbdSpacing.sm),
+          Flexible(
+            child: Text(
+              value,
+              style: EcomsbdType.label,
+              textAlign: TextAlign.end,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -1089,22 +1642,14 @@ class _SheetGrip extends StatelessWidget {
   }
 }
 
-String _relative(DateTime at) {
-  final delta = DateTime.now().toUtc().difference(at.toUtc());
-  if (delta.inMinutes < 1) {
-    return 'just now';
-  }
-  if (delta.inHours < 1) {
-    return '${delta.inMinutes}m ago';
-  }
-  if (delta.inDays < 1) {
-    return '${delta.inHours}h ago';
-  }
-  return '${delta.inDays}d ago';
-}
-
 final ButtonStyle _primaryButton = FilledButton.styleFrom(
   backgroundColor: EcomsbdColors.orange,
+  minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+  shape: const StadiumBorder(),
+  textStyle: EcomsbdType.label,
+);
+
+final ButtonStyle _secondaryButton = OutlinedButton.styleFrom(
   minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
   shape: const StadiumBorder(),
   textStyle: EcomsbdType.label,

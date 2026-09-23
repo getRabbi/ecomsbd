@@ -4,11 +4,15 @@ import '../../l10n/app_strings.dart';
 import '../glass.dart';
 import '../tokens.dart';
 
-/// The five main destinations (master spec section 3).
+/// The four main destinations (master spec section 3).
 ///
-/// Fixed at five, in this order. The bottom bar is the app's spine and
+/// Fixed at four, in this order. The bottom bar is the app's spine and
 /// reordering it would relearn every seller's muscle memory.
-enum MainDestination { home, orders, money, insights, menu }
+///
+/// Menu is not one of them. It opens from the hamburger in the top bar, which
+/// every main tab carries; a Menu tab as well was a second door to the same
+/// room, and it cost the four real destinations a fifth of the bar.
+enum MainDestination { home, orders, money, insights }
 
 extension MainDestinationLabel on MainDestination {
   /// The tab's name in the selected language.
@@ -22,7 +26,6 @@ extension MainDestinationLabel on MainDestination {
     MainDestination.orders => Icons.receipt_long_rounded,
     MainDestination.money => Icons.payments_rounded,
     MainDestination.insights => Icons.insights_rounded,
-    MainDestination.menu => Icons.menu_rounded,
   };
 }
 

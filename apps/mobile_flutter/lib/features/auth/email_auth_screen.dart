@@ -332,7 +332,7 @@ class AuthPage extends StatelessWidget {
                   // switch language before they have an account.
                   const Row(
                     children: [
-                      BrandPill(showChevron: false),
+                      BrandPill(),
                       Spacer(),
                       LanguageTogglePill(),
                     ],

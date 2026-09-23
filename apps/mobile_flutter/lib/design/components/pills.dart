@@ -48,28 +48,22 @@ class GlassTopPill extends StatelessWidget {
   }
 }
 
-/// The product identity pill: the brand mark plus the `ecomsbd` wordmark.
+/// The product identity pill: the brand mark plus the `ecomsbd` wordmark, or
+/// the current section's title on a main tab.
 ///
-/// The name is fixed here rather than passed in, so no screen can render the
-/// product under a different name.
+/// A label, not a control. It used to carry a dropdown chevron and open the
+/// menu when tapped, which read as a section switcher that was not there; the
+/// hamburger is the one way into the menu, so this pill takes no tap and draws
+/// no chevron.
 class BrandPill extends StatelessWidget {
-  const BrandPill({
-    super.key,
-    this.onTap,
-    this.label = 'ecomsbd',
-    this.showChevron = true,
-  });
+  const BrandPill({super.key, this.label = 'ecomsbd'});
 
-  /// Displayed product name. Defaults to the locked product name.
+  /// Displayed text. Defaults to the locked product name.
   final String label;
-
-  final VoidCallback? onTap;
-  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
     return GlassTopPill(
-      onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -79,23 +73,18 @@ class BrandPill extends StatelessWidget {
           const EcomsBrandMark(size: 30),
           const SizedBox(width: EcomsbdSpacing.sm),
           Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: EcomsbdType.bodyStrong.copyWith(
-                fontWeight: FontWeight.w800,
+            child: Semantics(
+              header: true,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EcomsbdType.bodyStrong.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
-          if (showChevron) ...<Widget>[
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: EcomsbdColors.muted,
-            ),
-          ],
         ],
       ),
     );

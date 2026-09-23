@@ -1621,6 +1621,36 @@ const Map<String, String> _secEn = <String, String>{
   'ca.testConnection': 'Test connection',
   'ca.title': 'Courier accounts',
   'ca.unreadable': 'We could not read this account.',
+  // Courier accounts hub and per-courier management.
+  'ca.intro':
+      'Every courier ecomsbd supports, and where your shop stands with each.',
+  'ca.stateDisabled': 'Disabled',
+  'ca.stateUnavailable': 'Unavailable',
+  'ca.disabledSub': '{provider} is not switched on for your shop yet.',
+  'ca.officialRequired': 'Official integration required',
+  'ca.unavailableSub':
+      '{provider} can be connected once its official merchant API contract is verified. Until then, record {provider} parcels by hand.',
+  'ca.readyToBook': 'Ready to book parcels',
+  'ca.manage': 'Manage',
+  'ca.ownerOnly':
+      'Only the shop owner can connect couriers or change their credentials.',
+  'ca.credentialsTitle': 'Credentials',
+  'ca.configured': 'Configured',
+  'ca.notSet': 'Not set',
+  'ca.credentialsNote':
+      'Saved credentials are never shown again. To change them, enter new ones. If {provider} rejects the new ones, the current ones stay in place.',
+  'ca.updateCredentials': 'Update credentials',
+  'ca.updateProvider': 'Update {provider} credentials',
+  'ca.connectionOk': 'Connection successful',
+  'ca.connectionFailed': 'Connection failed',
+  'ca.noAnswerProvider': '{provider} did not answer',
+  'ca.supportsProvider': 'What {provider} supports',
+  'ca.supportsSource':
+      'Read from {provider} API documentation {version}. Anything not listed there is not guessed at.',
+  'ca.pollingNoteProvider':
+      '{provider} does not publish a callback, so ecomsbd checks each parcel on a schedule instead. Status still stays up to date — it just arrives a few minutes later.',
+  'ca.capWebhook': 'Live status updates',
+  'ca.disconnected': '{provider} disconnected',
   'case.checkAgain': 'Check again',
   'case.description':
       'Money that did not arrive, arrived short, or could not be placed.',
@@ -2404,6 +2434,36 @@ const Map<String, String> _secBn = <String, String>{
   'ca.testConnection': 'সংযোগ পরীক্ষা করুন',
   'ca.title': 'কুরিয়ার অ্যাকাউন্ট',
   'ca.unreadable': 'এই অ্যাকাউন্টটি পড়া যায়নি।',
+  // কুরিয়ার অ্যাকাউন্টের তালিকা আর প্রতিটি কুরিয়ারের ব্যবস্থাপনা।
+  'ca.intro':
+      'ecomsbd যেসব কুরিয়ার সাপোর্ট করে, আর প্রতিটির সাথে আপনার দোকানের অবস্থা।',
+  'ca.stateDisabled': 'বন্ধ',
+  'ca.stateUnavailable': 'পাওয়া যাচ্ছে না',
+  'ca.disabledSub': '{provider} আপনার দোকানের জন্য এখনও চালু করা হয়নি।',
+  'ca.officialRequired': 'অফিশিয়াল ইন্টিগ্রেশন দরকার',
+  'ca.unavailableSub':
+      '{provider}-এর অফিশিয়াল মার্চেন্ট API চুক্তি যাচাই হলে তবেই এটি যুক্ত করা যাবে। ততদিন {provider}-এর পার্সেল নিজে লিখে রাখুন।',
+  'ca.readyToBook': 'পার্সেল বুক করার জন্য তৈরি',
+  'ca.manage': 'পরিচালনা করুন',
+  'ca.ownerOnly':
+      'শুধু দোকানের মালিক কুরিয়ার যুক্ত করতে বা তার ক্রেডেনশিয়াল বদলাতে পারেন।',
+  'ca.credentialsTitle': 'ক্রেডেনশিয়াল',
+  'ca.configured': 'সেট করা আছে',
+  'ca.notSet': 'সেট করা নেই',
+  'ca.credentialsNote':
+      'সেভ করা ক্রেডেনশিয়াল আর কখনও দেখানো হয় না। বদলাতে চাইলে নতুনগুলো দিন। {provider} নতুনগুলো না নিলে এখনকারগুলোই থেকে যাবে।',
+  'ca.updateCredentials': 'ক্রেডেনশিয়াল আপডেট করুন',
+  'ca.updateProvider': '{provider}-এর ক্রেডেনশিয়াল আপডেট করুন',
+  'ca.connectionOk': 'সংযোগ সফল হয়েছে',
+  'ca.connectionFailed': 'সংযোগ ব্যর্থ হয়েছে',
+  'ca.noAnswerProvider': '{provider} উত্তর দেয়নি',
+  'ca.supportsProvider': '{provider} কী কী পারে',
+  'ca.supportsSource':
+      '{provider}-এর API ডকুমেন্টেশন {version} থেকে নেওয়া। সেখানে যা নেই, তা আন্দাজে ধরা হয়নি।',
+  'ca.pollingNoteProvider':
+      '{provider} কোনো callback দেয় না, তাই ecomsbd নিজেই নির্দিষ্ট সময় পর পর প্রতিটি পার্সেল দেখে নেয়। স্টেটাস আপডেটই থাকে — শুধু কয়েক মিনিট পরে আসে।',
+  'ca.capWebhook': 'লাইভ স্টেটাস আপডেট',
+  'ca.disconnected': '{provider}-এর সংযোগ বিচ্ছিন্ন হয়েছে',
   'case.checkAgain': 'আবার দেখুন',
   'case.description': 'যে টাকা আসেনি, কম এসেছে, বা কোথায় বসবে ঠিক করা যায়নি।',
   'case.dismiss': 'বাদ দিন',

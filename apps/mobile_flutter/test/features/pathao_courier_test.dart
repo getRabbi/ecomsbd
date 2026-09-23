@@ -157,6 +157,17 @@ CommerceHarness _harness({List<dynamic> accounts = const <dynamic>[]}) {
   return harness;
 }
 
+/// Open Pathao's management screen from the accounts list.
+Future<void> _openPathao(WidgetTester tester) async {
+  final manage = find.text('Manage');
+  await tester.ensureVisible(manage);
+  await tester.pump();
+  await tester.tap(manage);
+  // Long enough for the page transition to finish, so the list underneath
+  // goes offstage and only the management screen is found.
+  await settle(tester, frames: 20, step: const Duration(milliseconds: 60));
+}
+
 void main() {
   group('Pathao on the courier accounts screen', () {
     testWidgets('offers Pathao alongside Steadfast', (tester) async {
@@ -244,6 +255,9 @@ void main() {
         findsOneWidget,
         reason: 'the blocking state is stated, not left to fail at booking',
       );
+
+      await _openPathao(tester);
+      expect(find.textContaining('Choose a pickup store'), findsOneWidget);
       expect(find.text('Choose store'), findsOneWidget);
       expect(find.text('Not chosen yet'), findsOneWidget);
     });
@@ -260,6 +274,7 @@ void main() {
           ],
         ),
       );
+      await _openPathao(tester);
 
       expect(find.text('Mirpur Warehouse'), findsOneWidget);
       expect(find.text('Change store'), findsOneWidget);
@@ -285,6 +300,7 @@ void main() {
         const CourierAccountsScreen(),
         harness: harness,
       );
+      await _openPathao(tester);
 
       final choose = find.text('Choose store');
       await tester.ensureVisible(choose);
@@ -339,6 +355,7 @@ void main() {
         const CourierAccountsScreen(),
         harness: harness,
       );
+      await _openPathao(tester);
 
       expect(find.text('Status updates are set up'), findsOneWidget);
       expect(
@@ -373,11 +390,12 @@ void main() {
         const CourierAccountsScreen(),
         harness: harness,
       );
+      await _openPathao(tester);
 
       expect(find.text('Status updates are not set up'), findsOneWidget);
     });
 
-    testWidgets('a courier the shop may not use is not offered', (
+    testWidgets('a courier the shop may not use is listed as disabled', (
       tester,
     ) async {
       final harness = CommerceHarness();
@@ -398,10 +416,17 @@ void main() {
         harness: harness,
       );
 
-      expect(find.text('Pathao'), findsNothing);
+      // Shown as it is — switched off for this shop — with nothing to press.
+      expect(find.text('Pathao'), findsOneWidget);
+      expect(find.text('Disabled'), findsOneWidget);
+      expect(
+        find.text('Pathao is not switched on for your shop yet.'),
+        findsOneWidget,
+      );
+      expect(find.text('Connect'), findsOneWidget, reason: "Steadfast's only");
     });
 
-    testWidgets('a courier with no verified contract is not offered', (
+    testWidgets('a courier with no verified contract cannot be connected', (
       tester,
     ) async {
       final harness = CommerceHarness();
@@ -414,8 +439,8 @@ void main() {
       harness.adapter.onJson('GET', '/couriers/providers', <dynamic>[
         _steadfastProvider,
         // RedX as the server reports it today: enabled, but with every
-        // capability unknown and therefore no connect form. There is nothing
-        // to connect, so no card and no form — manual mode covers it.
+        // capability unknown and therefore no connect form. It is listed so
+        // the seller can see where it stands, with nothing to connect.
         <String, dynamic>{
           'provider': 'redx',
           'display_name': 'RedX',
@@ -435,7 +460,13 @@ void main() {
         harness: harness,
       );
 
-      expect(find.text('RedX'), findsNothing);
+      expect(find.text('RedX'), findsOneWidget);
+      expect(find.text('Unavailable'), findsOneWidget);
+      expect(find.text('Official integration required'), findsOneWidget);
+      // No capability is drawn from an all-unknown manifest, and the only
+      // Connect button is Steadfast's.
+      expect(find.text('Connect'), findsOneWidget);
+      expect(find.text('Manage'), findsNothing);
       // Manual mode is still presented as a real path, not an apology.
       expect(find.text('Manual courier mode'), findsOneWidget);
     });

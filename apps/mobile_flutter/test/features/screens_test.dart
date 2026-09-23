@@ -18,17 +18,17 @@ import 'package:flutter_test/flutter_test.dart';
 /// screen: the navigation is locked.
 void main() {
   group('navigation labels', () {
-    test('the five destinations are locked and in order', () {
+    test('the four destinations are locked and in order', () {
       // The enum name is both the identity and the translation-key suffix
       // (`nav.home`), so locking the names locks the order every seller has
       // learned *and* the keys their labels are read from. The labels
-      // themselves are language-dependent and asserted below.
+      // themselves are language-dependent and asserted below. Menu is not a
+      // destination: it opens from the top bar's hamburger.
       expect(MainDestination.values.map((d) => d.name).toList(), <String>[
         'home',
         'orders',
         'money',
         'insights',
-        'menu',
       ]);
     });
 

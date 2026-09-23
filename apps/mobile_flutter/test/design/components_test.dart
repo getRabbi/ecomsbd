@@ -277,7 +277,7 @@ void main() {
   });
 
   group('BottomGlassNavigation', () {
-    testWidgets('has exactly the five locked destinations', (tester) async {
+    testWidgets('has exactly the four locked destinations', (tester) async {
       await pumpAtSize(
         tester,
         Scaffold(
@@ -294,7 +294,8 @@ void main() {
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('Money'), findsOneWidget);
       expect(find.text('Insights'), findsOneWidget);
-      expect(find.text('Menu'), findsOneWidget);
+      // The menu opens from the top bar's hamburger, not from a tab.
+      expect(find.text('Menu'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 

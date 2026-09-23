@@ -135,7 +135,7 @@ void main() {
     testWidgets('shows the brand mark, not a placeholder letter', (
       tester,
     ) async {
-      await pumpAtSize(tester, _centred(const BrandPill(showChevron: false)));
+      await pumpAtSize(tester, _centred(const BrandPill()));
       expect(find.byType(EcomsBrandMark), findsOneWidget);
       expect(find.byType(EcomsAnimatedLogo), findsNothing);
       expect(find.text('ecomsbd'), findsOneWidget);
@@ -145,7 +145,7 @@ void main() {
     testWidgets('keeps the brand mark on section tabs', (tester) async {
       await pumpAtSize(
         tester,
-        _centred(BrandPill(label: 'Orders', onTap: () {})),
+        _centred(const BrandPill(label: 'Orders')),
       );
       expect(find.byType(EcomsBrandMark), findsOneWidget);
       expect(find.text('Orders'), findsOneWidget);
@@ -157,7 +157,7 @@ void main() {
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      await pumpAtSize(tester, _centred(BrandPill(onTap: () {})));
+      await pumpAtSize(tester, _centred(const BrandPill()));
       expect(find.semantics.byLabel('ecomsbd'), findsOne);
       expect(find.semantics.byLabel(RegExp(r'^e$')), findsNothing);
       expect(find.semantics.byFlag(SemanticsFlag.isImage), findsNothing);
