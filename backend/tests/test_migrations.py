@@ -166,3 +166,101 @@ class TestConstraints:
             if isinstance(constraint, sa.UniqueConstraint)
         ]
         assert columns in unique_sets, f"{table} needs a unique constraint on {columns}"
+
+
+class TestAlembicVersionPrivileges:
+    """Supabase grants client roles everything Alembic created before d73e9c5a1201."""
+
+    @staticmethod
+    def _supabase_grants_then_upgrade(sync_conn: sa.Connection) -> dict[str, object]:
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        for role in ("anon", "authenticated"):
+            sync_conn.execute(
+                sa.text(
+                    "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = "
+                    f"'{role}') THEN CREATE ROLE {role} NOLOGIN; END IF; END $$"
+                )
+            )
+        sync_conn.execute(sa.text("ALTER TABLE public.alembic_version DISABLE ROW LEVEL SECURITY"))
+        sync_conn.execute(
+            sa.text("GRANT ALL ON TABLE public.alembic_version TO PUBLIC, anon, authenticated")
+        )
+        script = ScriptDirectory.from_config(_alembic_config("postgresql://unused"))
+        module = script.get_revision("a32002").module
+        with Operations.context(MigrationContext.configure(sync_conn)):
+            module.upgrade()
+
+        def allowed(role: str, privilege: str) -> bool:
+            return bool(
+                sync_conn.execute(
+                    sa.text("SELECT has_table_privilege(:role, 'public.alembic_version', :p)"),
+                    {"role": role, "p": privilege},
+                ).scalar_one()
+            )
+
+        return {
+            "client": {
+                (role, privilege): allowed(role, privilege)
+                for role in ("anon", "authenticated")
+                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")
+            },
+            "public_acl": sync_conn.execute(
+                sa.text(
+                    "SELECT count(*) FROM pg_class c, aclexplode(c.relacl) a "
+                    "WHERE c.oid = 'public.alembic_version'::regclass AND a.grantee = 0"
+                )
+            ).scalar_one(),
+            "rls": sync_conn.execute(
+                sa.text(
+                    "SELECT relrowsecurity FROM pg_class "
+                    "WHERE oid = 'public.alembic_version'::regclass"
+                )
+            ).scalar_one(),
+            "owner_reads": sync_conn.execute(
+                sa.text("SELECT version_num FROM public.alembic_version")
+            ).scalar_one(),
+        }
+
+    @pytest.mark.postgres
+    async def test_client_roles_cannot_read_or_rewrite_the_revision(self, system_db) -> None:
+        if system_db.bind.dialect.name != "postgresql":
+            pytest.skip("PostgreSQL only")
+        connection = await system_db.connection()
+        try:
+            state = await connection.run_sync(self._supabase_grants_then_upgrade)
+        finally:
+            # Roles and grants are transactional: nothing leaks into later tests.
+            await system_db.rollback()
+        assert not any(state["client"].values()), state["client"]
+        assert state["public_acl"] == 0
+        assert state["rls"] is True
+        # The owner (API readiness probe, `alembic upgrade`) bypasses RLS.
+        head = ScriptDirectory.from_config(
+            _alembic_config("postgresql://unused")
+        ).get_current_head()
+        assert state["owner_reads"] == head
+
+    @pytest.mark.postgres
+    async def test_migrated_database_keeps_the_version_table_private(self, system_db) -> None:
+        if system_db.bind.dialect.name != "postgresql":
+            pytest.skip("PostgreSQL only")
+        rls = (
+            await system_db.execute(
+                sa.text(
+                    "SELECT relrowsecurity FROM pg_class "
+                    "WHERE oid = 'public.alembic_version'::regclass"
+                )
+            )
+        ).scalar_one()
+        public = (
+            await system_db.execute(
+                sa.text(
+                    "SELECT count(*) FROM pg_class c, aclexplode(c.relacl) a "
+                    "WHERE c.oid = 'public.alembic_version'::regclass AND a.grantee = 0"
+                )
+            )
+        ).scalar_one()
+        assert rls is True
+        assert public == 0

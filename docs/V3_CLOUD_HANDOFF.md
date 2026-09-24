@@ -11,16 +11,18 @@ Short state note for the next session. Git is the source of truth; check it firs
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
 - No release tag has been created for V3.1 or V3.2.
-- Migration head: **`a32001`**, one head, no branches (`a31001` = V3.1, `a32001` = V3.2).
+- Migration head: **`a32002`**, one head, no branches (`a31001` = V3.1, `a32001` = V3.2,
+  `a32002` = client roles lose access to `alembic_version`).
 
 ## Production
 
-- Prod DB was last migrated to `a23007` (V2.3). **Not migrated to `a31001`/`a32001`.**
-- Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so the
-  V3.1/V3.2 image stays unready and the old container keeps serving until prod is migrated.
-  The new worker logs errors from the integration jobs until their tables exist.
-- Migrating prod (`a23007` → `a31001` → `a32001`) needs the owner's explicit approval.
-  No session has done it yet.
+- Prod DB is at `a32001` (V3.2); API and worker healthy on it.
+- Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so a new image
+  stays unready and the old container keeps serving until prod is migrated to its head.
+- `a32002` is privileges-only (REVOKE + ENABLE RLS on `alembic_version`, no data change).
+  Apply it through the session pooler:
+  `DATABASE_URL='postgresql+asyncpg://...5432/postgres' alembic -x database-only=true upgrade head`.
+  Cloud sessions have no production credentials; the owner runs it.
 
 ## External gates (code is done, these are not)
 
