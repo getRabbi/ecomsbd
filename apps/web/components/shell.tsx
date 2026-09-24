@@ -57,6 +57,7 @@ const NAV: NavGroup[] = [
   {
     labelKey: 'nav.shop',
     items: [
+      { href: '/integrations', labelKey: 'nav.integrations', icon: '⧉' },
       { href: '/imports', labelKey: 'nav.imports', icon: '⇪' },
       { href: '/order-sources', labelKey: 'nav.sources', icon: '⇥' },
       { href: '/team', labelKey: 'nav.team', icon: '⚇' },

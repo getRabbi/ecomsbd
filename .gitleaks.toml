@@ -97,3 +97,25 @@ regexes = [
 description = "Pathao's published webhook response protocol constant; authenticates no merchant. Scoped to the documented handshake value."
 paths = ['''docs/providers/pathao/CONTRACT\.md''']
 regexes = ['''f3992ecc\-59da\-4cbe\-a049\-a13da2018d51''']
+
+[[allowlists]]
+description = """
+Synthetic WooCommerce REST API keys in the V3.1 Integrations Hub tests. They
+are made up to match WooCommerce's documented `ck_`/`cs_` prefixes, because the
+tests prove that the API refuses keys without those prefixes, that the keys
+reach the store only as HTTPS Basic auth, and that no response ever echoes
+them. No store has ever issued any of these values.
+"""
+paths = [
+  '''backend/tests/test_integrations\.py''',
+  '''apps/mobile_flutter/test/features/integrations_screen_test\.dart''',
+]
+regexes = [
+  '''ck_abcdef1234567890''',
+  '''cs_abcdef1234567890''',
+  '''ck_1234567890abcdef''',
+  '''cs_1234567890abcdef''',
+  '''cs_abcdefgh12''',
+  '''ck_abcdef123456''',
+  '''cs_abcdef123456''',
+]

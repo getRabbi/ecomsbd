@@ -143,10 +143,7 @@ void main() {
     });
 
     testWidgets('keeps the brand mark on section tabs', (tester) async {
-      await pumpAtSize(
-        tester,
-        _centred(const BrandPill(label: 'Orders')),
-      );
+      await pumpAtSize(tester, _centred(const BrandPill(label: 'Orders')));
       expect(find.byType(EcomsBrandMark), findsOneWidget);
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('o'), findsNothing);

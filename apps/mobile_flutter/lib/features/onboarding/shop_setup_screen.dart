@@ -106,11 +106,7 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
           ),
           children: <Widget>[
             const Row(
-              children: <Widget>[
-                BrandPill(),
-                Spacer(),
-                LanguageTogglePill(),
-              ],
+              children: <Widget>[BrandPill(), Spacer(), LanguageTogglePill()],
             ),
             const SizedBox(height: EcomsbdSpacing.xl),
             Text(context.tr('onboarding.title'), style: EcomsbdType.pageTitle),

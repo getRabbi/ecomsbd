@@ -14,6 +14,7 @@
 library;
 
 import 'crm_strings.dart';
+import 'integrations_strings.dart';
 
 final Map<String, String> banglaStrings = <String, String>{
   'messaging.title': 'গ্রাহককে মেসেজ',
@@ -21,6 +22,7 @@ final Map<String, String> banglaStrings = <String, String>{
   'network.title': 'বেনামি নেটওয়ার্ক বেঞ্চমার্ক',
   'automation.title': 'অটোমেশন নিয়ম',
   ...crmBn,
+  ...integrationsBn,
   ..._commonBn,
   ..._authBn,
   ..._onboardingBn,
@@ -50,6 +52,7 @@ final Map<String, String> englishStrings = <String, String>{
   'network.title': 'Anonymous benchmarks',
   'automation.title': 'Automation rules',
   ...crmEn,
+  ...integrationsEn,
   ..._commonEn,
   ..._authEn,
   ..._onboardingEn,

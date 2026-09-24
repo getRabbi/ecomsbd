@@ -351,6 +351,24 @@ class Settings(BaseSettings):
     bkash_password: SecretStr | None = None
     bkash_webhook_secret: SecretStr | None = None
 
+    # ------------------------------------------------------- integrations ---
+    # Shopify public app from the Shopify Dev Dashboard. Until both are set the
+    # Integrations Hub reports SHOPIFY_APP_SETUP_REQUIRED and starts no OAuth.
+    shopify_client_id: str | None = None
+    shopify_client_secret: SecretStr | None = None
+    #: Pinned GraphQL Admin API version. Shopify releases quarterly; bump it
+    #: deliberately after reading that version's changelog.
+    shopify_api_version: str = "2026-07"
+    #: Orders and the customer fields on them. read_all_orders (older than 60
+    #: days) is a protected scope Shopify must approve, so it is not requested.
+    shopify_scopes: str = "read_orders"
+    # Meta app for Messenger Page connections. META_APP_SETUP_REQUIRED until all
+    # three are set; pages_messaging also needs Meta App Review.
+    meta_app_id: str | None = None
+    meta_app_secret: SecretStr | None = None
+    meta_webhook_verify_token: SecretStr | None = None
+    meta_graph_api_version: str = "v26.0"
+
     # ------------------------------------------------------------- admin ---
     # Platform admin is a separate identity from any seller account. Empty by
     # default: no console access exists until an operator provisions it.
@@ -506,6 +524,11 @@ class Settings(BaseSettings):
         "bkash_username",
         "bkash_password",
         "bkash_webhook_secret",
+        "shopify_client_id",
+        "shopify_client_secret",
+        "meta_app_id",
+        "meta_app_secret",
+        "meta_webhook_verify_token",
         mode="before",
     )
     @classmethod
@@ -920,6 +943,17 @@ class Settings(BaseSettings):
 
         if self.fcm_credentials_json is not None and not self.fcm_project_id:
             problems.append("FCM_PROJECT_ID is required alongside FCM_CREDENTIALS_JSON")
+
+        if bool(self.shopify_client_id) != bool(self.shopify_client_secret):
+            problems.append("Shopify needs both SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET")
+        meta_fields = {
+            "META_APP_ID": self.meta_app_id,
+            "META_APP_SECRET": self.meta_app_secret,
+            "META_WEBHOOK_VERIFY_TOKEN": self.meta_webhook_verify_token,
+        }
+        if any(meta_fields.values()) and not all(meta_fields.values()):
+            missing = [name for name, value in meta_fields.items() if not value]
+            problems.append(f"Meta is partly configured; missing {', '.join(missing)}")
 
         return problems
 

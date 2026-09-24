@@ -27,6 +27,8 @@ from app.api.v1 import (
     external_risk,
     imports,
     insights,
+    integration_webhooks,
+    integrations,
     messaging,
     money,
     network,
@@ -47,6 +49,11 @@ api_router.include_router(auth.router)
 api_router.include_router(messaging.router)
 api_router.include_router(order_sources.router)
 api_router.include_router(developers.router)
+api_router.include_router(integrations.router)
+# Unauthenticated: provider OAuth callbacks and signed webhooks. Each resolves
+# a connection by an unguessable token and verifies the provider's signature.
+api_router.include_router(integration_webhooks.callbacks)
+api_router.include_router(integration_webhooks.webhooks)
 api_router.include_router(external_risk.router)
 api_router.include_router(network.router)
 api_router.include_router(automation.router)

@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import secrets
 import socket
 import time
 import uuid
@@ -23,6 +24,7 @@ from app.common.outbox import OutboxEvent
 from app.core.clock import utc_now
 from app.core.context import ActorType, RequestContext, clear_context, set_context
 from app.core.errors import ValidationError
+from app.core.ids import new_id
 from app.db.session import session_scope, system_session
 from app.public_api.models import WebhookAttempt, WebhookDelivery, WebhookEndpoint
 
@@ -108,6 +110,48 @@ async def post_signed(url: str, body: bytes, headers: dict[str, str]) -> int:
         ) as response,
     ):
         return response.status_code
+
+
+async def create_endpoint(
+    db: AsyncSession, url: str, topics: list[str]
+) -> tuple[WebhookEndpoint, str]:
+    """A new endpoint and its only plaintext signing secret."""
+    valid_url(url)
+    if not topics or set(topics) - TOPICS:
+        raise ValidationError("Unknown webhook topic")
+    row_id, secret = new_id(), secrets.token_urlsafe(32)
+    row = WebhookEndpoint(
+        id=row_id,
+        url=url,
+        topics=sorted(set(topics)),
+        enabled=True,
+        secret_enc=get_vault().encrypt(secret, context=f"webhook:{row_id}"),
+    )
+    db.add(row)
+    await db.flush()
+    return row, secret
+
+
+async def queue_test_delivery(
+    db: AsyncSession, endpoint: WebhookEndpoint, shop_id: uuid.UUID
+) -> WebhookDelivery:
+    event_id = new_id()
+    delivery = WebhookDelivery(
+        endpoint_id=endpoint.id,
+        event_id=event_id,
+        next_attempt_at=utc_now(),
+        payload={
+            "id": str(event_id),
+            "version": "1",
+            "type": "webhook.test",
+            "created_at": utc_now().isoformat(),
+            "shop_id": str(shop_id),
+            "data": {"test": True},
+        },
+    )
+    db.add(delivery)
+    await db.flush()
+    return delivery
 
 
 async def schedule_event(db: AsyncSession, event: OutboxEvent) -> None:

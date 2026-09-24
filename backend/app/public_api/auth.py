@@ -3,12 +3,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request
 
 from app.api.deps import get_hasher
 from app.common.cache import RateLimiter
+from app.core.clock import utc_now
 from app.core.context import ActorType, clear_context, current_context, set_context
 from app.core.errors import AuthenticationError, ForbiddenError, RateLimitedError
 from app.db.session import system_session
@@ -71,6 +73,10 @@ async def authenticate(request: Request) -> AsyncIterator[ApiPrincipal]:
             raise AuthenticationError("Shop is unavailable")
         principal = ApiPrincipal(key.id, key.tenant_id, frozenset(key.scopes))
         rate_limit = key.rate_limit
+        # Integration health shows "last API call"; one write a minute is enough.
+        now = utc_now()
+        if key.last_used_at is None or now - key.last_used_at >= timedelta(minutes=1):
+            key.last_used_at = now
     for scope, identity, limit in (
         ("public-key", str(principal.key_id), rate_limit),
         ("public-shop", str(principal.tenant_id), 1000),

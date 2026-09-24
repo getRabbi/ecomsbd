@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 import uuid
 from typing import Annotated, Any
 
@@ -8,15 +7,15 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import DbSession, Principal, get_hasher, get_vault, require_permission
+from app.api.deps import DbSession, Principal, require_permission
 from app.common.operation_lock import lock_shop
 from app.core.clock import utc_now
 from app.core.errors import ConflictError, ValidationError
-from app.core.ids import new_id
 from app.messaging.service import required
 from app.public_api.auth import SCOPES
 from app.public_api.models import ApiKey, WebhookAttempt, WebhookDelivery, WebhookEndpoint
-from app.public_api.webhooks import TOPICS, valid_url
+from app.public_api.service import issue_key
+from app.public_api.webhooks import TOPICS, create_endpoint, queue_test_delivery
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/developers", tags=["developer settings"])
@@ -74,18 +73,13 @@ async def create_key(
 ) -> dict[str, Any]:
     if set(body.scopes) - SCOPES:
         raise ValidationError("Unknown API scope")
-    row_id = new_id()
-    token = f"ec_live_{row_id.hex}.{secrets.token_urlsafe(32)}"
-    row = ApiKey(
-        id=row_id,
+    row, token = await issue_key(
+        db,
         name=body.name,
-        scopes=sorted(set(body.scopes)),
+        scopes=body.scopes,
         rate_limit=body.rate_limit,
-        secret_hash=get_hasher().token_hash("public:" + token),
         created_by=actor.user_id,
     )
-    db.add(row)
-    await db.flush()
     response.headers["Cache-Control"] = "no-store"
     return {**key_view(row), "key": token}
 
@@ -118,19 +112,7 @@ async def webhooks(db: DbSession, _: Manager) -> dict[str, Any]:
 async def create_webhook(
     body: WebhookInput, db: DbSession, _: Manager, response: Response
 ) -> dict[str, Any]:
-    valid_url(body.url)
-    if set(body.topics) - TOPICS:
-        raise ValidationError("Unknown webhook topic")
-    row_id, secret = new_id(), secrets.token_urlsafe(32)
-    row = WebhookEndpoint(
-        id=row_id,
-        url=body.url,
-        topics=sorted(set(body.topics)),
-        enabled=True,
-        secret_enc=get_vault().encrypt(secret, context=f"webhook:{row_id}"),
-    )
-    db.add(row)
-    await db.flush()
+    row, secret = await create_endpoint(db, body.url, body.topics)
     response.headers["Cache-Control"] = "no-store"
     return {**hook_view(row), "signing_secret": secret}
 
@@ -154,22 +136,7 @@ async def test_hook(endpoint_id: uuid.UUID, db: DbSession, actor: Manager) -> di
     row = await required(db, WebhookEndpoint, endpoint_id)
     if not row.enabled:
         raise ConflictError("Webhook is disabled")
-    event_id = new_id()
-    delivery = WebhookDelivery(
-        endpoint_id=row.id,
-        event_id=event_id,
-        next_attempt_at=utc_now(),
-        payload={
-            "id": str(event_id),
-            "version": "1",
-            "type": "webhook.test",
-            "created_at": utc_now().isoformat(),
-            "shop_id": str(actor.tenant_id),
-            "data": {"test": True},
-        },
-    )
-    db.add(delivery)
-    await db.flush()
+    delivery = await queue_test_delivery(db, row, actor.require_tenant())
     return {"delivery_id": delivery.id, "status": delivery.status}
 
 

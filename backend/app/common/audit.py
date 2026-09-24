@@ -175,6 +175,16 @@ class AuditAction(StrEnum):
     PHONE_REVEALED = "privacy.phone_revealed"
     ADMIN_REPAIR_ACTION = "admin.repair_action"
 
+    # Integrations Hub (V3.1)
+    INTEGRATION_CREATED = "integration.created"
+    INTEGRATION_CONNECTED = "integration.connected"
+    INTEGRATION_RECONNECTED = "integration.reconnected"
+    INTEGRATION_DISCONNECTED = "integration.disconnected"
+    INTEGRATION_CONFIGURED = "integration.configured"
+    INTEGRATION_KEY_ROTATED = "integration.key_rotated"
+    INTEGRATION_SYNC_STARTED = "integration.sync_started"
+    INTEGRATION_EVENT_RETRIED = "integration.event_retried"
+
 
 class AuditLog(Base):
     """One audited action. Append-only."""

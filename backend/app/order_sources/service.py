@@ -23,12 +23,18 @@ from app.orders.service import OrderDraft, OrderItemDraft, OrderService
 PROVIDERS = ("CUSTOM_PUSH", "SHOPIFY", "WOOCOMMERCE", "MESSENGER")
 
 
+#: Sources the Integrations Hub owns. Only its connectors may feed them, so a
+#: pushed payload can never pose as a Shopify or WooCommerce order.
+MANAGED = frozenset({"SHOPIFY", "WOOCOMMERCE"})
+
+
 def capability(provider: str) -> dict[str, Any]:
-    return {
-        "provider": provider,
-        "available": provider == "CUSTOM_PUSH",
-        "blocker": None if provider == "CUSTOM_PUSH" else "ORDER_SOURCE_OFFICIAL_CONTRACT_REQUIRED",
-    }
+    blocker = None
+    if provider in MANAGED:
+        blocker = "INTEGRATIONS_HUB_REQUIRED"
+    elif provider != "CUSTOM_PUSH":
+        blocker = "ORDER_SOURCE_OFFICIAL_CONTRACT_REQUIRED"
+    return {"provider": provider, "available": blocker is None, "blocker": blocker}
 
 
 class NativeOrder(OrderCreatePayload):
@@ -112,8 +118,14 @@ async def create_native(
 
 
 async def ingest(
-    db: AsyncSession, source_id: uuid.UUID, external_order_id: str, payload: dict[str, Any]
+    db: AsyncSession,
+    source_id: uuid.UUID,
+    external_order_id: str,
+    payload: dict[str, Any],
+    *,
+    managed: bool = False,
 ) -> dict[str, Any]:
+    """``managed`` is the Integrations Hub's connector path, and only that."""
     await lock_shop(db)
     source = await required(db, OrderSource, source_id)
     # Receipt identity is permanent. Mapping edits must not reinterpret a replay.
@@ -125,23 +137,35 @@ async def ingest(
         )
     )
     if receipt:
-        if receipt.request_hash != digest:
+        changed = receipt.request_hash != digest
+        if changed and not managed:
             raise IdempotencyConflictError(
                 "External order ID was already used for a different payload"
             )
+        # A store edits its own orders after we import them. The first import
+        # stands; an edit is never a second order.
         return {
             "order_id": str(receipt.order_id),
             "external_order_id": receipt.external_order_id,
             "source_id": str(source.id),
             "replayed": True,
+            **({"changed": True} if changed else {}),
         }
-    if not source.enabled or not capability(source.provider)["available"]:
+    if not source.enabled or not (
+        (managed and source.provider in MANAGED) or capability(source.provider)["available"]
+    ):
         raise ConflictError(
             "Order source is disabled",
             details={"blocker": capability(source.provider)["blocker"] or "ORDER_SOURCE_DISABLED"},
         )
     normalized = normalize(source, payload)
-    order = await create_native(db, normalized)
+    # Deterministic, so even a lost receipt cannot mint a second order.
+    client_id = (
+        uuid.uuid5(uuid.NAMESPACE_URL, f"ecomsbd:source:{source.id}:{external_order_id}")
+        if managed
+        else None
+    )
+    order = await create_native(db, normalized, client_id=client_id)
     db.add(
         ExternalOrder(
             source_id=source.id,
