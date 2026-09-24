@@ -31,7 +31,6 @@ from app.tenants.models import TenantUser
 from tests.conftest_commerce import create_order, create_product, signed_in_shop
 from tests.test_auth_flow import auth_header
 
-
 # ----------------------------------------------------------------- helpers --
 
 
@@ -468,7 +467,7 @@ async def test_loops_depth_and_repeats_are_stopped_with_a_reason(client, shop, h
     # Repeat guard: the same workflow for the same order, too often in a day.
     for _ in range(service.REPEAT_LIMIT):
         await _schedule_as(shop, event(), None)
-    assert [r["last_error"] for r in await runs(client, headers)][0] == "REPEAT_LIMIT"
+    assert (await runs(client, headers))[0]["last_error"] == "REPEAT_LIMIT"
 
 
 # ------------------------------------------------------------- versioning --
@@ -714,6 +713,24 @@ async def test_integration_failure_is_retried_once_through_the_integration_queue
     assert result["status"] == "SUCCEEDED"
     async with system_session("test: problem state") as db:
         assert (await db.get(IntegrationEvent, problem_id)).status == "QUEUED"
+    # The retried import fails again: same problem, so no second run.
+    token = set_context(RequestContext(trace_id="test", tenant_id=tenant(shop)))
+    try:
+        async with session_scope() as db:
+            again = await db.get(IntegrationEvent, problem_id)
+            conn = await db.get(IntegrationConnection, again.connection_id)
+            await integrations.record_issue(
+                db,
+                conn,
+                kind="WEBHOOK",
+                topic="orders/create",
+                code="PROVIDER_TIMEOUT",
+                external_ref="1001",
+                event=again,
+            )
+    finally:
+        clear_context(token)
+    assert len(await runs(client, headers)) == 1
     # No credential or token in anything the retry centre shows.
     text = str(result) + str((await client.get("/v1/automation/workflows", headers=headers)).json())
     assert "enc-not-a-real-secret" not in text and "credentials" not in text
@@ -858,6 +875,15 @@ async def test_an_ambiguous_booking_stops_and_is_never_retried(client, shop, hea
     assert (await detail(client, headers, row["id"]))["last_error"] == "BOOKING_UNKNOWN"
     assert len(steadfast.calls_to("POST", "/create_order")) == 1
     assert await count(Consignment, Consignment.order_id == uuid.UUID(order["id"])) == 1
+    # A worker that died mid-call leaves the run RUNNING; recovery requeues it
+    # and the parcel check still refuses to book.
+    async with system_session("test: crashed worker") as db:
+        crashed = await db.get(AutomationExecution, uuid.UUID(row["id"]))
+        crashed.status = "RUNNING"
+        crashed.updated_at = utc_now() - timedelta(minutes=30)
+    await jobs.dispatch_automation()
+    assert (await detail(client, headers, row["id"]))["last_error"] == "BOOKING_UNKNOWN"
+    assert len(steadfast.calls_to("POST", "/create_order")) == 1
 
 
 # --------------------------------------------------------- preview / test --

@@ -254,6 +254,7 @@ class AlertLifecycle:
                         self._db,
                         OutboxTopic.ALERT_RAISED,
                         {"kind": str(condition.kind), "notification_id": str(written.id)},
+                        tenant_id=written.tenant_id,
                     )
                 return written
         except IntegrityError:

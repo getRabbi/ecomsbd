@@ -638,9 +638,28 @@ async def execute(tenant_id: uuid.UUID, execution_id: uuid.UUID) -> None:
         clear_context(token)
 
 
+#: A booking step still RUNNING after this long lost its worker mid-call.
+STALE_RUNNING = timedelta(minutes=10)
+
+
 async def dispatch_automation(ctx: dict[str, Any] | None = None) -> dict[str, int]:
     """Due runs: new, retrying, woken by an event, or at the end of a wait."""
     async with system_session("automation: due execution IDs") as db:
+        # A worker that died during a courier call leaves its run RUNNING. It
+        # goes back in the queue; the parcel check in ``_book`` then decides,
+        # from the order's parcels, whether anything may be booked.
+        for stale in (
+            await db.scalars(
+                sa.select(AutomationExecution)
+                .where(
+                    AutomationExecution.status == "RUNNING",
+                    AutomationExecution.updated_at < utc_now() - STALE_RUNNING,
+                )
+                .limit(50)
+            )
+        ).all():
+            stale.status, stale.next_attempt_at = "QUEUED", utc_now()
+        await db.flush()
         rows = (
             await db.execute(
                 sa.select(AutomationExecution.tenant_id, AutomationExecution.id)

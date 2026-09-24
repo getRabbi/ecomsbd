@@ -394,6 +394,22 @@ async def resume_waiters(db: AsyncSession, tenant_id: uuid.UUID, keys: list[str]
 async def schedule_event(db: AsyncSession, event: OutboxEvent) -> None:
     if event.tenant_id is None or event.topic not in TOPICS:
         return
+    # Most shops have no workflows: two indexed probes, then nothing to read.
+    listening = await db.scalar(
+        sa.select(AutomationRule.id)
+        .where(AutomationRule.tenant_id == event.tenant_id, AutomationRule.enabled.is_(True))
+        .limit(1)
+    ) or await db.scalar(
+        sa.select(AutomationExecution.id)
+        .where(
+            AutomationExecution.tenant_id == event.tenant_id,
+            AutomationExecution.status == "WAITING",
+            AutomationExecution.wait_key.is_not(None),
+        )
+        .limit(1)
+    )
+    if listening is None:
+        return
     reading = await read_event(db, event)
     await resume_waiters(db, event.tenant_id, reading.wait_keys)
     if not reading.matches:

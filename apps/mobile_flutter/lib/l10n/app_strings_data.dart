@@ -13,6 +13,7 @@
 /// Placeholders are `{name}` and are substituted by `AppStrings.t`.
 library;
 
+import 'automation_strings.dart';
 import 'crm_strings.dart';
 import 'integrations_strings.dart';
 
@@ -20,9 +21,10 @@ final Map<String, String> banglaStrings = <String, String>{
   'messaging.title': 'গ্রাহককে মেসেজ',
   'sources.title': 'অর্ডারের উৎস',
   'network.title': 'বেনামি নেটওয়ার্ক বেঞ্চমার্ক',
-  'automation.title': 'অটোমেশন নিয়ম',
+  'automation.title': 'অটোমেশন',
   'campaigns.title': 'ক্যাম্পেইন',
   ...crmBn,
+  ...automationBn,
   ...integrationsBn,
   ..._commonBn,
   ..._authBn,
@@ -51,9 +53,10 @@ final Map<String, String> englishStrings = <String, String>{
   'messaging.title': 'Customer messaging',
   'sources.title': 'Order sources',
   'network.title': 'Anonymous benchmarks',
-  'automation.title': 'Automation rules',
+  'automation.title': 'Automation',
   'campaigns.title': 'Campaigns',
   ...crmEn,
+  ...automationEn,
   ...integrationsEn,
   ..._commonEn,
   ..._authEn,

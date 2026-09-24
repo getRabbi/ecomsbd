@@ -332,8 +332,13 @@ async def _announce_issue(
     Once per problem: a repeat of the same problem is coalesced above and never
     reaches here. Codes only; no provider body or credential.
     """
-    from app.common.outbox import OutboxTopic, enqueue
+    from app.common.outbox import OutboxEvent, OutboxTopic, enqueue
 
+    key = f"integration.issue:{row.id}"
+    # A problem retried and failing again is the same problem, not a new one:
+    # otherwise a workflow that retries it would be started again each time.
+    if await db.scalar(sa.select(OutboxEvent.id).where(OutboxEvent.dedupe_key == key)):
+        return
     await enqueue(
         db,
         OutboxTopic.INTEGRATION_ISSUE_OPENED,
@@ -344,6 +349,7 @@ async def _announce_issue(
             "code": row.code,
         },
         tenant_id=conn.tenant_id,
+        dedupe_key=key,
     )
 
 

@@ -109,6 +109,8 @@ def upgrade():
         "UPDATE automation_executions SET finished_at = updated_at "
         "WHERE status IN ('SKIPPED', 'FAILED')"
     )
+    # A V2 FAILED run had exhausted transient retries: a seller may retry it.
+    op.execute("UPDATE automation_executions SET retryable = true WHERE status = 'FAILED'")
 
     db = op.get_bind()
     if db.dialect.name == "postgresql":
