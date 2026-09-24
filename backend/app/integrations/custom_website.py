@@ -208,6 +208,69 @@ def overlay(view: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
     return view
 
 
+#: The order a "Send test order" checks when the seller does not paste one.
+SAMPLE_ORDER: dict[str, Any] = {
+    "phone": "01700000000",
+    "customer_name": "Test Customer",
+    "address": "House 1, Road 2",
+    "district": "Dhaka",
+    "items": [{"name": "Test product", "quantity": 1, "unit_price_paisa": 100000}],
+    "cod_amount_paisa": 100000,
+}
+
+
+async def check_order(
+    db: AsyncSession, conn: IntegrationConnection, payload: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Run a website order through the source's rules without creating anything.
+
+    Uses the same normalization as ``POST /public/v1/sources/{id}/orders``; no
+    order, customer, receipt or event is written.
+    """
+    from app.common.phone import try_normalize_bd_phone
+    from app.order_sources.service import normalize
+    from app.products.models import Product
+
+    source = await db.get(OrderSource, conn.source_id) if conn.source_id else None
+    if source is None:
+        raise ConflictError("This connection has no order source", details={"code": "NO_SOURCE"})
+    order = normalize(source, payload or SAMPLE_ORDER)
+    problems: list[dict[str, Any]] = []
+    phone = try_normalize_bd_phone(order.phone)
+    if phone is None:
+        problems.append({"field": "phone", "code": "INVALID_PHONE"})
+    wanted = {item.product_id for item in order.items if item.product_id}
+    if wanted:
+        found = set((await db.scalars(sa.select(Product.id).where(Product.id.in_(wanted)))).all())
+        problems += [
+            {"field": "items.product_id", "code": "UNKNOWN_PRODUCT", "value": str(p)}
+            for p in sorted(wanted - found, key=str)
+        ]
+    for index, item in enumerate(order.items):
+        if item.product_id is None and not item.name:
+            problems.append({"field": f"items.{index}.name", "code": "NAME_REQUIRED"})
+    return {
+        "valid": not problems,
+        "creates_data": False,
+        "problems": problems,
+        "normalized": {
+            "phone_masked": phone.masked if phone else None,
+            "customer_name": order.customer_name,
+            "district": order.district,
+            "cod_amount_paisa": order.cod_amount_paisa,
+            "items": [
+                {
+                    "name": item.name,
+                    "product_id": str(item.product_id) if item.product_id else None,
+                    "quantity": item.quantity,
+                    "unit_price_paisa": item.unit_price_paisa,
+                }
+                for item in order.items
+            ],
+        },
+    }
+
+
 def package(conn: IntegrationConnection) -> dict[str, Any]:
     """The Developer view. Identifiers only; secrets were shown once at creation."""
     return {

@@ -31,7 +31,15 @@ import {
   type TestResult,
 } from '@/lib/integrations';
 import { SYNC_PARTS, syncSnippet } from '@/lib/integrations-sync';
+import { formatPaisa } from '@/lib/money';
 import { useApi } from '@/lib/useApi';
+
+interface TestOrder {
+  valid: boolean;
+  creates_data: false;
+  problems: { field: string; code: string }[];
+  normalized: { items: unknown[]; cod_amount_paisa: number | null };
+}
 
 export default function IntegrationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -738,6 +746,7 @@ function DeveloperSetup({
   const [lang, setLang] = useState<SnippetLang>('php');
   const [tested, setTested] = useState(false);
   const [stockWrite, setStockWrite] = useState(false);
+  const [testOrder, setTestOrder] = useState<string | null>(null);
   const open = c.state !== 'DISCONNECTED';
   const parts: { part: SnippetPart; label: StringKey }[] = [
     { part: 'create', label: 'int.dev.part.create' },
@@ -785,6 +794,32 @@ function DeveloperSetup({
             label={t('int.dev.lastOrder')}
             value={setup.last_order_at ? labels.when(setup.last_order_at) : t('int.dev.waitingOrder')}
           />
+          {open ? (
+            <p style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={busy}
+                title={t('int.dev.testOrderHint')}
+                onClick={() =>
+                  void act(async () => {
+                    const result = await api.post<TestOrder>(`/integrations/${c.id}/test-order`, {});
+                    setTestOrder(
+                      result.valid
+                        ? t('int.dev.testOrderOk', {
+                            items: result.normalized.items.length,
+                            cod: formatPaisa(result.normalized.cod_amount_paisa ?? 0),
+                          })
+                        : t('int.dev.testOrderBad', { problems: result.problems.map((p) => p.code).join(', ') }),
+                    );
+                  })
+                }
+              >
+                {t('int.dev.testOrder')}
+              </button>
+              <span className="card__hint"> {testOrder ?? t('int.dev.testOrderHint')}</span>
+            </p>
+          ) : null}
           {open ? (
             <p style={{ marginTop: 12 }}>
               <button

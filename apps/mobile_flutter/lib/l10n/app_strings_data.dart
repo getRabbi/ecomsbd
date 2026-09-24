@@ -19,6 +19,7 @@ import 'integrations_strings.dart';
 import 'forecasting_strings.dart';
 import 'procurement_strings.dart';
 import 'risk_provider_strings.dart';
+import 'developer_strings.dart';
 
 final Map<String, String> banglaStrings = <String, String>{
   'messaging.title': 'গ্রাহককে মেসেজ',
@@ -31,6 +32,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ...procurementBn,
   ...forecastingBn,
   ...riskProviderBn,
+  ...developerBn,
   ...integrationsBn,
   ..._commonBn,
   ..._authBn,
@@ -66,6 +68,7 @@ final Map<String, String> englishStrings = <String, String>{
   ...procurementEn,
   ...forecastingEn,
   ...riskProviderEn,
+  ...developerEn,
   ...integrationsEn,
   ..._commonEn,
   ..._authEn,

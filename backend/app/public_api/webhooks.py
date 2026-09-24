@@ -20,6 +20,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_vault
+from app.common.audit import AuditAction, record_audit
 from app.common.outbox import OutboxEvent
 from app.core.clock import utc_now
 from app.core.context import ActorType, RequestContext, clear_context, set_context
@@ -188,7 +189,85 @@ async def create_endpoint(
     )
     db.add(row)
     await db.flush()
+    await record_audit(
+        db,
+        AuditAction.WEBHOOK_CREATED,
+        entity_type="webhook_endpoint",
+        entity_id=row.id,
+        context={"host": urlsplit(url).hostname, "topics": row.topics},
+    )
     return row, secret
+
+
+async def rotate_secret(db: AsyncSession, endpoint: WebhookEndpoint) -> str:
+    """A new signing secret, effective for the next delivery. Shown once."""
+    secret = secrets.token_urlsafe(32)
+    endpoint.secret_enc = get_vault().encrypt(secret, context=f"webhook:{endpoint.id}")
+    await db.flush()
+    await record_audit(
+        db,
+        AuditAction.WEBHOOK_SECRET_ROTATED,
+        entity_type="webhook_endpoint",
+        entity_id=endpoint.id,
+    )
+    return secret
+
+
+async def update_endpoint(
+    db: AsyncSession,
+    endpoint: WebhookEndpoint,
+    *,
+    enabled: bool | None = None,
+    topics: list[str] | None = None,
+) -> WebhookEndpoint:
+    changed: dict[str, Any] = {}
+    if topics is not None:
+        if not topics or set(topics) - TOPICS:
+            raise ValidationError("Unknown webhook topic")
+        endpoint.topics = sorted(set(topics))
+        changed["topics"] = endpoint.topics
+    if enabled is not None and enabled != endpoint.enabled:
+        endpoint.enabled = enabled
+        changed["enabled"] = enabled
+    await db.flush()
+    if changed:
+        await record_audit(
+            db,
+            AuditAction.WEBHOOK_UPDATED,
+            entity_type="webhook_endpoint",
+            entity_id=endpoint.id,
+            context=changed,
+        )
+    return endpoint
+
+
+def sample_event(topic: str, shop_id: str = "00000000-0000-0000-0000-000000000000") -> dict:
+    """What a delivery of ``topic`` looks like. Placeholder identifiers only."""
+    placeholder = "00000000-0000-0000-0000-000000000001"
+    data: dict[str, Any] = {"order_id": placeholder}
+    if topic.startswith("order.") and topic not in {"order.created", "order.updated"}:
+        data["status"] = "CONFIRMED"
+    if topic in {"order.status_changed"}:
+        data.update({"from": "DRAFT", "to": "CONFIRMED"})
+    if topic in {"order.booked", "order.fulfilled", "tracking.assigned"}:
+        data.update({"provider": "steadfast", "tracking_code": "SF123456"})
+    if topic in {"consignment.status_changed", "order.delivered", "order.returned"}:
+        data.update({"consignment_id": placeholder, "old_status": "IN_TRANSIT"})
+        data["new_status"] = "RETURNED" if topic == "order.returned" else "DELIVERED"
+    if topic in {"inventory.updated", "product.updated"}:
+        data = {"product_id": placeholder, "sku": "SKU-1", "stock_on_hand": 12}
+    if topic == "import.committed":
+        data = {"import_id": placeholder}
+    if topic == "automation.workflow":
+        data = {"reason": "my-label"}
+    return {
+        "id": placeholder,
+        "type": topic,
+        "version": "1",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "shop_id": shop_id,
+        "data": {k: v for k, v in data.items() if k in DATA_FIELDS},
+    }
 
 
 async def queue_test_delivery(

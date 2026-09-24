@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -37,6 +37,8 @@ class ApiPrincipal:
     key_id: uuid.UUID
     tenant_id: uuid.UUID
     scopes: frozenset[str]
+    rate_limit: int = 60
+    expires_at: datetime | None = None
 
     def require(self, scope: str) -> None:
         if scope not in self.scopes:
@@ -68,10 +70,14 @@ async def authenticate(request: Request) -> AsyncIterator[ApiPrincipal]:
             or not get_hasher().verify_token("public:" + token, key.secret_hash)
         ):
             raise AuthenticationError("Invalid or revoked API key")
+        if key.expires_at is not None and key.expires_at <= utc_now():
+            raise AuthenticationError("API key has expired")
         tenant = await db.get(Tenant, key.tenant_id)
         if tenant is None or tenant.status != "ACTIVE" or tenant.deleted_at is not None:
             raise AuthenticationError("Shop is unavailable")
-        principal = ApiPrincipal(key.id, key.tenant_id, frozenset(key.scopes))
+        principal = ApiPrincipal(
+            key.id, key.tenant_id, frozenset(key.scopes), key.rate_limit, key.expires_at
+        )
         rate_limit = key.rate_limit
         # Integration health shows "last API call"; one write a minute is enough.
         now = utc_now()

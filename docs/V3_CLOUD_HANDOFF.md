@@ -16,20 +16,27 @@ Short state note for the next session. Git is the source of truth; check it firs
     head `3eb2bd3`; see `docs/V3_5_INVENTORY_PROCUREMENT.md`.
   - **V3.6 Forecasting & Advanced Intelligence** (`a36001`): merge commit `91e776b` (PR #9), CI
     green on head `36675e5`; see `docs/V3_6_FORECASTING.md`.
+  - **V3.7 External Risk + Network Intelligence** (`a37001`): merge commit `99e606f` (PR #11),
+    CI green (PostgreSQL included) on head `7309d9e`; see `docs/V3_7_RISK_NETWORK.md`.
+  - **V3.8 Developer Platform** (`a38001`): PR #12; see `docs/PUBLIC_API.md` and `sdk/`.
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
 - No release tag has been created for V3.1 or V3.2.
-- Migration head: **`a36001`**, one head, no branches (`a31001` = V3.1, `a32001` = V3.2,
+- Migration head: **`a38001`**, one head, no branches (`a31001` = V3.1, `a32001` = V3.2,
   `a32002` = client roles lose access to `alembic_version`, `a33001` = V3.3, `a34001` = V3.4,
-  `a35001` = V3.5, `a36001` = V3.6).
+  `a35001` = V3.5, `a36001` = V3.6, `a37001` = V3.7, `a38001` = V3.8).
 
 ## Production
 
 - Prod DB is at `a32001` (V3.2); API and worker healthy on it. **Production is behind main**
   and was not migrated from any cloud session:
-  it still needs `a32002` → `a33001` → `a34001` → `a35001` → `a36001` (one `upgrade head`
-  applies all five).
+  it still needs `a32002` → `a33001` → `a34001` → `a35001` → `a36001` → `a37001` → `a38001`
+  (one `upgrade head` applies all seven).
+- 2026-09-25: the prod session pooler (5432) was saturated (`EMAXCONNSESSION`, pool 15) by the
+  old API, the new unready API and the worker, and the local session could not migrate. The
+  worker already runs the newer image against the `a32001` schema, so jobs touching V3.3+
+  tables fail until prod is migrated. Migrate as soon as a pooler slot is free.
 - Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so a new image
   stays unready and the old container keeps serving until prod is migrated to its head.
 - Pending on prod: `a32002` (privileges only: REVOKE + ENABLE RLS on `alembic_version`) and
@@ -47,6 +54,12 @@ Short state note for the next session. Git is the source of truth; check it firs
 - Pending on prod after V3.6: `a36001` (one new table `demand_forecasts` with RLS on and
   client grants revoked; a nullable `suppliers.lead_time_days`). No data step. The worker
   gains `snapshot_demand_forecasts` (daily 02:50 UTC, before the morning alert scan).
+- Pending on prod after V3.7: `a37001` (three new tables with RLS on and client grants
+  revoked: `risk_provider_connections`, `external_risk_lookups`, `network_benchmark_cells`).
+  No data step. The worker gains `prune_external_risk_lookups` (daily 04:20 UTC), and the
+  monthly `build_network_benchmarks` also writes cohort cells.
+- Pending on prod after V3.8: `a38001` (one nullable column, `public_api_keys.expires_at`).
+  No data step, no new worker job.
 
 ## External gates (code is done, these are not)
 
@@ -63,10 +76,16 @@ Short state note for the next session. Git is the source of truth; check it firs
 - Email receipts (V3.3): `EMAIL_WEBHOOK_SECRET` (Resend `whsec_…`) and a Resend webhook to
   `/v1/webhooks/messaging/resend`. Open tracking on the Resend domain is optional.
 - WooCommerce: verified against a fake store in tests; **live-store verification pending**.
+- External risk provider (V3.7): the provider-neutral layer is complete, but the adapter
+  registry is empty. Activation needs a licensed provider with a documented contract and a
+  reviewed adapter. Until then every shop sees `GATED`, and the first-party Risk Check is
+  unaffected.
+- RedX: a real positive merchant-token verification is still pending.
 
 ## Next phase
 
-- To be agreed with the owner (V3.6 is merged). Deferred from V3.6:
+- V3 roadmap code is complete with V3.8; next is the V3 release decision (tag, Android
+  version, AAB) by the owner. Deferred from V3.6:
   seasonality/weekday profiles, per-location forecasts, promotion effects. Deferred from V3.5:
   batch/expiry/serial tracking, per-location sync to storefronts, reservations shown to
   sellers, landed cost and averaging.
@@ -76,7 +95,9 @@ Short state note for the next session. Git is the source of truth; check it firs
 ## Invariants
 
 - Reuse the V2/V3 foundations. Do not build a second CRM, public API, webhook system,
-  automation engine (V3.4 workflows extend the V2 rules), order domain or integration model.
+  automation engine (V3.4 workflows extend the V2 rules), order domain or integration model,
+  risk score (V3.7 provider facts stay beside the first-party Risk Check), or health model
+  (the Developer portal reads the Integrations Hub views).
 - The financial ledger and the stock ledger stay authoritative. Integrations never
   overwrite them: stock changes are ledger movements, and ambiguity becomes a conflict.
 - Every outbox topic needs a handler, or its events block the head of the outbox.
