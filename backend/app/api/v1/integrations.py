@@ -45,7 +45,7 @@ class Input(BaseModel):
 
 
 class CreateInput(Input):
-    provider: Literal["SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "MESSENGER"]
+    provider: Literal["SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "MESSENGER", "WHATSAPP"]
     name: str = Field(min_length=1, max_length=120)
 
 
@@ -323,6 +323,52 @@ async def messenger_page(
         service.mark_error(conn, exc.code)
         raise ConflictError("Meta refused the Page connection", details={"code": exc.code}) from exc
     return {"connection": await _one(db, conn, True)}
+
+
+class WhatsAppInput(Input):
+    phone_number_id: str = Field(pattern=r"^[0-9]{5,30}$")
+    waba_id: str = Field(pattern=r"^[0-9]{5,30}$")
+    access_token: str = Field(min_length=20, max_length=1000)
+
+
+@router.post("/{connection_id}/whatsapp")
+async def whatsapp_number(
+    connection_id: uuid.UUID, body: WhatsAppInput, db: DbSession, _: Owner, response: Response
+) -> dict[str, Any]:
+    conn = await service.get(db, connection_id, lock=True)
+    if conn.provider != "WHATSAPP":
+        raise ValidationError("Not a WhatsApp connection")
+    status = service.availability(conn.provider)
+    if not status["available"]:
+        raise ConflictError("Official setup required", details={"blocker": status["blocker"]})
+    _no_store(response)
+    try:
+        await service.connect_whatsapp(
+            db,
+            conn,
+            phone_number_id=body.phone_number_id,
+            waba_id=body.waba_id,
+            access_token=body.access_token,
+        )
+    except ProviderError as exc:
+        service.mark_error(conn, exc.code)
+        raise ConflictError("Meta refused the WhatsApp number", details={"code": exc.code}) from exc
+    return {"connection": await _one(db, conn, True)}
+
+
+@router.post("/{connection_id}/whatsapp/templates")
+async def whatsapp_templates(connection_id: uuid.UUID, db: DbSession, _: Owner) -> dict[str, Any]:
+    conn = await service.get(db, connection_id, lock=True)
+    if conn.provider != "WHATSAPP" or conn.state != "CONNECTED":
+        raise ConflictError(
+            "Connect the WhatsApp number first", details={"code": "CONNECT_REQUIRED"}
+        )
+    try:
+        updated = await service.sync_whatsapp_templates(db, conn)
+    except ProviderError as exc:
+        service.mark_error(conn, exc.code)
+        raise ConflictError("Meta refused the template list", details={"code": exc.code}) from exc
+    return {"updated": updated}
 
 
 @router.post("/{connection_id}/test")

@@ -25,6 +25,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -377,12 +378,29 @@ class PrivacyService:
         and identify nobody once the contact details are gone.
         """
         from app.customers.crm_models import CustomerActivity, CustomerFollowUp, CustomerTag
+        from app.messaging.models import ConsentEvent, Conversation, Message
 
-        # Free text can itself identify a person. Scrub CRM alongside the customer.
+        # Free text can itself identify a person. Scrub CRM alongside the customer,
+        # and messaging: addresses, rendered bodies (they carry names) and evidence.
+        model: Any
         for model, values in (
             (CustomerActivity, {"text": None, "actor_id": None}),
             (CustomerFollowUp, {"text": "", "assignee_id": None, "completed_by": None}),
             (CustomerTag, {"name": "", "archived": True}),
+            (
+                Conversation,
+                {
+                    "recipient_enc": "",
+                    "recipient_masked": "***",
+                    "recipient_hash": None,
+                    "unsubscribe_hash": None,
+                    "unsubscribe_enc": None,
+                    "consent": False,
+                    "marketing_consent": False,
+                },
+            ),
+            (Message, {"subject": "", "body": "", "params": None}),
+            (ConsentEvent, {"evidence": "", "actor_id": None}),
         ):
             await self._db.execute(
                 sa.update(model).where(model.tenant_id == tenant_id).values(**values)

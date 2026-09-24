@@ -403,6 +403,10 @@ class Settings(BaseSettings):
     #: Resend API base URL (https://api.resend.com), without /emails.
     email_api_base_url: str | None = None
     email_api_key: SecretStr | None = None
+    #: Resend webhook signing secret (``whsec_...``) for delivery, bounce and
+    #: complaint receipts on customer messages. Without it email statuses stop
+    #: at SENT and are labelled as not reported.
+    email_webhook_secret: SecretStr | None = None
 
     # ---------------------------------------------------------- couriers ---
     # Transport budgets. `connect` is short and separate on purpose: its expiry

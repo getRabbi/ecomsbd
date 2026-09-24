@@ -182,6 +182,9 @@ class EmailMessage:
     #: Deduplication key. A transport that sees the same one twice must not
     #: send twice — a seller receiving two reset links cannot tell which is live.
     idempotency_key: str | None = None
+    #: Extra headers. Only customer marketing mail sets any: RFC 8058
+    #: ``List-Unsubscribe`` and ``List-Unsubscribe-Post``.
+    headers: dict[str, str] | None = None
 
     def redacted(self) -> dict[str, Any]:
         """What may be logged.
@@ -582,6 +585,9 @@ def _validate_email(message: EmailMessage) -> str | None:
         return "an email needs a plain-text body"
     if message.reply_to is not None and not _EMAIL_RE.match(message.reply_to):
         return "the reply-to is not a valid email address"
+    for name, value in (message.headers or {}).items():
+        if any(c in name + value for c in "\r\n"):
+            return "a header must not contain a line break"
     return None
 
 
@@ -720,6 +726,8 @@ class ProviderApiEmailTransport:
             payload["html"] = message.html_body
         if message.reply_to is not None:
             payload["reply_to"] = message.reply_to
+        if message.headers:
+            payload["headers"] = dict(message.headers)
         headers = {"Authorization": f"Bearer {settings.email_api_key.get_secret_value()}"}
         if message.idempotency_key:
             headers["Idempotency-Key"] = message.idempotency_key

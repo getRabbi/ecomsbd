@@ -163,11 +163,9 @@ class CrmService:
         )
         return orders, parcels, money, due
 
-    async def listing(
+    async def filtered(
         self,
         *,
-        limit: int,
-        cursor: Cursor | None = None,
         search: str | None = None,
         segment: Segment | None = None,
         tag_id: uuid.UUID | None = None,
@@ -178,7 +176,8 @@ class CrmService:
         flag: str | None = None,
         customer_id: uuid.UUID | None = None,
         money_allowed: bool = False,
-    ) -> dict:
+    ) -> tuple[sa.Select, dict[Segment, Any], int | None]:
+        """The CRM filter, shared by the customer list and campaign audiences."""
         o, p, m, f = self.aggregates()
         zero = sa.func.coalesce
         paying = (
@@ -255,6 +254,49 @@ class CrmService:
             stmt = stmt.where(o.c.last <= last_until)
         if flag:
             stmt = stmt.where(Customer.flag == flag)
+        return stmt, rules, threshold
+
+    async def audience_ids(self, *, limit: int, **filters: Any) -> list[uuid.UUID]:
+        """Customer IDs matching CRM filters; blocked customers are never an audience."""
+        from app.customers.models import CustomerFlag
+
+        stmt, _rules, _threshold = await self.filtered(**filters)
+        stmt = (
+            stmt.with_only_columns(Customer.id)
+            .where(Customer.flag != CustomerFlag.BLOCKED)
+            .order_by(Customer.created_at, Customer.id)
+            .limit(limit)
+        )
+        return list((await self.db.scalars(stmt)).all())
+
+    async def listing(
+        self,
+        *,
+        limit: int,
+        cursor: Cursor | None = None,
+        search: str | None = None,
+        segment: Segment | None = None,
+        tag_id: uuid.UUID | None = None,
+        min_orders: int | None = None,
+        max_orders: int | None = None,
+        last_from: datetime | None = None,
+        last_until: datetime | None = None,
+        flag: str | None = None,
+        customer_id: uuid.UUID | None = None,
+        money_allowed: bool = False,
+    ) -> dict:
+        stmt, rules, threshold = await self.filtered(
+            search=search,
+            segment=segment,
+            tag_id=tag_id,
+            min_orders=min_orders,
+            max_orders=max_orders,
+            last_from=last_from,
+            last_until=last_until,
+            flag=flag,
+            customer_id=customer_id,
+            money_allowed=money_allowed,
+        )
         stmt = (
             apply_cursor(stmt, Customer, cursor)
             .order_by(Customer.created_at.desc(), Customer.id.desc())
