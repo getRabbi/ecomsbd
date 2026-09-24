@@ -18,6 +18,8 @@ class ApiKey(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(TZDateTime)
     #: Refreshed at most once a minute; feeds integration health, not billing.
     last_used_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+    #: Optional (V3.8). An expired key is refused like a revoked one.
+    expires_at: Mapped[datetime | None] = mapped_column(TZDateTime)
 
 
 class ApiWriteReceipt(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):

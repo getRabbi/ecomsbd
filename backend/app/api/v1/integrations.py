@@ -92,7 +92,7 @@ def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
 
 
-async def _view(
+async def connection_views(
     db: DbSession, rows: list[IntegrationConnection], manage: bool
 ) -> list[dict[str, Any]]:
     counts = await service.facts(db, rows)
@@ -109,7 +109,7 @@ async def _one(db: DbSession, row: IntegrationConnection, manage: bool) -> dict[
     # Flushed here, inside the tenant scope: the request session commits after
     # the principal's context is gone, and a pending write would be refused.
     await db.flush()
-    return (await _view(db, [row], manage))[0]
+    return (await connection_views(db, [row], manage))[0]
 
 
 # --------------------------------------------------------- hub and lists ---
@@ -127,7 +127,7 @@ async def hub(db: DbSession, actor: Viewer) -> dict[str, Any]:
     manage = actor.can(Permission.SETTINGS_MANAGE)
     return {
         "providers": [service.availability(p) for p in service.PROVIDERS],
-        "items": await _view(db, rows, manage),
+        "items": await connection_views(db, rows, manage),
         "can_manage": manage,
         "can_retry": actor.can(Permission.ORDER_WRITE),
     }
@@ -508,6 +508,22 @@ async def set_webhook(
     secret = await custom_website.set_webhook(db, conn, body.url, body.topics)
     _no_store(response)
     return {"signing_secret": secret, "connection": await _one(db, conn, True)}
+
+
+class TestOrderInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    payload: dict[str, Any] | None = None
+
+
+@router.post("/{connection_id}/test-order")
+async def test_order(
+    connection_id: uuid.UUID, body: TestOrderInput, db: DbSession, _: Owner
+) -> dict[str, Any]:
+    """Send test order (V3.8): checked like a real one, and nothing is created."""
+    conn = await service.get(db, connection_id)
+    if conn.provider != "CUSTOM_WEBSITE":
+        raise ValidationError("Only a Custom Website takes test orders")
+    return await custom_website.check_order(db, conn, body.payload)
 
 
 @router.post("/{connection_id}/webhook/test", status_code=202)

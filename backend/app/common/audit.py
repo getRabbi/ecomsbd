@@ -222,6 +222,15 @@ class AuditAction(StrEnum):
     RISK_PROVIDER_REMOVED = "risk_provider.removed"
     EXTERNAL_RISK_LOOKUP = "external_risk.lookup"
 
+    # Developer platform (V3.8)
+    API_KEY_CREATED = "developer.api_key_created"
+    API_KEY_REVOKED = "developer.api_key_revoked"
+    API_KEY_ROTATED = "developer.api_key_rotated"
+    WEBHOOK_CREATED = "developer.webhook_created"
+    WEBHOOK_UPDATED = "developer.webhook_updated"
+    WEBHOOK_SECRET_ROTATED = "developer.webhook_secret_rotated"
+    WEBHOOK_DELIVERY_RETRIED = "developer.webhook_retried"
+
 
 class AuditLog(Base):
     """One audited action. Append-only."""

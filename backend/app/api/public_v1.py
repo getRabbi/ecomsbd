@@ -41,6 +41,18 @@ CUSTOMER_FIELDS = "id name phone_masked created_at updated_at"
 PRODUCT_FIELDS = "id name sku default_selling_price_paisa cost_paisa stock_tracking_enabled stock_on_hand is_active created_at updated_at"
 
 
+@router.get("/me")
+async def me(principal: PublicPrincipal) -> dict[str, Any]:
+    """Which key this is and what it may do (V3.8). Needs no scope; creates nothing."""
+    return {
+        "key_id": str(principal.key_id),
+        "shop_id": str(principal.tenant_id),
+        "scopes": sorted(principal.scopes),
+        "rate_limit_per_minute": principal.rate_limit,
+        "expires_at": principal.expires_at.isoformat() if principal.expires_at else None,
+    }
+
+
 @router.get("/orders")
 async def orders(
     principal: PublicPrincipal,

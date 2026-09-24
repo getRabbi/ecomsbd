@@ -63,6 +63,14 @@ jobs:
       - name: Type check
         run: mypy
 
+      # The thin SDKs in sdk/ (V3.8): the Python one is covered by pytest.
+      - name: SDK checks (JavaScript, PHP)
+        working-directory: .
+        run: |
+          node --test sdk/js/ecomsbd.test.mjs
+          php -l sdk/php/Ecomsbd.php
+          php sdk/php/selftest.php
+
       - name: Tests (SQLite)
         run: pytest -q
 
