@@ -88,11 +88,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
           ),
           children: <Widget>[
             const Row(
-              children: <Widget>[
-                BrandPill(),
-                Spacer(),
-                LanguageTogglePill(),
-              ],
+              children: <Widget>[BrandPill(), Spacer(), LanguageTogglePill()],
             ),
             const SizedBox(height: EcomsbdSpacing.xxl),
             Text(

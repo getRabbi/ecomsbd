@@ -331,11 +331,7 @@ class AuthPage extends StatelessWidget {
                   // language control beside it: a seller has to be able to
                   // switch language before they have an account.
                   const Row(
-                    children: [
-                      BrandPill(),
-                      Spacer(),
-                      LanguageTogglePill(),
-                    ],
+                    children: [BrandPill(), Spacer(), LanguageTogglePill()],
                   ),
                   const SizedBox(height: EcomsbdSpacing.xl),
                   Text(title, style: EcomsbdType.pageTitle),
