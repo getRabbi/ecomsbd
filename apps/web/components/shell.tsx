@@ -45,6 +45,7 @@ const NAV: NavGroup[] = [
       { href: '/automation', labelKey: 'nav.automation', icon: '⚡' },
       { href: '/products', labelKey: 'nav.products', icon: '⬚' },
       { href: '/procurement', labelKey: 'nav.procurement', icon: '⧈' },
+      { href: '/forecasting', labelKey: 'nav.forecasting', icon: '◭' },
       { href: '/couriers', labelKey: 'nav.couriers', icon: '⇢' },
       { href: '/returns', labelKey: 'nav.returns', icon: '↺' },
     ],

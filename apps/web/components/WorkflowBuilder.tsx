@@ -425,6 +425,10 @@ function ActionConfig({
           <Field label={t('auto.cfg.quantity')}>
             <input className="input" type="number" min={1} max={100000} value={Number(config.quantity ?? 10)} disabled={disabled} onChange={(e) => set('quantity', Number(e.target.value))} />
           </Field>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={Boolean(config.use_suggested)} disabled={disabled} onChange={(e) => set('use_suggested', e.target.checked)} />
+            <span>{t('auto.cfg.useSuggested')}</span>
+          </label>
           <p className="card__hint">{t('auto.cfg.draftPoNote')}</p>
         </>
       );
