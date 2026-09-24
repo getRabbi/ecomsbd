@@ -1,9 +1,9 @@
 import type { Tone } from '@/components/ui';
 
 /** Wire shapes of /v1/integrations. Credentials never appear in any of them. */
-export type Provider = 'SHOPIFY' | 'WOOCOMMERCE' | 'CUSTOM_WEBSITE' | 'MESSENGER';
+export type Provider = 'SHOPIFY' | 'WOOCOMMERCE' | 'CUSTOM_WEBSITE' | 'MESSENGER' | 'WHATSAPP';
 
-export const PROVIDERS: Provider[] = ['SHOPIFY', 'WOOCOMMERCE', 'CUSTOM_WEBSITE', 'MESSENGER'];
+export const PROVIDERS: Provider[] = ['SHOPIFY', 'WOOCOMMERCE', 'CUSTOM_WEBSITE', 'MESSENGER', 'WHATSAPP'];
 
 export interface Availability {
   provider: Provider;

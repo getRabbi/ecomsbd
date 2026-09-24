@@ -23,7 +23,7 @@ export default function AutomationPage() {
   const bn = locale === 'bn';
   const tx = (en: string, bangla: string) => bn ? bangla : en;
   const label = (action: string) => actionLabels[action]?.[bn ? 1 : 0] ?? action;
-  const catalog = useApi<{ tags: { id: string; name: string }[]; templates: { key: string }[]; statuses: string[]; channels: string[] }>('/automation/catalog');
+  const catalog = useApi<{ tags: { id: string; name: string }[]; templates: { key: string; channel?: string }[]; statuses: string[]; channels: string[] }>('/automation/catalog');
   const rules = useApi<{ items: Rule[] }>('/automation/rules');
   const history = useApi<{ items: Execution[] }>('/automation/executions');
   const tasks = useApi<{ items: Task[] }>('/automation/tasks');
@@ -58,7 +58,7 @@ export default function AutomationPage() {
         </fieldset>
         <label className="field">{tx('Action', 'কাজ')}<select className="select" value={action} onChange={e => setAction(e.target.value)}>{Object.keys(actionLabels).map(a => <option value={a} key={a}>{label(a)}</option>)}</select></label>
         <div key={`${editing?.id}-${action}`}>
-          {action === 'SEND_TEMPLATE' ? <><label className="field">{tx('Configured template', 'নির্ধারিত টেমপ্লেট')}<select className="select" name="config.template_key" required defaultValue={defaults.template_key ?? 'order_update'}>{catalog.data?.templates.map(t => <option key={t.key}>{t.key}</option>)}</select></label><label className="field">{tx('Message language', 'মেসেজের ভাষা')}<select className="select" name="config.locale" defaultValue={defaults.locale ?? locale}><option value="bn">বাংলা</option><option value="en">English</option></select></label><p>{tx('Email must be configured and enabled. Customer consent is checked again before sending.', 'ইমেইল সংযোগ চালু থাকতে হবে। পাঠানোর আগে গ্রাহকের সম্মতি আবার যাচাই হবে।')}</p></> : null}
+          {action === 'SEND_TEMPLATE' ? <><label className="field">{tx('Configured template', 'নির্ধারিত টেমপ্লেট')}<select className="select" name="config.template_key" required defaultValue={defaults.template_key ?? 'order_update'}>{catalog.data?.templates.map(t => <option key={t.key}>{t.key}{t.channel ? ` · ${t.channel}` : ''}</option>)}</select></label><label className="field">{tx('Message language', 'মেসেজের ভাষা')}<select className="select" name="config.locale" defaultValue={defaults.locale ?? locale}><option value="bn">বাংলা</option><option value="en">English</option></select></label><label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" name="config.channel" defaultValue={defaults.channel ?? 'EMAIL'}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP">WhatsApp</option></select></label><p>{tx('Only order-update templates for the chosen channel. The channel must be enabled; order-update consent is checked again before sending. Offers go through Campaigns.', 'শুধু বেছে নেওয়া মাধ্যমের অর্ডার আপডেট টেমপ্লেট। মাধ্যম চালু থাকতে হবে; পাঠানোর আগে আবার সম্মতি যাচাই হবে। অফার পাঠান ক্যাম্পেইন থেকে।')}</p></> : null}
           {action === 'CREATE_FOLLOWUP' ? textField('text', tx('Follow-up note', 'ফলো-আপ নোট')) : null}
           {['CREATE_TASK', 'SELLER_NOTIFICATION'].includes(action) ? <>{textField('text_en', tx('English text', 'ইংরেজি লেখা'))}{textField('text_bn', tx('Bangla text', 'বাংলা লেখা'))}</> : null}
           {action === 'SELLER_NOTIFICATION' ? <>{textField('title_en', tx('English title', 'ইংরেজি শিরোনাম'), 160)}{textField('title_bn', tx('Bangla title', 'বাংলা শিরোনাম'), 160)}</> : null}
