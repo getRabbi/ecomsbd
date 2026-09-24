@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.outbox import OutboxTopic, enqueue
 from app.common.pagination import Cursor, apply_cursor
 from app.core.clock import utc_now
 from app.core.context import current_context
@@ -99,6 +100,29 @@ def insufficient_stock(
             "variant_id": str(variant.id) if variant is not None else None,
             "stock_on_hand": available,
             "requested": requested,
+        },
+    )
+
+
+async def _product_updated(
+    db: AsyncSession,
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID | None,
+    sku: str | None,
+    changed: list[str],
+) -> None:
+    """Tell connected stores and signed webhooks a product or variant changed."""
+    fields = sorted(
+        {"price" if f in {"default_selling_price_paisa", "price_paisa"} else f for f in changed}
+    )
+    await enqueue(
+        db,
+        OutboxTopic.PRODUCT_UPDATED,
+        {
+            "product_id": str(product_id),
+            "variant_id": str(variant_id) if variant_id else None,
+            "sku": sku,
+            "changed": fields,
         },
     )
 
@@ -198,6 +222,20 @@ class StockService:
         except BaseException:
             await savepoint.rollback()
             raise
+        if adjustment.source is not StockMovementSource.IMPORT:
+            # Imports announce themselves once, as import.committed.
+            await enqueue(
+                self._db,
+                OutboxTopic.INVENTORY_CHANGED,
+                {
+                    "product_id": str(product.id),
+                    "variant_id": str(variant.id) if variant is not None else None,
+                    "sku": variant.sku if variant is not None else product.sku,
+                    "stock_on_hand": movement.balance_after,
+                    "reason": str(adjustment.reason),
+                },
+            )
+            await self._db.flush()
         return movement
 
     async def assert_available(self, lines: list[tuple[uuid.UUID, uuid.UUID | None, int]]) -> None:
@@ -559,6 +597,7 @@ class ProductService:
                 entity_id=product.id,
                 context={"changed": sorted(changed)},
             )
+            await _product_updated(self._db, product.id, None, product.sku, changed)
         await self._db.flush()
         return product
 
@@ -697,6 +736,7 @@ class ProductService:
                 entity_id=product_id,
                 context={"changed": ["variants"], "variant": str(variant.id), "fields": changed},
             )
+            await _product_updated(self._db, product_id, variant.id, variant.sku, changed)
         await self._db.flush()
         return variant
 

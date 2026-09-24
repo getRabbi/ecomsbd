@@ -13,6 +13,7 @@ from __future__ import annotations
 import app.analytics.network_models
 import app.automation.models
 import app.integrations.models
+import app.integrations.sync_models
 import app.messaging.models
 import app.order_sources.models
 import app.public_api.models  # noqa: F401

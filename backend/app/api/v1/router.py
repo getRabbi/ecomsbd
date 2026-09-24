@@ -29,6 +29,7 @@ from app.api.v1 import (
     insights,
     integration_webhooks,
     integrations,
+    integrations_sync,
     messaging,
     money,
     network,
@@ -49,6 +50,8 @@ api_router.include_router(auth.router)
 api_router.include_router(messaging.router)
 api_router.include_router(order_sources.router)
 api_router.include_router(developers.router)
+# Before integrations.router: /integrations/conflicts must not read as an id.
+api_router.include_router(integrations_sync.router)
 api_router.include_router(integrations.router)
 # Unauthenticated: provider OAuth callbacks and signed webhooks. Each resolves
 # a connection by an unguessable token and verifies the provider's signature.

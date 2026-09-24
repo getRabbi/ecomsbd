@@ -339,12 +339,11 @@ async def resolve_ref(db: AsyncSession, conn: IntegrationConnection, external_re
 
 
 def retryable(event: IntegrationEvent) -> bool:
-    return (
-        event.status == "FAILED"
-        and event.provider in ORDER_PROVIDERS
-        and bool(event.external_ref)
-        and event.code in RETRYABLE
-    )
+    if event.status != "FAILED" or event.code not in RETRYABLE:
+        return False
+    if event.kind == "OUTBOUND":
+        return True  # an outbound push re-reads current state before it runs
+    return event.provider in ORDER_PROVIDERS and bool(event.external_ref)
 
 
 def event_view(event: IntegrationEvent) -> dict[str, Any]:
@@ -407,6 +406,11 @@ async def import_order(
         )
     )
     if existing is not None:
+        from app.integrations import inbound  # two-way sync builds on this module
+
+        handled = await inbound.on_existing(db, conn, node, existing, connector)
+        if handled is not None:
+            return Outcome(handled[0], handled[1], existing.order_id)
         if connector.is_cancelled(node):
             await record_issue(
                 db,
@@ -437,9 +441,11 @@ async def import_order(
         return Outcome("FAILED", reject.code)
     if conn.source_id is None:
         return Outcome("FAILED", "CONNECTION_NOT_ACTIVE")
+    identity = store_identity(payload)
+    payload = await resolve_lines(db, conn, payload)
     try:
         async with db.begin_nested():
-            result = await ingest(db, conn.source_id, ref, payload, managed=True)
+            result = await ingest(db, conn.source_id, ref, payload, managed=True, identity=identity)
     except (ValidationError, ConflictError, EntitlementRequiredError) as exc:
         code = _ingest_failure(exc)
         await record_issue(
@@ -451,6 +457,45 @@ async def import_order(
     if result["replayed"]:
         return Outcome("IGNORED", "DUPLICATE_IGNORED", order_id)
     return Outcome("PROCESSED", None, order_id)
+
+
+def store_identity(payload: dict[str, Any]) -> str:
+    """Hash of the store's order data alone: line mappings are ecomsbd's business."""
+    from app.common.idempotency import request_hash
+
+    items = [{k: v for k, v in item.items() if k != "_link"} for item in payload.get("items") or []]
+    return request_hash({**payload, "items": items})
+
+
+async def resolve_lines(
+    db: AsyncSession, conn: IntegrationConnection, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Point each line at the mapped ecomsbd product, so booking moves real stock."""
+    from app.integrations.sync_models import IntegrationLink
+
+    keys = {item["_link"] for item in payload.get("items") or [] if item.get("_link")}
+    mapped: dict[str, tuple[uuid.UUID | None, uuid.UUID | None]] = {}
+    if keys:
+        rows = await db.execute(
+            sa.select(
+                IntegrationLink.external_key, IntegrationLink.product_id, IntegrationLink.variant_id
+            ).where(
+                IntegrationLink.connection_id == conn.id,
+                IntegrationLink.state == "MATCHED",
+                IntegrationLink.external_key.in_(sorted(keys)),
+            )
+        )
+        mapped = {key: (product, variant) for key, product, variant in rows.all()}
+    items = []
+    for item in payload.get("items") or []:
+        line = {k: v for k, v in item.items() if k != "_link"}
+        product_id, variant_id = mapped.get(item.get("_link") or "", (None, None))
+        if product_id is not None:
+            line["product_id"] = str(product_id)
+            if variant_id is not None:
+                line["variant_id"] = str(variant_id)
+        items.append(line)
+    return {**payload, "items": items}
 
 
 # ---------------------------------------------------------- credentials ---
@@ -503,7 +548,17 @@ async def fresh_credentials(connection_id: uuid.UUID) -> tuple[Link, dict[str, A
     return link_view, credentials
 
 
+def _with_variant(link_view: Link) -> bool:
+    return link_view.provider == "SHOPIFY" and not shopify.missing_scopes(
+        link_view.config.get("scopes"), "catalog"
+    )
+
+
 async def fetch_order(link_view: Link, credentials: dict[str, Any], ref: str) -> dict[str, Any]:
+    if link_view.provider == "SHOPIFY":
+        return await shopify.fetch_order(
+            link_view.account_id or "", credentials, ref, with_variant=_with_variant(link_view)
+        )
     connector = CONNECTORS[link_view.provider]
     return await connector.fetch_order(link_view.account_id or "", credentials, ref)
 
@@ -511,6 +566,14 @@ async def fetch_order(link_view: Link, credentials: dict[str, Any], ref: str) ->
 async def fetch_page(
     link_view: Link, credentials: dict[str, Any], run: IntegrationSyncRun
 ) -> tuple[list[dict[str, Any]], str | None, int | None]:
+    if run.kind == "CATALOG":
+        from app.integrations import shopify_sync, woocommerce_sync
+
+        module: Any = shopify_sync if link_view.provider == "SHOPIFY" else woocommerce_sync
+        items, cursor = await module.catalog_page(
+            link_view.account_id or "", credentials, run.cursor
+        )
+        return items, cursor, None
     created_from = datetime.fromisoformat(
         link_view.config.get("import_from") or run.since.isoformat()
     )
@@ -518,7 +581,11 @@ async def fetch_page(
     if link_view.provider == "SHOPIFY":
         query = shopify.search(run.since, run.until, updated=updated, created_from=created_from)
         nodes, cursor = await shopify.orders_page(
-            link_view.account_id or "", credentials, query, run.cursor
+            link_view.account_id or "",
+            credentials,
+            query,
+            run.cursor,
+            with_variant=_with_variant(link_view),
         )
         return nodes, cursor, None
     return await woocommerce.orders_page(
@@ -558,7 +625,10 @@ async def facts(
 ) -> dict[uuid.UUID, dict[str, int]]:
     """Counts for many connections in three grouped queries; no provider calls."""
     ids = [row.id for row in rows]
-    result = {row.id: {"open_issues": 0, "orders_today": 0, "failed_today": 0} for row in rows}
+    result = {
+        row.id: {"open_issues": 0, "open_conflicts": 0, "orders_today": 0, "failed_today": 0}
+        for row in rows
+    }
     if not ids:
         return result
     since = today_start()
@@ -580,6 +650,15 @@ async def facts(
     )
     for connection_id, count in failed_rows.all():
         result[connection_id]["failed_today"] = count
+    from app.integrations.sync_models import IntegrationConflict
+
+    conflict_rows = await db.execute(
+        sa.select(IntegrationConflict.connection_id, sa.func.count())
+        .where(IntegrationConflict.connection_id.in_(ids), IntegrationConflict.status == "OPEN")
+        .group_by(IntegrationConflict.connection_id)
+    )
+    for connection_id, count in conflict_rows.all():
+        result[connection_id]["open_conflicts"] = count
     by_source = {row.source_id: row.id for row in rows if row.source_id}
     if by_source:
         order_rows = await db.execute(
@@ -600,7 +679,7 @@ def connection_view(
         "provider": conn.provider,
         "name": conn.name,
         "state": conn.state,
-        "health": health(conn, counts.get("open_issues", 0)),
+        "health": health(conn, counts.get("open_issues", 0) + counts.get("open_conflicts", 0)),
         "account_name": conn.account_name,
         "webhook_state": conn.webhook_state,
         "sync_state": conn.sync_state,
@@ -856,10 +935,13 @@ async def start_sync(
         raise ValidationError("This connection does not import orders")
     if conn.state != "CONNECTED":
         raise ConflictError("Connect the store first", details={"code": "CONNECTION_NOT_ACTIVE"})
+    # Catalog scans and order imports run side by side; each kind one at a time.
+    kinds = ["CATALOG"] if kind == "CATALOG" else ["INITIAL", "INCREMENTAL"]
     active = await db.scalar(
         sa.select(IntegrationSyncRun.id).where(
             IntegrationSyncRun.connection_id == conn.id,
             IntegrationSyncRun.status.in_(["QUEUED", "RUNNING"]),
+            IntegrationSyncRun.kind.in_(kinds),
         )
     )
     if active is not None:

@@ -25,7 +25,16 @@ from app.core.context import ActorType, RequestContext, clear_context, set_conte
 from app.core.errors import ConflictError
 from app.core.logging import get_logger
 from app.db.session import session_scope, system_session
-from app.integrations import service
+from app.integrations import (
+    catalog,
+    inbound,
+    inventory,
+    outbound,
+    service,
+    shopify_sync,
+    sync,
+    woocommerce_sync,
+)
 from app.integrations.http import ProviderError
 from app.integrations.models import IntegrationConnection, IntegrationEvent, IntegrationSyncRun
 from app.order_sources.models import ExternalOrder
@@ -36,6 +45,7 @@ BACKOFF = (60, 300, 900, 3600)
 INCREMENTAL_EVERY = timedelta(minutes=15)
 INCREMENTAL_OVERLAP = timedelta(minutes=10)
 HEALTH_EVERY = timedelta(hours=1)
+CATALOG_EVERY = timedelta(hours=6)
 KEEP = timedelta(days=30)
 SYNC_BUDGET_SECONDS = 20.0
 
@@ -94,7 +104,7 @@ async def process_event(tenant_id: uuid.UUID, event_id: uuid.UUID) -> None:
                     ExternalOrder.external_order_id == event.external_ref,
                 )
             )
-            if existing is not None and event.hint != "cancelled":
+            if existing is not None and event.hint != "cancelled" and not inbound.two_way(conn):
                 # Nothing a provider read could change: no call is spent on it.
                 event.attempts += 1
                 event.status, event.code, event.order_id = "IGNORED", "DUPLICATE_IGNORED", existing
@@ -149,7 +159,7 @@ async def process_integration_events(ctx: dict[str, Any] | None = None) -> dict[
     async with system_session("integrations: due events") as db:
         rows = (
             await db.execute(
-                sa.select(IntegrationEvent.tenant_id, IntegrationEvent.id)
+                sa.select(IntegrationEvent.tenant_id, IntegrationEvent.id, IntegrationEvent.kind)
                 .where(
                     IntegrationEvent.status == "QUEUED",
                     IntegrationEvent.next_attempt_at <= utc_now(),
@@ -158,9 +168,12 @@ async def process_integration_events(ctx: dict[str, Any] | None = None) -> dict[
                 .limit(50)
             )
         ).all()
-    for tenant_id, event_id in rows:
+    for tenant_id, event_id, kind in rows:
         try:
-            await process_event(tenant_id, event_id)
+            if kind == "OUTBOUND":
+                await process_outbound(tenant_id, event_id)
+            else:
+                await process_event(tenant_id, event_id)
         except Exception:
             log.exception("integration event failed", extra={"event_id": str(event_id)})
     return {"processed": len(rows)}
@@ -226,6 +239,12 @@ async def sync_step(tenant_id: uuid.UUID, run_id: uuid.UUID) -> bool:
                     )
                 return False
             nodes, next_cursor, total = found
+            if run.kind == "CATALOG":
+                counts = await catalog.apply_items(db, conn, nodes)
+                run.imported += counts["matched"]
+                run.skipped += counts["unmatched"]
+                run.failed += counts["conflicts"]
+                nodes = []
             for node in nodes:
                 try:
                     outcome = await service.import_order(db, conn, node, kind="SYNC")
@@ -249,6 +268,11 @@ async def sync_step(tenant_id: uuid.UUID, run_id: uuid.UUID) -> bool:
                 return True
             run.status, run.finished_at = "COMPLETED", utc_now()
             conn.sync_state = "IDLE"
+            if run.kind == "CATALOG":
+                # Only a complete scan may say an item is gone from the store.
+                started = run.started_at or run.created_at
+                run.duplicates = await catalog.finish_scan(db, conn, started)
+                return False
             conn.last_sync_at = utc_now()
             if run.kind == "INCREMENTAL":
                 conn.config = {**conn.config, "high_water": run.until.isoformat()}
@@ -313,6 +337,15 @@ async def maintain(tenant_id: uuid.UUID, connection_id: uuid.UUID) -> None:
                             actor_id=None,
                         )
                     conn.config = {**conn.config, "incremental_at": now.isoformat()}
+            scanned = conn.config.get("catalog_queued_at")
+            if sync.can(conn, "catalog") and (
+                not scanned or now - datetime.fromisoformat(scanned) >= CATALOG_EVERY
+            ):
+                with suppress(ConflictError):
+                    await service.start_sync(
+                        db, conn, kind="CATALOG", since=now, until=now, actor_id=None
+                    )
+                conn.config = {**conn.config, "catalog_queued_at": now.isoformat()}
             checked = conn.config.get("checked_at")
             if conn.provider != "CUSTOM_WEBSITE" and (
                 not checked or now - datetime.fromisoformat(checked) >= HEALTH_EVERY
@@ -356,3 +389,158 @@ async def schedule_integrations(ctx: dict[str, Any] | None = None) -> dict[str, 
                 "integration maintenance failed", extra={"connection_id": str(connection_id)}
             )
     return {"connections": len(rows), "pruned": pruned or 0}
+
+
+# -------------------------------------------------------------- outbound ---
+
+
+async def process_outbound(tenant_id: uuid.UUID, event_id: uuid.UUID) -> None:
+    """One ecomsbd -> store push: read state, call the store, record the answer."""
+    token = _enter(tenant_id)
+    try:
+        async with session_scope() as db:
+            event = await db.scalar(
+                sa.select(IntegrationEvent).where(IntegrationEvent.id == event_id).with_for_update()
+            )
+            if (
+                event is None
+                or event.status != "QUEUED"
+                or (event.next_attempt_at and event.next_attempt_at > utc_now())
+            ):
+                return
+            conn = await service.get(db, event.connection_id)
+            if conn.state != "CONNECTED":
+                event.attempts += 1
+                event.status = "FAILED" if conn.state == "AUTH_EXPIRED" else "IGNORED"
+                event.code = "CONNECTION_NOT_ACTIVE"
+                return
+            ctx = await outbound.prepare(db, event)
+            if isinstance(ctx, str):
+                event.attempts += 1
+                event.status, event.code = "IGNORED", ctx
+                return
+            attempts, connection_id = event.attempts, conn.id
+        failure: ProviderError | None = None
+        ref: str | None = None
+        try:
+            link, credentials = await service.fresh_credentials(connection_id)
+            ref = await outbound.execute(link, credentials, event, ctx)
+        except ProviderError as exc:
+            failure = exc
+        async with session_scope() as db:
+            await lock_shop(db)
+            event = await db.scalar(
+                sa.select(IntegrationEvent).where(IntegrationEvent.id == event_id).with_for_update()
+            )
+            if event is None or event.status != "QUEUED" or event.attempts != attempts:
+                return
+            conn = await service.get(db, connection_id)
+            event.attempts += 1
+            if failure is None:
+                event.status, event.code, event.result_ref = "PROCESSED", None, ref
+                await outbound.record(db, conn, event, ref)
+                service.mark_ok(conn)
+                return
+            code = failure.code
+            if code in outbound.SETTLED or code == "STOCK_CHANGED_DURING_PUSH":
+                # Nothing to do, or the store moved first: the next comparison decides.
+                event.status, event.code = "IGNORED", code
+                return
+            if code in outbound.DIVERGED:
+                event.status, event.code = "IGNORED", code
+                await outbound.diverged(db, conn, event, code)
+                return
+            service.mark_error(conn, code)
+            if failure.transient and event.attempts < service.AUTO_RETRY_LIMIT:
+                event.code, event.next_attempt_at = code, _backoff(event.attempts)
+                return
+            event.status, event.code = "FAILED", code
+            if code in service.RECONNECT:
+                await service.record_issue(db, conn, kind="AUTH", topic="sync.auth", code=code)
+    finally:
+        clear_context(token)
+
+
+# ------------------------------------------------------------- inventory ---
+
+
+async def run_inventory(tenant_id: uuid.UUID, connection_id: uuid.UUID) -> dict[str, int]:
+    """Compare every mapped, stock-tracked item once and act on each answer."""
+    token = _enter(tenant_id)
+    counts: dict[str, int] = {}
+    try:
+        async with session_scope() as db:
+            conn = await service.get(db, connection_id)
+            if not sync.can(conn, "inventory"):
+                return counts
+            links = await inventory.mapped_links(db, conn)
+            location = sync.settings_of(conn)["location_id"]
+            wanted = [
+                (link.external_product_id, link.external_variant_id, link.external_inventory_id)
+                for link in links
+            ]
+        if not wanted:
+            return counts
+        link_view, credentials = await service.fresh_credentials(connection_id)
+        levels: dict[tuple[str, str | None], int | None]
+        if link_view.provider == "SHOPIFY":
+            by_item = await shopify_sync.stock_levels(
+                link_view.account_id or "",
+                credentials,
+                [i for _, _, i in wanted if i],
+                str(location),
+            )
+            levels = {(p, v): by_item.get(i or "") for p, v, i in wanted}
+        else:
+            levels = await woocommerce_sync.stock_levels(
+                link_view.account_id or "", credentials, [(p, v) for p, v, _ in wanted]
+            )
+        async with session_scope() as db:
+            await lock_shop(db)
+            conn = await service.get(db, connection_id)
+            links = await inventory.mapped_links(db, conn)
+            keys = [k for k in (inventory.key_of(link) for link in links) if k]
+            local = await inventory.available(db, keys)
+            for link in links:
+                external = levels.get((link.external_product_id, link.external_variant_id))
+                key = inventory.key_of(link)
+                if external is None or key is None:
+                    continue
+                action = await inventory.apply(db, conn, link, external=external, local=local[key])
+                counts[action] = counts.get(action, 0) + 1
+            conn.config = {**conn.config, "inventory_synced_at": utc_now().isoformat()}
+            service.mark_ok(conn)
+        return counts
+    finally:
+        clear_context(token)
+
+
+async def sync_inventories(ctx: dict[str, Any] | None = None) -> dict[str, int]:
+    async with system_session("integrations: inventory") as db:
+        rows = (
+            await db.execute(
+                sa.select(
+                    IntegrationConnection.tenant_id,
+                    IntegrationConnection.id,
+                    IntegrationConnection.config,
+                ).where(
+                    IntegrationConnection.state == "CONNECTED",
+                    IntegrationConnection.provider.in_(sorted(sync.SYNC_PROVIDERS)),
+                )
+            )
+        ).all()
+    ran = 0
+    for tenant_id, connection_id, config in rows:
+        if ((config or {}).get("sync") or {}).get("inventory", "NONE") == "NONE":
+            continue
+        try:
+            await run_inventory(tenant_id, connection_id)
+            ran += 1
+        except ProviderError as exc:
+            log.warning(
+                "inventory sync skipped",
+                extra={"connection_id": str(connection_id), "code": exc.code},
+            )
+        except Exception:
+            log.exception("inventory sync failed", extra={"connection_id": str(connection_id)})
+    return {"connections": ran}

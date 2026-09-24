@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.audit import AuditAction, record_audit
+from app.common.outbox import OutboxTopic, enqueue
 from app.consignments.models import (
     MANUAL_PROVIDER,
     Consignment,
@@ -286,6 +287,19 @@ class ConsignmentService:
                 "cod_amount_paisa": consignment.cod_amount_paisa,
             },
         )
+        # Once per parcel: the early return above covers a repeated dispatch.
+        await enqueue(
+            self._db,
+            OutboxTopic.ORDER_BOOKED,
+            {
+                "order_id": str(consignment.order_id),
+                "consignment_id": str(consignment.id),
+                "provider": consignment.provider,
+                "tracking_code": consignment.tracking_code,
+            },
+        )
+        # Flushed here: subscribers' deliveries must be written in this scope.
+        await self._db.flush()
         return consignment
 
     # ------------------------------------------------------------- outcomes --
@@ -369,6 +383,17 @@ class ConsignmentService:
                 "collectible_paisa": consignment.collectible_paisa,
             },
         )
+        await enqueue(
+            self._db,
+            OutboxTopic.CONSIGNMENT_STATUS_CHANGED,
+            {
+                "order_id": str(consignment.order_id),
+                "consignment_id": str(consignment.id),
+                "old_status": str(current),
+                "new_status": str(target),
+            },
+        )
+        await self._db.flush()
         return consignment
 
     # -------------------------------------------------------------- helpers --

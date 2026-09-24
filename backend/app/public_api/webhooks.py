@@ -31,12 +31,69 @@ from app.public_api.models import WebhookAttempt, WebhookDelivery, WebhookEndpoi
 TOPICS = frozenset(
     {
         "order.created",
+        "order.updated",
         "order.status_changed",
+        "order.confirmed",
+        "order.cancelled",
         "order.booked",
+        "order.fulfilled",
+        "tracking.assigned",
+        "order.delivered",
+        "order.returned",
         "consignment.status_changed",
+        "inventory.updated",
+        "product.updated",
         "import.committed",
     }
 )
+#: Payload fields a subscriber may receive. Identifiers and states only: no
+#: customer data, no money, no courier credentials.
+DATA_FIELDS = frozenset(
+    {
+        "order_id",
+        "consignment_id",
+        "import_id",
+        "status",
+        "old_status",
+        "new_status",
+        "from",
+        "to",
+        "changed",
+        "provider",
+        "tracking_code",
+        "product_id",
+        "variant_id",
+        "sku",
+        "stock_on_hand",
+        "reason",
+    }
+)
+
+
+def public_topics(topic: str, payload: dict[str, Any]) -> list[str]:
+    """The public topics one internal event announces.
+
+    The first keeps the internal event's own id; each derived topic gets its
+    own stable id, so a subscriber deduping by event id sees each exactly once.
+    """
+    if topic == "order.status_changed":
+        extra = {"CONFIRMED": "order.confirmed", "CANCELLED": "order.cancelled"}
+        return [topic, *([extra[payload["to"]]] if payload.get("to") in extra else [])]
+    if topic == "order.booked":
+        return [
+            topic,
+            "order.fulfilled",
+            *(["tracking.assigned"] if payload.get("tracking_code") else []),
+        ]
+    if topic == "consignment.status_changed":
+        extra = {
+            "DELIVERED": "order.delivered",
+            "PARTIAL_DELIVERED": "order.delivered",
+            "RETURNED": "order.returned",
+        }
+        new = payload.get("new_status")
+        return [topic, *([extra[new]] if new in extra else [])]
+    return [topic] if topic in TOPICS else []
 
 
 def valid_url(url: str) -> str:
@@ -155,7 +212,10 @@ async def queue_test_delivery(
 
 
 async def schedule_event(db: AsyncSession, event: OutboxEvent) -> None:
-    if event.tenant_id is None or event.topic not in TOPICS:
+    if event.tenant_id is None:
+        return
+    topics = public_topics(event.topic, event.payload)
+    if not topics:
         return
     endpoints = (
         await db.scalars(
@@ -164,31 +224,28 @@ async def schedule_event(db: AsyncSession, event: OutboxEvent) -> None:
             )
         )
     ).all()
-    for endpoint in endpoints:
-        if event.topic not in endpoint.topics:
-            continue
-        payload = {
-            "id": str(event.id),
-            "type": event.topic,
-            "version": "1",
-            "created_at": utc_now().isoformat(),
-            "shop_id": str(event.tenant_id),
-            "data": {
-                key: value
-                for key, value in event.payload.items()
-                if key
-                in {"order_id", "consignment_id", "import_id", "status", "old_status", "new_status"}
-            },
-        }
-        db.add(
-            WebhookDelivery(
-                tenant_id=event.tenant_id,
-                endpoint_id=endpoint.id,
-                event_id=event.id,
-                payload=payload,
-                next_attempt_at=utc_now(),
+    data = {key: value for key, value in event.payload.items() if key in DATA_FIELDS}
+    for index, topic in enumerate(topics):
+        event_id = event.id if index == 0 else uuid.uuid5(event.id, topic)
+        for endpoint in endpoints:
+            if topic not in endpoint.topics:
+                continue
+            db.add(
+                WebhookDelivery(
+                    tenant_id=event.tenant_id,
+                    endpoint_id=endpoint.id,
+                    event_id=event_id,
+                    payload={
+                        "id": str(event_id),
+                        "type": topic,
+                        "version": "1",
+                        "created_at": utc_now().isoformat(),
+                        "shop_id": str(event.tenant_id),
+                        "data": data,
+                    },
+                    next_attempt_at=utc_now(),
+                )
             )
-        )
 
 
 async def deliver(tenant_id: uuid.UUID, delivery_id: uuid.UUID) -> None:
