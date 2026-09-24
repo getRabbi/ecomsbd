@@ -57,6 +57,12 @@ const automationEn = <String, String>{
   'auto.trigger.inventory.stockout_predicted':
       'When an item is forecast to run out',
   'auto.trigger.integration.sync_failed': 'When a store sync fails',
+  'auto.trigger.risk.state_changed': 'When a customer’s Risk Check changes',
+  'auto.trigger.risk.repeated_rto': 'When a customer returns a second parcel',
+  'auto.trigger.risk.external_lookup_completed':
+      'When the risk provider answers',
+  'auto.trigger.risk.external_provider_unavailable':
+      'When the risk provider is unavailable',
   'auto.trigger.customer.segment_entered': 'When a customer enters a segment',
   'auto.trigger.customer.replied': 'When a customer replies',
   'auto.trigger.followup.completed': 'When a follow-up is completed',
@@ -145,6 +151,11 @@ const automationBn = <String, String>{
   'auto.trigger.inventory.stockout_predicted':
       'পণ্য ফুরিয়ে যাওয়ার পূর্বাভাস হলে',
   'auto.trigger.integration.sync_failed': 'স্টোর সিঙ্ক ব্যর্থ হলে',
+  'auto.trigger.risk.state_changed': 'গ্রাহকের রিস্ক চেক বদলালে',
+  'auto.trigger.risk.repeated_rto': 'গ্রাহকের দ্বিতীয় পার্সেল ফেরত এলে',
+  'auto.trigger.risk.external_lookup_completed': 'রিস্ক প্রোভাইডার উত্তর দিলে',
+  'auto.trigger.risk.external_provider_unavailable':
+      'রিস্ক প্রোভাইডার পাওয়া না গেলে',
   'auto.trigger.customer.segment_entered': 'গ্রাহক কোনো সেগমেন্টে ঢুকলে',
   'auto.trigger.customer.replied': 'গ্রাহক উত্তর দিলে',
   'auto.trigger.followup.completed': 'ফলো-আপ সম্পন্ন হলে',

@@ -88,7 +88,7 @@ class _RiskCheckScreenState extends ConsumerState<RiskCheckScreen> {
       title: context.tr('rc.title'),
       subtitle: context.tr('rc.subtitle'),
       children: <Widget>[
-        const ExternalRiskCard(),
+        ExternalRiskCard(customerId: result?.customerId),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

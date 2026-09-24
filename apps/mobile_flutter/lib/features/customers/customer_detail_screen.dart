@@ -196,7 +196,7 @@ class _CustomerDetailState extends ConsumerState<CustomerDetailScreen> {
                       ],
                     ),
                   ),
-                const ExternalRiskCard(),
+                ExternalRiskCard(customerId: widget.customerId),
                 ExpansionTile(
                   title: Text(context.tr('crm.value')),
                   children: [
