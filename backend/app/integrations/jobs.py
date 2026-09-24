@@ -19,6 +19,7 @@ from typing import Any, cast
 import sqlalchemy as sa
 from sqlalchemy.engine import CursorResult
 
+from app.common.operation_lock import lock_shop
 from app.core.clock import utc_now
 from app.core.context import ActorType, RequestContext, clear_context, set_context
 from app.core.errors import ConflictError
@@ -107,6 +108,9 @@ async def process_event(tenant_id: uuid.UUID, event_id: uuid.UUID) -> None:
         except ProviderError as exc:
             failure = exc
         async with session_scope() as db:
+            # Shop first, then the row: the same order as the retry route, so
+            # the two can never wait on each other.
+            await lock_shop(db)
             event = await db.scalar(
                 sa.select(IntegrationEvent).where(IntegrationEvent.id == event_id).with_for_update()
             )
@@ -198,6 +202,7 @@ async def sync_step(tenant_id: uuid.UUID, run_id: uuid.UUID) -> bool:
         except ProviderError as exc:
             failure = exc
         async with session_scope() as db:
+            await lock_shop(db)  # before the run row; ingest takes it anyway
             run = await db.scalar(
                 sa.select(IntegrationSyncRun)
                 .where(IntegrationSyncRun.id == run_id)
