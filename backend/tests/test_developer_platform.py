@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from app.common import cache
 from app.common.audit import AuditLog
 from app.core.clock import utc_now
 from app.db.session import system_session
@@ -143,7 +144,14 @@ async def test_rotation_revocation_and_expiry_are_enforced_and_audited(client, u
             assert token not in json.dumps(audit.context)
 
 
-async def test_rate_limit_and_idempotency(client, unique_phone):
+async def test_rate_limit_and_idempotency(client, unique_phone, monkeypatch):
+    # One fixed window for the whole test: the limiter's windows are wall-clock
+    # minutes, and a request pair straddling a minute boundary resets the count.
+    monkeypatch.setattr(
+        cache.RateLimiter,
+        "_key",
+        staticmethod(lambda scope, identity, window_seconds: f"rl:{scope}:{identity}:test"),
+    )
     shop = await signed_in_shop(client, unique_phone)
     key = await _key(client, shop, ["customers:write"], rate_limit=2)
     headers = _bearer(key)
@@ -153,7 +161,7 @@ async def test_rate_limit_and_idempotency(client, unique_phone):
     same = await client.post("/public/v1/customers", headers=headers, json={"phone": "01712345678"})
     assert first.status_code == 201 and same.json() == first.json()
     limited = await client.post(
-        "/public/v1/customers", headers=headers, json={"phone": "01712345679"}
+        "/public/v1/customers", headers=_bearer(key), json={"phone": "01712345679"}
     )
     assert limited.status_code == 429 and int(limited.headers["retry-after"]) >= 1
 
