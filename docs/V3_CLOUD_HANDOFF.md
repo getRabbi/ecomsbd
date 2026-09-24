@@ -14,8 +14,8 @@ Short state note for the next session. Git is the source of truth; check it firs
     `1f0071e`; see `docs/V3_4_AUTOMATION_PRO.md`. Post-merge review: no blocking defect.
   - **V3.5 Inventory + Procurement** (`a35001`): merge commit `dbf4de3` (PR #7), CI green on
     head `3eb2bd3`; see `docs/V3_5_INVENTORY_PROCUREMENT.md`.
-  - **V3.6 Forecasting & Advanced Intelligence** (`a36001`): branch `v3.6-forecasting`, PR
-    pending; see `docs/V3_6_FORECASTING.md`.
+  - **V3.6 Forecasting & Advanced Intelligence** (`a36001`): merge commit `91e776b` (PR #9), CI
+    green on head `36675e5`; see `docs/V3_6_FORECASTING.md`.
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
@@ -66,7 +66,7 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Next phase
 
-- To be agreed with the owner after V3.6 (V3.6 is on `v3.6-forecasting`). Deferred from V3.6:
+- To be agreed with the owner (V3.6 is merged). Deferred from V3.6:
   seasonality/weekday profiles, per-location forecasts, promotion effects. Deferred from V3.5:
   batch/expiry/serial tracking, per-location sync to storefronts, reservations shown to
   sellers, landed cost and averaging.
