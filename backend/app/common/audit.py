@@ -214,6 +214,14 @@ class AuditAction(StrEnum):
     AUTOMATION_EXECUTION_CANCELLED = "automation.execution_cancelled"
     AUTOMATION_TEST_RUN = "automation.test_run"
 
+    # External risk providers (V3.7)
+    RISK_PROVIDER_CONFIGURED = "risk_provider.configured"
+    RISK_PROVIDER_ENABLED = "risk_provider.enabled"
+    RISK_PROVIDER_DISABLED = "risk_provider.disabled"
+    RISK_PROVIDER_TESTED = "risk_provider.tested"
+    RISK_PROVIDER_REMOVED = "risk_provider.removed"
+    EXTERNAL_RISK_LOOKUP = "external_risk.lookup"
+
 
 class AuditLog(Base):
     """One audited action. Append-only."""

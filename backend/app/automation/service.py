@@ -60,6 +60,7 @@ from app.core.errors import ConflictError, ValidationError
 from app.couriers.models import CourierAccount
 from app.customers.crm_models import CustomerTag
 from app.customers.models import CustomerFlag
+from app.customers.risk import RiskState
 from app.messaging import service as messaging
 from app.messaging.models import Channel
 from app.orders.models import OrderChannel, OrderStatus
@@ -109,6 +110,8 @@ TOPICS = frozenset(
         OutboxTopic.PURCHASE_ORDER_RECEIVED,
         OutboxTopic.STOCK_TRANSFER_COMPLETED,
         OutboxTopic.STOCKOUT_PREDICTED,
+        OutboxTopic.EXTERNAL_RISK_LOOKUP_COMPLETED,
+        OutboxTopic.EXTERNAL_RISK_UNAVAILABLE,
     }
 )
 
@@ -126,6 +129,9 @@ VALUES: dict[str, frozenset[str]] = {
     "customer_flag": frozenset(str(v) for v in CustomerFlag),
     "integration_provider": frozenset({"SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE"}),
     "alert_kind": frozenset(ALERT_TRIGGERS),
+    "risk_state": frozenset(str(v) for v in RiskState),
+    "previous_risk_state": frozenset(str(v) for v in RiskState),
+    "external_data_state": frozenset({"FRESH", "STALE", "NONE"}),
 }
 
 

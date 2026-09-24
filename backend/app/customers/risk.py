@@ -27,6 +27,9 @@ from typing import Protocol
 #: swing from one more order is larger than the gap between the bands.
 MIN_TERMINAL_ORDERS = 3
 
+#: Returned parcels at which the shop's own history shows repeated RTO (V3.7).
+REPEATED_RTO_MIN = 2
+
 #: Delivered share, in basis points, at or above which the order is banded low.
 LOW_RISK_BPS = 8_000
 #: ...and above which it is banded medium rather than high.
@@ -173,6 +176,7 @@ __all__ = [
     "LOW_RISK_BPS",
     "MEDIUM_RISK_BPS",
     "MIN_TERMINAL_ORDERS",
+    "REPEATED_RTO_MIN",
     "UNKNOWN",
     "RiskAssessment",
     "RiskInputs",

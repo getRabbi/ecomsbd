@@ -503,6 +503,13 @@ async def _book(execution_id: uuid.UUID) -> str:
             await _record(db, execution, step, "FAILED", outcome="BOOKING_PERMISSION_REQUIRED")
             return _fail(db, execution, step, "BOOKING_PERMISSION_REQUIRED", retryable=False)
         order_id = uuid.UUID(str(_subject(execution).get("order_id")))
+        held = await db.scalar(sa.select(Order.metadata_json).where(Order.id == order_id))
+        if (held or {}).get("review_hold"):
+            # A person has to look first (V3.7); the step is skipped, not failed.
+            await _record(
+                db, execution, step, "SKIPPED", outcome="ORDER_ON_REVIEW_HOLD", receipt=receipt
+            )
+            return _advance_to(execution, step.get("next"))
         parcels = (
             await db.execute(
                 sa.select(Consignment.id, Consignment.status, Consignment.created_at)

@@ -65,6 +65,8 @@ class Permission(StrEnum):
 
     CUSTOMER_VIEW = "customer.view"
     CUSTOMER_RISK_VIEW = "customer.risk_view"
+    #: V3.7: ask a connected external risk provider (a paid call).
+    EXTERNAL_RISK_LOOKUP = "customer.external_risk_lookup"
     CUSTOMER_EXPORT = "customer.export"
 
     PRODUCT_VIEW = "product.view"
@@ -106,6 +108,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.ORDER_CANCEL,
             Permission.CUSTOMER_VIEW,
             Permission.CUSTOMER_RISK_VIEW,
+            Permission.EXTERNAL_RISK_LOOKUP,
             Permission.PRODUCT_VIEW,
             Permission.PRODUCT_WRITE,
             Permission.INVENTORY_ADJUST,

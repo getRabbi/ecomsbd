@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, LoadingRows, Row } from '@/components/ui';
 import { api, type Page } from '@/lib/api';
 import { formatDate, formatPaisa } from '@/lib/money';
+import type { StringKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import {
   ORDER_STATUS_VALUES,
@@ -364,6 +365,9 @@ function OrderDrawer({ orderId, onClose }: { orderId: string; onClose: () => voi
       {error ? <ErrorState error={error} onRetry={reload} /> : null}
       {data ? (
         <>
+          {data.review_hold ? (
+            <ReviewHold orderId={data.id} reason={data.review_hold.reason} onReleased={reload} />
+          ) : null}
           <Row label={t('orders.order')} value={data.order_number} />
           <Row
             label={t('orders.customer')}
@@ -444,4 +448,35 @@ function courierName(provider: string): string {
 
 function toChip(state: { label: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }) {
   return { label: state.label, tone: state.tone };
+}
+
+/** A workflow paused this order for a person to look at (V3.7). */
+function ReviewHold({ orderId, reason, onReleased }: { orderId: string; reason: string; onReleased: () => void }) {
+  const { t } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  async function release() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.delete(`/orders/${orderId}/review-hold`);
+      onReleased();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+      <p>
+        <Chip label={t('orders.reviewHold')} tone="warn" /> {t(`auto.cfg.reviewReason.${reason}` as StringKey)}
+      </p>
+      <p className="card__hint">{t('orders.reviewHoldHint')}</p>
+      {error ? <ErrorState error={error} /> : null}
+      <button className="btn" disabled={busy} onClick={() => void release()}>
+        {t('orders.reviewRelease')}
+      </button>
+    </div>
+  );
 }

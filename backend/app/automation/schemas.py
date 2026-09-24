@@ -129,6 +129,16 @@ class LabelAction(Input):
     label: str = Field(min_length=1, max_length=40, pattern=r"^[\w\- ঀ-৿]+$")
 
 
+class ReviewHoldAction(Input):
+    """Pause the order for a person to review (V3.7).
+
+    Workflows then skip booking a courier or pushing its status until someone
+    releases the hold. Nothing is cancelled and no money or stock moves.
+    """
+
+    reason: Literal["FIRST_PARTY_RISK", "EXTERNAL_PROVIDER_FACTS", "PROVIDER_UNAVAILABLE", "OTHER"]
+
+
 class WebhookAction(Input):
     #: Sent as ``automation.workflow`` to endpoints subscribed to it.
     label: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_\-.]+$")
@@ -148,6 +158,7 @@ CONFIGS: dict[str, type[Input]] = {
     "TRIGGER_WEBHOOK": WebhookAction,
     "CREATE_TEAM_TASK": TeamTaskAction,
     "CREATE_DRAFT_PO": DraftPurchaseOrderAction,
+    "HOLD_FOR_REVIEW": ReviewHoldAction,
 }
 WORKFLOW_ACTIONS = tuple(CONFIGS)
 
@@ -181,6 +192,11 @@ TRIGGER_SUBJECTS: dict[str, str] = {
     "purchase_order.overdue": "shop",
     "supplier_payment.due": "shop",
     "transfer.completed": "shop",
+    # V3.7: first-party risk and external provider signals.
+    "risk.state_changed": "order",
+    "risk.repeated_rto": "order",
+    "risk.external_lookup_completed": "customer",
+    "risk.external_provider_unavailable": "customer",
 }
 WORKFLOW_TRIGGERS = tuple(TRIGGER_SUBJECTS)
 
@@ -209,6 +225,7 @@ ACTION_NEEDS: dict[str, str | None] = {
     "TRIGGER_WEBHOOK": None,
     "CREATE_TEAM_TASK": None,
     "CREATE_DRAFT_PO": "product",
+    "HOLD_FOR_REVIEW": "order",
 }
 
 #: Events a run can wait for, and the subject they are matched on.
@@ -244,7 +261,14 @@ FIELDS: dict[str, tuple[str | None, str, frozenset[str]]] = {
     "stock_on_hand": ("product", "int", frozenset({"eq", "gte", "lte"})),
     "integration_provider": ("integration", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "sync_error_code": ("integration", "text", frozenset({"eq", "ne"})),
+    #: V3.7: the shop's own Risk Check band, and what is stored from a provider.
+    "risk_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
+    "external_data_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
+    "external_found": ("customer", "bool", frozenset({"is_true", "is_false"})),
+    #: The latest published anonymous network RTO rate (rounded percent).
+    "network_rto_percent": (None, "int", frozenset({"gte", "lte"})),
     #: Facts of the event itself.
+    "previous_risk_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "entered_segment": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "alert_kind": (None, "enum", frozenset({"eq", "ne"})),
 }

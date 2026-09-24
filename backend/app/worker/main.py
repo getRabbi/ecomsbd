@@ -43,6 +43,7 @@ from app.messaging.campaign_jobs import run_campaigns
 from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.public_api.webhooks import dispatch_webhooks
+from app.risk_providers.service import prune_external_risk_lookups
 from app.worker.jobs import dispatch_outbox
 from app.worker.maintenance import (
     dispatch_notifications,
@@ -107,6 +108,7 @@ class WorkerSettings:
         sync_inventories,
         dispatch_outbox,
         snapshot_demand_forecasts,
+        prune_external_risk_lookups,
         scan_alerts,
         send_weekly_summaries,
         reconcile_billing,
@@ -158,6 +160,8 @@ class WorkerSettings:
         # Dhaka), so a predicted stock-out is on the snapshot the alert reads.
         # Idempotent per shop and day (V3.6).
         cron(snapshot_demand_forecasts, hour={2}, minute=50),
+        # External risk lookups past retention (V3.7). Idempotent.
+        cron(prune_external_risk_lookups, hour={4}, minute=20),
         cron(scan_alerts, hour={3, 9}, minute=30),
         # Hourly, because the job decides for itself whether the *tenant's*
         # clock has reached Friday 18:00 (master spec section 42). ARQ crons

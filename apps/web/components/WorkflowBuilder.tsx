@@ -432,6 +432,19 @@ function ActionConfig({
           <p className="card__hint">{t('auto.cfg.draftPoNote')}</p>
         </>
       );
+    case 'HOLD_FOR_REVIEW':
+      return (
+        <>
+          <Field label={t('auto.cfg.reviewReason')}>
+            <select className="select" value={String(config.reason ?? 'FIRST_PARTY_RISK')} disabled={disabled} onChange={(e) => set('reason', e.target.value)}>
+              {(['FIRST_PARTY_RISK', 'EXTERNAL_PROVIDER_FACTS', 'PROVIDER_UNAVAILABLE', 'OTHER'] as const).map((r) => (
+                <option key={r} value={r}>{t(`auto.cfg.reviewReason.${r}`)}</option>
+              ))}
+            </select>
+          </Field>
+          <p className="card__hint">{t('auto.cfg.reviewNote')}</p>
+        </>
+      );
     case 'PUSH_STORE_STATUS':
       return <p className="card__hint">{t('auto.cfg.storeNote')}</p>;
     case 'SET_ORDER_LABEL':

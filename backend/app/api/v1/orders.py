@@ -37,6 +37,7 @@ from app.api.v1.commerce_schemas import (
     ParseRequest,
     ParseResponse,
 )
+from app.common.audit import AuditAction, record_audit
 from app.common.pagination import Page, decode_cursor
 from app.consignments.models import Consignment
 from app.customers.service import CustomerService
@@ -85,6 +86,7 @@ def _to_detail(order: Order) -> OrderDetailResponse:
         ],
         source_text=order.source_text,
         estimated_item_cost_paisa=order.estimated_item_cost_paisa,
+        review_hold=(order.metadata_json or {}).get("review_hold"),
     )
 
 
@@ -354,6 +356,35 @@ async def get_order(
         detail.tracking_code = parcel.tracking_code
         detail.return_pending_units = sum(item.qty_return_pending for item in parcel.items)
     return detail
+
+
+@router.delete(
+    "/{order_id}/review-hold",
+    response_model=OrderDetailResponse,
+    summary="Release a workflow's hold for review",
+    dependencies=[Depends(require_permission(Permission.ORDER_WRITE))],
+)
+async def release_review_hold(
+    order_id: uuid.UUID,
+    principal: TenantPrincipal,
+    orders: OrderServiceDep,
+    db: DbSession,
+) -> OrderDetailResponse:
+    """A person reviewed the order. Workflows may book and push it again (V3.7)."""
+    order = await orders.get(order_id)
+    meta = dict(order.metadata_json or {})
+    held = meta.pop("review_hold", None)
+    if held is not None:
+        order.metadata_json = meta
+        await record_audit(
+            db,
+            AuditAction.ORDER_UPDATED,
+            entity_type="order",
+            entity_id=order.id,
+            context={"review_hold": "RELEASED", "reason": held.get("reason")},
+        )
+        await db.flush()
+    return _to_detail(order)
 
 
 @router.patch(
