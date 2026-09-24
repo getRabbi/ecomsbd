@@ -51,6 +51,9 @@ class Supplier(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(sa.String(1000))
     #: Days after the first receipt that a PO's payment falls due, by default.
     payment_terms_days: Mapped[int | None] = mapped_column()
+    #: V3.6: the seller's own "days from order to arrival", used for reorder
+    #: suggestions until enough received orders show the real figure.
+    lead_time_days: Mapped[int | None] = mapped_column()
     is_active: Mapped[bool] = mapped_column(default=True)
     created_by: Mapped[uuid.UUID] = mapped_column(GUID)
 

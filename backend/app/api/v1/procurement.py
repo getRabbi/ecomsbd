@@ -69,6 +69,7 @@ class SupplierInput(Input):
     address: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+    lead_time_days: int | None = Field(default=None, ge=0, le=365)
     is_active: bool | None = None
 
 
@@ -163,7 +164,8 @@ def _view(row: object, fields: str) -> dict[str, Any]:
 
 
 SUPPLIER_FIELDS = (
-    "id name contact_name phone email address notes payment_terms_days is_active created_at"
+    "id name contact_name phone email address notes payment_terms_days lead_time_days is_active "
+    "created_at"
 )
 PO_FIELDS = (
     "id number supplier_id warehouse_id status expected_at reference notes total_paisa "

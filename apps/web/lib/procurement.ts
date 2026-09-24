@@ -22,6 +22,7 @@ export interface Supplier {
   address: string | null;
   notes: string | null;
   payment_terms_days: number | null;
+  lead_time_days?: number | null;
   is_active: boolean;
   open_orders?: number;
   balance_paisa?: number | null;

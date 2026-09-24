@@ -117,6 +117,10 @@ class NotificationKind(StrEnum):
     PARTIAL_RECEIPT_PENDING = "PARTIAL_RECEIPT_PENDING"
     #: Supplier payments past their due date.
     SUPPLIER_PAYMENT_OVERDUE = "SUPPLIER_PAYMENT_OVERDUE"
+
+    # --- V3.6 forecasting ------------------------------------------------
+    #: Items the demand forecast says will run out before a reorder could arrive.
+    STOCKOUT_PREDICTED = "STOCKOUT_PREDICTED"
     #: A courier account whose credentials need re-entering.
     COURIER_ACCOUNT_PROBLEM = "COURIER_ACCOUNT_PROBLEM"
     FOLLOW_UP_DUE = "FOLLOW_UP_DUE"

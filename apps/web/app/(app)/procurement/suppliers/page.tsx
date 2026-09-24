@@ -62,6 +62,8 @@ export default function SuppliersPage() {
     }
     const terms = String(data.get('payment_terms_days') ?? '');
     body.payment_terms_days = terms === '' ? null : Number(terms);
+    const lead = String(data.get('lead_time_days') ?? '');
+    body.lead_time_days = lead === '' ? null : Number(lead);
     body.is_active = data.get('is_active') === 'on';
     void run(async () => {
       if (editing === 'new') await api.post('/procurement/suppliers', body);
@@ -183,6 +185,10 @@ export default function SuppliersPage() {
             <label className="field">
               <span className="field__label">{t('pr.s.terms')}</span>
               <input className="input" name="payment_terms_days" type="number" min={0} max={365} defaultValue={editing === 'new' ? '' : String(editing.payment_terms_days ?? '')} />
+            </label>
+            <label className="field">
+              <span className="field__label">{t('pr.f.leadTime')}</span>
+              <input className="input" name="lead_time_days" type="number" min={0} max={365} defaultValue={editing === 'new' ? '' : String(editing.lead_time_days ?? '')} />
             </label>
             <label><input type="checkbox" name="is_active" defaultChecked={editing === 'new' ? true : editing.is_active} /> {t('pr.s.active')}</label>
             <button type="submit" className="btn btn--primary" disabled={busy}>{t('pr.s.save')}</button>

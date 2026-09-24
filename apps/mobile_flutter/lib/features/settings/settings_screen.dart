@@ -15,6 +15,7 @@ import '../../l10n/language_picker.dart';
 import '../billing/plans_screen.dart';
 import '../shared/responsive.dart';
 import '../messaging/campaigns_screen.dart';
+import '../forecasting/forecast_screen.dart';
 import '../procurement/procurement_screen.dart';
 import '../messaging/messaging_screen.dart';
 import 'account_security_screen.dart';
@@ -169,6 +170,15 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const ProcurementScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.insights_outlined),
+                  title: Text(context.tr('fc.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ForecastScreen(),
                     ),
                   ),
                 ),

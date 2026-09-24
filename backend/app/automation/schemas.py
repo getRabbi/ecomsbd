@@ -118,6 +118,9 @@ class DraftPurchaseOrderAction(Input):
     """A DRAFT purchase order to the item's preferred supplier. Never ordered (V3.5)."""
 
     quantity: int = Field(ge=1, le=100_000)
+    #: V3.6: on a stock-out prediction, use the forecast's suggested quantity
+    #: instead; ``quantity`` stays the fallback when there is no suggestion.
+    use_suggested: bool = False
 
 
 class LabelAction(Input):
@@ -167,6 +170,7 @@ TRIGGER_SUBJECTS: dict[str, str] = {
     "reconciliation.issue": "shop",
     "followup.due": "shop",
     "inventory.low": "product",
+    "inventory.stockout_predicted": "product",
     "integration.sync_failed": "integration",
     "customer.segment_entered": "customer",
     "customer.replied": "customer",

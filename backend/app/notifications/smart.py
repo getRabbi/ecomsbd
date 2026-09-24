@@ -291,6 +291,7 @@ class SmartAlerts:
             (NotificationKind.PURCHASE_ORDER_OVERDUE, self.purchase_orders_overdue),
             (NotificationKind.PARTIAL_RECEIPT_PENDING, self.partial_receipts_pending),
             (NotificationKind.SUPPLIER_PAYMENT_OVERDUE, self.supplier_payments_overdue),
+            (NotificationKind.STOCKOUT_PREDICTED, self.stockouts_predicted),
         ]
         created = 0
         for kind, detector in detectors:
@@ -790,6 +791,49 @@ class SmartAlerts:
                 magnitude=int(amount),
                 amount_paisa=int(amount),
                 item_count=int(count),
+            )
+        ]
+
+    async def stockouts_predicted(self) -> list[AlertCondition]:
+        """Items the latest daily forecast marks at risk (V3.6).
+
+        Read from the stored snapshot, not recomputed: the alert says exactly
+        what the forecast screen said that morning. A snapshot older than a day
+        is stale and raises nothing.
+        """
+        from app.forecasting.engine import Confidence
+        from app.forecasting.models import DemandForecast
+        from app.products.models import Product, ProductVariant
+
+        day = await self._db.scalar(sa.select(sa.func.max(DemandForecast.as_of)))
+        if day is None or day < business_date() - timedelta(days=1):
+            return []
+        rows = (
+            await self._db.execute(
+                sa.select(Product.name, ProductVariant.name, DemandForecast.product_id)
+                .join(Product, Product.id == DemandForecast.product_id)
+                .outerjoin(ProductVariant, ProductVariant.id == DemandForecast.variant_id)
+                .where(
+                    DemandForecast.as_of == day,
+                    DemandForecast.at_risk.is_(True),
+                    DemandForecast.confidence != str(Confidence.INSUFFICIENT),
+                )
+                .order_by(DemandForecast.stockout_on, Product.name)
+                .limit(500)
+            )
+        ).all()
+        if not rows:
+            return []
+        names = [f"{name} ({variant})" if variant else str(name) for name, variant, _ in rows]
+        return [
+            AlertCondition(
+                kind=NotificationKind.STOCKOUT_PREDICTED,
+                subject="shop",
+                params={"count": len(rows), "names": names[: rules.MAX_LISTED]},
+                magnitude=len(rows),
+                item_count=len(rows),
+                entity_type="product" if len(rows) == 1 else None,
+                entity_id=rows[0][2] if len(rows) == 1 else None,
             )
         ]
 

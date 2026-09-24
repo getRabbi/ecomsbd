@@ -111,6 +111,10 @@ class OutboxTopic(StrEnum):
     PURCHASE_ORDER_RECEIVED = "purchase_order.received"
     STOCK_TRANSFER_COMPLETED = "stock_transfer.completed"
 
+    # Forecasting (V3.6): an item newly predicted to run out within its lead
+    # time. Consumed when written (app.automation.triggers); no-op handler.
+    STOCKOUT_PREDICTED = "forecast.stockout_predicted"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

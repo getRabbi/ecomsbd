@@ -186,6 +186,14 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=1,
             route="payables",
         ),
+        NotificationKind.STOCKOUT_PREDICTED: AlertRule(
+            category=NotificationCategory.INVENTORY,
+            severity=Severity.ACTION,
+            cooldown=3 * _DAY,
+            audience=Permission.PROCUREMENT_MANAGE,
+            worsen_min_delta=2,
+            route="forecasting",
+        ),
     }
 )
 

@@ -188,6 +188,23 @@ async def read_event(db: AsyncSession, event: OutboxEvent) -> Reading:
             add("purchase_order.partially_received", subject, key)
         return reading
 
+    if topic == OutboxTopic.STOCKOUT_PREDICTED:
+        product_id = _id(payload.get("product_id"))
+        if product_id is None:
+            return reading
+        variant_id = _id(payload.get("variant_id"))
+        suggested = payload.get("suggested_quantity")
+        add(
+            "inventory.stockout_predicted",
+            {
+                "product_id": str(product_id),
+                "variant_id": str(variant_id) if variant_id else None,
+                "suggested_quantity": suggested if type(suggested) is int else None,
+            },
+            f"product:{variant_id or product_id}",
+        )
+        return reading
+
     if topic == OutboxTopic.STOCK_TRANSFER_COMPLETED:
         add("transfer.completed", {}, f"transfer:{payload.get('transfer_id')}")
         return reading
@@ -267,5 +284,6 @@ for _topic in (
     OutboxTopic.PURCHASE_ORDER_ORDERED,
     OutboxTopic.PURCHASE_ORDER_RECEIVED,
     OutboxTopic.STOCK_TRANSFER_COMPLETED,
+    OutboxTopic.STOCKOUT_PREDICTED,
 ):
     register_handler(_topic)(_consumed_at_enqueue)

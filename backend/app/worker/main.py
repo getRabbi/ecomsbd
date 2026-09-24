@@ -31,6 +31,7 @@ from app.couriers.jobs import (
 )
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
+from app.forecasting.jobs import snapshot_demand_forecasts
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
 from app.integrations.jobs import (
     process_integration_events,
@@ -105,6 +106,7 @@ class WorkerSettings:
         schedule_integrations,
         sync_inventories,
         dispatch_outbox,
+        snapshot_demand_forecasts,
         scan_alerts,
         send_weekly_summaries,
         reconcile_billing,
@@ -152,6 +154,10 @@ class WorkerSettings:
         # time (the deployment sets TZ=UTC). Extra runs cannot duplicate
         # anything: each alert identity is raised once and then held by its
         # cooldown (app.notifications.rules).
+        # Demand forecasts, once a day just before the morning alert scan (08:50
+        # Dhaka), so a predicted stock-out is on the snapshot the alert reads.
+        # Idempotent per shop and day (V3.6).
+        cron(snapshot_demand_forecasts, hour={2}, minute=50),
         cron(scan_alerts, hour={3, 9}, minute=30),
         # Hourly, because the job decides for itself whether the *tenant's*
         # clock has reached Friday 18:00 (master spec section 42). ARQ crons
