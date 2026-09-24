@@ -10,7 +10,8 @@ Short state note for the next session. Git is the source of truth; check it firs
   - **Security: `alembic_version` client-role revoke** (`a32002`): merge commit `049ee3e` (PR #3).
   - **V3.3 Messaging & Campaigns** (`a33001`): merge commit `8403c7e` (PR #4); see `docs/V3_3_MESSAGING_CAMPAIGNS.md`.
   - Handoff note for V3.3: merge commit `ac90078` (PR #5).
-  - **V3.4 Automation Pro** (`a34001`): see `docs/V3_4_AUTOMATION_PRO.md`.
+  - **V3.4 Automation Pro** (`a34001`): merge commit `370432a` (PR #6), CI green on head
+    `1f0071e`; see `docs/V3_4_AUTOMATION_PRO.md`. Post-merge review: no blocking defect.
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
@@ -20,7 +21,8 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Production
 
-- Prod DB is at `a32001` (V3.2); API and worker healthy on it.
+- Prod DB is at `a32001` (V3.2); API and worker healthy on it. **Production is behind main**:
+  it still needs `a32002` → `a33001` → `a34001` (one `upgrade head` applies all three).
 - Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so a new image
   stays unready and the old container keeps serving until prod is migrated to its head.
 - Pending on prod: `a32002` (privileges only: REVOKE + ENABLE RLS on `alembic_version`) and
@@ -51,7 +53,7 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Next phase
 
-- **V3.5 Inventory + Procurement** (agreed with the owner). Out of scope until then:
+- **V3.5 Inventory + Procurement** (agreed with the owner), on branch `v3.5-procurement`. Out of scope until then:
   multi-warehouse, forecasting, external-risk expansion, SDK/app marketplace.
 
 ## Invariants
