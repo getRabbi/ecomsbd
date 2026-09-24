@@ -105,6 +105,9 @@ TOPICS = frozenset(
         OutboxTopic.SEGMENT_ENTERED,
         OutboxTopic.CUSTOMER_REPLIED,
         OutboxTopic.FOLLOWUP_COMPLETED,
+        OutboxTopic.PURCHASE_ORDER_ORDERED,
+        OutboxTopic.PURCHASE_ORDER_RECEIVED,
+        OutboxTopic.STOCK_TRANSFER_COMPLETED,
     }
 )
 
@@ -202,6 +205,19 @@ async def _action_config(
             channel = await db.scalar(sa.select(Channel).where(Channel.kind == config["channel"]))
             if not messaging.capability(config["channel"])[0] or not channel or not channel.enabled:
                 problems.append("CHANNEL_DISABLED")
+    if step.action == "CREATE_TEAM_TASK" and config.get("assignee_id"):
+        member = await db.scalar(
+            sa.select(TenantUser).where(
+                TenantUser.user_id == uuid.UUID(config["assignee_id"]),
+                TenantUser.is_active.is_(True),
+            )
+        )
+        if member is None:
+            problems.append("ASSIGNEE_NOT_ACTIVE")
+    if step.action == "CREATE_DRAFT_PO" and (
+        publisher is None or not has_permission(publisher.role, Permission.PROCUREMENT_MANAGE)
+    ):
+        problems.append("PROCUREMENT_PERMISSION_REQUIRED")
     if step.action == "BOOK_COURIER":
         if publisher is None or not has_permission(publisher.role, Permission.ORDER_BOOK):
             problems.append("BOOKING_PERMISSION_REQUIRED")

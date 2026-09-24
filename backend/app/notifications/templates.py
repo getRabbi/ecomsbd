@@ -304,6 +304,46 @@ def _follow_up_due(p: Params, locale: str) -> tuple[str, str]:
     return "Customer follow-ups due", f"{count} follow-ups are due. Open your customer list."
 
 
+def _po_overdue(p: Params, locale: str) -> tuple[str, str]:
+    count, numbers = int(p["count"]), ", ".join(str(n) for n in p.get("numbers") or [])
+    if locale == "bn":
+        return (
+            f"{count}টি ক্রয় আদেশের মাল আসেনি",
+            f"প্রত্যাশিত তারিখ পেরিয়ে গেছে: {numbers}। সরবরাহকারীর সঙ্গে যোগাযোগ করুন।",
+        )
+    return (
+        f"{_n(count, 'purchase order is', 'purchase orders are')} late",
+        f"Past the expected date: {numbers}. Check with the supplier.",
+    )
+
+
+def _partial_pending(p: Params, locale: str) -> tuple[str, str]:
+    count, days = int(p["count"]), int(p["days"])
+    numbers = ", ".join(str(n) for n in p.get("numbers") or [])
+    if locale == "bn":
+        return (
+            f"{count}টি ক্রয় আদেশের বাকি মাল আসেনি",
+            f"আংশিক মাল আসার {days} দিন পরও বাকি আছে: {numbers}।",
+        )
+    return (
+        f"{_n(count, 'purchase order is', 'purchase orders are')} partly received",
+        f"The rest is still outstanding {days}+ days after the first delivery: {numbers}.",
+    )
+
+
+def _supplier_overdue(p: Params, locale: str) -> tuple[str, str]:
+    count, amount = int(p["count"]), _money(p["amount_paisa"])
+    if locale == "bn":
+        return (
+            f"সরবরাহকারীর {amount} পরিশোধ বাকি",
+            f"{count}টি ক্রয় আদেশের পরিশোধের তারিখ পেরিয়ে গেছে।",
+        )
+    return (
+        f"{amount} due to suppliers",
+        f"{_n(count, 'purchase order is', 'purchase orders are')} past the payment due date.",
+    )
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
@@ -321,4 +361,7 @@ _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.COURIER_ACCOUNT_PROBLEM: _courier_account,
     NotificationKind.RETURNED_NOT_RESTOCKED: _returned_not_restocked,
     NotificationKind.WEEKLY_SUMMARY: _weekly_summary,
+    NotificationKind.PURCHASE_ORDER_OVERDUE: _po_overdue,
+    NotificationKind.PARTIAL_RECEIPT_PENDING: _partial_pending,
+    NotificationKind.SUPPLIER_PAYMENT_OVERDUE: _supplier_overdue,
 }

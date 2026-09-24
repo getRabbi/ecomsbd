@@ -288,6 +288,9 @@ class SmartAlerts:
             (NotificationKind.NEGATIVE_MARGIN, self.negative_margin),
             (NotificationKind.COURIER_ACCOUNT_PROBLEM, self.courier_accounts),
             (NotificationKind.RETURNED_NOT_RESTOCKED, self.returned_not_restocked),
+            (NotificationKind.PURCHASE_ORDER_OVERDUE, self.purchase_orders_overdue),
+            (NotificationKind.PARTIAL_RECEIPT_PENDING, self.partial_receipts_pending),
+            (NotificationKind.SUPPLIER_PAYMENT_OVERDUE, self.supplier_payments_overdue),
         ]
         created = 0
         for kind, detector in detectors:
@@ -692,6 +695,101 @@ class SmartAlerts:
                 item_count=count,
                 entity_type="product" if entity_id else None,
                 entity_id=entity_id,
+            )
+        ]
+
+    # ---------------------------------------------------- procurement --
+
+    async def _open_orders(self, *conditions: Any) -> list[tuple[str, uuid.UUID]]:
+        from app.procurement.models import OPEN_PO, PurchaseOrder
+
+        return [
+            (str(number), po_id)
+            for number, po_id in await self._db.execute(
+                sa.select(PurchaseOrder.number, PurchaseOrder.id)
+                .where(PurchaseOrder.status.in_(OPEN_PO), *conditions)
+                .order_by(PurchaseOrder.number)
+                .limit(500)
+            )
+        ]
+
+    async def purchase_orders_overdue(self) -> list[AlertCondition]:
+        """Ordered goods past the date the supplier said they would arrive."""
+        from app.procurement.models import PurchaseOrder
+
+        rows = await self._open_orders(
+            PurchaseOrder.expected_at.is_not(None), PurchaseOrder.expected_at < utc_now()
+        )
+        if not rows:
+            return []
+        return [
+            AlertCondition(
+                kind=NotificationKind.PURCHASE_ORDER_OVERDUE,
+                subject="shop",
+                params={"count": len(rows), "numbers": [n for n, _ in rows[: rules.MAX_LISTED]]},
+                magnitude=len(rows),
+                item_count=len(rows),
+                entity_type="purchase_order" if len(rows) == 1 else None,
+                entity_id=rows[0][1] if len(rows) == 1 else None,
+            )
+        ]
+
+    async def partial_receipts_pending(self) -> list[AlertCondition]:
+        from app.procurement.models import PurchaseOrder
+
+        days = 3
+        rows = await self._open_orders(
+            PurchaseOrder.status == "PARTIALLY_RECEIVED",
+            PurchaseOrder.first_received_at < utc_now() - timedelta(days=days),
+        )
+        if not rows:
+            return []
+        return [
+            AlertCondition(
+                kind=NotificationKind.PARTIAL_RECEIPT_PENDING,
+                subject="shop",
+                params={
+                    "count": len(rows),
+                    "days": days,
+                    "numbers": [n for n, _ in rows[: rules.MAX_LISTED]],
+                },
+                magnitude=len(rows),
+                item_count=len(rows),
+                entity_type="purchase_order" if len(rows) == 1 else None,
+                entity_id=rows[0][1] if len(rows) == 1 else None,
+            )
+        ]
+
+    async def supplier_payments_overdue(self) -> list[AlertCondition]:
+        """Received goods whose payment date has passed. Supplier money only."""
+        from app.procurement.models import PurchaseOrder
+
+        count, amount = (
+            await self._db.execute(
+                sa.select(
+                    sa.func.count(PurchaseOrder.id),
+                    sa.func.coalesce(
+                        sa.func.sum(PurchaseOrder.received_value_paisa - PurchaseOrder.paid_paisa),
+                        0,
+                    ),
+                ).where(
+                    PurchaseOrder.status != "DRAFT",
+                    PurchaseOrder.payment_due_at.is_not(None),
+                    PurchaseOrder.payment_due_at < utc_now(),
+                    PurchaseOrder.paid_paisa < PurchaseOrder.received_value_paisa,
+                )
+            )
+        ).one()
+        if not count:
+            return []
+        return [
+            AlertCondition(
+                kind=NotificationKind.SUPPLIER_PAYMENT_OVERDUE,
+                subject="shop",
+                params={"count": int(count), "amount_paisa": int(amount)},
+                magnitude=int(amount),
+                amount_paisa=int(amount),
+                item_count=int(count),
             )
         ]
 

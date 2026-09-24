@@ -161,6 +161,31 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=3,
             route="reconciliation",
         ),
+        NotificationKind.PURCHASE_ORDER_OVERDUE: AlertRule(
+            category=NotificationCategory.INVENTORY,
+            severity=Severity.ACTION,
+            cooldown=3 * _DAY,
+            audience=Permission.PROCUREMENT_MANAGE,
+            worsen_min_delta=2,
+            route="purchase_orders",
+        ),
+        NotificationKind.PARTIAL_RECEIPT_PENDING: AlertRule(
+            category=NotificationCategory.INVENTORY,
+            severity=Severity.WARNING,
+            cooldown=7 * _DAY,
+            audience=Permission.PROCUREMENT_MANAGE,
+            worsen_min_delta=2,
+            route="purchase_orders",
+        ),
+        NotificationKind.SUPPLIER_PAYMENT_OVERDUE: AlertRule(
+            category=NotificationCategory.MONEY,
+            severity=Severity.ACTION,
+            cooldown=3 * _DAY,
+            # Supplier money: people who can pay suppliers, not every money viewer.
+            audience=Permission.PAYABLE_MANAGE,
+            worsen_min_delta=1,
+            route="payables",
+        ),
     }
 )
 

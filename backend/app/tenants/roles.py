@@ -82,6 +82,10 @@ class Permission(StrEnum):
     SETTINGS_MANAGE = "settings.manage"
     #: Create, edit, publish and switch off automation workflows (V3.4).
     AUTOMATION_MANAGE = "automation.manage"
+    #: V3.5: suppliers, purchase orders, over-receipt approval, locations.
+    PROCUREMENT_MANAGE = "procurement.manage"
+    #: V3.5: record payments to suppliers (not COD, not payouts).
+    PAYABLE_MANAGE = "payable.manage"
     DATA_EXPORT = "data.export"
 
 
@@ -107,6 +111,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.INVENTORY_ADJUST,
             Permission.MONEY_VIEW,
             Permission.AUTOMATION_MANAGE,
+            Permission.PROCUREMENT_MANAGE,
         }
     ),
     TenantRole.ORDER_OPERATOR: frozenset(
@@ -126,6 +131,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.MONEY_RECONCILE,
             Permission.PRODUCT_VIEW,
             Permission.DATA_EXPORT,
+            Permission.PAYABLE_MANAGE,
         }
     ),
     TenantRole.VIEWER: frozenset(

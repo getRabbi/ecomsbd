@@ -109,6 +109,14 @@ class NotificationKind(StrEnum):
     NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
     #: An import that failed, or finished with many rejected rows.
     IMPORT_FAILURE = "IMPORT_FAILURE"
+
+    # --- V3.5 procurement ------------------------------------------------
+    #: Purchase orders past their expected date with goods still to come.
+    PURCHASE_ORDER_OVERDUE = "PURCHASE_ORDER_OVERDUE"
+    #: Purchase orders partly received days ago, the rest still outstanding.
+    PARTIAL_RECEIPT_PENDING = "PARTIAL_RECEIPT_PENDING"
+    #: Supplier payments past their due date.
+    SUPPLIER_PAYMENT_OVERDUE = "SUPPLIER_PAYMENT_OVERDUE"
     #: A courier account whose credentials need re-entering.
     COURIER_ACCOUNT_PROBLEM = "COURIER_ACCOUNT_PROBLEM"
     FOLLOW_UP_DUE = "FOLLOW_UP_DUE"

@@ -32,6 +32,8 @@ ALERT_TRIGGERS = {
     "PAYOUT_OVERDUE": "payout.overdue",
     "RECONCILIATION_DISCREPANCY": "reconciliation.issue",
     "FOLLOW_UP_DUE": "followup.due",
+    "PURCHASE_ORDER_OVERDUE": "purchase_order.overdue",
+    "SUPPLIER_PAYMENT_OVERDUE": "supplier_payment.due",
 }
 DELIVERED = frozenset({"DELIVERED", "PARTIAL_DELIVERED"})
 RETURNED = frozenset({"RETURNED"})
@@ -172,6 +174,24 @@ async def read_event(db: AsyncSession, event: OutboxEvent) -> Reading:
             )
         return reading
 
+    if topic in {OutboxTopic.PURCHASE_ORDER_ORDERED, OutboxTopic.PURCHASE_ORDER_RECEIVED}:
+        po_id = _id(payload.get("purchase_order_id"))
+        if po_id is None:
+            return reading
+        subject = {"purchase_order_id": str(po_id)}
+        key = f"purchase_order:{po_id}"
+        if topic == OutboxTopic.PURCHASE_ORDER_ORDERED:
+            add("purchase_order.ordered", subject, key)
+        elif payload.get("complete"):
+            add("purchase_order.received", subject, key)
+        else:
+            add("purchase_order.partially_received", subject, key)
+        return reading
+
+    if topic == OutboxTopic.STOCK_TRANSFER_COMPLETED:
+        add("transfer.completed", {}, f"transfer:{payload.get('transfer_id')}")
+        return reading
+
     if topic == OutboxTopic.INTEGRATION_ISSUE_OPENED:
         subject = {
             "integration_event_id": payload.get("integration_event_id"),
@@ -244,5 +264,8 @@ for _topic in (
     OutboxTopic.CUSTOMER_REPLIED,
     OutboxTopic.FOLLOWUP_COMPLETED,
     OutboxTopic.SEGMENT_ENTERED,
+    OutboxTopic.PURCHASE_ORDER_ORDERED,
+    OutboxTopic.PURCHASE_ORDER_RECEIVED,
+    OutboxTopic.STOCK_TRANSFER_COMPLETED,
 ):
     register_handler(_topic)(_consumed_at_enqueue)

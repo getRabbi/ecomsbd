@@ -105,6 +105,12 @@ class OutboxTopic(StrEnum):
     FOLLOWUP_COMPLETED = "followup.completed"
     SEGMENT_ENTERED = "customer.segment_entered"
 
+    # Inventory + procurement (V3.5): facts workflows react to. Consumed when
+    # written (app.automation.triggers); their outbox handlers are no-ops.
+    PURCHASE_ORDER_ORDERED = "purchase_order.ordered"
+    PURCHASE_ORDER_RECEIVED = "purchase_order.received"
+    STOCK_TRANSFER_COMPLETED = "stock_transfer.completed"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

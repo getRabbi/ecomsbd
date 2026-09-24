@@ -131,8 +131,12 @@ class AutomationTask(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     __tablename__ = "automation_tasks"
     __table_args__ = (sa.UniqueConstraint("tenant_id", "execution_id"),)
     execution_id: Mapped[uuid.UUID] = mapped_column(GUID, sa.ForeignKey("automation_executions.id"))
-    order_id: Mapped[uuid.UUID] = mapped_column(GUID, sa.ForeignKey("orders.id"))
-    customer_id: Mapped[uuid.UUID] = mapped_column(GUID, sa.ForeignKey("customers.id"))
+    #: The order a task is about; empty for a procurement or stock task (V3.5).
+    order_id: Mapped[uuid.UUID | None] = mapped_column(GUID, sa.ForeignKey("orders.id"))
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(GUID, sa.ForeignKey("customers.id"))
+    purchase_order_id: Mapped[uuid.UUID | None] = mapped_column(GUID)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(GUID)
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(GUID)
     text_en: Mapped[str] = mapped_column(sa.String(1000))
     text_bn: Mapped[str] = mapped_column(sa.String(1000))
     due_at: Mapped[datetime] = mapped_column(TZDateTime)

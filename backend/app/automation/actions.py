@@ -336,5 +336,38 @@ async def perform(
             return "SKIPPED", None, "NO_WEBHOOK_ENDPOINT"
         return "SUCCEEDED", str(event_id), None
 
+    if action == "CREATE_TEAM_TASK":
+        # About whatever the trigger is about: an order, a purchase order, an
+        # item, or the shop. One per run (the task table keys tasks by run).
+        task = AutomationTask(
+            execution_id=execution.id,
+            order_id=_id(subject.get("order_id")),
+            customer_id=_id(subject.get("customer_id")),
+            purchase_order_id=_id(subject.get("purchase_order_id")),
+            product_id=_id(subject.get("product_id")),
+            assignee_id=_id(config.get("assignee_id")),
+            text_en=config["text_en"],
+            text_bn=config["text_bn"],
+            due_at=execution.created_at + timedelta(hours=config.get("due_hours", 24)),
+        )
+        db.add(task)
+        await db.flush()
+        return "SUCCEEDED", str(task.id), None
+
+    if action == "CREATE_DRAFT_PO":
+        from app.procurement.service import ProcurementService
+
+        product_id = _id(subject.get("product_id"))
+        if product_id is None:
+            raise ValidationError("This step needs an item", details={"blocker": "NO_PRODUCT"})
+        # A draft for a person to review and order. Never ordered here, and
+        # never sent to a supplier: ecomsbd places no external orders.
+        po, reason = await ProcurementService(db, None).draft_for_item(
+            product_id, _id(subject.get("variant_id")), int(config["quantity"])
+        )
+        if po is None:
+            return "SKIPPED", None, reason
+        return "SUCCEEDED", str(po.id), None
+
     # No eval, arbitrary HTTP, ledger, stock, status or reconciliation action.
     raise ValidationError("Unsupported automation action")

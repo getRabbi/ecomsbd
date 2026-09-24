@@ -105,6 +105,21 @@ class EmptyAction(Input):
     pass
 
 
+class TeamTaskAction(Input):
+    """A task for the team about whatever the trigger is about (V3.5)."""
+
+    text_en: str = Field(min_length=1, max_length=1000)
+    text_bn: str = Field(min_length=1, max_length=1000)
+    due_hours: int = Field(default=24, ge=1, le=720)
+    assignee_id: uuid.UUID | None = None
+
+
+class DraftPurchaseOrderAction(Input):
+    """A DRAFT purchase order to the item's preferred supplier. Never ordered (V3.5)."""
+
+    quantity: int = Field(ge=1, le=100_000)
+
+
 class LabelAction(Input):
     #: A short label kept on the order's automation metadata. Not the status,
     #: not money, not stock.
@@ -128,6 +143,8 @@ CONFIGS: dict[str, type[Input]] = {
     "RETRY_INTEGRATION_SYNC": EmptyAction,
     "SET_ORDER_LABEL": LabelAction,
     "TRIGGER_WEBHOOK": WebhookAction,
+    "CREATE_TEAM_TASK": TeamTaskAction,
+    "CREATE_DRAFT_PO": DraftPurchaseOrderAction,
 }
 WORKFLOW_ACTIONS = tuple(CONFIGS)
 
@@ -154,6 +171,12 @@ TRIGGER_SUBJECTS: dict[str, str] = {
     "customer.segment_entered": "customer",
     "customer.replied": "customer",
     "followup.completed": "customer",
+    "purchase_order.ordered": "purchase_order",
+    "purchase_order.partially_received": "purchase_order",
+    "purchase_order.received": "purchase_order",
+    "purchase_order.overdue": "shop",
+    "supplier_payment.due": "shop",
+    "transfer.completed": "shop",
 }
 WORKFLOW_TRIGGERS = tuple(TRIGGER_SUBJECTS)
 
@@ -163,6 +186,7 @@ SUBJECT_PROVIDES: dict[str, frozenset[str]] = {
     "customer": frozenset({"customer"}),
     "product": frozenset({"product"}),
     "integration": frozenset({"integration"}),
+    "purchase_order": frozenset({"purchase_order"}),
     "shop": frozenset(),
 }
 
@@ -179,6 +203,8 @@ ACTION_NEEDS: dict[str, str | None] = {
     "RETRY_INTEGRATION_SYNC": "integration",
     "SET_ORDER_LABEL": "order",
     "TRIGGER_WEBHOOK": None,
+    "CREATE_TEAM_TASK": None,
+    "CREATE_DRAFT_PO": "product",
 }
 
 #: Events a run can wait for, and the subject they are matched on.
@@ -412,8 +438,10 @@ def structural_problems(definition: WorkflowDefinition) -> list[str]:
     if sum(isinstance(step, DelayStep | WaitStep) for step, _ in steps) > MAX_WAITS:
         problems.append("TOO_MANY_WAITS")
     # One legacy task per run: the task table keys tasks by run.
-    if sum(step.action == "CREATE_TASK" for step in actions) > 1:
+    if sum(step.action in {"CREATE_TASK", "CREATE_TEAM_TASK"} for step in actions) > 1:
         problems.append("ONE_TASK_PER_WORKFLOW")
+    if sum(step.action == "CREATE_DRAFT_PO" for step in actions) > 1:
+        problems.append("ONE_DRAFT_PO_PER_WORKFLOW")
     if sum(step.action == "BOOK_COURIER" for step in actions) > 1:
         problems.append("ONE_BOOKING_PER_WORKFLOW")
     # A follow-up delay must point at a follow-up step that runs before it on

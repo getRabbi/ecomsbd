@@ -185,6 +185,17 @@ class AuditAction(StrEnum):
     INTEGRATION_SYNC_STARTED = "integration.sync_started"
     INTEGRATION_EVENT_RETRIED = "integration.event_retried"
 
+    # Inventory + procurement (V3.5)
+    SUPPLIER_SAVED = "procurement.supplier_saved"
+    PURCHASE_ORDER_SAVED = "procurement.po_saved"
+    PURCHASE_ORDER_ORDERED = "procurement.po_ordered"
+    PURCHASE_ORDER_CANCELLED = "procurement.po_cancelled"
+    GOODS_RECEIVED = "procurement.goods_received"
+    GOODS_OVER_RECEIVED = "procurement.goods_over_received"
+    SUPPLIER_PAYMENT_RECORDED = "procurement.supplier_payment"
+    STOCK_TRANSFERRED = "inventory.stock_transferred"
+    WAREHOUSE_SAVED = "inventory.warehouse_saved"
+
     # Messaging & campaigns (V3.3)
     CAMPAIGN_CREATED = "campaign.created"
     CAMPAIGN_UPDATED = "campaign.updated"
