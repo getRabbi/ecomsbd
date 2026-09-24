@@ -17,6 +17,7 @@ import '../money/cases_screen.dart';
 import '../money/receivables_screen.dart';
 import '../customers/customers_screen.dart';
 import '../orders/order_detail_screen.dart';
+import '../forecasting/forecast_screen.dart';
 import '../procurement/procurement_screen.dart';
 import '../products/products_screen.dart';
 import '../settings/courier_accounts_screen.dart';
@@ -66,6 +67,7 @@ Widget? notificationDestination(AppNotification notification) {
     'purchase_order' ||
     'purchase_orders' ||
     'payables' => const ProcurementScreen(),
+    'forecasting' => const ForecastScreen(),
     _ => null,
   };
 }

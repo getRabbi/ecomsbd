@@ -54,6 +54,8 @@ const automationEn = <String, String>{
   'auto.trigger.reconciliation.issue': 'When a reconciliation issue is found',
   'auto.trigger.followup.due': 'When follow-ups are due',
   'auto.trigger.inventory.low': 'When stock runs low',
+  'auto.trigger.inventory.stockout_predicted':
+      'When an item is forecast to run out',
   'auto.trigger.integration.sync_failed': 'When a store sync fails',
   'auto.trigger.customer.segment_entered': 'When a customer enters a segment',
   'auto.trigger.customer.replied': 'When a customer replies',
@@ -140,6 +142,8 @@ const automationBn = <String, String>{
   'auto.trigger.reconciliation.issue': 'হিসাব মেলানোয় সমস্যা পেলে',
   'auto.trigger.followup.due': 'ফলো-আপের সময় হলে',
   'auto.trigger.inventory.low': 'স্টক কমে গেলে',
+  'auto.trigger.inventory.stockout_predicted':
+      'পণ্য ফুরিয়ে যাওয়ার পূর্বাভাস হলে',
   'auto.trigger.integration.sync_failed': 'স্টোর সিঙ্ক ব্যর্থ হলে',
   'auto.trigger.customer.segment_entered': 'গ্রাহক কোনো সেগমেন্টে ঢুকলে',
   'auto.trigger.customer.replied': 'গ্রাহক উত্তর দিলে',
