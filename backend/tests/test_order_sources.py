@@ -86,8 +86,15 @@ async def test_tenant_and_role_boundaries(client, unique_phone):
     ).status_code == 403
 
 
-@pytest.mark.parametrize("provider", ["SHOPIFY", "WOOCOMMERCE", "MESSENGER"])
-async def test_provider_contract_gate(client, unique_phone, provider):
+@pytest.mark.parametrize(
+    ("provider", "blocker"),
+    [
+        ("SHOPIFY", "INTEGRATIONS_HUB_REQUIRED"),
+        ("WOOCOMMERCE", "INTEGRATIONS_HUB_REQUIRED"),
+        ("MESSENGER", "ORDER_SOURCE_OFFICIAL_CONTRACT_REQUIRED"),
+    ],
+)
+async def test_provider_contract_gate(client, unique_phone, provider, blocker):
     shop = await signed_in_shop(client, unique_phone)
     result = await client.post(
         "/v1/order-sources",
@@ -95,7 +102,7 @@ async def test_provider_contract_gate(client, unique_phone, provider):
         json={"name": "provider", "provider": provider, "enabled": True},
     )
     assert result.status_code == 409
-    assert result.json()["details"]["blocker"] == "ORDER_SOURCE_OFFICIAL_CONTRACT_REQUIRED"
+    assert result.json()["details"]["blocker"] == blocker
 
 
 async def test_external_identity_cannot_override_an_existing_client_id(client, unique_phone):

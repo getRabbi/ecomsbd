@@ -1,0 +1,207 @@
+"""Custom Website: the V2 Public API and outbound webhooks, packaged for a seller.
+
+Nothing here is a new API. A connection is a CUSTOM_PUSH order source, a
+shop-scoped API key limited to what a storefront needs, and optionally one
+signed webhook endpoint. The website calls
+``POST /public/v1/sources/{source_id}/orders`` and gets V2's idempotency,
+normalization and order pipeline.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import timedelta
+from typing import Any
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.audit import AuditAction
+from app.core.clock import utc_now
+from app.core.config import get_settings
+from app.core.errors import ConflictError, ValidationError
+from app.integrations import service
+from app.integrations.models import IntegrationConnection
+from app.order_sources.models import ExternalOrder, OrderSource
+from app.public_api.models import ApiKey, WebhookDelivery, WebhookEndpoint
+from app.public_api.service import issue_key
+from app.public_api.webhooks import TOPICS, create_endpoint, queue_test_delivery
+
+SCOPES = ["orders:read", "orders:write", "sources:write"]
+DEFAULT_TOPICS = ["order.booked", "order.status_changed", "consignment.status_changed"]
+RATE_LIMIT = 120
+
+
+def api_base_url() -> str:
+    return get_settings().public_base_url.rstrip("/") + "/public/v1"
+
+
+async def _new_key(
+    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID
+) -> tuple[ApiKey, str]:
+    return await issue_key(
+        db,
+        name=f"{conn.name} (website)"[:100],
+        scopes=SCOPES,
+        rate_limit=RATE_LIMIT,
+        created_by=actor_id,
+    )
+
+
+async def create(
+    db: AsyncSession, name: str, actor_id: uuid.UUID
+) -> tuple[IntegrationConnection, str]:
+    conn = await service.create(db, "CUSTOM_WEBSITE", name, actor_id)
+    source = OrderSource(name=name[:120], provider="CUSTOM_PUSH", enabled=True, mapping={})
+    db.add(source)
+    await db.flush()
+    key, token = await _new_key(db, conn, actor_id)
+    conn.source_id = source.id
+    conn.webhook_token = None  # Inbound traffic is the Public API, not a callback.
+    conn.config = {"api_key_id": str(key.id), "scopes": SCOPES}
+    return conn, token
+
+
+async def _key(db: AsyncSession, conn: IntegrationConnection) -> ApiKey | None:
+    key_id = conn.config.get("api_key_id")
+    return await db.get(ApiKey, uuid.UUID(key_id)) if key_id else None
+
+
+async def _endpoint(db: AsyncSession, conn: IntegrationConnection) -> WebhookEndpoint | None:
+    endpoint_id = conn.config.get("webhook_endpoint_id")
+    return await db.get(WebhookEndpoint, uuid.UUID(endpoint_id)) if endpoint_id else None
+
+
+async def rotate_key(db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID) -> str:
+    """Issue a new key and revoke the old one now. The website must be updated."""
+    if conn.state == "DISCONNECTED":
+        raise ConflictError("This connection is disconnected")
+    old = await _key(db, conn)
+    if old is not None and old.revoked_at is None:
+        old.revoked_at = utc_now()
+    key, token = await _new_key(db, conn, actor_id)
+    conn.config = {**conn.config, "api_key_id": str(key.id)}
+    await service.audit(db, AuditAction.INTEGRATION_KEY_ROTATED, conn)
+    return token
+
+
+async def set_webhook(
+    db: AsyncSession, conn: IntegrationConnection, url: str, topics: list[str] | None
+) -> str:
+    """Point the connection's signed events at ``url``. Returns the new secret once."""
+    if conn.state == "DISCONNECTED":
+        raise ConflictError("This connection is disconnected")
+    chosen = topics or DEFAULT_TOPICS
+    if set(chosen) - TOPICS:
+        raise ValidationError("Unknown webhook topic")
+    old = await _endpoint(db, conn)
+    if old is not None:
+        old.enabled = False
+    endpoint, secret = await create_endpoint(db, url, chosen)
+    conn.config = {**conn.config, "webhook_endpoint_id": str(endpoint.id)}
+    await service.audit(db, AuditAction.INTEGRATION_CONFIGURED, conn, change="webhook")
+    return secret
+
+
+async def test_webhook(
+    db: AsyncSession, conn: IntegrationConnection, shop_id: uuid.UUID
+) -> WebhookDelivery:
+    endpoint = await _endpoint(db, conn)
+    if endpoint is None or not endpoint.enabled:
+        raise ConflictError("Add a webhook address first", details={"code": "WEBHOOK_NOT_SET"})
+    return await queue_test_delivery(db, endpoint, shop_id)
+
+
+async def go_live(db: AsyncSession, conn: IntegrationConnection) -> None:
+    key = await _key(db, conn)
+    if key is None or key.revoked_at is not None:
+        raise ConflictError("Create an API key first", details={"code": "API_KEY_REQUIRED"})
+    await service.set_source_enabled(db, conn, True)
+    await service.went_live(db, conn)
+
+
+async def disconnect(db: AsyncSession, conn: IntegrationConnection) -> None:
+    key = await _key(db, conn)
+    if key is not None and key.revoked_at is None:
+        key.revoked_at = utc_now()
+    endpoint = await _endpoint(db, conn)
+    if endpoint is not None:
+        endpoint.enabled = False
+    await service.disconnect(db, conn, remote=False)
+
+
+async def facts(db: AsyncSession, conn: IntegrationConnection) -> dict[str, Any]:
+    """What the setup checklist and health read. All local; no network."""
+    key = await _key(db, conn)
+    endpoint = await _endpoint(db, conn)
+    first = await db.scalar(
+        sa.select(ExternalOrder)
+        .where(ExternalOrder.source_id == conn.source_id)
+        .order_by(ExternalOrder.created_at.desc())
+        .limit(1)
+    )
+    deliveries: dict[str, Any] = {"failed_24h": 0, "last_status": None, "last_at": None}
+    if endpoint is not None:
+        latest = await db.scalar(
+            sa.select(WebhookDelivery)
+            .where(WebhookDelivery.endpoint_id == endpoint.id)
+            .order_by(WebhookDelivery.created_at.desc())
+            .limit(1)
+        )
+        failed = await db.scalar(
+            sa.select(sa.func.count())
+            .select_from(WebhookDelivery)
+            .where(
+                WebhookDelivery.endpoint_id == endpoint.id,
+                WebhookDelivery.status.in_(["FAILED", "RETRY"]),
+                WebhookDelivery.created_at >= utc_now() - timedelta(days=1),
+            )
+        )
+        deliveries = {
+            "failed_24h": failed or 0,
+            "last_status": latest.status if latest else None,
+            "last_at": latest.updated_at if latest else None,
+        }
+    return {
+        "key_active": key is not None and key.revoked_at is None,
+        "key_created_at": key.created_at if key else None,
+        "last_api_call_at": key.last_used_at if key else None,
+        "last_order_at": first.created_at if first else None,
+        "last_order_id": first.order_id if first else None,
+        "webhook_url": endpoint.url if endpoint else None,
+        "webhook_enabled": bool(endpoint and endpoint.enabled),
+        "webhook_topics": endpoint.topics if endpoint else [],
+        "deliveries": deliveries,
+    }
+
+
+def overlay(view: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Fold Public API facts into the common health fields of a view.
+
+    Computed on read rather than stored: a key revoked from Developer settings
+    must show here at once, and a GET must not write.
+    """
+    view["last_success_at"] = data["last_api_call_at"] or view["last_success_at"]
+    view["webhook_state"] = None
+    if data["webhook_url"]:
+        deliveries = data["deliveries"]
+        failing = deliveries["failed_24h"] and deliveries["last_status"] != "DELIVERED"
+        view["webhook_state"] = "FAILING" if failing else "ACTIVE"
+        view["last_webhook_at"] = deliveries["last_at"]
+        if failing and view["health"] in {"CONNECTED", "DEGRADED"}:
+            view["health"] = "WEBHOOK_FAILING"
+    if view["state"] != "DISCONNECTED" and not data["key_active"]:
+        view["health"], view["last_error_code"] = "AUTH_EXPIRED", "API_KEY_REVOKED"
+    return view
+
+
+def package(conn: IntegrationConnection) -> dict[str, Any]:
+    """The Developer view. Identifiers only; secrets were shown once at creation."""
+    return {
+        "api_base_url": api_base_url(),
+        "orders_endpoint": f"{api_base_url()}/sources/{conn.source_id}/orders",
+        "source_id": conn.source_id,
+        "scopes": conn.config.get("scopes") or SCOPES,
+        "topics": sorted(TOPICS),
+        "signature_header": "X-Ecomsbd-Signature",
+    }

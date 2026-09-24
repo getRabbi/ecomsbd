@@ -32,6 +32,11 @@ from app.couriers.jobs import (
 from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
+from app.integrations.jobs import (
+    process_integration_events,
+    run_integration_syncs,
+    schedule_integrations,
+)
 from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.public_api.webhooks import dispatch_webhooks
@@ -91,6 +96,9 @@ class WorkerSettings:
         dispatch_webhooks,
         build_network_benchmarks,
         dispatch_automation,
+        process_integration_events,
+        run_integration_syncs,
+        schedule_integrations,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -115,6 +123,11 @@ class WorkerSettings:
         cron(dispatch_webhooks, second={10, 40}),
         cron(build_network_benchmarks, day=8, hour=3, minute=45, run_at_startup=True),
         cron(dispatch_automation, second={12, 42}),
+        # Integrations: queued webhook events every 15s, sync pages twice a
+        # minute within a time budget, catch-up syncs and health every 5 min.
+        cron(process_integration_events, second={3, 18, 33, 48}),
+        cron(run_integration_syncs, second={25, 55}),
+        cron(schedule_integrations, minute=set(range(0, 60, 5))),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),

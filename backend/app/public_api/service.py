@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import secrets
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_hasher
 from app.common.idempotency import request_hash
 from app.common.operation_lock import lock_shop
 from app.core.errors import AuthenticationError, IdempotencyConflictError
+from app.core.ids import new_id
 from app.public_api.auth import ApiPrincipal
 from app.public_api.models import ApiKey, ApiWriteReceipt
 
@@ -52,3 +56,22 @@ async def write_once(
     )
     await db.flush()
     return response
+
+
+async def issue_key(
+    db: AsyncSession, *, name: str, scopes: list[str], rate_limit: int, created_by: uuid.UUID
+) -> tuple[ApiKey, str]:
+    """A new key and its only plaintext copy. The caller shows it once."""
+    row_id = new_id()
+    token = f"ec_live_{row_id.hex}.{secrets.token_urlsafe(32)}"
+    row = ApiKey(
+        id=row_id,
+        name=name,
+        scopes=sorted(set(scopes)),
+        rate_limit=rate_limit,
+        secret_hash=get_hasher().token_hash("public:" + token),
+        created_by=created_by,
+    )
+    db.add(row)
+    await db.flush()
+    return row, token

@@ -16,6 +16,8 @@ class ApiKey(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     rate_limit: Mapped[int] = mapped_column(default=60)
     created_by: Mapped[uuid.UUID] = mapped_column(GUID)
     revoked_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+    #: Refreshed at most once a minute; feeds integration health, not billing.
+    last_used_at: Mapped[datetime | None] = mapped_column(TZDateTime)
 
 
 class ApiWriteReceipt(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
