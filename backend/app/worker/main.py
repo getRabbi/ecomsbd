@@ -19,7 +19,7 @@ from arq.connections import RedisSettings
 
 from app import __version__
 from app.analytics.network import build_network_benchmarks
-from app.automation.jobs import dispatch_automation
+from app.automation.jobs import dispatch_automation, scan_segment_entries
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -99,6 +99,7 @@ class WorkerSettings:
         dispatch_webhooks,
         build_network_benchmarks,
         dispatch_automation,
+        scan_segment_entries,
         process_integration_events,
         run_integration_syncs,
         schedule_integrations,
@@ -129,7 +130,12 @@ class WorkerSettings:
         cron(run_campaigns, second={20}),
         cron(dispatch_webhooks, second={10, 40}),
         cron(build_network_benchmarks, day=8, hour=3, minute=45, run_at_startup=True),
+        # Workflow runs: new, retrying, woken by an event or at the end of a
+        # delay. Waits are rows, so this one cron serves every workflow (V3.4).
         cron(dispatch_automation, second={12, 42}),
+        # Customers who became inactive since yesterday (the one time-based
+        # workflow trigger). 04:10 Dhaka.
+        cron(scan_segment_entries, hour={22}, minute=10),
         # Integrations: queued webhook events every 15s, sync pages twice a
         # minute within a time budget, catch-up syncs and health every 5 min.
         cron(process_integration_events, second={3, 18, 33, 48}),

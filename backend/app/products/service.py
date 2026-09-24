@@ -232,6 +232,7 @@ class StockService:
                     "variant_id": str(variant.id) if variant is not None else None,
                     "sku": variant.sku if variant is not None else product.sku,
                     "stock_on_hand": movement.balance_after,
+                    "quantity_delta": adjustment.quantity_delta,
                     "reason": str(adjustment.reason),
                 },
             )

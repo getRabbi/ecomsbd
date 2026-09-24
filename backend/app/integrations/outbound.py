@@ -112,7 +112,26 @@ async def schedule(
         order_id = uuid.UUID(str(event.payload.get("order_id")))
     except ValueError:
         return 0
-    found = await _connection_for_order(session, event.tenant_id, order_id)
+    return await queue_for_order(
+        session, event.tenant_id, order_id, operation, key=key, payload=payload
+    )
+
+
+async def queue_for_order(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    order_id: uuid.UUID,
+    operation: str,
+    *,
+    key: str,
+    payload: dict[str, Any] | None = None,
+) -> int:
+    """Queue one store push for an order; 0 when nothing is connected or wanted.
+
+    The operation key is the dedupe: the automatic push and a workflow asking
+    for the same push land on the same ``IntegrationEvent``.
+    """
+    found = await _connection_for_order(session, tenant_id, order_id)
     if found is None:
         return 0
     conn, external_id = found

@@ -193,6 +193,16 @@ class AuditAction(StrEnum):
     CAMPAIGN_RESUMED = "campaign.resumed"
     CAMPAIGN_CANCELLED = "campaign.cancelled"
 
+    # Automation Pro (V3.4)
+    AUTOMATION_WORKFLOW_CREATED = "automation.workflow_created"
+    AUTOMATION_WORKFLOW_CHANGED = "automation.workflow_changed"
+    AUTOMATION_WORKFLOW_PUBLISHED = "automation.workflow_published"
+    AUTOMATION_WORKFLOW_ENABLED = "automation.workflow_enabled"
+    AUTOMATION_WORKFLOW_DISABLED = "automation.workflow_disabled"
+    AUTOMATION_EXECUTION_RETRIED = "automation.execution_retried"
+    AUTOMATION_EXECUTION_CANCELLED = "automation.execution_cancelled"
+    AUTOMATION_TEST_RUN = "automation.test_run"
+
 
 class AuditLog(Base):
     """One audited action. Append-only."""

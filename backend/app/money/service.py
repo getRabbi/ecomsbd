@@ -261,6 +261,7 @@ class ReceivableService:
         if receivable.is_fully_settled:
             self._transition(receivable, ReceivableStatus.SETTLED)
             receivable.settled_at = moment
+            await self._announce_settled(receivable)
         else:
             self._transition(receivable, ReceivableStatus.PARTIALLY_SETTLED)
         await self._db.flush()
@@ -419,6 +420,7 @@ class ReceivableService:
         ):
             self._transition(receivable, ReceivableStatus.SETTLED)
             receivable.settled_at = occurred_at or utc_now()
+            await self._announce_settled(receivable)
         await self._db.flush()
 
         # Two entries, like a settlement: the receivable shrinks by what the
@@ -621,6 +623,19 @@ class ReceivableService:
         if receivable is None:
             raise NotFoundError("That parcel has no receivable")
         return receivable
+
+    async def _announce_settled(self, receivable: CodReceivable) -> None:
+        """The parcel's COD is paid in full: a fact workflows may react to (V3.4).
+
+        Announced, never acted on here: nothing downstream may write money.
+        """
+        from app.common.outbox import OutboxTopic, enqueue
+
+        await enqueue(
+            self._db,
+            OutboxTopic.COD_SETTLED,
+            {"order_id": str(receivable.order_id), "receivable_id": str(receivable.id)},
+        )
 
     def _transition(self, receivable: CodReceivable, target: ReceivableStatus) -> None:
         current = receivable.receivable_status

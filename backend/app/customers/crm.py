@@ -517,6 +517,14 @@ class CrmService:
                 "FOLLOW_UP_COMPLETED" if completed else "FOLLOW_UP_REOPENED",
                 subject_id=row.id,
             )
+            if completed:
+                from app.common.outbox import OutboxTopic, enqueue
+
+                await enqueue(
+                    self.db,
+                    OutboxTopic.FOLLOWUP_COMPLETED,
+                    {"customer_id": str(customer_id), "followup_id": str(row.id)},
+                )
         return row
 
     async def timeline(

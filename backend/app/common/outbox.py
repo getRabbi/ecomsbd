@@ -96,6 +96,15 @@ class OutboxTopic(StrEnum):
     INVENTORY_CHANGED = "inventory.updated"
     PRODUCT_UPDATED = "product.updated"
 
+    # Automation Pro (V3.4): facts workflows react to. Consumed when written
+    # (app.automation.triggers); their outbox handlers are no-ops.
+    COD_SETTLED = "cod.settled"
+    ALERT_RAISED = "alert.raised"
+    INTEGRATION_ISSUE_OPENED = "integration.issue_opened"
+    CUSTOMER_REPLIED = "customer.replied"
+    FOLLOWUP_COMPLETED = "followup.completed"
+    SEGMENT_ENTERED = "customer.segment_entered"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.
