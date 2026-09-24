@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from app.common.audit import AuditLog
 from app.common.outbox import OutboxEvent
 from app.core.clock import utc_now
-from app.db.session import system_session
+from app.db.session import session_scope, system_session
 from app.orders.models import OrderItem
 from app.procurement.models import PurchaseOrder, WarehouseStock
 from app.products.models import Product, StockMovement
@@ -346,7 +346,8 @@ async def test_payment_due_date_raises_the_supplier_alert(client, unique_phone):
     from app.core.context import use_context
 
     with use_context(tenant_id=uuid.UUID(shop["tenant_id"])):
-        async with system_session("test: alerts") as db:
+        # As the worker runs it: tenant-scoped, so other shops' orders stay out.
+        async with session_scope() as db:
             alerts = SmartAlerts(db)
             overdue = await alerts.supplier_payments_overdue()
             late = await alerts.purchase_orders_overdue()
@@ -544,7 +545,6 @@ async def test_variant_items_and_draft_po_from_automation(client, unique_phone):
         snapshot={"subject": {"product_id": product["id"], "variant_id": variant["id"]}},
         created_at=utc_now(),
     )
-    from app.db.session import session_scope
 
     # As the dispatcher runs it: in the shop's own scope.
     with use_context(tenant_id=tenant):
