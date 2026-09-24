@@ -19,6 +19,7 @@ import 'account_security_screen.dart';
 import 'courier_accounts_screen.dart';
 import 'data_privacy_screen.dart';
 import 'notification_settings_screen.dart';
+import 'integrations_screen.dart';
 import 'order_sources_screen.dart';
 import 'network_screen.dart';
 import 'automation_screen.dart';
@@ -121,6 +122,15 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const NetworkScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.hub_outlined),
+                  title: Text(context.tr('int.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const IntegrationsScreen(),
                     ),
                   ),
                 ),
