@@ -5,6 +5,7 @@ import { crmEn, crmBn } from './crm-strings';
 import { integrationsEn, integrationsBn } from './integrations-strings';
 import { syncEn, syncBn } from './sync-strings';
 import { campaignsEn, campaignsBn } from './campaign-strings';
+import { procurementEn, procurementBn } from './procurement-strings';
 import { automationEn, automationBn } from './automation-strings';
 
 /**
@@ -26,6 +27,7 @@ export const strings = {
     ...integrationsEn,
     ...syncEn,
     ...campaignsEn,
+    ...procurementEn,
     ...automationEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
@@ -652,6 +654,7 @@ export const strings = {
     ...integrationsBn,
     ...syncBn,
     ...campaignsBn,
+    ...procurementBn,
     ...automationBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',

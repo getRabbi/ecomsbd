@@ -44,6 +44,7 @@ const NAV: NavGroup[] = [
       { href: '/campaigns', labelKey: 'nav.campaigns', icon: '✦' },
       { href: '/automation', labelKey: 'nav.automation', icon: '⚡' },
       { href: '/products', labelKey: 'nav.products', icon: '⬚' },
+      { href: '/procurement', labelKey: 'nav.procurement', icon: '⧈' },
       { href: '/couriers', labelKey: 'nav.couriers', icon: '⇢' },
       { href: '/returns', labelKey: 'nav.returns', icon: '↺' },
     ],

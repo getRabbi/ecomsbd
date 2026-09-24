@@ -67,6 +67,9 @@ const WEB_ROUTES: Record<string, string> = {
   product: '/products',
   products: '/products',
   profit: '/dashboard',
+  purchase_order: '/procurement',
+  purchase_orders: '/procurement',
+  payables: '/procurement/payables',
 };
 
 export function hrefFor(notification: Pick<AppNotification, 'payload'>): string | null {
