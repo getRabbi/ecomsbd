@@ -869,3 +869,39 @@ async def test_outbound_retries_dead_letters_and_reports_auth_expiry(
     async with system_session("test: sealed") as db:
         row = await db.get(IntegrationConnection, uuid.UUID(conn["id"]))
         assert "cs_abcdef" not in (row.credentials_enc or "")
+
+
+# -------------------------------------------------------- product authority ---
+
+
+async def test_product_authority_creates_from_store_or_pushes_prices(
+    client, unique_phone, monkeypatch
+):
+    fake, shop, conn, _ = await shopify_shop(client, unique_phone, monkeypatch)
+    headers = auth_header(shop)
+    # The store is in charge: an unknown SKU comes in as an ecomsbd product.
+    fake.catalog_pages = [[shopify_variant(300, 3000, "NEW-1", price="650.00")]]
+    await put_sync(client, shop, conn["id"], products="EXTERNAL")
+    await jobs.run_integration_syncs()
+    [row] = (await links(client, shop, conn["id"]))["items"]
+    assert (row["state"], row["match_source"]) == ("MATCHED", "CREATED")
+    created = (await client.get(f"/v1/products/{row['product_id']}", headers=headers)).json()
+    assert (created["sku"], created["default_selling_price_paisa"], created["stock_on_hand"]) == (
+        "NEW-1",
+        65000,
+        0,
+    )
+    # ecomsbd is in charge: a price edit goes to the mapped store variant.
+    await put_sync(client, shop, conn["id"], products="ECOMSBD")
+    await client.patch(
+        f"/v1/products/{row['product_id']}",
+        headers=headers,
+        json={"default_selling_price_paisa": 70000},
+    )
+    await settle()
+    [push] = calls(fake, "productVariantsBulkUpdate")
+    variables = push["json_body"]["variables"]
+    assert variables["productId"] == "gid://shopify/Product/300"
+    assert variables["variants"] == [{"id": "gid://shopify/ProductVariant/3000", "price": "700.00"}]
+    await settle()
+    assert len(calls(fake, "productVariantsBulkUpdate")) == 1
