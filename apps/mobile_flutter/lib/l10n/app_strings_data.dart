@@ -3594,6 +3594,7 @@ const Map<String, String> _rtoBn = <String, String>{
 /// Inventory V2: variants, restock, stock history filters, return receipt.
 const Map<String, String> _inventoryEn = <String, String>{
   'mv.restock': 'Restock',
+  'mv.externalSync': 'Matched to the store’s stock',
   'sa.reasonCaps': 'REASON',
   'inv.inStockCount': '{count} in stock',
   'inv.left': '{count} left',
@@ -3641,6 +3642,7 @@ const Map<String, String> _inventoryEn = <String, String>{
 /// Inventory V2: variants, restock, stock history filters, return receipt.
 const Map<String, String> _inventoryBn = <String, String>{
   'mv.restock': 'রিস্টক',
+  'mv.externalSync': 'স্টোরের স্টকের সঙ্গে মেলানো',
   'sa.reasonCaps': 'কারণ',
   'inv.inStockCount': 'স্টকে {count}টি',
   'inv.left': '{count}টি বাকি',

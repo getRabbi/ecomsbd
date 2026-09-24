@@ -173,6 +173,7 @@ class StockMovement {
     'DAMAGED_WRITE_OFF' => _t('mv.damagedWriteOff'),
     'IMPORT_ADJUSTMENT' => _t('mv.fromImport'),
     'RESTOCK' => _t('mv.restock'),
+    'EXTERNAL_SYNC' => _t('mv.externalSync'),
     _ => reason,
   };
 }

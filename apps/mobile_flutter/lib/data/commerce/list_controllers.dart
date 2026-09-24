@@ -95,6 +95,7 @@ const Map<String, List<String>> stockHistoryFilters = <String, List<String>>{
     'MANUAL_ADJUSTMENT',
     'DAMAGED_WRITE_OFF',
     'IMPORT_ADJUSTMENT',
+    'EXTERNAL_SYNC',
   ],
 };
 

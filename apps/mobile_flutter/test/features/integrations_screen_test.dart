@@ -67,6 +67,41 @@ void hub(
   });
 }
 
+Map<String, dynamic> syncView({
+  String inventory = 'ECOMSBD',
+  int conflicts = 1,
+}) => {
+  'settings': {
+    'catalog': true,
+    'products': 'MANUAL',
+    'inventory': inventory,
+    'order_status': 'TWO_WAY',
+    'fulfillment': 'ON',
+    'location_id': '1',
+  },
+  'capabilities': {},
+  'status_map': {},
+  'links': {'MATCHED': 4, 'UNMATCHED': 2},
+  'open_conflicts': conflicts,
+  'catalog_synced_at': '2026-09-24T08:00:00Z',
+  'inventory_synced_at': '2026-09-24T08:05:00Z',
+  'reconnect_scopes': [],
+};
+
+void syncRoutes(
+  ({ApiClient client, FakeApiAdapter adapter}) fake,
+  String id, {
+  Map<String, dynamic>? view,
+  List<dynamic> conflicts = const [],
+}) {
+  fake.adapter.onJson(
+    'GET',
+    '/integrations/$id/sync-settings',
+    view ?? syncView(conflicts: conflicts.length),
+  );
+  fake.adapter.onJson('GET', '/integrations/conflicts', {'items': conflicts});
+}
+
 void main() {
   testWidgets('lists connections, real availability and health', (
     tester,
@@ -130,6 +165,7 @@ void main() {
     tester,
   ) async {
     final fake = buildFakeApi();
+    syncRoutes(fake, 'w1');
     fake.adapter.onJson('GET', '/integrations/w1', {
       'connection': connection(
         id: 'w1',
@@ -195,6 +231,131 @@ void main() {
     expect(find.text(banglaStrings['int.title']!), findsOneWidget);
     expect(find.text(banglaStrings['int.health.DEGRADED']!), findsOneWidget);
     expect(find.text(banglaStrings['int.code.MISSING_PHONE']!), findsWidgets);
+  });
+
+  testWidgets('detail shows who controls stock, matches and conflicts', (
+    tester,
+  ) async {
+    final fake = buildFakeApi();
+    syncRoutes(
+      fake,
+      's1',
+      conflicts: [
+        {
+          'id': 'k1',
+          'kind': 'STOCK_CHANGED_BOTH',
+          'entity': 'INVENTORY',
+          'updated_at': '2026-09-24T08:00:00Z',
+        },
+      ],
+    );
+    fake.adapter.onJson('GET', '/integrations/s1', {
+      'connection': connection(id: 's1', health: 'DEGRADED'),
+      'events': [
+        {
+          ...issue(id: 'o1'),
+          'kind': 'OUTBOUND',
+          'operation': 'PUSH_INVENTORY',
+          'code': 'PROVIDER_UNAVAILABLE',
+          'external_ref': null,
+        },
+      ],
+      'runs': [],
+      'can_manage': true,
+      'can_retry': true,
+    });
+    fake.adapter.onJson('POST', '/integrations/events/o1/retry', {
+      'id': 'o1',
+      'status': 'QUEUED',
+    });
+    fake.adapter.onJson('GET', '/integrations/s1/links', {
+      'items': [
+        {
+          'id': 'l1',
+          'external_title': 'Panjabi / L',
+          'external_sku': 'P-L',
+          'internal_name': 'Panjabi',
+          'external_qty': 7,
+          'state': 'MATCHED',
+        },
+        {
+          'id': 'l2',
+          'external_title': 'Scarf',
+          'external_sku': null,
+          'internal_name': null,
+          'external_qty': null,
+          'state': 'UNMATCHED',
+        },
+      ],
+    });
+    await pumpAtSize(
+      tester,
+      const IntegrationDetailScreen(id: 's1'),
+      overrides: [apiClientProvider.overrideWithValue(fake.client)],
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Stock: ${englishStrings['int.sync.stock.ECOMSBD']}'),
+      findsOneWidget,
+    );
+    expect(find.text('Products matched: 4 · not matched: 2'), findsOneWidget);
+    expect(find.text('Conflicts to decide: 1'), findsOneWidget);
+    expect(
+      find.text(englishStrings['int.sync.kind.STOCK_CHANGED_BOTH']!),
+      findsOneWidget,
+    );
+    // An outbound push that failed reads as what was being sent, and retries.
+    await tester.ensureVisible(
+      find.text(englishStrings['int.op.PUSH_INVENTORY']!),
+    );
+    expect(find.text(englishStrings['int.op.PUSH_INVENTORY']!), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text(englishStrings['int.retry']!).hitTestable(),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text(englishStrings['int.retry']!));
+    await tester.pumpAndSettle();
+    expect(fake.adapter.to('POST', '/integrations/events/o1/retry').length, 1);
+    // Matches are inspected here, changed on the web.
+    await tester.scrollUntilVisible(
+      find.text(englishStrings['int.sync.mappings']!).hitTestable(),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text(englishStrings['int.sync.mappings']!));
+    await tester.pumpAndSettle();
+    expect(find.text('Panjabi / L'), findsOneWidget);
+    expect(find.textContaining('→ Panjabi'), findsOneWidget);
+    expect(
+      find.text(englishStrings['int.sync.link.UNMATCHED']!),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sync section renders in Bangla', (tester) async {
+    final fake = buildFakeApi();
+    syncRoutes(fake, 's2', view: syncView(inventory: 'EXTERNAL', conflicts: 0));
+    fake.adapter.onJson('GET', '/integrations/s2', {
+      'connection': connection(id: 's2', provider: 'WOOCOMMERCE'),
+      'events': [],
+      'runs': [],
+      'can_manage': false,
+      'can_retry': false,
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [apiClientProvider.overrideWithValue(fake.client)],
+        child: const MaterialApp(home: IntegrationDetailScreen(id: 's2')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('স্টক: ${banglaStrings['int.sync.stock.EXTERNAL']}'),
+      findsOneWidget,
+    );
+    expect(find.text(banglaStrings['int.sync.title']!), findsOneWidget);
   });
 
   test('integration translations exist in both languages', () {
