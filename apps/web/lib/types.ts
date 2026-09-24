@@ -61,4 +61,6 @@ export interface OrderDetail extends OrderSummary {
   items: OrderItem[];
   source_text: string | null;
   estimated_item_cost_paisa: number;
+  /** Set by a workflow's hold-for-review step (V3.7). */
+  review_hold?: { reason: string; at: string } | null;
 }

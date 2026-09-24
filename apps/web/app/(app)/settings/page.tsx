@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { PageHeader } from '@/components/shell';
 import { Card, ErrorState, Row } from '@/components/ui';
 import { useSession } from '@/lib/session';
@@ -71,6 +73,12 @@ export default function SettingsPage() {
         <div style={{ marginTop: 18 }}>
           <Card>
             <p className="card__hint">{t('set.manageOnPhone')}</p>
+          </Card>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <Card title={t('rp.title')} hint={t('rp.subtitle')}>
+            <Link className="btn" href="/settings/risk-provider">{t('nav.riskProvider')}</Link>
           </Card>
         </div>
       </div>

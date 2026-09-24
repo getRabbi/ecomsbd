@@ -8,6 +8,7 @@ import { campaignsEn, campaignsBn } from './campaign-strings';
 import { procurementEn, procurementBn } from './procurement-strings';
 import { forecastingEn, forecastingBn } from './forecasting-strings';
 import { automationEn, automationBn } from './automation-strings';
+import { riskEn, riskBn } from './risk-strings';
 
 /**
  * English and Bangla for the dashboard.
@@ -31,6 +32,7 @@ export const strings = {
     ...procurementEn,
     ...forecastingEn,
     ...automationEn,
+    ...riskEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -659,6 +661,7 @@ export const strings = {
     ...procurementBn,
     ...forecastingBn,
     ...automationBn,
+    ...riskBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',

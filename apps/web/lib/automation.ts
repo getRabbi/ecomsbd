@@ -166,6 +166,8 @@ export function defaultConfig(action: string, catalog: Catalog | null, locale: '
       return { text_en: '', text_bn: '', due_hours: 24 };
     case 'CREATE_DRAFT_PO':
       return { quantity: 10 };
+    case 'HOLD_FOR_REVIEW':
+      return { reason: 'FIRST_PARTY_RISK' };
     default:
       return {};
   }
