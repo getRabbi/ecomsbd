@@ -26,6 +26,7 @@ from app.api.v1 import (
     customers,
     developers,
     external_risk,
+    forecasting,
     imports,
     insights,
     integration_webhooks,
@@ -70,6 +71,7 @@ api_router.include_router(automation.router)
 api_router.include_router(tenants.router)
 api_router.include_router(products.router)
 api_router.include_router(procurement.router)
+api_router.include_router(forecasting.router)
 api_router.include_router(crm.router)
 api_router.include_router(customers.router)
 api_router.include_router(orders.router)

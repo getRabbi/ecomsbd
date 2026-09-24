@@ -317,6 +317,19 @@ def _po_overdue(p: Params, locale: str) -> tuple[str, str]:
     )
 
 
+def _stockout_predicted(p: Params, locale: str) -> tuple[str, str]:
+    count, names = int(p["count"]), ", ".join(str(n) for n in p.get("names") or [])
+    if locale == "bn":
+        return (
+            f"{count}টি পণ্য শেষ হয়ে যেতে পারে",
+            f"আবার অর্ডার করলেও সময়মতো আসার আগে ফুরিয়ে যাবে বলে পূর্বাভাস: {names}।",
+        )
+    return (
+        f"{_n(count, 'item is', 'items are')} likely to run out",
+        f"Forecast to sell out before a new order could arrive: {names}. Review reorders.",
+    )
+
+
 def _partial_pending(p: Params, locale: str) -> tuple[str, str]:
     count, days = int(p["count"]), int(p["days"])
     numbers = ", ".join(str(n) for n in p.get("numbers") or [])
@@ -364,4 +377,5 @@ _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.PURCHASE_ORDER_OVERDUE: _po_overdue,
     NotificationKind.PARTIAL_RECEIPT_PENDING: _partial_pending,
     NotificationKind.SUPPLIER_PAYMENT_OVERDUE: _supplier_overdue,
+    NotificationKind.STOCKOUT_PREDICTED: _stockout_predicted,
 }

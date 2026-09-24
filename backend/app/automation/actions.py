@@ -362,8 +362,12 @@ async def perform(
             raise ValidationError("This step needs an item", details={"blocker": "NO_PRODUCT"})
         # A draft for a person to review and order. Never ordered here, and
         # never sent to a supplier: ecomsbd places no external orders.
+        quantity = int(config["quantity"])
+        suggested = subject.get("suggested_quantity")
+        if config.get("use_suggested") and type(suggested) is int and suggested > 0:
+            quantity = min(suggested, 100_000)
         po, reason = await ProcurementService(db, None).draft_for_item(
-            product_id, _id(subject.get("variant_id")), int(config["quantity"])
+            product_id, _id(subject.get("variant_id")), quantity
         )
         if po is None:
             return "SKIPPED", None, reason

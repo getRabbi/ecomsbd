@@ -212,7 +212,15 @@ class ProcurementService:
             row = Supplier(created_by=self.actor_id, is_active=True)
             self.db.add(row)
         row.name, row.name_key = name, key
-        for field in ("contact_name", "phone", "email", "address", "notes", "payment_terms_days"):
+        for field in (
+            "contact_name",
+            "phone",
+            "email",
+            "address",
+            "notes",
+            "payment_terms_days",
+            "lead_time_days",
+        ):
             if field in values:
                 setattr(row, field, values[field])
         if "is_active" in values and values["is_active"] is not None:
@@ -996,7 +1004,12 @@ class ProcurementService:
     # ------------------------------------------------------- automation ---
 
     async def draft_for_item(
-        self, product_id: uuid.UUID, variant_id: uuid.UUID | None, quantity: int
+        self,
+        product_id: uuid.UUID,
+        variant_id: uuid.UUID | None,
+        quantity: int,
+        *,
+        source: str = "AUTOMATION",
     ) -> tuple[PurchaseOrder | None, str | None]:
         """A DRAFT purchase order to the item's preferred supplier, or why not.
 
@@ -1037,7 +1050,11 @@ class ProcurementService:
         po = await self.create_po(
             supplier_id=link.supplier_id,
             lines=[LineInput(product_id, variant_id, quantity, cost or 0)],
-            notes="Prepared by an automation workflow. Review before ordering.",
-            source="AUTOMATION",
+            notes=(
+                "Prepared by an automation workflow. Review before ordering."
+                if source == "AUTOMATION"
+                else "Prepared from a reorder suggestion. Review before ordering."
+            ),
+            source=source,
         )
         return po, None

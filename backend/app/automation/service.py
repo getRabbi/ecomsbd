@@ -108,6 +108,7 @@ TOPICS = frozenset(
         OutboxTopic.PURCHASE_ORDER_ORDERED,
         OutboxTopic.PURCHASE_ORDER_RECEIVED,
         OutboxTopic.STOCK_TRANSFER_COMPLETED,
+        OutboxTopic.STOCKOUT_PREDICTED,
     }
 )
 
