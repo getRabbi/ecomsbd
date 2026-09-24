@@ -18,7 +18,21 @@ Short state note for the next session. Git is the source of truth; check it firs
     green on head `36675e5`; see `docs/V3_6_FORECASTING.md`.
   - **V3.7 External Risk + Network Intelligence** (`a37001`): merge commit `99e606f` (PR #11),
     CI green (PostgreSQL included) on head `7309d9e`; see `docs/V3_7_RISK_NETWORK.md`.
-  - **V3.8 Developer Platform** (`a38001`): PR #12; see `docs/PUBLIC_API.md` and `sdk/`.
+  - **V3.8 Developer Platform** (`a38001`): merge commit `5e0bb38` (PR #12), CI green
+    (PostgreSQL and the SDK step included) on head `990423a`; see `docs/PUBLIC_API.md` and `sdk/`.
+  - `99e606f` (V3.7 merge) failed its main CI at the type check only: SQLAlchemy 2.1.0 was
+    released between the PR run and the merge. `990423a` caps it at `<2.1` (CI and the image
+    install unpinned).
+- **Final V3 RC** (on `5e0bb38`, whose tree is identical to the one tested locally):
+  - backend SQLite 1701 passed / 5 skipped, plus ruff, format and mypy clean;
+  - Flutter 407 passed, `flutter analyze` clean;
+  - web typecheck, lint, production build and unit tests;
+  - gitleaks over 152 commits: clean; one Alembic head `a38001`;
+  - main CI on `5e0bb38`: PostgreSQL suite, migration from empty, dependency audit, backup
+    restore drill, backend image, secret scan and Flutter debug APK.
+- No V3 tag, Android version bump, AAB or release has been made; that is the owner's call.
+- Production was **not** migrated in this pass: prod is still `a32001` and serving `7ec1071`. Newer
+  images stay unready until `alembic -x database-only=true upgrade head` reaches `a38001`.
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
