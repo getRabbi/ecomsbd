@@ -59,7 +59,12 @@ export function CampaignBuilder({
   const [channel, setChannel] = useState<Channel>(initial?.channel ?? 'EMAIL');
   const [template, setTemplate] = useState(initial?.template_key ?? '');
   const [language, setLanguage] = useState<'bn' | 'en'>(initial?.locale ?? (locale === 'en' ? 'en' : 'bn'));
-  const [audience, setAudience] = useState<Audience>(initial?.audience ?? {});
+  // `money_allowed` is derived by the server from the segment; never sent back.
+  const [audience, setAudience] = useState<Audience>(() => {
+    const { money_allowed: _derived, ...rest } = (initial?.audience ?? {}) as Audience & { money_allowed?: boolean };
+    void _derived;
+    return rest;
+  });
   const [rate, setRate] = useState(initial?.rate_per_minute ?? 30);
   const [cap, setCap] = useState(initial?.frequency_cap_hours ?? 72);
   const [attribution, setAttribution] = useState(initial?.attribution_days ?? 7);
@@ -75,6 +80,7 @@ export function CampaignBuilder({
   const audienceBody = () => {
     const body: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(audience)) {
+      if (key === 'money_allowed') continue;
       if (value !== null && value !== undefined && value !== '') body[key] = value;
     }
     return body;

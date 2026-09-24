@@ -14,6 +14,7 @@ import '../../l10n/app_strings.dart';
 import '../../l10n/language_picker.dart';
 import '../billing/plans_screen.dart';
 import '../shared/responsive.dart';
+import '../messaging/campaigns_screen.dart';
 import '../messaging/messaging_screen.dart';
 import 'account_security_screen.dart';
 import 'courier_accounts_screen.dart';
@@ -149,6 +150,15 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const MessagingScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.campaign_outlined),
+                  title: Text(context.tr('campaigns.title')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CampaignsScreen(),
                     ),
                   ),
                 ),

@@ -65,7 +65,7 @@ async def run_campaigns(ctx: dict[str, Any] | None = None) -> dict[str, int]:
                     )
                 )
                 .order_by(Campaign.updated_at)
-                .limit(100)
+                .limit(500)
             )
         ).all()
     for tenant_id, campaign_id in rows:

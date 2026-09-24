@@ -291,16 +291,16 @@ async def enrol(
 ) -> int:
     if not pairs:
         return 0
-    existing = set(
-        (
-            await db.execute(
-                sa.select(CampaignRecipient.customer_id, CampaignRecipient.cycle_key).where(
-                    CampaignRecipient.campaign_id == campaign.id,
-                    CampaignRecipient.customer_id.in_([customer for customer, _ in pairs]),
-                )
+    existing: set[tuple[uuid.UUID, str]] = set()
+    customers = [customer for customer, _ in pairs]
+    for start in range(0, len(customers), 500):
+        rows = await db.execute(
+            sa.select(CampaignRecipient.customer_id, CampaignRecipient.cycle_key).where(
+                CampaignRecipient.campaign_id == campaign.id,
+                CampaignRecipient.customer_id.in_(customers[start : start + 500]),
             )
-        ).all()
-    )
+        )
+        existing.update((customer, cycle) for customer, cycle in rows.all())
     found = await contacts(db, campaign.channel, [customer for customer, _ in pairs])
     added = 0
     for customer_id, cycle in pairs:
