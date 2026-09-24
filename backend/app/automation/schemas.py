@@ -52,7 +52,7 @@ class RuleInput(Input):
 class TemplateAction(Input):
     template_key: str = Field(min_length=1, max_length=80)
     locale: Literal["en", "bn"] = "bn"
-    channel: Literal["EMAIL"] = "EMAIL"
+    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
 
 
 class FollowupAction(Input):

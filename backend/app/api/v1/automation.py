@@ -60,7 +60,7 @@ async def catalog(db: DbSession, _: Reader) -> dict[str, Any]:
         "statuses": [str(value) for value in OrderStatus],
         "channels": [str(value) for value in OrderChannel],
         "tags": [{"id": row.id, "name": row.name} for row in tags],
-        "templates": await templates(db),
+        "templates": await templates(db, purpose="TRANSACTIONAL"),
     }
 
 

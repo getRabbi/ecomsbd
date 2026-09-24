@@ -33,14 +33,14 @@ from app.core.errors import (
 )
 from app.db.session import session_scope
 from app.db.tenancy import allow_cross_tenant
-from app.integrations import meta, shopify, woocommerce
+from app.integrations import meta, shopify, whatsapp, woocommerce
 from app.integrations.http import ProviderError
 from app.integrations.models import IntegrationConnection, IntegrationEvent, IntegrationSyncRun
 from app.integrations.normalize import Reject, Skip
 from app.order_sources.models import ExternalOrder, OrderSource
 from app.order_sources.service import ingest
 
-PROVIDERS = ("SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "MESSENGER")
+PROVIDERS = ("SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "MESSENGER", "WHATSAPP")
 ORDER_PROVIDERS = frozenset({"SHOPIFY", "WOOCOMMERCE"})
 CONNECTORS: dict[str, Any] = {"SHOPIFY": shopify, "WOOCOMMERCE": woocommerce}
 MAX_CONNECTIONS = 20
@@ -80,7 +80,7 @@ def availability(provider: str) -> dict[str, Any]:
     blocker = None
     if provider == "SHOPIFY" and not shopify.configured():
         blocker = "SHOPIFY_APP_SETUP_REQUIRED"
-    if provider == "MESSENGER" and not meta.configured():
+    if provider in {"MESSENGER", "WHATSAPP"} and not meta.configured():
         blocker = "META_APP_SETUP_REQUIRED"
     result: dict[str, Any] = {
         "provider": provider,
@@ -884,6 +884,12 @@ async def health_check(db: AsyncSession, conn: IntegrationConnection) -> dict[st
                 raise ProviderError("AUTH_EXPIRED")
             await meta.check(conn.account_id or "", credentials["page_token"])
             checks.append({"key": "AUTH", "ok": True})
+        elif conn.provider == "WHATSAPP":
+            credentials = unseal(conn)
+            if not credentials.get("access_token"):
+                raise ProviderError("AUTH_EXPIRED")
+            await whatsapp.phone_number(conn.account_id or "", credentials["access_token"])
+            checks.append({"key": "AUTH", "ok": True})
         if conn.state == "AUTH_EXPIRED":
             await went_live(db, conn)
         mark_ok(conn)
@@ -997,3 +1003,67 @@ def run_view(run: IntegrationSyncRun) -> dict[str, Any]:
             "created_at",
         )
     }
+
+
+# ------------------------------------------------------------- WhatsApp ---
+
+
+async def connect_whatsapp(
+    db: AsyncSession,
+    conn: IntegrationConnection,
+    *,
+    phone_number_id: str,
+    waba_id: str,
+    access_token: str,
+) -> None:
+    """Link a WhatsApp Business number the shop owns, proving the token first."""
+    info = await whatsapp.phone_number(phone_number_id, access_token)
+    await ensure_unlinked(db, conn, phone_number_id)
+    label = " · ".join(
+        part for part in (info.get("verified_name"), info.get("display_phone_number")) if part
+    )
+    await link(db, conn, phone_number_id, label or None)
+    seal(
+        conn,
+        {"access_token": access_token, "phone_number_id": phone_number_id, "waba_id": waba_id},
+    )
+    conn.config = {**conn.config, "waba_id": waba_id}
+    try:
+        await whatsapp.subscribe(waba_id, access_token)
+        conn.webhook_state = "ACTIVE"
+    except ProviderError as exc:
+        # Sending works without it; delivery receipts and STOP replies do not.
+        conn.webhook_state = "FAILING"
+        conn.last_error_code = exc.code
+    mark_ok(conn)
+    await went_live(db, conn)
+
+
+async def sync_whatsapp_templates(db: AsyncSession, conn: IntegrationConnection) -> int:
+    """Copy Meta's review status onto the shop's WhatsApp templates. Returns rows updated."""
+    from app.messaging.models import MessageTemplate
+
+    credentials = unseal(conn)
+    waba = credentials.get("waba_id") or conn.config.get("waba_id") or ""
+    remote = await whatsapp.templates(waba, credentials.get("access_token", ""))
+    by_key = {(row["name"], row["language"]): row for row in remote}
+    rows = (
+        await db.scalars(
+            sa.select(MessageTemplate).where(
+                MessageTemplate.channel == "WHATSAPP", MessageTemplate.archived.is_(False)
+            )
+        )
+    ).all()
+    now = utc_now()
+    for row in rows:
+        languages = [code for code in (row.provider_language_bn, row.provider_language_en) if code]
+        found = [by_key.get((row.provider_name or "", code)) for code in languages]
+        statuses = [item["status"] if item else "NOT_FOUND" for item in found]
+        row.provider_status = next(
+            (status for status in statuses if status != "APPROVED"), "APPROVED"
+        )
+        row.provider_category = next((item["category"] for item in found if item), None)
+        row.provider_checked_at = now
+    mark_ok(conn)
+    await db.flush()
+    return len(rows)

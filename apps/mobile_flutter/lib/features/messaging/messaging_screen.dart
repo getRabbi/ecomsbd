@@ -85,6 +85,11 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
     await _history();
   });
 
+  /// Order updates only: offers go through campaigns, never one by one.
+  bool _orderTemplate(dynamic t) =>
+      (t['purpose'] ?? 'TRANSACTIONAL') == 'TRANSACTIONAL' &&
+      (t['channel'] ?? 'EMAIL') == (_contact?['channel'] ?? 'EMAIL');
+
   Future<void> _history() async {
     if (_contact == null) return;
     final api = ref.read(apiClientProvider);
@@ -129,15 +134,23 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
             SwitchListTile(
               title: Text('${c['kind']}'),
               subtitle: Text(
-                c['available'] == true
-                    ? tx('Transactional messages', 'অর্ডারের মেসেজ')
-                    : tx(
+                c['available'] != true
+                    ? tx(
                         'Official provider required',
                         'অফিশিয়াল প্রোভাইডার প্রয়োজন',
-                      ),
+                      )
+                    : c['shop_blocker'] != null
+                    ? tx(
+                        'Finish setup in Integrations',
+                        'ইন্টিগ্রেশন থেকে সেটআপ শেষ করুন',
+                      )
+                    : tx('Order updates and offers', 'অর্ডারের আপডেট ও অফার'),
               ),
               value: c['enabled'] == true,
-              onChanged: _busy || c['available'] != true
+              onChanged:
+                  _busy ||
+                      ((c['available'] != true || c['shop_blocker'] != null) &&
+                          c['enabled'] != true)
                   ? null
                   : (value) => _run(() async {
                       await api.post(
@@ -226,9 +239,10 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
             ListTile(
               title: Text('${c['recipient_masked']}'),
               subtitle: Text(
-                c['consent'] == true
-                    ? tx('Consented', 'সম্মতি আছে')
-                    : tx('Opted out', 'সম্মতি নেই'),
+                '${c['channel'] ?? 'EMAIL'} · '
+                '${c['consent'] == true ? tx('Consented', 'সম্মতি আছে') : tx('Opted out', 'সম্মতি নেই')}'
+                ' · '
+                '${c['marketing_consent'] == true ? tx('Offers allowed', 'অফার চালু') : tx('No offers', 'অফার নয়')}',
               ),
               selected: _contact?['id'] == c['id'],
               onTap: _busy
@@ -283,6 +297,33 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
                     : tx('Record consent', 'সম্মতি সংরক্ষণ'),
               ),
             ),
+            OutlinedButton(
+              onPressed: _busy
+                  ? null
+                  : () => _run(() async {
+                      final saved = await api.patch(
+                        '/messaging/conversations/${_contact!['id']}/marketing-consent',
+                        body: {
+                          'consent': _contact!['marketing_consent'] != true,
+                          'evidence': _evidence.text,
+                        },
+                      );
+                      final contacts = await api.get(
+                        '/messaging/conversations',
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _contact = saved;
+                          _contacts = contacts['items'] as List;
+                        });
+                      }
+                    }),
+              child: Text(
+                _contact!['marketing_consent'] == true
+                    ? tx('Stop offers', 'অফার বন্ধ করুন')
+                    : tx('Record consent to offers', 'অফারের সম্মতি সংরক্ষণ'),
+              ),
+            ),
             DropdownButtonFormField<String>(
               key: ValueKey('order-$_order-${_contact!['id']}'),
               initialValue: _order,
@@ -305,7 +346,7 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
                 labelText: tx('Template', 'টেমপ্লেট'),
               ),
               items: [
-                for (final t in _templates)
+                for (final t in _templates.where(_orderTemplate))
                   DropdownMenuItem(
                     value: t['key'] as String,
                     child: Text('${t['key']}'),

@@ -278,13 +278,43 @@ async def shopify_compliance(db: AsyncSession, headers: dict[str, str], body: by
     return Ack(200)
 
 
+async def whatsapp_event(db: AsyncSession, payload: dict[str, Any]) -> None:
+    """Delivery receipts and opt-out keywords for connected WhatsApp numbers."""
+    from app.messaging.receipts import whatsapp_value
+
+    for entry in (payload.get("entry") or [])[:20]:
+        if not isinstance(entry, dict):
+            continue
+        for change in (entry.get("changes") or [])[:20]:
+            if not isinstance(change, dict) or change.get("field") != "messages":
+                continue
+            value = change.get("value")
+            if not isinstance(value, dict):
+                continue
+            number = str((value.get("metadata") or {}).get("phone_number_id") or "")
+            if not number:
+                continue
+            for conn in await service.by_account(db, "WHATSAPP", number):
+                if conn.state != "CONNECTED":
+                    continue
+                await whatsapp_value(db, conn.tenant_id, value)
+                async with _as_shop(db, conn):
+                    service.mark_ok(conn, webhook=True)
+
+
 async def meta_event(db: AsyncSession, headers: dict[str, str], body: bytes) -> Ack:
-    """Page events refresh connection health only; message bodies are dropped."""
+    """Page events refresh connection health only; message bodies are dropped.
+
+    WhatsApp Business Account events carry delivery receipts and opt-out
+    replies for V3.3 messaging; their message bodies are dropped too."""
     if not meta.valid_webhook(body, headers.get("x-hub-signature-256")):
         return Ack(401, {"received": False})
     try:
         payload = json.loads(body)
     except ValueError:
+        return Ack(200)
+    if isinstance(payload, dict) and payload.get("object") == "whatsapp_business_account":
+        await whatsapp_event(db, payload)
         return Ack(200)
     if not isinstance(payload, dict) or payload.get("object") != "page":
         return Ack(200)

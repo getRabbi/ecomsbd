@@ -38,6 +38,7 @@ from app.integrations.jobs import (
     schedule_integrations,
     sync_inventories,
 )
+from app.messaging.campaign_jobs import run_campaigns
 from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
 from app.public_api.webhooks import dispatch_webhooks
@@ -94,6 +95,7 @@ class WorkerSettings:
 
     functions: ClassVar[list[Any]] = [
         dispatch_messages,
+        run_campaigns,
         dispatch_webhooks,
         build_network_benchmarks,
         dispatch_automation,
@@ -122,6 +124,9 @@ class WorkerSettings:
 
     cron_jobs: ClassVar[list[Any]] = [
         cron(dispatch_messages, second={5, 35}),
+        # Campaigns: start scheduled sends, enrol flows and queue one minute's
+        # worth of recipients; the dispatcher above does the sending (V3.3).
+        cron(run_campaigns, second={20}),
         cron(dispatch_webhooks, second={10, 40}),
         cron(build_network_benchmarks, day=8, hour=3, minute=45, run_at_startup=True),
         cron(dispatch_automation, second={12, 42}),

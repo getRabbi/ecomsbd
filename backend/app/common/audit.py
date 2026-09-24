@@ -185,6 +185,14 @@ class AuditAction(StrEnum):
     INTEGRATION_SYNC_STARTED = "integration.sync_started"
     INTEGRATION_EVENT_RETRIED = "integration.event_retried"
 
+    # Messaging & campaigns (V3.3)
+    CAMPAIGN_CREATED = "campaign.created"
+    CAMPAIGN_UPDATED = "campaign.updated"
+    CAMPAIGN_LAUNCHED = "campaign.launched"
+    CAMPAIGN_PAUSED = "campaign.paused"
+    CAMPAIGN_RESUMED = "campaign.resumed"
+    CAMPAIGN_CANCELLED = "campaign.cancelled"
+
 
 class AuditLog(Base):
     """One audited action. Append-only."""

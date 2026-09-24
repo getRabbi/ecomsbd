@@ -56,7 +56,17 @@ async def validate_rule(db: AsyncSession, body: RuleInput) -> dict:
         if member is None or not has_permission(member.role, Permission.ORDER_WRITE):
             raise ValidationError("Choose an active operational member")
     if body.action == "SEND_TEMPLATE":
-        if config["template_key"] not in {t["key"] for t in await messaging.templates(db)}:
+        # Order events only ever send order updates: marketing has its own
+        # consent and goes through campaigns, never through a rule.
+        found = next(
+            (
+                t
+                for t in await messaging.templates(db, purpose="TRANSACTIONAL")
+                if t["key"] == config["template_key"]
+            ),
+            None,
+        )
+        if found is None or found["channel"] != config["channel"]:
             raise ValidationError("Choose a configured transactional template")
         if body.enabled:
             channel = await db.scalar(sa.select(Channel).where(Channel.kind == config["channel"]))

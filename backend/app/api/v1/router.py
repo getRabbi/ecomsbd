@@ -18,6 +18,7 @@ from app.api.v1 import (
     auth,
     automation,
     billing,
+    campaigns,
     consignments,
     courier_webhooks,
     couriers,
@@ -31,6 +32,7 @@ from app.api.v1 import (
     integrations,
     integrations_sync,
     messaging,
+    messaging_public,
     money,
     network,
     order_sources,
@@ -48,6 +50,10 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(messaging.router)
+# Unauthenticated: one-click unsubscribe links and signed provider receipts.
+api_router.include_router(messaging_public.public)
+api_router.include_router(messaging_public.webhooks)
+api_router.include_router(campaigns.router)
 api_router.include_router(order_sources.router)
 api_router.include_router(developers.router)
 # Before integrations.router: /integrations/conflicts must not read as an id.

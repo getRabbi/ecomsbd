@@ -205,7 +205,10 @@ function IntegrationDetail({ id }: { id: string }) {
                 emptyTitle={t('int.issues.empty')}
               />
             </Card>
-            {manage && conn.provider !== 'MESSENGER' ? (
+            {manage && conn.provider === 'WHATSAPP' && conn.state === 'CONNECTED' ? (
+              <WhatsAppTemplatesCard connectionId={conn.id} busy={busy} act={act} />
+            ) : null}
+            {manage && conn.provider !== 'MESSENGER' && conn.provider !== 'WHATSAPP' ? (
               <RecipesCard recipes={recipes.data?.items ?? []} busy={busy} act={act} />
             ) : null}
           </>
@@ -259,7 +262,7 @@ function Stepper({ detail, recipes }: { detail: Detail; recipes: Recipe[] }) {
       key: 'int.step.configure',
       done: website
         ? !!custom?.webhook_url
-        : c.provider === 'MESSENGER'
+        : c.provider === 'MESSENGER' || c.provider === 'WHATSAPP'
           ? c.state === 'CONNECTED'
           : c.webhook_state === 'ACTIVE' || c.webhook_state === 'NOT_REGISTERED',
     },
@@ -271,7 +274,7 @@ function Stepper({ detail, recipes }: { detail: Detail; recipes: Recipe[] }) {
       done: detail.runs.some((r) => r.kind === 'INITIAL' && r.status === 'COMPLETED'),
     });
   }
-  if (c.provider !== 'MESSENGER') {
+  if (c.provider !== 'MESSENGER' && c.provider !== 'WHATSAPP') {
     steps.push({ key: 'int.step.automate', done: recipes.some((r) => r.installed) });
   }
   steps.push({ key: 'int.step.live', done: c.state === 'CONNECTED' });
@@ -326,6 +329,7 @@ function HealthCard({ detail, test }: { detail: Detail; test: TestResult | null 
         </p>
       ) : null}
       {c.provider === 'MESSENGER' ? <p className="card__hint">{t('int.messengerNote')}</p> : null}
+      {c.provider === 'WHATSAPP' ? <p className="card__hint">{t('int.wa.note')}</p> : null}
       {c.state === 'DISCONNECTED' ? <p className="card__hint">{t('int.disconnectedHint')}</p> : null}
       {test ? (
         <div role="status" style={{ marginTop: 12 }}>
@@ -403,6 +407,10 @@ function ConnectCard({ detail, busy, act }: { detail: Detail; busy: boolean; act
     );
   }
 
+  if (c.provider === 'WHATSAPP') {
+    return <WhatsAppConnect connectionId={c.id} busy={busy} act={act} />;
+  }
+
   const shopify = c.provider === 'SHOPIFY';
   return (
     <Card title={t('int.step.connect')} hint={t(shopify ? 'int.about.SHOPIFY' : 'int.about.WOOCOMMERCE')}>
@@ -476,6 +484,75 @@ function ConnectCard({ detail, busy, act }: { detail: Detail; busy: boolean; act
         </details>
       ) : null}
     </Card>
+  );
+}
+
+function WhatsAppConnect({ connectionId, busy, act }: { connectionId: string; busy: boolean; act: Act }) {
+  const { t } = useIntegrationLabels();
+  const [form, setForm] = useState({ phone_number_id: '', waba_id: '', access_token: '' });
+  const field = (name: keyof typeof form, label: StringKey, secret = false) => (
+    <label className="field">
+      <span className="field__label">{t(label)}</span>
+      <input
+        className="input"
+        required
+        autoComplete="off"
+        type={secret ? 'password' : 'text'}
+        inputMode={secret ? undefined : 'numeric'}
+        pattern={secret ? undefined : '[0-9]{5,30}'}
+        minLength={secret ? 20 : undefined}
+        value={form[name]}
+        onChange={(event) => setForm({ ...form, [name]: event.target.value.trim() })}
+      />
+    </label>
+  );
+  return (
+    <Card title={t('int.step.connect')} hint={t('int.about.WHATSAPP')}>
+      <form
+        className="wizard__body"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void act(async () => {
+            await api.post(`/integrations/${connectionId}/whatsapp`, form);
+            setForm({ phone_number_id: '', waba_id: '', access_token: '' });
+          });
+        }}
+      >
+        <p className="card__hint">{t('int.wa.hint')}</p>
+        {field('phone_number_id', 'int.wa.phoneId')}
+        {field('waba_id', 'int.wa.wabaId')}
+        {field('access_token', 'int.wa.token', true)}
+        <button type="submit" className="btn btn--primary" disabled={busy}>
+          {t('int.wa.link')}
+        </button>
+      </form>
+    </Card>
+  );
+}
+
+function WhatsAppTemplatesCard({ connectionId, busy, act }: { connectionId: string; busy: boolean; act: Act }) {
+  const { t } = useIntegrationLabels();
+  const [count, setCount] = useState<number | null>(null);
+  return (
+    <Card
+      title={t('int.wa.syncTemplates')}
+      hint={count === null ? t('int.wa.note') : t('int.wa.synced', { count })}
+      actions={
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            void act(async () => {
+              const result = await api.post<{ updated: number }>(`/integrations/${connectionId}/whatsapp/templates`);
+              setCount(result.updated);
+            })
+          }
+        >
+          {t('int.wa.syncTemplates')}
+        </button>
+      }
+    />
   );
 }
 

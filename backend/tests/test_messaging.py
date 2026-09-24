@@ -158,14 +158,23 @@ async def test_expired_provider_window_never_resends(client, unique_phone, monke
     ).status_code == 409
 
 
-@pytest.mark.parametrize("channel", ["WHATSAPP", "MESSENGER", "SMS"])
-async def test_unavailable_official_channels_are_disabled(client, unique_phone, channel):
+@pytest.mark.parametrize(
+    ("channel", "blocker"),
+    [
+        # WhatsApp is the shop's own WABA on Meta's Cloud API: needs the Meta app.
+        ("WHATSAPP", "META_APP_SETUP_REQUIRED"),
+        # Messenger marketing needs Meta's per-person marketing opt-in.
+        ("MESSENGER", "MESSENGER_MARKETING_OPT_IN_REQUIRED"),
+        ("SMS", "SMS_OFFICIAL_PROVIDER_REQUIRED"),
+    ],
+)
+async def test_unavailable_official_channels_are_disabled(client, unique_phone, channel, blocker):
     shop = await signed_in_shop(client, unique_phone)
     response = await client.post(
         f"/v1/messaging/channels/{channel}", headers=auth_header(shop), json={"enabled": True}
     )
     assert response.status_code == 409
-    assert response.json()["details"]["blocker"] == f"{channel}_OFFICIAL_PROVIDER_REQUIRED"
+    assert response.json()["details"]["blocker"] == blocker
 
 
 async def test_template_validation_and_order_link(client, unique_phone, monkeypatch):
