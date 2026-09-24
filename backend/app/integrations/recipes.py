@@ -8,6 +8,7 @@ offered (a "parcel returned" trigger does not exist in V2).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import sqlalchemy as sa
@@ -97,9 +98,14 @@ async def _blocker(db: AsyncSession, action: str) -> str | None:
     return None
 
 
+def _canonical(conditions: Any) -> str:
+    return json.dumps(conditions, sort_keys=True, separators=(",", ":"))
+
+
 async def catalog(db: AsyncSession) -> list[dict[str, Any]]:
     rules = (await db.scalars(sa.select(AutomationRule))).all()
-    shapes = {(r.trigger, r.action, repr(r.conditions)) for r in rules}
+    # Canonical JSON: PostgreSQL's JSONB hands keys back in its own order.
+    shapes = {(r.trigger, r.action, _canonical(r.conditions)) for r in rules}
     items = []
     for key, recipe in RECIPES.items():
         blocker = await _blocker(db, recipe["action"])
@@ -109,7 +115,7 @@ async def catalog(db: AsyncSession) -> list[dict[str, Any]]:
                 "name": recipe["name"],
                 "trigger": recipe["trigger"],
                 "action": recipe["action"],
-                "installed": (recipe["trigger"], recipe["action"], repr(recipe["conditions"]))
+                "installed": (recipe["trigger"], recipe["action"], _canonical(recipe["conditions"]))
                 in shapes,
                 "available": blocker is None,
                 "blocker": blocker,
