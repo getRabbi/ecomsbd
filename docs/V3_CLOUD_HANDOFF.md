@@ -8,7 +8,7 @@ Short state note for the next session. Git is the source of truth; check it firs
   - **V3.1 Integrations Hub**: merge commit `99dd98e` (PR #1).
   - **V3.2 advanced two-way sync**: merge commit `5eef579` (PR #2).
   - **Security: `alembic_version` client-role revoke** (`a32002`): merge commit `049ee3e` (PR #3).
-  - **V3.3 Messaging & Campaigns** (`a33001`): see `docs/V3_3_MESSAGING_CAMPAIGNS.md`.
+  - **V3.3 Messaging & Campaigns** (`a33001`): merge commit `8403c7e` (PR #4); see `docs/V3_3_MESSAGING_CAMPAIGNS.md`.
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
