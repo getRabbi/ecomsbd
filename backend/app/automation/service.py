@@ -384,6 +384,10 @@ async def resume_waiters(db: AsyncSession, tenant_id: uuid.UUID, keys: list[str]
     now = utc_now()
     for row in rows:
         row.wait_satisfied_at, row.wait_key, row.next_attempt_at = now, None, now
+    if rows:
+        # Written now, inside the producer's tenant scope: some producers only
+        # commit after the response, when no tenant is in scope any more.
+        await db.flush()
     return len(rows)
 
 
@@ -415,6 +419,7 @@ async def schedule_event(db: AsyncSession, event: OutboxEvent) -> None:
             if match.trigger != rule.trigger:
                 continue
             await _start(db, event, rule, match, cause)
+    await db.flush()
 
 
 async def _start(db: AsyncSession, event: OutboxEvent, rule: AutomationRule, match, cause) -> None:  # type: ignore[no-untyped-def]

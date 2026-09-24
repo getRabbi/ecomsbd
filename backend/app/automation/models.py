@@ -81,7 +81,9 @@ class AutomationExecution(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     last_error: Mapped[str | None] = mapped_column(sa.String(80))
     result_id: Mapped[str | None] = mapped_column(sa.String(80))
     version_id: Mapped[uuid.UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("automation_workflow_versions.id"), nullable=True
+        GUID,
+        sa.ForeignKey("automation_workflow_versions.id", name="fk_automation_executions_version"),
+        nullable=True,
     )
     trigger: Mapped[str | None] = mapped_column(sa.String(80), nullable=True)
     #: The step to run next (or the step that failed / is waiting).

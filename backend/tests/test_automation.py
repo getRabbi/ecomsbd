@@ -39,9 +39,7 @@ async def executions(client, headers):
     return (await client.get("/v1/automation/executions", headers=headers)).json()["items"]
 
 
-async def test_status_trigger_uses_event_transition_and_run_keeps_its_version(
-    client, unique_phone
-):
+async def test_status_trigger_uses_event_transition_and_run_keeps_its_version(client, unique_phone):
     shop = await signed_in_shop(client, unique_phone)
     headers = auth_header(shop)
     configured = await rule(
@@ -243,9 +241,7 @@ async def test_opt_out_prevents_automation_message(client, unique_phone, monkeyp
     result = (await executions(client, headers))[0]
     # The message is not sent; that is a compliance skip, not a failed run.
     assert result["status"] == "SUCCEEDED"
-    detail = (
-        await client.get(f"/v1/automation/executions/{result['id']}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/v1/automation/executions/{result['id']}", headers=headers)).json()
     assert [(s["status"], s["outcome"]) for s in detail["steps"]] == [
         ("SKIPPED", "CONSENT_REQUIRED")
     ]

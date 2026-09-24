@@ -55,7 +55,7 @@ def upgrade():
                 GUID,
                 sa.ForeignKey(
                     "automation_workflow_versions.id",
-                    name="fk_automation_executions_version_id_automation_workflow_versions",
+                    name="fk_automation_executions_version",
                 ),
                 nullable=True,
             )
@@ -194,9 +194,7 @@ def downgrade():
     op.drop_index("ix_automation_rule_subject", table_name="automation_executions")
     op.drop_index("ix_automation_wait_key", table_name="automation_executions")
     with op.batch_alter_table("automation_executions") as batch:
-        batch.drop_constraint(
-            "fk_automation_executions_version_id_automation_workflow_versions", type_="foreignkey"
-        )
+        batch.drop_constraint("fk_automation_executions_version", type_="foreignkey")
         for column in (
             "finished_at",
             "started_at",
