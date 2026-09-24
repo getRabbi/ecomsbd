@@ -155,6 +155,11 @@ jobs:
   secrets-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    # gitleaks-action lists a pull request's commits through the API; the
+    # default read-only token is refused that call on pull_request runs.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
