@@ -17,6 +17,7 @@ import '../money/cases_screen.dart';
 import '../money/receivables_screen.dart';
 import '../customers/customers_screen.dart';
 import '../orders/order_detail_screen.dart';
+import '../procurement/procurement_screen.dart';
 import '../products/products_screen.dart';
 import '../settings/courier_accounts_screen.dart';
 import '../shared/data_state.dart';
@@ -61,6 +62,10 @@ Widget? notificationDestination(AppNotification notification) {
     'courier_account' || 'courier_accounts' => const CourierAccountsScreen(),
     'product' || 'products' => const ProductsScreen(),
     'order' when id != null => OrderDetailScreen(orderId: id),
+    'purchase_order' when id != null => PurchaseOrderScreen(orderId: id),
+    'purchase_order' ||
+    'purchase_orders' ||
+    'payables' => const ProcurementScreen(),
     _ => null,
   };
 }

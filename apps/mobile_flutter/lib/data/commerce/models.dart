@@ -174,6 +174,8 @@ class StockMovement {
     'IMPORT_ADJUSTMENT' => _t('mv.fromImport'),
     'RESTOCK' => _t('mv.restock'),
     'EXTERNAL_SYNC' => _t('mv.externalSync'),
+    'TRANSFER_OUT' => _t('mv.transferOut'),
+    'TRANSFER_IN' => _t('mv.transferIn'),
     _ => reason,
   };
 }
