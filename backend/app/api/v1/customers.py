@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
+from app.analytics import network as network_rules
 from app.analytics.rto import CustomerHistory, RtoService
 from app.api.deps import (
     DbSession,
@@ -41,6 +42,7 @@ from app.customers import risk as risk_rules
 from app.customers.models import Customer, CustomerFlag
 from app.customers.service import CustomerService
 from app.entitlements.catalog import Entitlement
+from app.risk_providers.service import ExternalRiskService
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -278,6 +280,62 @@ async def risk_check(
             [ObservationResponse.of(obs) for obs in history.observations] if history else []
         ),
     )
+
+
+@router.get(
+    "/{customer_id}/risk-profile",
+    summary="Own-shop history, external provider facts and network context, kept apart",
+    dependencies=[Depends(require_permission(Permission.CUSTOMER_RISK_VIEW))],
+)
+async def risk_profile(
+    customer_id: uuid.UUID,
+    principal: TenantPrincipal,
+    db: DbSession,
+    customers: CustomerServiceDep,
+    settings: SettingsDep,
+) -> dict[str, Any]:
+    """Three separate sections, never blended into one score (V3.7).
+
+    ``own_shop`` is this shop's own parcels with this customer. ``external`` is
+    what a connected provider said, attributed and timestamped; it is read from
+    storage and never calls a provider. ``network`` is the anonymous cohort RTO
+    rate for context: it says nothing about this customer.
+    """
+    customer = await customers.get(customer_id)
+    history = await RtoService(db).customer_history(customer.id)
+    assessment = risk_rules.assess(history)
+    external = await ExternalRiskService(
+        db, principal.require_tenant(), get_vault(settings)
+    ).customer_view(customer.id)
+    release = await network_rules.latest_cells(db, "ALL")
+    return {
+        "customer_id": str(customer.id),
+        "own_shop": {
+            "source": "OWN_SHOP_HISTORY",
+            "state": str(assessment.state),
+            "reasons": [str(reason) for reason in assessment.reasons],
+            "order_count": assessment.order_count,
+            "delivered_count": assessment.delivered_count,
+            "returned_count": assessment.returned_count,
+            "cancelled_count": assessment.cancelled_count,
+            "terminal_count": assessment.terminal_count,
+            "success_rate_basis_points": assessment.success_rate_basis_points,
+            "repeated_rto": assessment.returned_count >= risk_rules.REPEATED_RTO_MIN,
+            "in_transit_count": history.counts.in_transit,
+            "last_order_at": assessment.last_order_at,
+            "recent": [ParcelEventResponse.of(event) for event in history.recent],
+        },
+        "external": external,
+        "network": {
+            "source": "ANONYMOUS_NETWORK_COHORT",
+            "period": release["period"],
+            "computed_at": release["computed_at"],
+            "cells": [
+                c for c in release["cells"] if c["metric"] in {"RTO_RATE", "DELIVERY_SUCCESS"}
+            ],
+        },
+        "can_lookup": principal.can(Permission.EXTERNAL_RISK_LOOKUP),
+    }
 
 
 @router.get(

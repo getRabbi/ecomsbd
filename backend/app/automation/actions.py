@@ -210,6 +210,8 @@ async def perform(
         from app.integrations import outbound
 
         order = await _order(db, subject)
+        if (order.metadata_json or {}).get("review_hold"):
+            return "SKIPPED", None, "ORDER_ON_REVIEW_HOLD"
         parcel = await db.scalar(
             sa.select(Consignment)
             .where(
@@ -268,6 +270,19 @@ async def perform(
             return "SKIPPED", None, "RETRY_LIMIT_REACHED"
         await integrations.retry_event(db, problem)
         return "SUCCEEDED", str(problem.id), None
+
+    if action == "HOLD_FOR_REVIEW":
+        order = await _order(db, subject)
+        meta = dict(order.metadata_json or {})
+        if not meta.get("review_hold"):
+            meta["review_hold"] = {
+                "reason": config["reason"],
+                "at": utc_now().isoformat(),
+                "execution_id": str(execution.id),
+            }
+            order.metadata_json = meta
+            await db.flush()
+        return "SUCCEEDED", str(order.id), None
 
     if action == "SET_ORDER_LABEL":
         order = await _order(db, subject)

@@ -13,14 +13,17 @@ way it can stand for several public webhook topics: ``order.status_changed`` to
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.customer_segments import REPEAT_MIN_ORDERS
+from app.analytics.rto import DISPATCHED_STATUSES, CustomerHistory, RtoService
 from app.common.outbox import OutboxEvent, OutboxTopic
+from app.consignments.models import Consignment
+from app.customers.risk import REPEATED_RTO_MIN, RiskAssessment, assess
 from app.orders.models import Order
 from app.products.models import Product, ProductVariant
 from app.worker.jobs import register_handler
@@ -36,6 +39,7 @@ ALERT_TRIGGERS = {
     "SUPPLIER_PAYMENT_OVERDUE": "supplier_payment.due",
 }
 DELIVERED = frozenset({"DELIVERED", "PARTIAL_DELIVERED"})
+DISPATCHED = frozenset(DISPATCHED_STATUSES)
 RETURNED = frozenset({"RETURNED"})
 
 
@@ -153,6 +157,8 @@ async def read_event(db: AsyncSession, event: OutboxEvent) -> Reading:
                 reading.wait_keys.append(f"{key}:order.delivered")
             if new in RETURNED:
                 add("order.returned", subject, key, facts)
+            if order.customer_id is not None:
+                await _risk_signals(db, order.customer_id, payload, subject, key, add)
         else:
             add("cod.settled", subject, key)
         return reading
@@ -235,7 +241,71 @@ async def read_event(db: AsyncSession, event: OutboxEvent) -> Reading:
     elif topic == OutboxTopic.FOLLOWUP_COMPLETED:
         add("followup.completed", person, key)
         reading.wait_keys.append(f"{key}:followup.completed")
+    elif topic == OutboxTopic.EXTERNAL_RISK_LOOKUP_COMPLETED:
+        add(
+            "risk.external_lookup_completed",
+            person,
+            key,
+            {"external_found": payload.get("found") is True},
+        )
+    elif topic == OutboxTopic.EXTERNAL_RISK_UNAVAILABLE:
+        state = str(payload.get("external_data_state") or "NONE")
+        add(
+            "risk.external_provider_unavailable",
+            person,
+            key,
+            {"external_data_state": state if state in {"STALE", "NONE"} else "NONE"},
+        )
     return reading
+
+
+async def _risk_signals(
+    db: AsyncSession,
+    customer_id: uuid.UUID,
+    payload: dict[str, Any],
+    subject: dict[str, Any],
+    key: str,
+    add: Any,
+) -> None:
+    """First-party Risk Check changes caused by one parcel's status change (V3.7).
+
+    The band before and after are both computed from the shop's own parcels,
+    with this parcel counted at its old and at its new status, so the answer
+    does not depend on whether the change is flushed yet.
+    """
+    parcel_id = _id(payload.get("consignment_id"))
+    old, new = str(payload.get("old_status") or ""), str(payload.get("new_status") or "")
+    if parcel_id is None or new == old or new not in DISPATCHED:
+        return
+    history = await RtoService(db).customer_history(customer_id)
+    stored = await db.scalar(sa.select(Consignment.status).where(Consignment.id == parcel_id))
+
+    def with_status(status: str) -> RiskAssessment:
+        counts = replace(history.counts)
+        if stored is not None and str(stored) in DISPATCHED:
+            counts.add(str(stored), -1)
+        if status in DISPATCHED:
+            counts.add(status, 1)
+        return assess(
+            CustomerHistory(
+                order_count=history.order_count,
+                counts=counts,
+                cancelled_count=history.cancelled_count,
+                first_order_at=history.first_order_at,
+                last_order_at=history.last_order_at,
+            )
+        )
+
+    before, after = with_status(old), with_status(new)
+    if before.state != after.state:
+        add(
+            "risk.state_changed",
+            subject,
+            key,
+            {"risk_state": str(after.state), "previous_risk_state": str(before.state)},
+        )
+    if before.returned_count < REPEATED_RTO_MIN <= after.returned_count:
+        add("risk.repeated_rto", subject, key, {"returned_parcels": after.returned_count})
 
 
 async def _crossed_low_stock(db: AsyncSession, payload: dict[str, Any]) -> dict | None:
@@ -285,5 +355,7 @@ for _topic in (
     OutboxTopic.PURCHASE_ORDER_RECEIVED,
     OutboxTopic.STOCK_TRANSFER_COMPLETED,
     OutboxTopic.STOCKOUT_PREDICTED,
+    OutboxTopic.EXTERNAL_RISK_LOOKUP_COMPLETED,
+    OutboxTopic.EXTERNAL_RISK_UNAVAILABLE,
 ):
     register_handler(_topic)(_consumed_at_enqueue)

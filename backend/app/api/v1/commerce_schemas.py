@@ -410,6 +410,8 @@ class OrderDetailResponse(OrderResponse):
     consignment_status: str | None = None
     #: Returned units the seller has not yet restocked or written off (V2.2).
     return_pending_units: int = 0
+    #: Set by a workflow's "hold for review" step (V3.7); cleared by a person.
+    review_hold: dict[str, Any] | None = None
 
 
 class DuplicateCandidateResponse(BaseModel):

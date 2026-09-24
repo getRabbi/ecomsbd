@@ -18,14 +18,19 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.network_models import NetworkBenchmarkCell
+from app.analytics.rto import RtoService
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.customers.crm_models import CustomerTag, CustomerTagLink
 from app.customers.models import Customer
+from app.customers.risk import assess
 from app.integrations.models import IntegrationConnection, IntegrationEvent
 from app.messaging.models import Conversation
 from app.order_sources.models import ExternalOrder
 from app.orders.models import Order, OrderItem
 from app.products.models import Product, ProductVariant
+from app.risk_providers.models import ExternalRiskLookup
+from app.risk_providers.service import external_data_state
 
 __all__ = ["Facts", "evaluate"]
 
@@ -209,6 +214,39 @@ class Facts:
             if row is None:
                 return None
             return row[0] if field == "integration_provider" else row[1]
+        if field == "risk_state":
+            if self.customer_id is None:
+                return None
+            history = await RtoService(self.db).customer_history(self.customer_id)
+            return str(assess(history).state)
+        if field == "external_data_state":
+            if self.customer_id is None:
+                return None
+            return await external_data_state(self.db, self.customer_id)
+        if field == "external_found":
+            if self.customer_id is None:
+                return None
+            status = await self.db.scalar(
+                sa.select(ExternalRiskLookup.status)
+                .where(
+                    ExternalRiskLookup.customer_id == self.customer_id,
+                    ExternalRiskLookup.status.in_(("FOUND", "NOT_FOUND")),
+                )
+                .order_by(ExternalRiskLookup.checked_at.desc())
+                .limit(1)
+            )
+            return None if status is None else status == "FOUND"
+        if field == "network_rto_percent":
+            return await self.db.scalar(
+                sa.select(NetworkBenchmarkCell.value)
+                .where(
+                    NetworkBenchmarkCell.metric == "RTO_RATE",
+                    NetworkBenchmarkCell.dimension == "ALL",
+                    NetworkBenchmarkCell.status == "PUBLISHED",
+                )
+                .order_by(NetworkBenchmarkCell.period.desc())
+                .limit(1)
+            )
         return None
 
     async def _items_in_stock(self) -> bool | None:

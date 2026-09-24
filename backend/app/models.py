@@ -16,7 +16,8 @@ import app.integrations.models
 import app.integrations.sync_models
 import app.messaging.models
 import app.order_sources.models
-import app.public_api.models  # noqa: F401
+import app.public_api.models
+import app.risk_providers.models  # noqa: F401
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken

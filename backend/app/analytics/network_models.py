@@ -22,3 +22,29 @@ class NetworkBenchmark(Base, PrimaryKeyMixin, TimestampMixin):
     policy_version: Mapped[str] = mapped_column(sa.String(24))
     status: Mapped[str] = mapped_column(sa.String(24))
     facts: Mapped[dict] = mapped_column(JSONColumn)
+
+
+class NetworkBenchmarkCell(Base, PrimaryKeyMixin, TimestampMixin):
+    """One cohort figure of a closed month (V3.7). Immutable once written.
+
+    Holds a rounded value and coarse bands only, never a shop, a count or a
+    per-shop value. A cohort that fails the privacy thresholds is still
+    written, as ``DATA_NOT_SUFFICIENT`` with no value, so the set of cohorts
+    is fixed and its presence says nothing.
+    """
+
+    __tablename__ = "network_benchmark_cells"
+    __table_args__ = (
+        sa.UniqueConstraint("period", "policy_version", "metric", "dimension", "cohort"),
+    )
+    period: Mapped[str] = mapped_column(sa.String(7), index=True)
+    policy_version: Mapped[str] = mapped_column(sa.String(24))
+    metric: Mapped[str] = mapped_column(sa.String(32))
+    dimension: Mapped[str] = mapped_column(sa.String(16))
+    cohort: Mapped[str] = mapped_column(sa.String(32))
+    status: Mapped[str] = mapped_column(sa.String(24))
+    value: Mapped[int | None] = mapped_column()
+    precision: Mapped[int | None] = mapped_column()
+    unit: Mapped[str] = mapped_column(sa.String(12))
+    shops_band: Mapped[str | None] = mapped_column(sa.String(12))
+    sample_band: Mapped[str | None] = mapped_column(sa.String(12))

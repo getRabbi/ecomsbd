@@ -115,6 +115,11 @@ class OutboxTopic(StrEnum):
     # time. Consumed when written (app.automation.triggers); no-op handler.
     STOCKOUT_PREDICTED = "forecast.stockout_predicted"
 
+    # External risk and first-party risk signals (V3.7). Consumed when written
+    # (app.automation.triggers); their outbox handlers are no-ops.
+    EXTERNAL_RISK_LOOKUP_COMPLETED = "external_risk.lookup_completed"
+    EXTERNAL_RISK_UNAVAILABLE = "external_risk.provider_unavailable"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.
