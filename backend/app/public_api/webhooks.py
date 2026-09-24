@@ -44,6 +44,8 @@ TOPICS = frozenset(
         "inventory.updated",
         "product.updated",
         "import.committed",
+        # Sent only by a workflow's "trigger webhook" step (V3.4).
+        "automation.workflow",
     }
 )
 #: Payload fields a subscriber may receive. Identifiers and states only: no

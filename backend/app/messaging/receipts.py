@@ -209,7 +209,10 @@ async def whatsapp_value(db: AsyncSession, tenant_id: uuid.UUID, value: dict[str
                 continue
             body = (inbound.get("text") or {}).get("body")
             sender = try_normalize_bd_phone("+" + str(inbound.get("from") or ""))
-            if not isinstance(body, str) or sender is None or not stop_word(body):
+            if not isinstance(body, str) or sender is None:
+                continue
+            if not stop_word(body):
+                changed += await _announce_reply(db, sender.e164, str(inbound.get("id") or ""))
                 continue
             conversation = await db.scalar(
                 sa.select(Conversation)
@@ -227,6 +230,36 @@ async def whatsapp_value(db: AsyncSession, tenant_id: uuid.UUID, value: dict[str
                     evidence="Customer replied STOP on WhatsApp",
                 )
     return changed
+
+
+async def _announce_reply(db: AsyncSession, e164: str, message_id: str) -> int:
+    """A known customer wrote back on WhatsApp: a fact workflows may wait for.
+
+    Only the fact is kept. The text itself is never stored (see module docs).
+    """
+    from app.common.outbox import OutboxEvent, OutboxTopic, enqueue
+
+    if not message_id or len(message_id) > 150:
+        return 0
+    conversation = await db.scalar(
+        sa.select(Conversation).where(
+            Conversation.channel == "WHATSAPP",
+            Conversation.recipient_hash == recipient_digest("WHATSAPP", e164),
+        )
+    )
+    if conversation is None:
+        return 0
+    key = f"wa-reply:{message_id}"
+    if await db.scalar(sa.select(OutboxEvent.id).where(OutboxEvent.dedupe_key == key)):
+        return 0  # a redelivered webhook
+    await enqueue(
+        db,
+        OutboxTopic.CUSTOMER_REPLIED,
+        {"customer_id": str(conversation.customer_id), "channel": "WHATSAPP"},
+        tenant_id=conversation.tenant_id,
+        dedupe_key=key,
+    )
+    return 1
 
 
 # ------------------------------------------------------------ unsubscribe ---

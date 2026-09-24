@@ -80,6 +80,8 @@ class Permission(StrEnum):
     BILLING_MANAGE = "billing.manage"
     TEAM_MANAGE = "team.manage"
     SETTINGS_MANAGE = "settings.manage"
+    #: Create, edit, publish and switch off automation workflows (V3.4).
+    AUTOMATION_MANAGE = "automation.manage"
     DATA_EXPORT = "data.export"
 
 
@@ -104,6 +106,7 @@ _MATRIX: dict[TenantRole, frozenset[Permission]] = {
             Permission.PRODUCT_WRITE,
             Permission.INVENTORY_ADJUST,
             Permission.MONEY_VIEW,
+            Permission.AUTOMATION_MANAGE,
         }
     ),
     TenantRole.ORDER_OPERATOR: frozenset(

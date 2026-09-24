@@ -28,6 +28,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.outbox import OutboxTopic, enqueue
 from app.consignments.models import MANUAL_PROVIDER, Consignment, ConsignmentStatus
 from app.core.clock import business_date, utc_now
 from app.core.logging import get_logger
@@ -224,7 +225,7 @@ class AlertLifecycle:
             target["params"] = dict(condition.target_params)
         try:
             async with self._db.begin_nested():
-                return await self._notifications.notify(
+                written = await self._notifications.notify(
                     kind=condition.kind,
                     severity=condition.severity or rule.severity,
                     title=title[:160],
@@ -246,6 +247,16 @@ class AlertLifecycle:
                     subject_key=condition.subject,
                     user_id=condition.user_id,
                 )
+                if written is not None and reason == "NEW":
+                    # A newly raised condition is a fact workflows may react
+                    # to (V3.4); reminders and worsenings are not new events.
+                    await enqueue(
+                        self._db,
+                        OutboxTopic.ALERT_RAISED,
+                        {"kind": str(condition.kind), "notification_id": str(written.id)},
+                        tenant_id=written.tenant_id,
+                    )
+                return written
         except IntegrityError:
             return None
 

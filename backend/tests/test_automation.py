@@ -39,9 +39,7 @@ async def executions(client, headers):
     return (await client.get("/v1/automation/executions", headers=headers)).json()["items"]
 
 
-async def test_status_trigger_uses_event_transition_and_edit_invalidates_pending(
-    client, unique_phone
-):
+async def test_status_trigger_uses_event_transition_and_run_keeps_its_version(client, unique_phone):
     shop = await signed_in_shop(client, unique_phone)
     headers = auth_header(shop)
     configured = await rule(
@@ -57,7 +55,7 @@ async def test_status_trigger_uses_event_transition_and_edit_invalidates_pending
     )
     assert changed.status_code == 200, changed.text
     execution = (await executions(client, headers))[0]
-    assert execution["status"] == "PENDING"
+    assert execution["status"] == "QUEUED"
     update = {k: v for k, v in configured.items() if k not in {"id", "version"}}
     update["config"]["text_en"] = "Changed action"
     response = await client.put(
@@ -65,7 +63,16 @@ async def test_status_trigger_uses_event_transition_and_edit_invalidates_pending
     )
     assert response.status_code == 200, response.text
     await jobs.execute(uuid.UUID(shop["tenant_id"]), uuid.UUID(execution["id"]))
-    assert (await executions(client, headers))[0]["last_error"] == "RULE_DISABLED_OR_CHANGED"
+    # V3.4: a run finishes on the version it started with; the edit is version 2.
+    done = (await executions(client, headers))[0]
+    assert done["status"] == "SUCCEEDED" and done["version"] == 1
+    async with system_session("test version safety") as db:
+        task = await db.scalar(
+            sa.select(AutomationTask).where(
+                AutomationTask.execution_id == uuid.UUID(execution["id"])
+            )
+        )
+        assert task.text_en == "Check order"
 
 
 @pytest.mark.parametrize(
@@ -129,8 +136,9 @@ async def test_actions_execute_once_through_existing_services(
     await jobs.execute(uuid.UUID(shop["tenant_id"]), execution_id)
     await jobs.execute(uuid.UUID(shop["tenant_id"]), execution_id)
     result = (await executions(client, headers))[0]
-    assert result["status"] == "DONE", result
-    assert result["attempts"] == 1
+    assert result["status"] == "SUCCEEDED", result
+    # Attempts count retries of the current step; a clean run has none left.
+    assert result["attempts"] == 0
     async with system_session("test automation action") as db:
         if action == "CREATE_TASK":
             assert (
@@ -184,13 +192,15 @@ async def test_conditions_and_rule_changes_skip_queued_actions(client, unique_ph
     )
     active = await rule(client, headers)
     await create_order(client, shop)
-    assert sorted(x["status"] for x in await executions(client, headers)) == ["PENDING", "SKIPPED"]
+    runs = await executions(client, headers)
+    assert [x["status"] for x in runs] == ["QUEUED", "QUEUED"]
     await client.patch(
         "/v1/automation/rules/" + active["id"], headers=headers, json={"enabled": False}
     )
-    pending = next(x for x in await executions(client, headers) if x["status"] == "PENDING")
-    await jobs.execute(uuid.UUID(shop["tenant_id"]), uuid.UUID(pending["id"]))
-    assert all(x["status"] == "SKIPPED" for x in await executions(client, headers))
+    for run in runs:
+        await jobs.execute(uuid.UUID(shop["tenant_id"]), uuid.UUID(run["id"]))
+    outcomes = sorted((x["status"], x["last_error"]) for x in await executions(client, headers))
+    assert outcomes == [("CANCELLED", "WORKFLOW_DISABLED"), ("SKIPPED", "CONDITIONS_NOT_MET")]
 
 
 async def test_transient_failure_rolls_back_action_and_retries(client, unique_phone, monkeypatch):
@@ -201,8 +211,8 @@ async def test_transient_failure_rolls_back_action_and_retries(client, unique_ph
     execution_id = uuid.UUID((await executions(client, headers))[0]["id"])
     original = jobs.perform
 
-    async def fail_after_action(db, execution):
-        await original(db, execution)
+    async def fail_after_action(db, execution, step):
+        await original(db, execution, step)
         raise OSError("temporary")
 
     monkeypatch.setattr(jobs, "perform", fail_after_action)
@@ -212,11 +222,11 @@ async def test_transient_failure_rolls_back_action_and_retries(client, unique_ph
             sa.select(AutomationTask.id).where(AutomationTask.execution_id == execution_id)
         )
         row = await db.get(AutomationExecution, execution_id)
-        assert row.status == "RETRY"
+        assert row.status == "QUEUED" and row.last_error == "TRANSIENT:OSError"
         row.next_attempt_at = utc_now() - timedelta(seconds=1)
     monkeypatch.setattr(jobs, "perform", original)
     await jobs.execute(uuid.UUID(shop["tenant_id"]), execution_id)
-    assert (await executions(client, headers))[0]["status"] == "DONE"
+    assert (await executions(client, headers))[0]["status"] == "SUCCEEDED"
 
 
 async def test_opt_out_prevents_automation_message(client, unique_phone, monkeypatch):
@@ -229,20 +239,26 @@ async def test_opt_out_prevents_automation_message(client, unique_phone, monkeyp
     execution = (await executions(client, headers))[0]
     await jobs.execute(uuid.UUID(shop["tenant_id"]), uuid.UUID(execution["id"]))
     result = (await executions(client, headers))[0]
-    assert result["status"] == "SKIPPED"
-    assert result["last_error"] == "CONSENT_REQUIRED"
+    # The message is not sent; that is a compliance skip, not a failed run.
+    assert result["status"] == "SUCCEEDED"
+    detail = (await client.get(f"/v1/automation/executions/{result['id']}", headers=headers)).json()
+    assert [(s["status"], s["outcome"]) for s in detail["steps"]] == [
+        ("SKIPPED", "CONSENT_REQUIRED")
+    ]
 
 
 async def test_loop_guard_and_unapproved_actions(client, unique_phone, monkeypatch):
     shop = await signed_in_shop(client, unique_phone)
     headers = auth_header(shop)
     await rule(client, headers)
-    token = service.automation_depth.set(1)
+    token = service.automation_depth.set(service.MAX_DEPTH + 1)
     try:
         await create_order(client, shop)
     finally:
         service.automation_depth.reset(token)
-    assert await executions(client, headers) == []
+    assert [(x["status"], x["last_error"]) for x in await executions(client, headers)] == [
+        ("SKIPPED", "DEPTH_LIMIT")
+    ]
     for action in ["UPDATE_LEDGER", "RECONCILE", "CHANGE_STATUS", "HTTP_REQUEST"]:
         response = await client.post(
             "/v1/automation/rules",

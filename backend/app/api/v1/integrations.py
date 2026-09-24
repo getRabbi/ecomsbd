@@ -174,16 +174,7 @@ async def retry(event_id: uuid.UUID, db: DbSession, _: Operator) -> dict[str, An
     )
     if event is None:
         raise NotFoundError()
-    if not service.retryable(event):
-        raise ConflictError("This problem cannot be retried", details={"code": "NOT_RETRYABLE"})
-    conn = await service.get(db, event.connection_id)
-    if conn.state != "CONNECTED":
-        raise ConflictError("Reconnect the store first", details={"code": "RECONNECT_REQUIRED"})
-    # The same order id goes back through the same dedupe: a retry can finish
-    # an import, never duplicate one.
-    event.status, event.next_attempt_at, event.resolved_at = "QUEUED", utc_now(), None
-    await service.audit(db, AuditAction.INTEGRATION_EVENT_RETRIED, conn, event_id=str(event.id))
-    await db.flush()
+    await service.retry_event(db, event)
     return service.event_view(event)
 
 

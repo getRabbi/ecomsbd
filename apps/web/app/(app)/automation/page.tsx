@@ -1,76 +1,418 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
+
 import { PageHeader } from '@/components/shell';
-import { ErrorState } from '@/components/ui';
-import { api } from '@/lib/api';
-import { useSession } from '@/lib/session';
+import { Card, Chip, Drawer, EmptyState, ErrorState, Row, Tile } from '@/components/ui';
+import { useAutomationLabels } from '@/components/WorkflowBuilder';
+import { api, ApiError } from '@/lib/api';
+import { statusTone, type Catalog, type Metrics, type Recipe, type Run, type RunDetail, type Workflow } from '@/lib/automation';
+import { formatDate } from '@/lib/money';
 import { useApi } from '@/lib/useApi';
 
-type Condition = { field: string; op: string; value: string | number };
-type Rule = { id: string; name: string; trigger: string; conditions: Condition[]; action: string; config: Record<string, string | number>; enabled: boolean };
-type Execution = { id: string; rule_id: string; action: string; status: string; attempts: number; last_error: string | null; created_at: string };
+type Tab = 'workflows' | 'recipes' | 'runs' | 'failures' | 'tasks';
 type Task = { id: string; text_en: string; text_bn: string; due_at: string; completed_at: string | null };
-const actionLabels: Record<string, [string, string]> = {
-  SEND_TEMPLATE: ['Send transactional template', 'অর্ডারের টেমপ্লেট পাঠান'],
-  CREATE_FOLLOWUP: ['Create follow-up', 'ফলো-আপ তৈরি'],
-  ADD_TAG: ['Add CRM tag', 'CRM ট্যাগ যোগ'], REMOVE_TAG: ['Remove CRM tag', 'CRM ট্যাগ সরান'],
-  SELLER_NOTIFICATION: ['Notify seller', 'বিক্রেতাকে জানান'], CREATE_TASK: ['Create task', 'কাজ তৈরি'],
-};
 
 export default function AutomationPage() {
-  const { locale } = useSession();
-  const bn = locale === 'bn';
-  const tx = (en: string, bangla: string) => bn ? bangla : en;
-  const label = (action: string) => actionLabels[action]?.[bn ? 1 : 0] ?? action;
-  const catalog = useApi<{ tags: { id: string; name: string }[]; templates: { key: string; channel?: string }[]; statuses: string[]; channels: string[] }>('/automation/catalog');
-  const rules = useApi<{ items: Rule[] }>('/automation/rules');
-  const history = useApi<{ items: Execution[] }>('/automation/executions');
-  const tasks = useApi<{ items: Task[] }>('/automation/tasks');
-  const [editing, setEditing] = useState<Rule | null>(null);
-  const [action, setAction] = useState('CREATE_TASK');
-  const [trigger, setTrigger] = useState('order.created');
-  const [conditions, setConditions] = useState<Condition[]>([]);
+  const labels = useAutomationLabels();
+  const { t, locale } = labels;
+  const [tab, setTab] = useState<Tab>('workflows');
+  const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const attempts = useApi<{ items: { id: string; status: string; error: string | null; created_at: string }[] }>(selected ? `/automation/executions/${selected}/attempts` : null);
-  async function run(work: () => Promise<unknown>) { setBusy(true); setError(null); try { await work(); rules.reload(); history.reload(); tasks.reload(); attempts.reload(); } catch(e) { setError(e); } finally { setBusy(false); } }
-  function edit(rule: Rule | null) { setEditing(rule); setAction(rule?.action ?? 'CREATE_TASK'); setTrigger(rule?.trigger ?? 'order.created'); setConditions(rule?.conditions ?? []); }
-  function condition(index: number, value: Partial<Condition>) { setConditions(conditions.map((c, i) => i === index ? { ...c, ...value } : c)); }
-  const defaults = editing?.action === action ? editing.config : {};
-  const textField = (name: string, title: string, max = 1000) => <label className="field" key={name}>{title}<textarea className="input" name={`config.${name}`} defaultValue={defaults[name] ?? ''} required maxLength={max} /></label>;
-  return <><PageHeader title={tx('Automation rules', 'অটোমেশন নিয়ম')} subtitle={tx('Trigger + all conditions → one safe action. Rules apply to future events.', 'ট্রিগার + সব শর্ত → একটি কাজ। নতুন ইভেন্টে নিয়ম কাজ করবে।')} /><div className="content">
-    {error || rules.error || catalog.error ? <ErrorState error={error || rules.error || catalog.error} /> : null}
-    <section className="card" style={{ padding: 20 }}>
-      <h2>{editing ? tx('Edit rule', 'নিয়ম সম্পাদনা') : tx('Create rule', 'নিয়ম তৈরি')}</h2>
-      <form key={editing?.id ?? 'new'} onSubmit={e => { e.preventDefault(); const form = e.currentTarget; const data = new FormData(form); const config: Record<string, string | number> = {}; for (const [key, value] of data.entries()) { if (key.startsWith('config.')) { const name = key.slice(7); config[name] = name === 'due_hours' ? Number(value) : String(value); } } void run(async () => { const body = { name: data.get('name'), trigger, conditions, action, config, enabled: data.get('enabled') === 'on' }; if (editing) await api.put(`/automation/rules/${editing.id}`, body); else await api.post('/automation/rules', body); edit(null); form.reset(); }); }}>
-        <label className="field">{tx('Rule name', 'নিয়মের নাম')}<input className="input" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} /></label>
-        <label className="field">{tx('Trigger', 'কখন')}<select className="select" value={trigger} onChange={e => setTrigger(e.target.value)}><option value="order.created">{tx('Order created', 'অর্ডার তৈরি হলে')}</option><option value="order.status_changed">{tx('Order status changed', 'অর্ডারের অবস্থা বদলালে')}</option></select></label>
-        <fieldset><legend>{tx('All conditions must match', 'সব শর্ত মিলতে হবে')}</legend>
-          {conditions.map((c, i) => <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <select className="select" aria-label={tx('Condition field', 'শর্তের বিষয়')} value={c.field} onChange={e => condition(i, { field: e.target.value, op: 'eq', value: e.target.value === 'cod_amount_paisa' ? 0 : '' })}><option value="cod_amount_paisa">{tx('COD (paisa)', 'COD (পয়সা)')}</option><option value="status">{tx('Order status', 'অর্ডারের অবস্থা')}</option><option value="channel">{tx('Order channel', 'অর্ডারের মাধ্যম')}</option></select>
-            <select className="select" aria-label={tx('Comparison', 'তুলনা')} value={c.op} onChange={e => condition(i, { op: e.target.value })}><option value="eq">{tx('Equals', 'সমান')}</option><option value="ne">{tx('Does not equal', 'সমান নয়')}</option>{c.field === 'cod_amount_paisa' ? <><option value="gte">≥</option><option value="lte">≤</option></> : null}</select>
-            {c.field === 'cod_amount_paisa' ? <input className="input" aria-label={tx('Condition value', 'শর্তের মান')} type="number" min={0} required value={c.value} onChange={e => condition(i, { value: Number(e.target.value) })} /> : <select className="select" aria-label={tx('Condition value', 'শর্তের মান')} required value={c.value} onChange={e => condition(i, { value: e.target.value })}><option value="">{tx('Select', 'বাছুন')}</option>{(c.field === 'status' ? catalog.data?.statuses : catalog.data?.channels)?.map(v => <option key={v}>{v}</option>)}</select>}
-            <button type="button" className="btn" onClick={() => setConditions(conditions.filter((_, n) => n !== i))}>{tx('Remove', 'সরান')}</button>
-          </div>)}
-          <button type="button" className="btn" disabled={conditions.length >= 8} onClick={() => setConditions([...conditions, { field: 'cod_amount_paisa', op: 'gte', value: 0 }])}>{tx('Add condition', 'শর্ত যোগ')}</button>
-        </fieldset>
-        <label className="field">{tx('Action', 'কাজ')}<select className="select" value={action} onChange={e => setAction(e.target.value)}>{Object.keys(actionLabels).map(a => <option value={a} key={a}>{label(a)}</option>)}</select></label>
-        <div key={`${editing?.id}-${action}`}>
-          {action === 'SEND_TEMPLATE' ? <><label className="field">{tx('Configured template', 'নির্ধারিত টেমপ্লেট')}<select className="select" name="config.template_key" required defaultValue={defaults.template_key ?? 'order_update'}>{catalog.data?.templates.map(t => <option key={t.key}>{t.key}{t.channel ? ` · ${t.channel}` : ''}</option>)}</select></label><label className="field">{tx('Message language', 'মেসেজের ভাষা')}<select className="select" name="config.locale" defaultValue={defaults.locale ?? locale}><option value="bn">বাংলা</option><option value="en">English</option></select></label><label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" name="config.channel" defaultValue={defaults.channel ?? 'EMAIL'}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP">WhatsApp</option></select></label><p>{tx('Only order-update templates for the chosen channel. The channel must be enabled; order-update consent is checked again before sending. Offers go through Campaigns.', 'শুধু বেছে নেওয়া মাধ্যমের অর্ডার আপডেট টেমপ্লেট। মাধ্যম চালু থাকতে হবে; পাঠানোর আগে আবার সম্মতি যাচাই হবে। অফার পাঠান ক্যাম্পেইন থেকে।')}</p></> : null}
-          {action === 'CREATE_FOLLOWUP' ? textField('text', tx('Follow-up note', 'ফলো-আপ নোট')) : null}
-          {['CREATE_TASK', 'SELLER_NOTIFICATION'].includes(action) ? <>{textField('text_en', tx('English text', 'ইংরেজি লেখা'))}{textField('text_bn', tx('Bangla text', 'বাংলা লেখা'))}</> : null}
-          {action === 'SELLER_NOTIFICATION' ? <>{textField('title_en', tx('English title', 'ইংরেজি শিরোনাম'), 160)}{textField('title_bn', tx('Bangla title', 'বাংলা শিরোনাম'), 160)}</> : null}
-          {['CREATE_FOLLOWUP', 'CREATE_TASK'].includes(action) ? <label className="field">{tx('Due after hours', 'কত ঘণ্টা পরে করতে হবে')}<input className="input" type="number" name="config.due_hours" min={1} max={720} defaultValue={defaults.due_hours ?? 24} required /></label> : null}
-          {['ADD_TAG', 'REMOVE_TAG'].includes(action) ? <label className="field">{tx('CRM tag', 'CRM ট্যাগ')}<select className="select" name="config.tag_id" defaultValue={defaults.tag_id ?? ''} required><option value="">{tx('Select an existing tag', 'আগের ট্যাগ বাছুন')}</option>{catalog.data?.tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label> : null}
+  const [notice, setNotice] = useState<string | null>(null);
+  const catalog = useApi<Catalog>('/automation/catalog');
+  const metrics = useApi<Metrics>('/automation/metrics', { days: 7 });
+  const workflows = useApi<{ items: Workflow[] }>('/automation/workflows');
+  const manage = !!catalog.data?.can_manage;
+  const operate = !!catalog.data?.can_operate;
+
+  async function act(work: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await work();
+      workflows.reload();
+      metrics.reload();
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const m = metrics.data;
+  const top = m?.top_failures[0];
+  return (
+    <>
+      <PageHeader
+        title={t('auto.title')}
+        subtitle={t('auto.subtitle')}
+        actions={
+          manage ? (
+            <Link className="btn btn--primary" href="/automation/new">
+              {t('auto.new')}
+            </Link>
+          ) : null
+        }
+      />
+      <div className="content">
+        {catalog.error ? <ErrorState error={catalog.error} onRetry={catalog.reload} /> : null}
+        {error ? <ProblemNote error={error} /> : null}
+        {notice ? <p className="card__hint">{notice}</p> : null}
+        {catalog.data && !manage ? <p className="card__hint">{t('auto.readOnly')}</p> : null}
+        <div className="tiles">
+          <Tile label={t('auto.metrics.runs')} value={String(m?.executions ?? '—')} hint={t('auto.metrics.period', { days: 7 })} />
+          <Tile label={t('auto.metrics.succeeded')} value={String(m?.succeeded ?? '—')} />
+          <Tile label={t('auto.metrics.failed')} value={String(m?.failed ?? '—')} />
+          <Tile label={t('auto.metrics.waiting')} value={String(m?.waiting ?? '—')} />
+          <Tile
+            label={t('auto.metrics.duration')}
+            value={m?.average_duration_seconds == null ? '—' : m.average_duration_seconds < 120 ? t('auto.seconds', { n: m.average_duration_seconds }) : t('auto.minutes', { n: Math.round(m.average_duration_seconds / 60) })}
+            hint={top?.reason ? `${t('auto.metrics.topFailure')}: ${labels.reason(top.reason)}` : undefined}
+          />
         </div>
-        <label><input type="checkbox" name="enabled" defaultChecked={editing?.enabled ?? false} /> {tx('Enable this rule', 'নিয়মটি চালু করুন')}</label>
-        <p><button className="btn btn--primary" disabled={busy}>{tx('Save rule', 'নিয়ম সংরক্ষণ')}</button>{editing ? <button type="button" className="btn" onClick={() => edit(null)}>{tx('Cancel edit', 'সম্পাদনা বাতিল')}</button> : null}</p>
-      </form>
-    </section>
-    <section className="card" style={{ padding: 20 }}><h2>{tx('Rules', 'নিয়মগুলো')}</h2>{rules.data?.items.map(r => <article key={r.id}><h3>{r.name}</h3><p>{label(r.action)} · {r.enabled ? tx('Enabled', 'চালু') : tx('Disabled', 'বন্ধ')}</p><button className="btn" disabled={busy} onClick={() => void run(() => api.patch(`/automation/rules/${r.id}`, { enabled: !r.enabled }))}>{r.enabled ? tx('Disable', 'বন্ধ করুন') : tx('Enable', 'চালু করুন')}</button><button className="btn" onClick={() => edit(r)}>{tx('Edit', 'সম্পাদনা')}</button></article>)}</section>
-    <section className="card" style={{ padding: 20 }}><h2>{tx('Execution history', 'চালানোর ইতিহাস')}</h2><button className="btn" onClick={history.reload}>{tx('Refresh', 'হালনাগাদ')}</button>{history.error ? <ErrorState error={history.error} /> : null}{history.data?.items.map(h => <article key={h.id}><p>{label(h.action)} · {h.status} · {tx('Attempts', 'প্রচেষ্টা')}: {h.attempts} {h.last_error ? `(${h.last_error})` : ''}</p><button className="btn" onClick={() => setSelected(h.id)}>{tx('Details', 'বিস্তারিত')}</button>{h.status === 'FAILED' ? <button className="btn" disabled={busy} onClick={() => void run(() => api.post(`/automation/executions/${h.id}/retry`))}>{tx('Retry', 'আবার চেষ্টা')}</button> : null}</article>)}{attempts.data?.items.map(a => <p key={a.id}>{a.created_at}: {a.status} {a.error}</p>)}</section>
-    <section className="card" style={{ padding: 20 }}><h2>{tx('Tasks', 'কাজগুলো')}</h2>{tasks.error ? <ErrorState error={tasks.error} /> : null}{tasks.data?.items.map(t => <article key={t.id}><p>{t[bn ? 'text_bn' : 'text_en']} · {new Date(t.due_at).toLocaleString(locale)}</p><button className="btn" disabled={busy} onClick={() => void run(() => api.patch(`/automation/tasks/${t.id}`, { completed: !t.completed_at }))}>{t.completed_at ? tx('Reopen', 'আবার খুলুন') : tx('Mark complete', 'সম্পন্ন করুন')}</button></article>)}</section>
-  </div></>;
+
+        <div className="toolbar" role="tablist" style={{ padding: 0, marginBottom: 12 }}>
+          {(['workflows', 'recipes', 'runs', 'failures', 'tasks'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              className={`btn btn--sm${tab === value ? ' btn--primary' : ''}`}
+              onClick={() => setTab(value)}
+            >
+              {t(`auto.tab.${value}`)}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'workflows' ? (
+          <Card title={t('auto.tab.workflows')} padded={false}>
+            {workflows.error ? <ErrorState error={workflows.error} onRetry={workflows.reload} /> : null}
+            {workflows.data && workflows.data.items.length === 0 ? (
+              <EmptyState title={t('auto.empty')} hint={t('auto.emptyHint')} />
+            ) : (
+              <div className="tablewrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('auto.col.workflow')}</th>
+                      <th>{t('auto.col.trigger')}</th>
+                      <th>{t('auto.col.status')}</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workflows.data?.items.map((row) => {
+                      const r = row.runs_7d ?? {};
+                      return (
+                        <tr key={row.id}>
+                          <td>
+                            <Link href={`/automation/${row.id}`}>{row.name}</Link>
+                            <div className="card__hint">
+                              {t('auto.runs7d', { ok: r.SUCCEEDED ?? 0, failed: r.FAILED ?? 0, waiting: r.WAITING ?? 0 })}
+                            </div>
+                          </td>
+                          <td>{labels.trigger(row.trigger)}</td>
+                          <td>
+                            <Chip label={row.enabled ? t('auto.enabled') : t('auto.disabled')} tone={row.enabled ? 'good' : 'neutral'} />
+                            <div className="card__hint">
+                              {row.published_version ? t('auto.version', { n: row.published_version }) : t('auto.notPublished')}
+                              {row.published_version && row.has_unpublished_changes ? ` · ${t('auto.unpublished')}` : ''}
+                            </div>
+                          </td>
+                          <td>
+                            {manage && row.published_version ? (
+                              <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void act(() => api.patch(`/automation/workflows/${row.id}`, { enabled: !row.enabled }))}>
+                                {row.enabled ? t('auto.disable') : t('auto.enable')}
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        ) : null}
+
+        {tab === 'recipes' ? (
+          <Recipes
+            catalog={catalog.data}
+            manage={manage}
+            busy={busy}
+            onInstall={(key, body) =>
+              act(async () => {
+                const result = await api.post<Workflow & { blocker: string | null }>(`/automation/recipes/${key}/install`, body);
+                setNotice(result.blocker ? t('auto.recipe.draft', { reason: labels.reason(result.blocker) }) : t('auto.recipe.done'));
+              })
+            }
+            locale={locale === 'en' ? 'en' : 'bn'}
+          />
+        ) : null}
+
+        {tab === 'runs' || tab === 'failures' ? (
+          <Runs key={tab} status={tab === 'failures' ? 'FAILED' : ''} onOpen={setOpen} />
+        ) : null}
+
+        {tab === 'tasks' ? <Tasks operate={operate} /> : null}
+      </div>
+      {open ? <RunDrawer id={open} operate={operate} onClose={() => setOpen(null)} onChanged={() => { workflows.reload(); metrics.reload(); }} /> : null}
+    </>
+  );
+}
+
+function ProblemNote({ error }: { error: unknown }) {
+  const labels = useAutomationLabels();
+  if (error instanceof ApiError) {
+    const code = error.details?.blocker ?? (Array.isArray(error.details?.problems) ? error.details?.problems[0] : null);
+    return <ErrorState error={new ApiError(error.status, error.code, typeof code === 'string' ? labels.reason(code) : error.message)} />;
+  }
+  return <ErrorState error={error} />;
+}
+
+function Recipes({
+  catalog,
+  manage,
+  busy,
+  onInstall,
+  locale,
+}: {
+  catalog: Catalog | null;
+  manage: boolean;
+  busy: boolean;
+  onInstall: (key: string, body: Record<string, unknown>) => Promise<void>;
+  locale: 'en' | 'bn';
+}) {
+  const labels = useAutomationLabels();
+  const { t } = labels;
+  const recipes = useApi<{ items: Recipe[] }>('/automation/recipes');
+  const [provider, setProvider] = useState('');
+  const [channel, setChannel] = useState('EMAIL');
+  const couriers = (catalog?.couriers ?? []).filter((c) => c !== 'manual');
+  return (
+    <Card title={t('auto.tab.recipes')}>
+      {recipes.error ? <ErrorState error={recipes.error} onRetry={recipes.reload} /> : null}
+      {recipes.data?.items.map((recipe) => (
+        <article key={recipe.key} style={{ borderBottom: '1px solid var(--stroke)', padding: '12px 0' }}>
+          <h3>{recipe.name[locale]}</h3>
+          <p className="card__hint">{labels.trigger(recipe.trigger)}</p>
+          {recipe.installed ? (
+            <Chip label={t('auto.recipe.installed')} tone="good" />
+          ) : manage ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {recipe.needs.includes('provider') ? (
+                <select className="select" aria-label={t('auto.recipe.provider')} value={provider} onChange={(e) => setProvider(e.target.value)}>
+                  <option value="">{t('auto.recipe.provider')}</option>
+                  {(couriers.length ? couriers : ['steadfast', 'pathao', 'redx']).map((c) => (
+                    <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                  ))}
+                </select>
+              ) : null}
+              {recipe.needs.includes('channel') ? (
+                <select className="select" aria-label={t('auto.recipe.channel')} value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <option value="EMAIL">Email</option>
+                  <option value="WHATSAPP">WhatsApp</option>
+                </select>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                disabled={busy || (recipe.needs.includes('provider') && !provider)}
+                onClick={() =>
+                  void onInstall(recipe.key, {
+                    locale,
+                    channel,
+                    ...(recipe.needs.includes('provider') ? { provider } : {}),
+                  }).then(recipes.reload)
+                }
+              >
+                {t('auto.recipe.install')}
+              </button>
+            </div>
+          ) : null}
+        </article>
+      ))}
+    </Card>
+  );
+}
+
+function Runs({ status, onOpen }: { status: string; onOpen: (id: string) => void }) {
+  const labels = useAutomationLabels();
+  const { t, locale } = labels;
+  const [offset, setOffset] = useState(0);
+  const page = useApi<{ items: Run[]; next_offset: number | null }>('/automation/executions', { status: status || undefined, offset });
+  const rows = page.data?.items ?? [];
+  return (
+    <Card title={t(status ? 'auto.tab.failures' : 'auto.tab.runs')} padded={false}>
+      {page.error ? <ErrorState error={page.error} onRetry={page.reload} /> : null}
+      {page.data && rows.length === 0 ? (
+        <EmptyState title={t(status ? 'auto.run.noFailures' : 'auto.run.none')} />
+      ) : (
+        <div className="tablewrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('auto.col.workflow')}</th>
+                <th>{t('auto.col.status')}</th>
+                <th>{t('auto.col.step')}</th>
+                <th>{t('auto.col.reason')}</th>
+                <th>{t('auto.col.when')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="table__row--clickable" onClick={() => onOpen(row.id)}>
+                  <td className="table__primary">
+                    {row.workflow_name ?? '—'}
+                    {row.source === 'TEST' ? <div className="card__hint">{t('auto.run.test')}</div> : null}
+                  </td>
+                  <td>
+                    <Chip label={labels.status(row.status)} tone={statusTone(row.status)} />
+                    {row.waiting_for ? <div className="card__hint">{t('auto.run.waitingFor', { event: labels.event(row.waiting_for) })}</div> : null}
+                  </td>
+                  <td>{row.current_step ?? '—'}</td>
+                  <td>{labels.reason(row.last_error)}</td>
+                  <td>{formatDate(row.created_at, { locale, withTime: true })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="card__body" style={{ display: 'flex', gap: 8 }}>
+        {offset > 0 ? (
+          <button type="button" className="btn btn--sm" onClick={() => setOffset(Math.max(0, offset - 50))}>←</button>
+        ) : null}
+        {page.data?.next_offset ? (
+          <button type="button" className="btn btn--sm" onClick={() => setOffset(page.data?.next_offset ?? 0)}>
+            {t('auto.run.more')}
+          </button>
+        ) : null}
+        <button type="button" className="btn btn--sm" onClick={page.reload}>↻</button>
+      </div>
+    </Card>
+  );
+}
+
+function RunDrawer({
+  id,
+  operate,
+  onClose,
+  onChanged,
+}: {
+  id: string;
+  operate: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const labels = useAutomationLabels();
+  const { t, locale } = labels;
+  const run = useApi<RunDetail>(`/automation/executions/${id}`);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const data = run.data;
+  async function act(path: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(path);
+      run.reload();
+      onChanged();
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Drawer title={t('auto.run.detail')} onClose={onClose}>
+      {run.error ? <ErrorState error={run.error} onRetry={run.reload} /> : null}
+      {error ? <ProblemNote error={error} /> : null}
+      {data ? (
+        <>
+          <Row label={t('auto.col.workflow')} value={data.workflow_name ?? '—'} />
+          <Row label={t('auto.col.trigger')} value={data.trigger ? labels.trigger(data.trigger) : '—'} />
+          <Row label={t('auto.col.status')} value={<Chip label={labels.status(data.status)} tone={statusTone(data.status)} />} />
+          <Row label={t('auto.run.version')} value={String(data.version)} />
+          {data.order_id ? <Row label={t('auto.run.order')} value={<Link href={`/orders/${data.order_id}`}>{data.order_id.slice(0, 8)}</Link>} /> : null}
+          {data.depth ? <Row label={t('auto.run.depth')} value={String(data.depth)} /> : null}
+          {data.last_error ? <Row label={t('auto.col.reason')} value={labels.reason(data.last_error)} /> : null}
+          {data.status === 'FAILED' ? <Row label={t('auto.col.status')} value={data.retryable ? t('auto.run.retryable') : t('auto.run.notRetryable')} /> : null}
+          {data.next_attempt_at ? <Row label={t('auto.col.when')} value={t('auto.run.nextAt', { when: formatDate(data.next_attempt_at, { locale, withTime: true }) })} /> : null}
+          <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
+            {operate && data.status === 'FAILED' && data.retryable ? (
+              <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void act(`/automation/executions/${id}/retry`)}>
+                {t('auto.run.retry')}
+              </button>
+            ) : null}
+            {operate && (data.status === 'QUEUED' || data.status === 'WAITING') ? (
+              <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void act(`/automation/executions/${id}/cancel`)}>
+                {t('auto.run.cancel')}
+              </button>
+            ) : null}
+          </div>
+          <h3>{t('auto.run.steps')}</h3>
+          <ol>
+            {data.steps.map((step) => (
+              <li key={step.step_id}>
+                <strong>{step.action ? labels.action(step.action) : step.event ? labels.event(step.event) : t(`auto.step.${step.kind}` as never)}</strong>{' '}
+                <Chip label={labels.status(step.status)} tone={statusTone(step.status)} />{' '}
+                {step.outcome && !['THEN', 'ELSE', 'EVENT', 'TIMEOUT'].includes(step.outcome) && !/^\d{4}-/.test(step.outcome) ? labels.reason(step.outcome) : step.outcome === 'THEN' || step.outcome === 'ELSE' ? t(`auto.builder.${step.outcome === 'THEN' ? 'then' : 'else'}`) : ''}
+              </li>
+            ))}
+          </ol>
+          <h3>{t('auto.run.history')}</h3>
+          <ul>
+            {data.history.map((h) => (
+              <li key={h.id}>
+                {formatDate(h.created_at, { locale, withTime: true })} · {h.step_id ?? '—'} · {labels.status(h.status)} {h.error ? `· ${labels.reason(h.error)}` : ''}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function Tasks({ operate }: { operate: boolean }) {
+  const { t, locale } = useAutomationLabels();
+  const tasks = useApi<{ items: Task[] }>('/automation/tasks');
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card title={t('auto.tab.tasks')}>
+      {tasks.error ? <ErrorState error={tasks.error} onRetry={tasks.reload} /> : null}
+      {tasks.data?.items.length === 0 ? <EmptyState title={t('auto.run.none')} /> : null}
+      {tasks.data?.items.map((task) => (
+        <article key={task.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0' }}>
+          <span>
+            {locale === 'bn' ? task.text_bn : task.text_en} · {formatDate(task.due_at, { locale, withTime: true })}
+          </span>
+          {operate ? (
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void api.patch(`/automation/tasks/${task.id}`, { completed: !task.completed_at }).finally(() => {
+                  setBusy(false);
+                  tasks.reload();
+                });
+              }}
+            >
+              {task.completed_at ? '↺' : '✓'}
+            </button>
+          ) : null}
+        </article>
+      ))}
+    </Card>
+  );
 }

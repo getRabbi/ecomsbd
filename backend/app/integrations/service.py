@@ -305,6 +305,7 @@ async def record_issue(
     if event is not None:
         event.status, event.code = "FAILED", code
         event.order_id = order_id or event.order_id
+        await _announce_issue(db, conn, event)
         return event
     row = IntegrationEvent(
         connection_id=conn.id,
@@ -319,7 +320,37 @@ async def record_issue(
     )
     db.add(row)
     await db.flush()
+    await _announce_issue(db, conn, row)
     return row
+
+
+async def _announce_issue(
+    db: AsyncSession, conn: IntegrationConnection, row: IntegrationEvent
+) -> None:
+    """A new open problem is a fact workflows may react to (V3.4).
+
+    Once per problem: a repeat of the same problem is coalesced above and never
+    reaches here. Codes only; no provider body or credential.
+    """
+    from app.common.outbox import OutboxEvent, OutboxTopic, enqueue
+
+    key = f"integration.issue:{row.id}"
+    # A problem retried and failing again is the same problem, not a new one:
+    # otherwise a workflow that retries it would be started again each time.
+    if await db.scalar(sa.select(OutboxEvent.id).where(OutboxEvent.dedupe_key == key)):
+        return
+    await enqueue(
+        db,
+        OutboxTopic.INTEGRATION_ISSUE_OPENED,
+        {
+            "integration_event_id": str(row.id),
+            "connection_id": str(conn.id),
+            "provider": conn.provider,
+            "code": row.code,
+        },
+        tenant_id=conn.tenant_id,
+        dedupe_key=key,
+    )
 
 
 async def resolve_ref(db: AsyncSession, conn: IntegrationConnection, external_ref: str) -> None:
@@ -344,6 +375,22 @@ def retryable(event: IntegrationEvent) -> bool:
     if event.kind == "OUTBOUND":
         return True  # an outbound push re-reads current state before it runs
     return event.provider in ORDER_PROVIDERS and bool(event.external_ref)
+
+
+async def retry_event(db: AsyncSession, event: IntegrationEvent) -> None:
+    """Put a failed, retryable problem back in the queue (seller or workflow).
+
+    The same order id goes back through the same dedupe: a retry can finish an
+    import, never duplicate one. ``event`` must be locked by the caller.
+    """
+    if not retryable(event):
+        raise ConflictError("This problem cannot be retried", details={"code": "NOT_RETRYABLE"})
+    conn = await get(db, event.connection_id)
+    if conn.state != "CONNECTED":
+        raise ConflictError("Reconnect the store first", details={"code": "RECONNECT_REQUIRED"})
+    event.status, event.next_attempt_at, event.resolved_at = "QUEUED", utc_now(), None
+    await audit(db, AuditAction.INTEGRATION_EVENT_RETRIED, conn, event_id=str(event.id))
+    await db.flush()
 
 
 def event_view(event: IntegrationEvent) -> dict[str, Any]:
