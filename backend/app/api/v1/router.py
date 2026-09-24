@@ -38,6 +38,7 @@ from app.api.v1 import (
     order_sources,
     orders,
     payouts,
+    procurement,
     products,
     providers,
     reconciliation,
@@ -68,6 +69,7 @@ api_router.include_router(network.router)
 api_router.include_router(automation.router)
 api_router.include_router(tenants.router)
 api_router.include_router(products.router)
+api_router.include_router(procurement.router)
 api_router.include_router(crm.router)
 api_router.include_router(customers.router)
 api_router.include_router(orders.router)

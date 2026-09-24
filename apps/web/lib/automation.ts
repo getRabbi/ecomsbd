@@ -162,6 +162,10 @@ export function defaultConfig(action: string, catalog: Catalog | null, locale: '
     case 'SET_ORDER_LABEL':
     case 'TRIGGER_WEBHOOK':
       return { label: '' };
+    case 'CREATE_TEAM_TASK':
+      return { text_en: '', text_bn: '', due_hours: 24 };
+    case 'CREATE_DRAFT_PO':
+      return { quantity: 10 };
     default:
       return {};
   }

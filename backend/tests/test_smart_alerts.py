@@ -737,6 +737,13 @@ class TestPushAndWording:
             NotificationKind.COURIER_ACCOUNT_PROBLEM: {"provider": "pathao"},
             NotificationKind.RETURNED_NOT_RESTOCKED: {"count": 2},
             NotificationKind.FOLLOW_UP_DUE: {"count": 2},
+            NotificationKind.PURCHASE_ORDER_OVERDUE: {"count": 2, "numbers": ["PO-00001"]},
+            NotificationKind.PARTIAL_RECEIPT_PENDING: {
+                "count": 1,
+                "days": 3,
+                "numbers": ["PO-00002"],
+            },
+            NotificationKind.SUPPLIER_PAYMENT_OVERDUE: {"count": 1, "amount_paisa": 250_000},
         }
         assert set(samples) == set(rules.ALERT_RULES)
         for kind, params in samples.items():

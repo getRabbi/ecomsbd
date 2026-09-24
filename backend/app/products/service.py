@@ -75,6 +75,8 @@ class StockAdjustment:
     idempotency_key: str | None = None
     reference: str | None = None
     unit_cost_paisa: int | None = None
+    #: V3.5: the location the units moved at. ``None``: the default location.
+    warehouse_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +202,7 @@ class StockService:
                 reference=adjustment.reference,
                 unit_cost_paisa=adjustment.unit_cost_paisa,
                 idempotency_key=adjustment.idempotency_key,
+                warehouse_id=adjustment.warehouse_id,
                 occurred_at=adjustment.occurred_at or utc_now(),
             )
             self._db.add(movement)
@@ -238,6 +241,64 @@ class StockService:
             )
             await self._db.flush()
         return movement
+
+    async def record_transfer(
+        self,
+        *,
+        product_id: uuid.UUID,
+        variant_id: uuid.UUID | None,
+        quantity: int,
+        from_warehouse_id: uuid.UUID | None,
+        to_warehouse_id: uuid.UUID | None,
+        key: str,
+        reference: str | None = None,
+        note: str | None = None,
+    ) -> tuple[StockMovement, StockMovement]:
+        """Move units between the shop's own locations (V3.5).
+
+        Written as a TRANSFER_OUT / TRANSFER_IN pair that nets to zero, so the
+        shop's total, every cached balance and every connected store's stock
+        stay exactly where they were: nothing is announced and nothing syncs.
+        The location balances themselves belong to the caller
+        (``app.procurement.service``), in the same transaction.
+        """
+        if quantity <= 0:
+            raise ValidationError("A transfer moves at least one unit")
+        product = await self._lock_product(product_id)
+        if not product.stock_tracking_enabled:
+            raise ConflictError(
+                "This product does not track stock", details={"product_id": str(product.id)}
+            )
+        out_key, in_key = f"{key}:out", f"{key}:in"
+        existing_out, existing_in = await self._by_key(out_key), await self._by_key(in_key)
+        if existing_out is not None and existing_in is not None:
+            return existing_out, existing_in
+        variant = await self._resolve_variant(product, variant_id)
+        balance = variant.stock_on_hand if variant is not None else product.stock_on_hand
+        pair = []
+        for delta, reason, warehouse, movement_key in (
+            (-quantity, StockMovementReason.TRANSFER_OUT, from_warehouse_id, out_key),
+            (quantity, StockMovementReason.TRANSFER_IN, to_warehouse_id, in_key),
+        ):
+            movement = StockMovement(
+                tenant_id=product.tenant_id,
+                product_id=product.id,
+                variant_id=variant.id if variant is not None else None,
+                quantity_delta=delta,
+                balance_after=balance,
+                reason=reason,
+                source=StockMovementSource.TRANSFER,
+                actor_user_id=current_context().user_id,
+                note=note,
+                reference=reference,
+                idempotency_key=movement_key,
+                warehouse_id=warehouse,
+                occurred_at=utc_now(),
+            )
+            self._db.add(movement)
+            pair.append(movement)
+        await self._db.flush()
+        return pair[0], pair[1]
 
     async def assert_available(self, lines: list[tuple[uuid.UUID, uuid.UUID | None, int]]) -> None:
         """Refuse up front when stock cannot cover ``(product, variant, qty)`` lines.

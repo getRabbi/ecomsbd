@@ -408,6 +408,26 @@ function ActionConfig({
           <p className="card__hint">{t('auto.cfg.bookingNote')}</p>
         </>
       );
+    case 'CREATE_TEAM_TASK':
+      return (
+        <>
+          {text('text_en', t('auto.cfg.textEn'))}
+          {text('text_bn', t('auto.cfg.textBn'))}
+          {hours}
+          <Field label={t('auto.cfg.assigneeOptional')}>
+            <input className="input" value={String(config.assignee_id ?? '')} disabled={disabled} onChange={(e) => set('assignee_id', e.target.value || null)} />
+          </Field>
+        </>
+      );
+    case 'CREATE_DRAFT_PO':
+      return (
+        <>
+          <Field label={t('auto.cfg.quantity')}>
+            <input className="input" type="number" min={1} max={100000} value={Number(config.quantity ?? 10)} disabled={disabled} onChange={(e) => set('quantity', Number(e.target.value))} />
+          </Field>
+          <p className="card__hint">{t('auto.cfg.draftPoNote')}</p>
+        </>
+      );
     case 'PUSH_STORE_STATUS':
       return <p className="card__hint">{t('auto.cfg.storeNote')}</p>;
     case 'SET_ORDER_LABEL':

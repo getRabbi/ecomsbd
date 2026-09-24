@@ -77,6 +77,11 @@ class StockMovementReason(StrEnum):
     #: Always a delta computed against the ledger, never an overwrite.
     EXTERNAL_SYNC = "EXTERNAL_SYNC"
 
+    #: V3.5: units leaving / arriving at a location in a stock transfer. Always
+    #: written as a pair that nets to zero: the shop's total never changes.
+    TRANSFER_OUT = "TRANSFER_OUT"
+    TRANSFER_IN = "TRANSFER_IN"
+
 
 #: Expected sign of each reason's delta, or ``None`` where either direction is
 #: legitimate. Enforced by the service so a "restore" can never quietly remove
@@ -93,6 +98,8 @@ MOVEMENT_SIGN: dict[StockMovementReason, int | None] = {
     StockMovementReason.IMPORT_ADJUSTMENT: None,
     StockMovementReason.RESTOCK: +1,
     StockMovementReason.EXTERNAL_SYNC: None,
+    StockMovementReason.TRANSFER_OUT: -1,
+    StockMovementReason.TRANSFER_IN: +1,
 }
 
 
@@ -106,6 +113,10 @@ class StockMovementSource(StrEnum):
     SYSTEM = "SYSTEM"
     #: V3.2: a connected store (Integrations Hub) moved stock.
     INTEGRATION = "INTEGRATION"
+    #: V3.5: goods received against a purchase order.
+    PURCHASE = "PURCHASE"
+    #: V3.5: a move between the shop's own locations.
+    TRANSFER = "TRANSFER"
 
 
 class Product(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
@@ -312,6 +323,10 @@ class StockMovement(Base, TenantOwned, PrimaryKeyMixin):
 
     #: When the change happened in the real world, which is not always when the
     #: row was written (an import backfills history).
+    #: V3.5: the location the units moved in or out of. ``None``: the default.
+    warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("warehouses.id", name="fk_stock_movements_warehouse"), nullable=True
+    )
     occurred_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False, default=utc_now)
     created_at: Mapped[datetime] = mapped_column(
         TZDateTime, nullable=False, default=utc_now, index=True
