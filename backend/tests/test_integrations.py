@@ -159,8 +159,10 @@ async def test_custom_website_package_key_once_and_public_api_flow(client, uniqu
     assert first.status_code == 201, first.text
     replay = await client.post(path, headers=api, json=body)
     assert replay.json() == first.json()
-    # Scopes are exactly what a storefront needs.
-    assert (await client.get("/public/v1/products", headers=api)).status_code == 403
+    # Scopes are exactly what a storefront needs: its orders, and reading the
+    # catalogue and stock to map SKUs. No customers, no product or stock writes.
+    assert (await client.get("/public/v1/customers", headers=api)).status_code == 403
+    assert (await client.get("/public/v1/products", headers=api)).status_code == 200
     assert (
         await client.get(f"/public/v1/orders/{first.json()['order_id']}", headers=api)
     ).status_code == 200

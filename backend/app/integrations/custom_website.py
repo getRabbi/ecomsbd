@@ -27,7 +27,10 @@ from app.public_api.models import ApiKey, WebhookDelivery, WebhookEndpoint
 from app.public_api.service import issue_key
 from app.public_api.webhooks import TOPICS, create_endpoint, queue_test_delivery
 
-SCOPES = ["orders:read", "orders:write", "sources:write"]
+#: A storefront reads and writes its own orders and reads the catalogue and
+#: stock to map its SKUs. Changing stock is opt-in: STOCK_WRITE.
+SCOPES = ["orders:read", "orders:write", "sources:write", "products:read", "inventory:read"]
+STOCK_WRITE = "inventory:write"
 DEFAULT_TOPICS = [
     "order.confirmed",
     "order.cancelled",
@@ -45,12 +48,12 @@ def api_base_url() -> str:
 
 
 async def _new_key(
-    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID
+    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID, *, stock_write: bool = False
 ) -> tuple[ApiKey, str]:
     return await issue_key(
         db,
         name=f"{conn.name} (website)"[:100],
-        scopes=SCOPES,
+        scopes=SCOPES + ([STOCK_WRITE] if stock_write else []),
         rate_limit=RATE_LIMIT,
         created_by=actor_id,
     )
@@ -80,16 +83,18 @@ async def _endpoint(db: AsyncSession, conn: IntegrationConnection) -> WebhookEnd
     return await db.get(WebhookEndpoint, uuid.UUID(endpoint_id)) if endpoint_id else None
 
 
-async def rotate_key(db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID) -> str:
+async def rotate_key(
+    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID, *, stock_write: bool = False
+) -> str:
     """Issue a new key and revoke the old one now. The website must be updated."""
     if conn.state == "DISCONNECTED":
         raise ConflictError("This connection is disconnected")
     old = await _key(db, conn)
     if old is not None and old.revoked_at is None:
         old.revoked_at = utc_now()
-    key, token = await _new_key(db, conn, actor_id)
-    conn.config = {**conn.config, "api_key_id": str(key.id)}
-    await service.audit(db, AuditAction.INTEGRATION_KEY_ROTATED, conn)
+    key, token = await _new_key(db, conn, actor_id, stock_write=stock_write)
+    conn.config = {**conn.config, "api_key_id": str(key.id), "scopes": key.scopes}
+    await service.audit(db, AuditAction.INTEGRATION_KEY_ROTATED, conn, stock_write=stock_write)
     return token
 
 

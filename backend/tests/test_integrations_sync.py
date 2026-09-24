@@ -691,7 +691,20 @@ async def test_custom_website_status_api_and_sync_events(client, unique_phone, m
     )
     api = {"Authorization": f"Bearer {key}"}
     found = await client.get("/public/v1/products", headers=api, params={"sku": "K-BLUE"})
-    assert found.status_code == 403  # products:read is not in a storefront key
+    assert found.status_code == 200, found.text
+    [item] = found.json()["items"]
+    assert item["id"] == kurti["id"] and [v["sku"] for v in item["variants"]] == ["K-BLUE"]
+    # Changing stock from the website is opt-in, on a replaced key.
+    adjust = f"/public/v1/inventory/{kurti['id']}/adjustments"
+    body = {"quantity_delta": 2, "variant_id": item["variants"][0]["id"], "note": "Website count"}
+    denied = await client.post(adjust, headers={**api, "Idempotency-Key": "stock-0001"}, json=body)
+    assert denied.status_code == 403
+    rotated = await client.post(
+        f"/v1/integrations/{conn_id}/api-key", headers=headers, json={"stock_write": True}
+    )
+    api = {"Authorization": f"Bearer {rotated.json()['api_key']}"}
+    allowed = await client.post(adjust, headers={**api, "Idempotency-Key": "stock-0001"}, json=body)
+    assert allowed.status_code == 201, allowed.text
     order = await client.post(
         f"/public/v1/sources/{website['package']['source_id']}/orders",
         headers={**api, "Idempotency-Key": "site-order-1"},
@@ -706,20 +719,20 @@ async def test_custom_website_status_api_and_sync_events(client, unique_phone, m
     order_id = order.json()["order_id"]
     confirm = await client.post(
         f"/public/v1/orders/{order_id}/status",
-        headers={**api, "Idempotency-Key": "confirm-1"},
+        headers={**api, "Idempotency-Key": "confirm-0001"},
         json={"status": "CONFIRMED"},
     )
     assert confirm.status_code == 200 and confirm.json()["result"] == "UPDATED"
     again = await client.post(
         f"/public/v1/orders/{order_id}/status",
-        headers={**api, "Idempotency-Key": "confirm-1"},
+        headers={**api, "Idempotency-Key": "confirm-0001"},
         json={"status": "CONFIRMED"},
     )
     assert again.json() == confirm.json()
     await dispatch(client, shop, order_id, tracking="STD-1")
     late = await client.post(
         f"/public/v1/orders/{order_id}/status",
-        headers={**api, "Idempotency-Key": "cancel-1"},
+        headers={**api, "Idempotency-Key": "cancel-0001"},
         json={"status": "CANCELLED"},
     )
     assert late.status_code == 409 and late.json()["code"] == "CANCELLED_AFTER_BOOKING"

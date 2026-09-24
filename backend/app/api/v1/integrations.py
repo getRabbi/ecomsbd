@@ -79,6 +79,11 @@ class WebhookInput(Input):
     topics: list[str] | None = Field(default=None, max_length=20)
 
 
+class KeyInput(Input):
+    #: Let the website change stock through the Public API.
+    stock_write: bool = False
+
+
 class RecipeInput(Input):
     locale: Literal["en", "bn"] = "bn"
 
@@ -440,12 +445,18 @@ async def go_live(connection_id: uuid.UUID, db: DbSession, _: Owner) -> dict[str
 
 @router.post("/{connection_id}/api-key", status_code=201)
 async def rotate_key(
-    connection_id: uuid.UUID, db: DbSession, actor: Owner, response: Response
+    connection_id: uuid.UUID,
+    db: DbSession,
+    actor: Owner,
+    response: Response,
+    body: KeyInput | None = None,
 ) -> dict[str, Any]:
     conn = await service.get(db, connection_id, lock=True)
     if conn.provider != "CUSTOM_WEBSITE":
         raise ValidationError("Only a Custom Website has an API key")
-    key = await custom_website.rotate_key(db, conn, actor.user_id)
+    key = await custom_website.rotate_key(
+        db, conn, actor.user_id, stock_write=bool(body and body.stock_write)
+    )
     _no_store(response)
     return {"api_key": key, "connection": await _one(db, conn, True)}
 

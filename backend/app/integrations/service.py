@@ -352,6 +352,7 @@ def event_view(event: IntegrationEvent) -> dict[str, Any]:
         "connection_id": event.connection_id,
         "provider": event.provider,
         "kind": event.kind,
+        "operation": event.operation,
         "topic": event.topic,
         "external_ref": event.external_ref,
         "status": event.status,
