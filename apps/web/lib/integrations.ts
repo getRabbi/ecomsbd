@@ -29,6 +29,7 @@ export interface Connection {
   last_error_code: string | null;
   created_at: string;
   open_issues: number;
+  open_conflicts: number;
   orders_today: number;
   failed_today: number;
   import_from?: string | null;
@@ -47,6 +48,7 @@ export interface IntegrationEvent {
   connection_id: string;
   provider: Provider;
   kind: string;
+  operation: string | null;
   topic: string;
   external_ref: string | null;
   status: string;
@@ -62,7 +64,7 @@ export interface IntegrationEvent {
 
 export interface SyncRun {
   id: string;
-  kind: 'INITIAL' | 'INCREMENTAL';
+  kind: 'INITIAL' | 'INCREMENTAL' | 'CATALOG';
   status: string;
   since: string;
   until: string;

@@ -11,6 +11,7 @@ import {
   ShowOnce,
   useIntegrationLabels,
 } from '@/components/Integrations';
+import { ConflictsPanel } from '@/components/IntegrationSync';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, Tile } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -77,6 +78,10 @@ export default function IntegrationsPage() {
             label={t('int.tile.failedToday')}
             value={String(live.reduce((sum, c) => sum + c.failed_today, 0))}
           />
+          <Tile
+            label={t('int.tile.conflicts')}
+            value={String(live.reduce((sum, c) => sum + (c.open_conflicts ?? 0), 0))}
+          />
         </div>
 
         <div className="grid2">
@@ -106,6 +111,7 @@ export default function IntegrationsPage() {
                     <th>{t('int.col.lastSync')}</th>
                     <th>{t('int.col.lastWebhook')}</th>
                     <th className="num">{t('int.col.issues')}</th>
+                    <th className="num">{t('int.col.conflicts')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -127,6 +133,7 @@ export default function IntegrationsPage() {
                       <td>{labels.when(c.last_sync_at)}</td>
                       <td>{labels.when(c.last_webhook_at)}</td>
                       <td className="num">{c.open_issues}</td>
+                      <td className="num">{c.open_conflicts ?? 0}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -145,6 +152,12 @@ export default function IntegrationsPage() {
             emptyTitle={t('int.issues.empty')}
           />
         </Card>
+
+        <ConflictsPanel
+          canManage={!!hub.data?.can_manage}
+          canRetry={!!hub.data?.can_retry}
+          onChanged={reload}
+        />
       </div>
 
       {adding ? (
