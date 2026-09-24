@@ -12,6 +12,7 @@ import {
   ShowOnce,
   useIntegrationLabels,
 } from '@/components/Integrations';
+import { ConflictsPanel, MappingPanel, SyncSettingsPanel } from '@/components/IntegrationSync';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, ErrorState, Row } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -29,6 +30,7 @@ import {
   type SyncRun,
   type TestResult,
 } from '@/lib/integrations';
+import { SYNC_PARTS, syncSnippet } from '@/lib/integrations-sync';
 import { useApi } from '@/lib/useApi';
 
 export default function IntegrationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +54,7 @@ function IntegrationDetail({ id }: { id: string }) {
   const [error, setError] = useState<unknown>(null);
   const [test, setTest] = useState<TestResult | null>(null);
   const [secret, setSecret] = useState<{ title: string; value: string } | null>(null);
+  const [tab, setTab] = useState<Tab>('overview');
 
   const data = detail.data;
   const conn = data?.connection;
@@ -167,7 +170,20 @@ function IntegrationDetail({ id }: { id: string }) {
         {problem ? <p className="formerror">{problem}</p> : error ? <ErrorState error={error} /> : null}
         {secret ? <ShowOnce title={secret.title} value={secret.value} onDone={() => setSecret(null)} /> : null}
 
-        {data && conn ? (
+        {data && conn ? <Tabs provider={conn.provider} tab={tab} onTab={setTab} /> : null}
+        {data && conn && tab === 'settings' ? (
+          <SyncSettingsPanel connection={conn} canManage={manage} onChanged={detail.reload} />
+        ) : null}
+        {data && conn && tab === 'mapping' ? <MappingPanel connection={conn} canManage={manage} /> : null}
+        {data && conn && tab === 'conflicts' ? (
+          <ConflictsPanel
+            connectionId={conn.id}
+            canManage={manage}
+            canRetry={data.can_retry}
+            onChanged={detail.reload}
+          />
+        ) : null}
+        {data && conn && tab === 'overview' ? (
           <>
             {manage ? <Stepper detail={data} recipes={recipes.data?.items ?? []} /> : null}
             <div className="grid2">
@@ -196,6 +212,35 @@ function IntegrationDetail({ id }: { id: string }) {
         ) : null}
       </div>
     </>
+  );
+}
+
+type Tab = 'overview' | 'settings' | 'mapping' | 'conflicts';
+
+function Tabs({ provider, tab, onTab }: { provider: string; tab: Tab; onTab: (tab: Tab) => void }) {
+  const { t } = useIntegrationLabels();
+  const tabs: Tab[] =
+    provider === 'SHOPIFY' || provider === 'WOOCOMMERCE'
+      ? ['overview', 'settings', 'mapping', 'conflicts']
+      : provider === 'CUSTOM_WEBSITE'
+        ? ['overview', 'conflicts']
+        : [];
+  if (tabs.length === 0) return null;
+  return (
+    <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {tabs.map((value) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={tab === value}
+          className={`btn btn--sm${tab === value ? ' btn--primary' : ''}`}
+          onClick={() => onTab(value)}
+        >
+          {t(`sync.tab.${value}` as StringKey)}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -615,6 +660,7 @@ function DeveloperSetup({
   const [url, setUrl] = useState(setup.webhook_url ?? '');
   const [lang, setLang] = useState<SnippetLang>('php');
   const [tested, setTested] = useState(false);
+  const [stockWrite, setStockWrite] = useState(false);
   const open = c.state !== 'DISCONNECTED';
   const parts: { part: SnippetPart; label: StringKey }[] = [
     { part: 'create', label: 'int.dev.part.create' },
@@ -671,13 +717,24 @@ function DeveloperSetup({
                 onClick={() => {
                   if (!window.confirm(t('int.dev.rotateConfirm'))) return;
                   void act(async () => {
-                    const result = await api.post<{ api_key: string }>(`/integrations/${c.id}/api-key`);
+                    const result = await api.post<{ api_key: string }>(`/integrations/${c.id}/api-key`, {
+                      stock_write: stockWrite,
+                    });
                     onSecret({ title: t('int.dev.keyOnce'), value: result.api_key });
                   });
                 }}
               >
                 {t('int.dev.rotate')}
               </button>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={stockWrite}
+                  onChange={(event) => setStockWrite(event.target.checked)}
+                />
+                {t('int.dev.stockWrite')}
+              </label>
+              <span className="card__hint">{t('int.dev.stockWriteHint')}</span>
             </p>
           ) : null}
         </Card>
@@ -777,6 +834,24 @@ function DeveloperSetup({
               }}
             >
               <code>{snippet(lang, part, setup)}</code>
+            </pre>
+          </div>
+        ))}
+        {SYNC_PARTS.map(({ part, label }) => (
+          <div key={part} style={{ marginBottom: 14 }}>
+            <strong>{t(label)}</strong>
+            <pre
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--stroke)',
+                borderRadius: 'var(--radius)',
+                padding: 12,
+                overflowX: 'auto',
+                fontSize: 12,
+                margin: '6px 0 0',
+              }}
+            >
+              <code>{syncSnippet(lang, part, setup)}</code>
             </pre>
           </div>
         ))}

@@ -104,6 +104,15 @@ class FakeProviders:
         self.subscriptions: list[dict[str, Any]] = []
         self.currency = "BDT"
         self.token_counter = 0
+        # V3.2 two-way sync state.
+        self.scope = "read_orders"
+        self.catalog_pages: list[list[dict[str, Any]]] = []
+        self.levels: dict[str, int] = {}  # Shopify inventory item id -> available
+        self.stale = False
+        self.fulfillment: dict[str, dict[str, Any]] = {}  # order id -> state
+        self.woo_products: list[dict[str, Any]] = []
+        self.woo_variations: dict[int, list[dict[str, Any]]] = {}
+        self.woo_notes: dict[int, list[dict[str, Any]]] = {}
 
     def _failure(self, key: str) -> Reply | None:
         for needle, status in self.fail.items():
@@ -124,7 +133,7 @@ class FakeProviders:
                 200,
                 {
                     "access_token": f"shpat_{self.token_counter}",
-                    "scope": "read_orders",
+                    "scope": self.scope,
                     "expires_in": 3600,
                     "refresh_token": f"shprt_{self.token_counter}",
                     "refresh_token_expires_in": 7776000,
@@ -142,6 +151,9 @@ class FakeProviders:
     def _graphql(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         query, variables = body["query"], body.get("variables") or {}
         shop = url.split("/")[2]
+        synced = self._graphql_sync(query, variables)
+        if synced is not None:
+            return synced
         if "shop {" in query:
             return {
                 "data": {
@@ -199,8 +211,204 @@ class FakeProviders:
             return {"data": {"order": self.shopify_orders.get(number)}}
         return {"errors": [{"message": "unknown"}]}
 
+    def _graphql_sync(self, query: str, variables: dict[str, Any]) -> dict[str, Any] | None:
+        if "productVariants(" in query:
+            index = int(variables.get("after") or 0)
+            page = self.catalog_pages[index] if index < len(self.catalog_pages) else []
+            more = index + 1 < len(self.catalog_pages)
+            return {
+                "data": {
+                    "productVariants": {
+                        "nodes": page,
+                        "pageInfo": {
+                            "hasNextPage": more,
+                            "endCursor": str(index + 1) if more else None,
+                        },
+                    }
+                }
+            }
+        if "locations(" in query:
+            return {
+                "data": {
+                    "locations": {
+                        "nodes": [
+                            {
+                                "id": "gid://shopify/Location/1",
+                                "name": "Dhaka",
+                                "isActive": True,
+                                "fulfillsOnlineOrders": True,
+                            }
+                        ]
+                    }
+                }
+            }
+        if "nodes(ids" in query:
+            nodes = []
+            for gid in variables["ids"]:
+                item = gid.rsplit("/", 1)[-1]
+                quantities = (
+                    [{"name": "available", "quantity": self.levels[item]}]
+                    if item in self.levels
+                    else []
+                )
+                nodes.append(
+                    {
+                        "id": gid,
+                        "inventoryLevel": {"quantities": quantities} if quantities else None,
+                    }
+                )
+            return {"data": {"nodes": nodes}}
+        if "inventorySetQuantities" in query:
+            change = variables["input"]["quantities"][0]
+            item = change["inventoryItemId"].rsplit("/", 1)[-1]
+            if self.stale or self.levels.get(item) != change["changeFromQuantity"]:
+                errors = [{"code": "CHANGE_FROM_QUANTITY_STALE", "field": None, "message": "stale"}]
+                return {
+                    "data": {
+                        "inventorySetQuantities": {
+                            "inventoryAdjustmentGroup": None,
+                            "userErrors": errors,
+                        }
+                    }
+                }
+            self.levels[item] = change["quantity"]
+            return {
+                "data": {
+                    "inventorySetQuantities": {
+                        "inventoryAdjustmentGroup": {
+                            "id": "gid://shopify/InventoryAdjustmentGroup/1"
+                        },
+                        "userErrors": [],
+                    }
+                }
+            }
+        if "query OrderFulfillment" in query:
+            order = variables["id"].rsplit("/", 1)[-1]
+            state = self.fulfillment.setdefault(
+                order, {"cancelledAt": None, "open": True, "fulfillments": []}
+            )
+            return {
+                "data": {
+                    "order": {
+                        "id": variables["id"],
+                        "cancelledAt": state["cancelledAt"],
+                        "displayFulfillmentStatus": "FULFILLED"
+                        if not state["open"]
+                        else "UNFULFILLED",
+                        "fulfillmentOrders": {
+                            "nodes": [
+                                {
+                                    "id": f"gid://shopify/FulfillmentOrder/{order}",
+                                    "status": "OPEN" if state["open"] else "CLOSED",
+                                }
+                            ]
+                        },
+                        "fulfillments": state["fulfillments"],
+                    }
+                }
+            }
+        if "fulfillmentCreate" in query:
+            fo = variables["fulfillment"]["lineItemsByFulfillmentOrder"][0]["fulfillmentOrderId"]
+            order = fo.rsplit("/", 1)[-1]
+            state = self.fulfillment[order]
+            state["open"] = False
+            tracking = variables["fulfillment"]["trackingInfo"]
+            fulfillment = {
+                "id": f"gid://shopify/Fulfillment/9{order}",
+                "status": "SUCCESS",
+                "trackingInfo": [tracking],
+            }
+            state["fulfillments"].append(fulfillment)
+            return {
+                "data": {
+                    "fulfillmentCreate": {
+                        "fulfillment": {"id": fulfillment["id"], "status": "SUCCESS"},
+                        "userErrors": [],
+                    }
+                }
+            }
+        if "fulfillmentEventCreate" in query:
+            return {
+                "data": {
+                    "fulfillmentEventCreate": {
+                        "fulfillmentEvent": {
+                            "id": "gid://shopify/FulfillmentEvent/1",
+                            "status": "DELIVERED",
+                        },
+                        "userErrors": [],
+                    }
+                }
+            }
+        if "orderCancel(" in query:
+            order = variables["orderId"].rsplit("/", 1)[-1]
+            self.fulfillment.setdefault(order, {"open": True, "fulfillments": []})[
+                "cancelledAt"
+            ] = "2026-09-24T00:00:00Z"
+            return {
+                "data": {
+                    "orderCancel": {
+                        "job": {"id": "gid://shopify/Job/1"},
+                        "orderCancelUserErrors": [],
+                    }
+                }
+            }
+        if "productVariantsBulkUpdate" in query:
+            return {
+                "data": {"productVariantsBulkUpdate": {"productVariants": [], "userErrors": []}}
+            }
+        return None
+
+    def _woo_sync(
+        self, method: str, path: str, params: dict[str, Any], body: dict[str, Any]
+    ) -> Reply | None:
+        parts = path.strip("/").split("/")
+        if method == "GET" and path == "/products":
+            rows = self.woo_products
+            if params.get("include"):
+                wanted = {int(i) for i in str(params["include"]).split(",")}
+                rows = [r for r in rows if r["id"] in wanted]
+            per_page, page = int(params.get("per_page", 10)), int(params.get("page", 1))
+            chunk = rows[(page - 1) * per_page : page * per_page]
+            pages = max(1, -(-len(rows) // per_page))
+            return Reply(200, chunk, {"x-wp-total": str(len(rows)), "x-wp-totalpages": str(pages)})
+        if (
+            method == "GET"
+            and len(parts) == 3
+            and parts[0] == "products"
+            and parts[2] == "variations"
+        ):
+            rows = self.woo_variations.get(int(parts[1]), [])
+            if params.get("include"):
+                wanted = {int(i) for i in str(params["include"]).split(",")}
+                rows = [r for r in rows if r["id"] in wanted]
+            return Reply(200, rows, {"x-wp-total": str(len(rows)), "x-wp-totalpages": "1"})
+        if method == "PUT" and parts[0] == "products":
+            if len(parts) == 2:
+                item = next(r for r in self.woo_products if r["id"] == int(parts[1]))
+            else:
+                item = next(
+                    r for r in self.woo_variations[int(parts[1])] if r["id"] == int(parts[3])
+                )
+            item.update(body)
+            return Reply(200, item, {})
+        if len(parts) == 3 and parts[0] == "orders" and parts[2] == "notes":
+            notes = self.woo_notes.setdefault(int(parts[1]), [])
+            if method == "POST":
+                note = {"id": 500 + len(notes), **body}
+                notes.append(note)
+                return Reply(201, note, {})
+            return Reply(200, notes, {"x-wp-total": str(len(notes)), "x-wp-totalpages": "1"})
+        if method == "PUT" and len(parts) == 2 and parts[0] == "orders":
+            order = self.woo_orders[int(parts[1])]
+            order.update(body)
+            return Reply(200, order, {})
+        return None
+
     def _woo(self, method: str, url: str, params: dict[str, Any], body: dict[str, Any]) -> Reply:
         path = url.split("/wp-json/wc/v3", 1)[1]
+        synced = self._woo_sync(method, path, params, body)
+        if synced is not None:
+            return synced
         if method == "GET" and path == "/orders":
             ordered = sorted(self.woo_orders.values(), key=lambda o: o["id"])
             per_page, page = int(params.get("per_page", 10)), int(params.get("page", 1))
@@ -300,3 +508,37 @@ async def webhook_token(connection_id: str) -> str:
     async with system_session("test: webhook token") as db:
         row = await db.get(IntegrationConnection, uuid.UUID(connection_id))
         return row.webhook_token
+
+
+FULL_SHOPIFY_SCOPES = (
+    "read_orders,read_products,write_products,read_inventory,write_inventory,read_locations,"
+    "write_orders,read_merchant_managed_fulfillment_orders,"
+    "write_merchant_managed_fulfillment_orders,write_fulfillments"
+)
+
+
+def shopify_variant(
+    product: int,
+    variant: int,
+    sku: str | None,
+    *,
+    title: str = "Default Title",
+    price: str = "500.00",
+    item: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": f"gid://shopify/ProductVariant/{variant}",
+        "legacyResourceId": str(variant),
+        "sku": sku,
+        "title": title,
+        "displayName": f"Product {product}",
+        "price": price,
+        "updatedAt": "2026-09-20T10:00:00Z",
+        "product": {
+            "id": f"gid://shopify/Product/{product}",
+            "legacyResourceId": str(product),
+            "title": f"Product {product}",
+            "status": "ACTIVE",
+        },
+        "inventoryItem": {"id": f"gid://shopify/InventoryItem/{item or variant}", "tracked": True},
+    }

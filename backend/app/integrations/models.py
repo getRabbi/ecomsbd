@@ -66,9 +66,11 @@ class IntegrationEvent(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
         GUID, sa.ForeignKey("integration_connections.id")
     )
     provider: Mapped[str] = mapped_column(sa.String(24))
-    #: WEBHOOK, SYNC, AUTH or SECURITY.
+    #: WEBHOOK, SYNC, AUTH, SECURITY or OUTBOUND (ecomsbd -> provider).
     kind: Mapped[str] = mapped_column(sa.String(16))
     topic: Mapped[str] = mapped_column(sa.String(64))
+    #: The dedupe key: a provider's delivery id inbound, ecomsbd's own
+    #: operation key outbound ("status:<order>:CANCELLED"). One row per key.
     delivery_id: Mapped[str | None] = mapped_column(sa.String(200))
     external_ref: Mapped[str | None] = mapped_column(sa.String(200))
     #: A non-PII fact read from a verified body, such as "cancelled".
@@ -81,6 +83,12 @@ class IntegrationEvent(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     next_attempt_at: Mapped[datetime | None] = mapped_column(TZDateTime)
     order_id: Mapped[uuid.UUID | None] = mapped_column(GUID, sa.ForeignKey("orders.id"))
     resolved_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+    #: OUTBOUND only: PUSH_STATUS, PUSH_FULFILLMENT, PUSH_DELIVERED, PUSH_CANCEL,
+    #: PUSH_INVENTORY or PUSH_PRICE, with the desired state it carries.
+    operation: Mapped[str | None] = mapped_column(sa.String(32))
+    payload: Mapped[dict | None] = mapped_column(JSONColumn)
+    #: What the provider returned that later operations need (a fulfillment id).
+    result_ref: Mapped[str | None] = mapped_column(sa.String(200))
 
 
 class IntegrationSyncRun(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):

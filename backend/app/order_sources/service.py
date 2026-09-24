@@ -124,12 +124,17 @@ async def ingest(
     payload: dict[str, Any],
     *,
     managed: bool = False,
+    identity: str | None = None,
 ) -> dict[str, Any]:
-    """``managed`` is the Integrations Hub's connector path, and only that."""
+    """``managed`` is the Integrations Hub's connector path, and only that.
+
+    ``identity`` (managed only) is the hash of the store's own order data, so a
+    product mapping resolved into the payload never reads as a store edit.
+    """
     await lock_shop(db)
     source = await required(db, OrderSource, source_id)
     # Receipt identity is permanent. Mapping edits must not reinterpret a replay.
-    digest = request_hash(payload)
+    digest = identity if managed and identity else request_hash(payload)
     receipt = await db.scalar(
         sa.select(ExternalOrder).where(
             ExternalOrder.source_id == source.id,

@@ -36,6 +36,7 @@ from app.integrations.jobs import (
     process_integration_events,
     run_integration_syncs,
     schedule_integrations,
+    sync_inventories,
 )
 from app.messaging.jobs import dispatch_messages
 from app.notifications.jobs import scan_alerts, send_weekly_summaries
@@ -99,6 +100,7 @@ class WorkerSettings:
         process_integration_events,
         run_integration_syncs,
         schedule_integrations,
+        sync_inventories,
         dispatch_outbox,
         scan_alerts,
         send_weekly_summaries,
@@ -128,6 +130,8 @@ class WorkerSettings:
         cron(process_integration_events, second={3, 18, 33, 48}),
         cron(run_integration_syncs, second={25, 55}),
         cron(schedule_integrations, minute=set(range(0, 60, 5))),
+        # Two-way stock: compare mapped items every 5 minutes (V3.2).
+        cron(sync_inventories, minute=set(range(2, 60, 5))),
         # Frequent, cheap and idempotent: the dispatcher claims work with
         # SKIP LOCKED, so overlapping runs contend for nothing.
         cron(dispatch_outbox, second={0, 15, 30, 45}, run_at_startup=True),

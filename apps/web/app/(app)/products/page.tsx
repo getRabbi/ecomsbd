@@ -69,6 +69,7 @@ const MOVEMENT_TYPES = [
   'MANUAL_ADJUSTMENT',
   'DAMAGED_WRITE_OFF',
   'IMPORT_ADJUSTMENT',
+  'EXTERNAL_SYNC',
 ] as const;
 
 function stockTone(stock: number, low: boolean): Tone | null {

@@ -46,6 +46,7 @@ fragment OrderFields on Order {
     nodes {
       title variantTitle sku currentQuantity
       discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } }
+      __VARIANT__
     }
   }
 }
@@ -113,12 +114,41 @@ def redirect_uri() -> str:
     return get_settings().public_base_url.rstrip("/") + "/v1/integration-callbacks/shopify"
 
 
-def authorize_url(shop: str, state: str) -> str:
+#: Access scopes each V3.2 sync feature needs. They are requested only when the
+#: seller turns that feature on; a connection keeps working with what it has.
+FEATURE_SCOPES: dict[str, tuple[str, ...]] = {
+    "catalog": ("read_products",),
+    "price_push": ("write_products",),
+    "inventory": ("read_products", "read_inventory", "write_inventory", "read_locations"),
+    "order_status": ("write_orders",),
+    "fulfillment": (
+        "read_merchant_managed_fulfillment_orders",
+        "write_merchant_managed_fulfillment_orders",
+        "write_fulfillments",
+    ),
+}
+
+
+def requested_scopes(features: list[str] | None = None) -> str:
+    scopes = [s.strip() for s in get_settings().shopify_scopes.split(",") if s.strip()]
+    for feature in features or []:
+        scopes.extend(FEATURE_SCOPES.get(feature, ()))
+    return ",".join(dict.fromkeys(scopes))
+
+
+def missing_scopes(granted: str | None, feature: str) -> list[str]:
+    have = {s.strip() for s in (granted or "").split(",") if s.strip()}
+    # Shopify's write_X scope implies read_X.
+    have |= {s.replace("write_", "read_", 1) for s in have if s.startswith("write_")}
+    return [s for s in FEATURE_SCOPES.get(feature, ()) if s not in have]
+
+
+def authorize_url(shop: str, state: str, features: list[str] | None = None) -> str:
     settings = get_settings()
     query = urlencode(
         {
             "client_id": settings.shopify_client_id,
-            "scope": settings.shopify_scopes,
+            "scope": requested_scopes(features),
             "redirect_uri": redirect_uri(),
             "state": state,
         }
@@ -274,12 +304,29 @@ def search(since: datetime, until: datetime, *, updated: bool, created_from: dat
     return " AND ".join(terms)
 
 
+#: Line-item variant ids need read_products; asked for only once granted, so
+#: an orders-only connection keeps importing exactly as before.
+VARIANT_FIELDS = "variant { legacyResourceId product { legacyResourceId } }"
+
+
+def _with_variants(query: str, with_variant: bool) -> str:
+    return query.replace("__VARIANT__", VARIANT_FIELDS if with_variant else "")
+
+
 async def orders_page(
-    shop: str, credentials: dict[str, Any], query: str, cursor: str | None
+    shop: str,
+    credentials: dict[str, Any],
+    query: str,
+    cursor: str | None,
+    *,
+    with_variant: bool = False,
 ) -> tuple[list[dict[str, Any]], str | None]:
     data = (
         await graphql(
-            shop, credentials, ORDERS_QUERY, {"first": PAGE_SIZE, "after": cursor, "query": query}
+            shop,
+            credentials,
+            _with_variants(ORDERS_QUERY, with_variant),
+            {"first": PAGE_SIZE, "after": cursor, "query": query},
         )
     ).get("orders") or {}
     info = data.get("pageInfo") or {}
@@ -288,11 +335,18 @@ async def orders_page(
     )
 
 
-async def fetch_order(shop: str, credentials: dict[str, Any], order_id: str) -> dict[str, Any]:
+async def fetch_order(
+    shop: str, credentials: dict[str, Any], order_id: str, *, with_variant: bool = False
+) -> dict[str, Any]:
     if not order_id.isdigit():
         raise ProviderError("MALFORMED_PAYLOAD")
     node = (
-        await graphql(shop, credentials, ORDER_QUERY, {"id": f"gid://shopify/Order/{order_id}"})
+        await graphql(
+            shop,
+            credentials,
+            _with_variants(ORDER_QUERY, with_variant),
+            {"id": f"gid://shopify/Order/{order_id}"},
+        )
     ).get("order")
     if not node:
         raise ProviderError("NOT_FOUND_AT_PROVIDER")
@@ -316,6 +370,15 @@ def external_id(node: dict[str, Any]) -> str:
     if not value.isdigit():
         raise ProviderError("MALFORMED_PAYLOAD")
     return value
+
+
+def _line_link(line: dict[str, Any]) -> dict[str, str]:
+    """The store item a line sold, for mapping it to an ecomsbd product."""
+    variant = line.get("variant") or {}
+    product = variant.get("product") or {}
+    if variant.get("legacyResourceId") and product.get("legacyResourceId"):
+        return {"_link": f"{product['legacyResourceId']}:{variant['legacyResourceId']}"}
+    return {}
 
 
 def is_cancelled(node: dict[str, Any]) -> bool:
@@ -347,6 +410,7 @@ def to_native(node: dict[str, Any]) -> dict[str, Any]:
                     _money(line.get("discountedUnitPriceAfterAllDiscountsSet"))
                 ),
                 "variant_label": clip(variant, 120) if variant != "Default Title" else None,
+                **_line_link(line),
             }
         )
     if not items:

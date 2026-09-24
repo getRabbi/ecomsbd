@@ -73,6 +73,10 @@ class StockMovementReason(StrEnum):
     #: payable — only the quantity, with an optional unit cost for reference.
     RESTOCK = "RESTOCK"
 
+    #: V3.2: a connected store is the stock authority and its count changed.
+    #: Always a delta computed against the ledger, never an overwrite.
+    EXTERNAL_SYNC = "EXTERNAL_SYNC"
+
 
 #: Expected sign of each reason's delta, or ``None`` where either direction is
 #: legitimate. Enforced by the service so a "restore" can never quietly remove
@@ -88,6 +92,7 @@ MOVEMENT_SIGN: dict[StockMovementReason, int | None] = {
     StockMovementReason.DAMAGED_WRITE_OFF: -1,
     StockMovementReason.IMPORT_ADJUSTMENT: None,
     StockMovementReason.RESTOCK: +1,
+    StockMovementReason.EXTERNAL_SYNC: None,
 }
 
 
@@ -99,6 +104,8 @@ class StockMovementSource(StrEnum):
     COURIER_EVENT = "COURIER_EVENT"
     IMPORT = "IMPORT"
     SYSTEM = "SYSTEM"
+    #: V3.2: a connected store (Integrations Hub) moved stock.
+    INTEGRATION = "INTEGRATION"
 
 
 class Product(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):

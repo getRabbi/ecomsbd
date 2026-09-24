@@ -19,16 +19,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.audit import AuditAction
 from app.core.clock import utc_now
 from app.core.config import get_settings
-from app.core.errors import ConflictError, ValidationError
-from app.integrations import service
+from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.integrations import service, sync
 from app.integrations.models import IntegrationConnection
 from app.order_sources.models import ExternalOrder, OrderSource
 from app.public_api.models import ApiKey, WebhookDelivery, WebhookEndpoint
 from app.public_api.service import issue_key
 from app.public_api.webhooks import TOPICS, create_endpoint, queue_test_delivery
 
-SCOPES = ["orders:read", "orders:write", "sources:write"]
-DEFAULT_TOPICS = ["order.booked", "order.status_changed", "consignment.status_changed"]
+#: A storefront reads and writes its own orders and reads the catalogue and
+#: stock to map its SKUs. Changing stock is opt-in: STOCK_WRITE.
+SCOPES = ["orders:read", "orders:write", "sources:write", "products:read", "inventory:read"]
+STOCK_WRITE = "inventory:write"
+DEFAULT_TOPICS = [
+    "order.confirmed",
+    "order.cancelled",
+    "order.fulfilled",
+    "tracking.assigned",
+    "order.delivered",
+    "order.returned",
+    "inventory.updated",
+]
 RATE_LIMIT = 120
 
 
@@ -37,12 +48,12 @@ def api_base_url() -> str:
 
 
 async def _new_key(
-    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID
+    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID, *, stock_write: bool = False
 ) -> tuple[ApiKey, str]:
     return await issue_key(
         db,
         name=f"{conn.name} (website)"[:100],
-        scopes=SCOPES,
+        scopes=SCOPES + ([STOCK_WRITE] if stock_write else []),
         rate_limit=RATE_LIMIT,
         created_by=actor_id,
     )
@@ -72,16 +83,18 @@ async def _endpoint(db: AsyncSession, conn: IntegrationConnection) -> WebhookEnd
     return await db.get(WebhookEndpoint, uuid.UUID(endpoint_id)) if endpoint_id else None
 
 
-async def rotate_key(db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID) -> str:
+async def rotate_key(
+    db: AsyncSession, conn: IntegrationConnection, actor_id: uuid.UUID, *, stock_write: bool = False
+) -> str:
     """Issue a new key and revoke the old one now. The website must be updated."""
     if conn.state == "DISCONNECTED":
         raise ConflictError("This connection is disconnected")
     old = await _key(db, conn)
     if old is not None and old.revoked_at is None:
         old.revoked_at = utc_now()
-    key, token = await _new_key(db, conn, actor_id)
-    conn.config = {**conn.config, "api_key_id": str(key.id)}
-    await service.audit(db, AuditAction.INTEGRATION_KEY_ROTATED, conn)
+    key, token = await _new_key(db, conn, actor_id, stock_write=stock_write)
+    conn.config = {**conn.config, "api_key_id": str(key.id), "scopes": key.scopes}
+    await service.audit(db, AuditAction.INTEGRATION_KEY_ROTATED, conn, stock_write=stock_write)
     return token
 
 
@@ -205,3 +218,72 @@ def package(conn: IntegrationConnection) -> dict[str, Any]:
         "topics": sorted(TOPICS),
         "signature_header": "X-Ecomsbd-Signature",
     }
+
+
+async def connection_for_key(db: AsyncSession, key_id: uuid.UUID) -> IntegrationConnection | None:
+    rows = (
+        await db.scalars(
+            sa.select(IntegrationConnection).where(
+                IntegrationConnection.provider == "CUSTOM_WEBSITE",
+                IntegrationConnection.state != "DISCONNECTED",
+            )
+        )
+    ).all()
+    return next((row for row in rows if row.config.get("api_key_id") == str(key_id)), None)
+
+
+async def apply_status(
+    db: AsyncSession,
+    key_id: uuid.UUID,
+    order_id: uuid.UUID,
+    status: str,
+    reason: str | None,
+) -> dict[str, Any]:
+    """A website confirms or cancels an order it sent, through the order service."""
+    from app.api.deps import get_hasher, get_vault
+    from app.customers.service import CustomerService
+    from app.integrations.inbound import booked
+    from app.orders.models import Order, OrderStatus
+    from app.orders.service import OrderService
+
+    order = await db.scalar(
+        sa.select(Order).where(Order.id == order_id, Order.deleted_at.is_(None))
+    )
+    if order is None:
+        raise NotFoundError()
+    current = str(order.status)
+    if current == status:
+        return {"order_id": str(order.id), "status": current, "result": "UNCHANGED"}
+    if status == "CANCELLED" and await booked(db, order):
+        conn = await connection_for_key(db, key_id)
+        conflict_id = None
+        if conn is not None:
+            conflict = await sync.open_conflict(
+                db,
+                conn,
+                kind="CANCELLED_AFTER_BOOKING",
+                entity="ORDER",
+                fingerprint=f"cancel:{order.id}",
+                order_id=order.id,
+                detail={
+                    "ecomsbd": {"status": current, "order_number": order.order_number},
+                    "external": {"status": "CANCELLED", "reason": reason},
+                },
+            )
+            conflict_id = str(conflict.id)
+        return {
+            "order_id": str(order.id),
+            "status": current,
+            "result": "CONFLICT",
+            "code": "CANCELLED_AFTER_BOOKING",
+            "conflict_id": conflict_id,
+        }
+    service_ = OrderService(
+        db, customers=CustomerService(db, hasher=get_hasher(), vault=get_vault())
+    )
+    updated = await service_.transition(
+        order.id,
+        OrderStatus(status),
+        reason=(reason or "Cancelled by the website") if status == "CANCELLED" else None,
+    )
+    return {"order_id": str(updated.id), "status": str(updated.status), "result": "UPDATED"}

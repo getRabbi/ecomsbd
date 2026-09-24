@@ -25,6 +25,7 @@ from app.core.clock import utc_now
 from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.integrations import custom_website, meta, recipes, service, shopify, woocommerce
+from app.integrations import sync as sync_engine
 from app.integrations.http import ProviderError
 from app.integrations.models import IntegrationConnection, IntegrationEvent, IntegrationSyncRun
 from app.integrations.receiver import select_page
@@ -75,7 +76,12 @@ class SyncInput(Input):
 
 class WebhookInput(Input):
     url: str = Field(min_length=10, max_length=1000)
-    topics: list[str] | None = Field(default=None, max_length=5)
+    topics: list[str] | None = Field(default=None, max_length=20)
+
+
+class KeyInput(Input):
+    #: Let the website change stock through the Public API.
+    stock_write: bool = False
 
 
 class RecipeInput(Input):
@@ -262,7 +268,9 @@ async def connect(
         shop = shopify.normalize_shop(body.shop or "")
         await service.ensure_unlinked(db, conn, shop)
         conn.account_id = shop
-        url = shopify.authorize_url(shop, service.new_state(conn))
+        # Scopes follow the sync features the seller turned on, nothing more.
+        wanted = sync_engine.features(sync_engine.settings_of(conn))
+        url = shopify.authorize_url(shop, service.new_state(conn), wanted)
         await db.flush()
         return {"authorize_url": url}
     if conn.provider == "WOOCOMMERCE":
@@ -437,12 +445,18 @@ async def go_live(connection_id: uuid.UUID, db: DbSession, _: Owner) -> dict[str
 
 @router.post("/{connection_id}/api-key", status_code=201)
 async def rotate_key(
-    connection_id: uuid.UUID, db: DbSession, actor: Owner, response: Response
+    connection_id: uuid.UUID,
+    db: DbSession,
+    actor: Owner,
+    response: Response,
+    body: KeyInput | None = None,
 ) -> dict[str, Any]:
     conn = await service.get(db, connection_id, lock=True)
     if conn.provider != "CUSTOM_WEBSITE":
         raise ValidationError("Only a Custom Website has an API key")
-    key = await custom_website.rotate_key(db, conn, actor.user_id)
+    key = await custom_website.rotate_key(
+        db, conn, actor.user_id, stock_write=bool(body and body.stock_write)
+    )
     _no_store(response)
     return {"api_key": key, "connection": await _one(db, conn, True)}
 

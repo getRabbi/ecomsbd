@@ -91,6 +91,11 @@ class OutboxTopic(StrEnum):
     SUBSCRIPTION_RENEWED = "subscription.renewed"
     FRIDAY_SUMMARY_DUE = "summary.friday_due"
 
+    # Integrations Hub two-way sync (V3.2). Public webhook topics of the same name.
+    ORDER_UPDATED = "order.updated"
+    INVENTORY_CHANGED = "inventory.updated"
+    PRODUCT_UPDATED = "product.updated"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

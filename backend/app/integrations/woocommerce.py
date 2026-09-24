@@ -264,6 +264,11 @@ def to_native(order: dict[str, Any]) -> dict[str, Any]:
                 "quantity": min(quantity, 9999),
                 "unit_price_paisa": unit,
                 "discount_paisa": unit * quantity - total,
+                **(
+                    {"_link": f"{line['product_id']}:{line.get('variation_id') or ''}"}
+                    if line.get("product_id")
+                    else {}
+                ),
             }
         )
     if not items:

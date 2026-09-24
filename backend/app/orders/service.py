@@ -491,6 +491,11 @@ class OrderService:
                 entity_id=order.id,
                 context={"changed": sorted(changed)},
             )
+            await enqueue(
+                self._db,
+                OutboxTopic.ORDER_UPDATED,
+                {"order_id": str(order.id), "changed": sorted(changed)},
+            )
         await self._db.flush()
         return order
 

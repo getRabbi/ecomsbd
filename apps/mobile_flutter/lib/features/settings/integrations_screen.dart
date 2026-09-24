@@ -118,6 +118,10 @@ class _IntegrationsState extends ConsumerState<IntegrationsScreen> {
                         'count': c['orders_today'],
                       }),
                       context.tr('int.problems', {'count': c['open_issues']}),
+                      if ((c['open_conflicts'] ?? 0) as int > 0)
+                        context.tr('int.conflictsCount', {
+                          'count': c['open_conflicts'],
+                        }),
                       context.tr('int.lastSync', {
                         'when': when(context, c['last_sync_at']),
                       }),
@@ -190,6 +194,8 @@ class IntegrationDetailScreen extends ConsumerStatefulWidget {
 
 class _DetailState extends ConsumerState<IntegrationDetailScreen> {
   Map<String, dynamic>? _detail;
+  Map<String, dynamic>? _sync;
+  List<dynamic> _conflicts = const [];
   Map<String, dynamic>? _test;
   final Set<String> _queued = <String>{};
   final _key = TextEditingController();
@@ -211,10 +217,28 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
   }
 
   Future<void> _load() async {
-    final result = await ref
-        .read(apiClientProvider)
-        .get('/integrations/${widget.id}');
-    if (mounted) setState(() => _detail = result);
+    final api = ref.read(apiClientProvider);
+    final result = await api.get('/integrations/${widget.id}');
+    final provider = (result['connection'] as Map?)?['provider'];
+    Map<String, dynamic>? syncView;
+    List<dynamic> open = const [];
+    if (provider == 'SHOPIFY' || provider == 'WOOCOMMERCE') {
+      syncView = await api.get('/integrations/${widget.id}/sync-settings');
+    }
+    if (provider != 'MESSENGER') {
+      final conflicts = await api.get(
+        '/integrations/conflicts',
+        query: {'connection_id': widget.id},
+      );
+      open = conflicts['items'] as List;
+    }
+    if (mounted) {
+      setState(() {
+        _detail = result;
+        _sync = syncView;
+        _conflicts = open;
+      });
+    }
   }
 
   Future<void> _run(Future<void> Function() work) async {
@@ -322,6 +346,8 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(context.tr('int.reconnectWeb')),
               ),
+            if (_sync != null) ..._syncSection(context, _sync!),
+            if (_conflicts.isNotEmpty) ..._conflictSection(context),
             const SizedBox(height: 16),
             Text(
               context.tr('int.activity'),
@@ -352,6 +378,81 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
       ),
     );
   }
+
+  List<Widget> _syncSection(BuildContext context, Map<String, dynamic> view) {
+    final settings = view['settings'] as Map;
+    final links = (view['links'] as Map?) ?? const {};
+    return [
+      const SizedBox(height: 16),
+      Text(
+        context.tr('int.sync.title'),
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      Text(
+        context.tr('int.sync.stock', {
+          'value': context.tr('int.sync.stock.${settings['inventory']}'),
+        }),
+      ),
+      Text(
+        context.tr('int.sync.status', {
+          'value': context.tr('int.sync.status.${settings['order_status']}'),
+        }),
+      ),
+      Text(
+        context.tr('int.sync.tracking', {
+          'value': context.tr('int.sync.tracking.${settings['fulfillment']}'),
+        }),
+      ),
+      Text(
+        context.tr('int.sync.mapped', {
+          'matched': links['MATCHED'] ?? 0,
+          'unmatched': links['UNMATCHED'] ?? 0,
+        }),
+      ),
+      if (settings['inventory'] != 'NONE')
+        Text(
+          context.tr('int.sync.lastStock', {
+            'when': when(context, view['inventory_synced_at']),
+          }),
+        ),
+      Text(
+        context.tr('int.sync.conflicts', {
+          'count': view['open_conflicts'] ?? 0,
+        }),
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          icon: const Icon(Icons.link),
+          label: Text(context.tr('int.sync.mappings')),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => IntegrationMappingsScreen(id: widget.id),
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _conflictSection(BuildContext context) => [
+    const SizedBox(height: 8),
+    Text(
+      context.tr('int.sync.conflictsList'),
+      style: Theme.of(context).textTheme.titleMedium,
+    ),
+    for (final conflict in _conflicts)
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.call_split, color: EcomsbdColors.amber),
+        title: Text(conflictLabel(context, '${conflict['kind']}')),
+        subtitle: Text(when(context, conflict['updated_at'])),
+      ),
+    Text(
+      context.tr('int.sync.conflictsWeb'),
+      style: const TextStyle(color: EcomsbdColors.muted),
+    ),
+  ];
 
   List<Widget> _wooKeys(BuildContext context) => [
     const SizedBox(height: 12),
@@ -422,7 +523,10 @@ class IssueTile extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(
-            issue['code'] != null
+            issue['kind'] == 'OUTBOUND' &&
+                    englishStrings.containsKey('int.op.${issue['operation']}')
+                ? context.tr('int.op.${issue['operation']}')
+                : issue['code'] != null
                 ? codeLabel(context, '${issue['code']}')
                 : context.tr('int.status.${issue['status']}'),
           ),
@@ -486,6 +590,92 @@ class HealthBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Read-only list of how store products map to ecomsbd products. Matching
+/// by hand stays on the web, where search and a keyboard are.
+class IntegrationMappingsScreen extends ConsumerStatefulWidget {
+  const IntegrationMappingsScreen({super.key, required this.id});
+
+  final String id;
+
+  @override
+  ConsumerState<IntegrationMappingsScreen> createState() => _MappingsState();
+}
+
+class _MappingsState extends ConsumerState<IntegrationMappingsScreen> {
+  List<dynamic>? _items;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    try {
+      final result = await ref
+          .read(apiClientProvider)
+          .get('/integrations/${widget.id}/links');
+      if (mounted) setState(() => _items = result['items'] as List);
+    } on ApiError catch (e) {
+      if (mounted) setState(() => _error = explain(context, e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('int.sync.mappings'))),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_error != null)
+            Text(_error!, style: const TextStyle(color: EcomsbdColors.red)),
+          if (items == null && _error == null) const LinearProgressIndicator(),
+          if (items != null && items.isEmpty)
+            Text(context.tr('int.sync.noMappings')),
+          for (final link in items ?? const [])
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('${link['external_title']}'),
+              subtitle: Text(
+                [
+                  if (link['external_sku'] != null) '${link['external_sku']}',
+                  if (link['internal_name'] != null)
+                    '→ ${link['internal_name']}',
+                  if (link['external_qty'] != null)
+                    context.tr('int.sync.storeStock', {
+                      'count': link['external_qty'],
+                    }),
+                ].join(' · '),
+              ),
+              trailing: Text(
+                context.tr('int.sync.link.${link['state']}'),
+                style: TextStyle(
+                  color: link['state'] == 'MATCHED'
+                      ? EcomsbdColors.green
+                      : link['state'] == 'CONFLICT'
+                      ? EcomsbdColors.red
+                      : EcomsbdColors.muted,
+                ),
+              ),
+            ),
+          Text(
+            context.tr('int.sync.conflictsWeb'),
+            style: const TextStyle(color: EcomsbdColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String conflictLabel(BuildContext context, String kind) {
+  final key = 'int.sync.kind.$kind';
+  return englishStrings.containsKey(key) ? context.tr(key) : kind;
 }
 
 String codeLabel(BuildContext context, String code) {

@@ -3,6 +3,7 @@
 import { insightsEn, insightsBn } from './insights-strings';
 import { crmEn, crmBn } from './crm-strings';
 import { integrationsEn, integrationsBn } from './integrations-strings';
+import { syncEn, syncBn } from './sync-strings';
 
 /**
  * English and Bangla for the dashboard.
@@ -21,6 +22,7 @@ export const strings = {
     ...insightsEn,
     ...crmEn,
     ...integrationsEn,
+    ...syncEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -644,6 +646,7 @@ export const strings = {
     ...insightsBn,
     ...crmBn,
     ...integrationsBn,
+    ...syncBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',

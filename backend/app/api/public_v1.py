@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, Response
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import DbSession, get_hasher, get_vault
 from app.api.v1.commerce_schemas import (
@@ -18,6 +19,7 @@ from app.common.idempotency import request_hash
 from app.core.errors import ValidationError
 from app.customers.models import Customer
 from app.customers.service import CustomerService
+from app.integrations import custom_website
 from app.messaging.service import required
 from app.order_sources.service import NativeOrder, create_native, ingest
 from app.orders.models import Order
@@ -137,21 +139,35 @@ async def products(
     db: DbSession,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    sku: str | None = Query(None, min_length=1, max_length=64),
 ) -> dict[str, Any]:
     principal.require("products:read")
+    query = sa.select(Product).where(Product.is_active.is_(True))
+    if sku is not None:
+        # A website maps its catalogue by SKU: the product's own, or a variant's.
+        variant_owner = sa.select(ProductVariant.product_id).where(ProductVariant.sku == sku)
+        query = query.where(sa.or_(Product.sku == sku, Product.id.in_(variant_owner)))
     rows = (
         await db.scalars(
-            sa.select(Product)
-            .where(Product.is_active.is_(True))
-            .order_by(Product.created_at.desc(), Product.id)
-            .offset(offset)
-            .limit(limit)
+            query.order_by(Product.created_at.desc(), Product.id).offset(offset).limit(limit)
         )
     ).all()
-    return {
-        "items": [fields(row, PRODUCT_FIELDS) for row in rows],
-        "next_offset": offset + len(rows),
-    }
+    items = [fields(row, PRODUCT_FIELDS) for row in rows]
+    if sku is not None and rows:
+        variants = (
+            await db.scalars(
+                sa.select(ProductVariant).where(
+                    ProductVariant.product_id.in_([row.id for row in rows])
+                )
+            )
+        ).all()
+        for item in items:
+            item["variants"] = [
+                fields(v, "id name sku stock_on_hand is_active")
+                for v in variants
+                if str(v.product_id) == item["id"]
+            ]
+    return {"items": items, "next_offset": offset + len(rows)}
 
 
 @router.post("/products", status_code=201)
@@ -229,3 +245,35 @@ async def source_order(
     return await write_once(
         db, principal, f"sources/{source_id}", key, body.model_dump(mode="json"), execute
     )
+
+
+class OrderStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["CONFIRMED", "CANCELLED"]
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/orders/{order_id}/status")
+async def order_status(
+    order_id: uuid.UUID,
+    body: OrderStatusInput,
+    principal: PublicPrincipal,
+    db: DbSession,
+    key: Key,
+    response: Response,
+) -> dict[str, Any]:
+    """Confirm or cancel from the website. A booked parcel is not cancelled here:
+    the answer is 409 CANCELLED_AFTER_BOOKING and the seller gets a conflict."""
+    principal.require("orders:write")
+
+    async def execute() -> dict[str, Any]:
+        return await custom_website.apply_status(
+            db, principal.key_id, order_id, body.status, body.reason
+        )
+
+    result = await write_once(
+        db, principal, f"orders/{order_id}/status", key, body.model_dump(mode="json"), execute
+    )
+    if result.get("result") == "CONFLICT":
+        response.status_code = 409
+    return result

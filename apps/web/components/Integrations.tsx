@@ -174,8 +174,15 @@ export function EventsTable({
                 ) : null}
                 <td style={{ whiteSpace: 'normal' }}>
                   <span className="table__primary">
-                    {event.code ? labels.code(event.code) : labels.status(event.status)}
+                    {event.kind === 'OUTBOUND' && event.operation && known(`int.op.${event.operation}`)
+                      ? t(`int.op.${event.operation}` as StringKey)
+                      : event.code
+                        ? labels.code(event.code)
+                        : labels.status(event.status)}
                   </span>
+                  {event.kind === 'OUTBOUND' && event.code ? (
+                    <span className="table__sub">{labels.code(event.code)}</span>
+                  ) : null}
                   {event.attempts > 1 ? (
                     <span className="table__sub">{t('int.times', { count: event.attempts })}</span>
                   ) : null}
