@@ -37,9 +37,9 @@ Short state note for the next session. Git is the source of truth; check it firs
   - Forecasts told shops without sales history "nothing will run out".
   - Automation briefly showed an owner the read-only note, and kept a stale "Turned on" notice.
 - **`V3_PRODUCTION_READY = YES`, `REAL_DEVICE_V3_RC = PASS`. No V3 code blocker remains.**
-- No V3 tag, Android version bump, AAB or release has been made; that is the owner's call.
-- Production is aligned with V3.8: the DB is at `a38001`, and the API and worker run `a069621`
-  (2026-09-25; see Production).
+- **V3 is tagged and released as `v3.0.0`** (Android `3.0.0+300`, merge `77d497f`,
+  2026-09-25). Google Play distribution is still pending; see Release.
+- Production is aligned with V3.8: the DB is at `a38001` (2026-09-25; see Production).
 - PRs #1–#14 passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan. PR #15
   (mobile only) was verified locally (Flutter 413 passed) because GitHub Actions did not
@@ -52,8 +52,9 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Production
 
-- **Prod DB is at `a38001`** (current head). The API and worker run `a069621` (main after
-  PR #15; backend unchanged since `68744fe`). `/health/ready` is 200 with PostgreSQL and Redis ok.
+- **Prod DB is at `a38001`** (current head). The API and worker were last confirmed on
+  `a069621` (main after PR #15; backend unchanged since `68744fe`). PRs #16 and #17 changed no
+  backend code. After #17 merged, `/health/ready` was 200 with PostgreSQL and Redis ok.
 - Migrated on 2026-09-25 around 06:46 UTC with the owner's approval: `a32001` → `a32002` →
   `a33001` → `a34001` → `a35001` → `a36001` → `a37001` → `a38001`, in one
   `alembic -x database-only=true upgrade head` transaction.
@@ -94,6 +95,50 @@ Short state note for the next session. Git is the source of truth; check it firs
 
   Every new table has RLS on and client grants revoked.
 
+## Release (`v3.0.0`)
+
+- PR #17 bumped the app to `3.0.0+300` and changed only `pubspec.yaml`. The highest
+  versionCode before it was 232. GitHub Actions still did not start jobs (billing hold).
+- Annotated tag `v3.0.0` points to merge `77d497f`. The GitHub Release "ecomsbd v3.0.0" is
+  marked Latest and has the APK, the AAB and `SHA256SUMS.txt`:
+  - `ecomsbd-3.0.0+300-production.aab`: `19783b500fdd16119ab3889d2a31a873e4885cdc5bf7edff40420c9da99bab4d`
+  - `ecomsbd-3.0.0+300-production.apk`: `45042e688a8555e569c27dbb045f43a4a6b6b1a77b97422027d4435ef32dee4a`
+- Both were built from the tree of `77d497f` with `--dart-define-from-file=env/production.json`.
+  They are signed with the upload key `CN=ecomsbd Upload`, the same key as v2.3.1 (SHA-1
+  `A6:65:21:D5:5B:86:A6:C4:A7:6F:24:DD:DF:A7:23:8A:8A:E2:12:6F`).
+- Checked: not debuggable, cleartext traffic off, and the only API endpoint is
+  `https://api.scalemyprints.com/v1`. Native libraries are 16 KB aligned, targetSdk is 36,
+  and no sensitive permissions are requested.
+- Use the GitHub Release copies. The owner's ignored `release/v3.0.0/` holds the same files.
+
+Still pending, all in the owner's consoles:
+
+- **Play Internal testing.** Upload the release AAB, not the APK, with Play App Signing
+  (Google-generated key). Nothing is on Play yet.
+- **Play App Signing fingerprints.** After the upload they are under Setup → App integrity →
+  App signing → "App signing key certificate". This key is not the upload key above.
+- **Android Google Sign-In.** Create Android OAuth clients for `com.smply.app` in Google Cloud
+  project **939255107253**, the project of web client `939255107253-vu8012mb…`: one with the
+  Play app-signing SHA-1 and one with the upload SHA-1.
+  - It is the right project: Supabase's `/auth/v1/authorize?provider=google` redirects with
+    that client, the app passes it as `serverClientId`, and web Google login works with it.
+  - Do not add these SHA-1s to Firebase `ecomsbd-11bdb`. It is used only for FCM, and Firebase
+    would create the OAuth clients in the wrong project and claim the package + SHA-1 pair.
+  - No rebuild and no Supabase change are needed. The app sends no nonce, so Supabase checks
+    only the token audience, which already matches.
+- **Play-installed smoke.** Install from the Internal testing link. Check launch, email login,
+  Google login, session restore after a force-close, and Home. The POCO test phone has a
+  debug-signed install that Play cannot update in place.
+- **Before closed testing or production.** Play needs:
+  - a hosted privacy policy URL;
+  - a web URL for account deletion (the app has in-app deletion, but neither page exists);
+  - the Data safety form, content rating, target audience and ads declaration;
+  - app access (a reviewer login) and the store listing.
+
+  A personal developer account created after November 2023 also needs a closed test with at
+  least 12 testers for 14 days before production access.
+- No public rollout until Google Sign-In passes on a Play-installed build.
+
 ## External gates (code is done, these are not)
 
 - Shopify: `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` from an approved Shopify app,
@@ -117,8 +162,8 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Next phase
 
-- V3 roadmap code is complete with V3.8; next is the V3 release decision (tag, Android
-  version, AAB) by the owner. Deferred from V3.6:
+- V3 roadmap code is complete with V3.8 and released as `v3.0.0`; next is Play distribution
+  (see Release). Deferred from V3.6:
   seasonality/weekday profiles, per-location forecasts, promotion effects. Deferred from V3.5:
   batch/expiry/serial tracking, per-location sync to storefronts, reservations shown to
   sellers, landed cost and averaging.
