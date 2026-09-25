@@ -30,11 +30,20 @@ Short state note for the next session. Git is the source of truth; check it firs
   - gitleaks over 152 commits: clean; one Alembic head `a38001`;
   - main CI on `5e0bb38`: PostgreSQL suite, migration from empty, dependency audit, backup
     restore drill, backend image, secret scan and Flutter debug APK.
+- **Real-device V3 RC: PASS** (2026-09-25). POCO X3 NFC, Android 11, with a profile build using
+  `env/production.json` against production. Every V3.1–V3.8 mobile screen was checked in EN and BN.
+  The API log had no 404 or 5xx. It found three defects, fixed in PR #15 (merge `a069621`):
+  - WhatsApp showed the raw key `int.provider.WHATSAPP`.
+  - Forecasts told shops without sales history "nothing will run out".
+  - Automation briefly showed an owner the read-only note, and kept a stale "Turned on" notice.
+- **`V3_PRODUCTION_READY = YES`, `REAL_DEVICE_V3_RC = PASS`. No V3 code blocker remains.**
 - No V3 tag, Android version bump, AAB or release has been made; that is the owner's call.
-- Production is aligned with V3.8: the DB is at `a38001`, and the API and worker run `68744fe`
+- Production is aligned with V3.8: the DB is at `a38001`, and the API and worker run `a069621`
   (2026-09-25; see Production).
-- Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
-  tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
+- PRs #1–#14 passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
+  tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan. PR #15
+  (mobile only) was verified locally (Flutter 413 passed) because GitHub Actions did not
+  start jobs (account billing hold).
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
 - No release tag has been created for V3.1 or V3.2.
 - Migration head: **`a38001`**, one head, no branches (`a31001` = V3.1, `a32001` = V3.2,
@@ -43,8 +52,8 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Production
 
-- **Prod DB is at `a38001`** (current head). The API and worker run `68744fe` (main after
-  PR #13). `/health/ready` is 200 with PostgreSQL and Redis ok.
+- **Prod DB is at `a38001`** (current head). The API and worker run `a069621` (main after
+  PR #15; backend unchanged since `68744fe`). `/health/ready` is 200 with PostgreSQL and Redis ok.
 - Migrated on 2026-09-25 around 06:46 UTC with the owner's approval: `a32001` → `a32002` →
   `a33001` → `a34001` → `a35001` → `a36001` → `a37001` → `a38001`, in one
   `alembic -x database-only=true upgrade head` transaction.
@@ -115,6 +124,12 @@ Short state note for the next session. Git is the source of truth; check it firs
   sellers, landed cost and averaging.
   Still out of scope: double-entry accounting, MRP, vendor portal, automatic purchasing,
   SDK/app marketplace.
+- Post-release polish (not blockers, from before V3; found in the device RC):
+  - the menu shows "Owner · " when the account has no phone;
+  - sign-out takes about 4 s with no progress UI;
+  - Order sources and Messaging show raw codes (`CUSTOM_PUSH`, `EMAIL`);
+  - Home's "with couriers" amount (delivered, unpaid) and Cash & COD's "on the road" (booked
+    consignments) use different definitions.
 
 ## Invariants
 
