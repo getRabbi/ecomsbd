@@ -2,6 +2,7 @@ import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/core/api/api_client.dart';
 import 'package:ecomsbd/features/forecasting/forecast_screen.dart';
 import 'package:ecomsbd/l10n/app_strings.dart';
+import 'package:ecomsbd/l10n/forecasting_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,6 +88,60 @@ void main() {
       );
     });
   }
+
+  for (final language in ['en', 'bn']) {
+    testWidgets('a shop without enough history is not told nothing runs out '
+        'in $language', (tester) async {
+      final fake = buildFakeApi();
+      fake.adapter.onJson('GET', '/forecasting/demand', {
+        'items': <Map<String, dynamic>>[],
+        'counts': {'all': 2, 'at_risk': 0, 'insufficient': 2},
+        'method': {'min_in_stock_days': 14, 'min_units': 5},
+        'can_draft': false,
+      });
+      fake.adapter.onJson('GET', '/forecasting/cash', {
+        'inflow': {'next_7_days': 0},
+        'outflow': {'next_7_days': 0, 'overdue': 0},
+        'net_7_days_paisa': 0,
+        'net_14_days_paisa': 0,
+        'committed_on_open_orders_paisa': 0,
+      });
+      await tester.pumpWidget(_app(fake, language));
+      await tester.pumpAndSettle();
+      final strings = language == 'en' ? forecastingEn : forecastingBn;
+      expect(find.text(strings['fc.empty']!), findsNothing);
+      expect(
+        find.textContaining(language == 'en' ? '14 days' : '14 দিনের'),
+        findsOneWidget,
+      );
+    });
+  }
+
+  testWidgets('items without history are counted beside a real forecast', (
+    tester,
+  ) async {
+    final fake = buildFakeApi();
+    fake.adapter.onJson('GET', '/forecasting/demand', {
+      'items': [_item()],
+      'counts': {'all': 4, 'at_risk': 1, 'insufficient': 3},
+      'method': {'min_in_stock_days': 14, 'min_units': 5},
+      'can_draft': false,
+    });
+    fake.adapter.onJson('GET', '/forecasting/cash', {
+      'inflow': {'next_7_days': 0},
+      'outflow': {'next_7_days': 0, 'overdue': 0},
+      'net_7_days_paisa': 0,
+      'net_14_days_paisa': 0,
+      'committed_on_open_orders_paisa': 0,
+    });
+    await tester.pumpWidget(_app(fake, 'en'));
+    await tester.pumpAndSettle();
+    expect(find.text('Borka'), findsOneWidget);
+    expect(
+      find.text('3 items have too little sales history to forecast yet.'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('a manager drafts the suggested reorder', (tester) async {
     final fake = buildFakeApi();

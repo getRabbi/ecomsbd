@@ -60,6 +60,9 @@ class _AutomationState extends ConsumerState<AutomationScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      // A notice describes the last action only; "Turned on" must not stay
+      // beside a workflow that has since been switched off.
+      _notice = null;
     });
     try {
       await work();
@@ -134,7 +137,10 @@ class _AutomationState extends ConsumerState<AutomationScreen> {
           }),
         ),
       const SizedBox(height: 8),
-      Text(context.tr(_manage ? 'auto.webOnly' : 'auto.readOnly')),
+      // The role is known only once the catalog loads; until then an owner
+      // would be told they can only watch.
+      if (_metrics != null)
+        Text(context.tr(_manage ? 'auto.webOnly' : 'auto.readOnly')),
       if (!_busy && _workflows.isEmpty) Text(context.tr('auto.empty')),
       for (final row in _workflows) _workflowTile(row as Map<String, dynamic>),
     ],

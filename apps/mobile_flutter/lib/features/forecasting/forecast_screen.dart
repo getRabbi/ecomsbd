@@ -23,6 +23,8 @@ class ForecastScreen extends ConsumerStatefulWidget {
 
 class _ForecastScreenState extends ConsumerState<ForecastScreen> {
   List<dynamic> _items = [];
+  Map<dynamic, dynamic> _counts = const {};
+  Map<dynamic, dynamic> _method = const {};
   bool _canDraft = false;
   Map<String, dynamic>? _cash;
   bool _cashForbidden = false;
@@ -35,6 +37,19 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
     super.initState();
     Future.microtask(_load);
   }
+
+  /// Items without enough sales history get no forecast, so they are never
+  /// "at risk". An empty at-risk list must not tell a new shop that nothing
+  /// will run out when nothing could be forecast at all.
+  int get _insufficient => (_counts['insufficient'] as int?) ?? 0;
+
+  bool get _noneForecastable =>
+      _insufficient > 0 && _insufficient == _counts['all'];
+
+  Map<String, Object?> get _minimum => {
+    'days': _method['min_in_stock_days'],
+    'units': _method['min_units'],
+  };
 
   String _message(ApiError e) {
     final code = e.details?['code'];
@@ -59,6 +74,8 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
       if (!mounted) return;
       setState(() {
         _items = demand['items'] as List;
+        _counts = (demand['counts'] as Map?) ?? const {};
+        _method = (demand['method'] as Map?) ?? const {};
         _canDraft = demand['can_draft'] == true;
       });
     } on ApiError catch (e) {
@@ -236,9 +253,22 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
                       if (!_busy && _items.isEmpty)
                         Padding(
                           padding: const EdgeInsets.all(24),
-                          child: Text(context.tr('fc.empty')),
+                          child: Text(
+                            _noneForecastable
+                                ? context.tr('fc.emptyInsufficient', _minimum)
+                                : context.tr('fc.empty'),
+                          ),
                         ),
                       for (final item in _items) _itemTile(item as Map),
+                      if (!_busy && _insufficient > 0 && !_noneForecastable)
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            context.tr('fc.insufficientCount', {
+                              'n': _insufficient,
+                            }),
+                          ),
+                        ),
                     ],
                   ),
                 ),
