@@ -31,8 +31,8 @@ Short state note for the next session. Git is the source of truth; check it firs
   - main CI on `5e0bb38`: PostgreSQL suite, migration from empty, dependency audit, backup
     restore drill, backend image, secret scan and Flutter debug APK.
 - No V3 tag, Android version bump, AAB or release has been made; that is the owner's call.
-- Production was **not** migrated in this pass: prod is still `a32001` and serving `7ec1071`. Newer
-  images stay unready until `alembic -x database-only=true upgrade head` reaches `a38001`.
+- Production is aligned with V3.8: the DB is at `a38001`, and the API and worker run `68744fe`
+  (2026-09-25; see Production).
 - Every PR passed full CI before merging: backend lint, types, SQLite and **PostgreSQL**
   tests, PostgreSQL migration-from-empty, dependency audit, Flutter, secret scan.
 - Work from **`main`**. `v3.1-integrations` and `v3.2-sync` are merged; new work goes on a new branch.
@@ -43,37 +43,47 @@ Short state note for the next session. Git is the source of truth; check it firs
 
 ## Production
 
-- Prod DB is at `a32001` (V3.2); API and worker healthy on it. **Production is behind main**
-  and was not migrated from any cloud session:
-  it still needs `a32002` → `a33001` → `a34001` → `a35001` → `a36001` → `a37001` → `a38001`
-  (one `upgrade head` applies all seven).
-- 2026-09-25: the prod session pooler (5432) was saturated (`EMAXCONNSESSION`, pool 15) by the
-  old API, the new unready API and the worker, and the local session could not migrate. The
-  worker already runs the newer image against the `a32001` schema, so jobs touching V3.3+
-  tables fail until prod is migrated. Migrate as soon as a pooler slot is free.
-- Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so a new image
-  stays unready and the old container keeps serving until prod is migrated to its head.
-- Pending on prod: `a32002` (privileges only: REVOKE + ENABLE RLS on `alembic_version`) and
-  `a33001` (two new tables; all other changes are additive nullable or defaulted columns). Apply
-  through the session pooler:
+- **Prod DB is at `a38001`** (current head). The API and worker run `68744fe` (main after
+  PR #13). `/health/ready` is 200 with PostgreSQL and Redis ok.
+- Migrated on 2026-09-25 around 06:46 UTC with the owner's approval: `a32001` → `a32002` →
+  `a33001` → `a34001` → `a35001` → `a36001` → `a37001` → `a38001`, in one
+  `alembic -x database-only=true upgrade head` transaction.
+- Checked afterwards:
+  - `alembic_version` has one row, and every new table and column exists.
+  - `anon` and `authenticated` have no privileges on `alembic_version` or the new tables, and
+    RLS is on.
+  - The new API image went ready by itself and replaced the `7ec1071` container.
+  - V3.3–V3.8 routes answer 401 when logged out, not 404.
+  - The worker logs show no schema errors, and the outbox is clear.
+- Northflank auto-deploys `main`. `/health/ready` needs DB == code head, so a new image with a
+  new migration stays unready and the old container keeps serving until prod is migrated.
+  Migrate right after such a merge builds.
+- **How to migrate:** run it through the session pooler (5432), with only `DATABASE_URL` loaded:
   `DATABASE_URL='postgresql+asyncpg://...5432/postgres' alembic -x database-only=true upgrade head`.
-  Cloud sessions have no production credentials; the owner runs it.
-- The worker gains `run_campaigns` (every minute). It does nothing until a campaign exists.
-- Pending on prod after V3.4: `a34001` (two new tables, additive columns, and a data step
-  that publishes every existing automation rule as version 1 and renames run statuses
-  PENDING/RETRY→QUEUED, DONE→SUCCEEDED). The worker gains `scan_segment_entries` (daily).
-- Pending on prod after V3.5: `a35001` (eleven new tables with RLS on and client grants
-  revoked; a nullable `stock_movements.warehouse_id`; `automation_tasks.order_id` and
-  `customer_id` become nullable, plus three nullable link columns). No data step, no new worker job.
-- Pending on prod after V3.6: `a36001` (one new table `demand_forecasts` with RLS on and
-  client grants revoked; a nullable `suppliers.lead_time_days`). No data step. The worker
-  gains `snapshot_demand_forecasts` (daily 02:50 UTC, before the morning alert scan).
-- Pending on prod after V3.7: `a37001` (three new tables with RLS on and client grants
-  revoked: `risk_provider_connections`, `external_risk_lookups`, `network_benchmark_cells`).
-  No data step. The worker gains `prune_external_risk_lookups` (daily 04:20 UTC), and the
-  monthly `build_network_benchmarks` also writes cohort cells.
-- Pending on prod after V3.8: `a38001` (one nullable column, `public_api_keys.expires_at`).
-  No data step, no new worker job.
+  - The session pooler allows 15 clients, and the API and worker pools can fill it
+    (`EMAXCONNSESSION`).
+  - If it is full, pause **only the worker** with Northflank `POST .../services/ecomsbd-worker/pause`,
+    migrate, then `POST .../resume`. The worker keeps its instance count. Do not stop the
+    serving API.
+  - Do not use the transaction pooler (6543) for migrations.
+  - Cloud sessions have no production credentials; the owner or a local session runs it.
+- Worker jobs added across V3.3–V3.8, all live now:
+  - `run_campaigns` (every minute);
+  - `scan_segment_entries` (daily);
+  - `snapshot_demand_forecasts` (daily 02:50 UTC);
+  - `prune_external_risk_lookups` (daily 04:20 UTC);
+  - cohort cells written by the monthly `build_network_benchmarks`.
+- What each migration changed:
+  - `a32002`: privileges only.
+  - `a33001`: two tables.
+  - `a34001`: two tables, plus a data step that published existing rules as version 1 and
+    renamed run statuses.
+  - `a35001`: eleven tables.
+  - `a36001`: `demand_forecasts` and `suppliers.lead_time_days`.
+  - `a37001`: three tables.
+  - `a38001`: `public_api_keys.expires_at`.
+
+  Every new table has RLS on and client grants revoked.
 
 ## External gates (code is done, these are not)
 
