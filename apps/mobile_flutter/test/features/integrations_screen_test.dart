@@ -103,6 +103,21 @@ void syncRoutes(
 }
 
 void main() {
+  test('every provider the API can list has a name in both languages', () {
+    // PROVIDERS in backend/app/integrations/service.py.
+    for (final provider in [
+      'SHOPIFY',
+      'WOOCOMMERCE',
+      'CUSTOM_WEBSITE',
+      'MESSENGER',
+      'WHATSAPP',
+    ]) {
+      final key = 'int.provider.$provider';
+      expect(englishStrings[key], isNotNull, reason: key);
+      expect(banglaStrings[key], isNotNull, reason: key);
+    }
+  });
+
   testWidgets('lists connections, real availability and health', (
     tester,
   ) async {

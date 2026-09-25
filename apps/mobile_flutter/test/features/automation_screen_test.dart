@@ -107,6 +107,57 @@ void main() {
     });
   }
 
+  testWidgets('an owner is not told they can only watch while it loads', (
+    tester,
+  ) async {
+    final fake = _fake(manage: true, enabled: () => true);
+    await tester.pumpWidget(_app(fake, 'en'));
+    expect(find.text(automationEn['auto.readOnly']!), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.text(automationEn['auto.readOnly']!), findsNothing);
+    expect(find.text(automationEn['auto.webOnly']!), findsOneWidget);
+  });
+
+  testWidgets('a notice does not outlive the next action', (tester) async {
+    var enabled = true;
+    final fake = _fake(
+      manage: true,
+      enabled: () => enabled,
+      recipes: [
+        {
+          'key': 'low_stock_notify',
+          'name': {'en': 'Low stock → notify owner', 'bn': 'স্টক কম'},
+          'trigger': 'inventory.low',
+          'needs': <String>[],
+          'installed': false,
+        },
+      ],
+    );
+    fake.adapter.onJson(
+      'POST',
+      '/automation/recipes/low_stock_notify/install',
+      {'id': 'wf2', 'blocker': null},
+    );
+    fake.adapter.on('PATCH', '/automation/workflows/wf1', (request) {
+      enabled = request.jsonBody['enabled'] as bool;
+      return FakeReply({'id': 'wf1', 'enabled': enabled});
+    });
+    await tester.pumpWidget(_app(fake, 'en'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recipes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Turn on'));
+    await tester.pumpAndSettle();
+    expect(find.text(automationEn['auto.recipe.done']!), findsOneWidget);
+    await tester.tap(find.text('Workflows'));
+    await tester.pumpAndSettle();
+    tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged!(
+      false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(automationEn['auto.recipe.done']!), findsNothing);
+  });
+
   testWidgets('a viewer cannot switch workflows', (tester) async {
     final fake = _fake(manage: false, enabled: () => true);
     await tester.pumpWidget(_app(fake, 'en'));

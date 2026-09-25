@@ -8,6 +8,10 @@ const forecastingEn = <String, String>{
   'fc.tab.cash': 'Cash outlook',
   'fc.hint': 'Estimates from your own sales, never a guarantee.',
   'fc.empty': 'Nothing is likely to run out right now.',
+  'fc.emptyInsufficient':
+      'No forecast yet. An item needs sales on at least {days} days and {units} units in total before ecomsbd can estimate when it runs out.',
+  'fc.insufficientCount':
+      '{n} items have too little sales history to forecast yet.',
   'fc.rate': '{rate}/day',
   'fc.onHand': 'On hand {n}',
   'fc.incoming': 'On order {n}',
@@ -41,6 +45,10 @@ const forecastingBn = <String, String>{
   'fc.tab.cash': 'টাকার অনুমান',
   'fc.hint': 'আপনার নিজের বিক্রি থেকে অনুমান, নিশ্চয়তা নয়।',
   'fc.empty': 'এখন কোনো মাল ফুরিয়ে যাওয়ার আশঙ্কা নেই।',
+  'fc.emptyInsufficient':
+      'এখনো পূর্বাভাস নেই। কোনো পণ্য কবে ফুরাবে তা অনুমান করতে কমপক্ষে {days} দিনের বিক্রি আর মোট {units}টি বিক্রি লাগে।',
+  'fc.insufficientCount':
+      '{n}টি পণ্যের পূর্বাভাস দেওয়ার মতো যথেষ্ট বিক্রির ইতিহাস এখনো নেই।',
   'fc.rate': 'দিনে {rate}',
   'fc.onHand': 'হাতে {n}',
   'fc.incoming': 'অর্ডারে {n}',
