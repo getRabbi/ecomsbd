@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FD6C05</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Notification accent: the brand mark's orange (its measured median). -->
+    <color name="ecomsbd_notification">#FD5501</color>
 </resources>

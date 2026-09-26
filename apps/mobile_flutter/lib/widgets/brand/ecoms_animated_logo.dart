@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,21 +8,23 @@ import '../../design/tokens.dart';
 
 /// The ecomsbd brand mark, moving like a small soft-plastic object.
 ///
-/// Renders the supplied transparent mark ([assetPath]) exactly as delivered:
-/// no recolouring, no redrawing, no baked-in effects. The depth comes only from
-/// motion — a squash before take-off, a short hop with a slight perspective
-/// tilt, a squash on landing and a springy settle — over a separate contact
-/// shadow that shrinks and fades as the mark rises. It never spins or flips:
-/// the artwork is flat, and showing its edge would give that away.
+/// Renders the supplied mark ([assetPath]) as delivered, with only its white
+/// backdrop removed: no recolouring, no redrawing, no baked-in effects. The
+/// depth comes only from motion — a squash before take-off, a short hop with a
+/// slight perspective tilt, a squash on landing and a springy settle — over a
+/// separate contact shadow that shrinks and fades as the mark rises. It never
+/// spins or flips: the artwork is flat, and showing its edge would give that
+/// away.
 ///
 /// * `animate: false` — the mark at rest.
 /// * `animate: true, looping: true` — the hop repeats, for loading states.
+///   With a [rest], the mark pauses between hops, for everyday UI.
 /// * `animate: true, looping: false` — fades in, hops once, then rests.
 ///
 /// It always rests while the system "remove animations" setting is on.
 ///
 /// [size] is the side of the square asset canvas. The artwork carries
-/// transparent padding (8–13% per side), so the visible mark is smaller than
+/// transparent padding (8–12% per side), so the visible mark is smaller than
 /// [size]. That padding absorbs most of the hop, but at the top of it the mark
 /// can paint up to ~4% of [size] above the box: leave that much room before
 /// any clip.
@@ -31,11 +34,13 @@ class EcomsAnimatedLogo extends StatefulWidget {
     this.size = 110,
     this.animate = true,
     this.looping = true,
+    this.rest = Duration.zero,
     this.semanticLabel = Env.appName,
   });
 
-  /// The transparent brand mark. Used as supplied.
-  static const String assetPath = 'assets/icon/logo_mark.png';
+  /// The brand mark on transparency, derived from the delivered
+  /// `assets/icon/logo_mark.png` by removing only its white backdrop.
+  static const String assetPath = 'assets/icon/logo_mark_transparent.png';
 
   /// One hop, from rest to rest.
   static const Duration period = Duration(milliseconds: 1400);
@@ -43,6 +48,11 @@ class EcomsAnimatedLogo extends StatefulWidget {
   final double size;
   final bool animate;
   final bool looping;
+
+  /// While looping, how long the mark stands still between hops; zero hops
+  /// back to back. A rest also comes before the first hop, so the mark does
+  /// not jump the moment its screen appears. Nothing is drawn while it rests.
+  final Duration rest;
 
   /// Read by screen readers. Null hides the mark from them.
   final String? semanticLabel;
@@ -61,10 +71,25 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
   bool _initialised = false;
   bool _reduceMotion = false;
 
+  /// Counts down a [EcomsAnimatedLogo.rest] before the next hop.
+  Timer? _restTimer;
+
   /// Whether the current run is a one-shot entrance, which fades in.
   bool _fadeIn = false;
 
   bool get _moving => widget.animate && !_reduceMotion;
+
+  bool get _resting => widget.looping && widget.rest > Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed && _moving && _resting) {
+        _restBeforeHop();
+      }
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -83,7 +108,8 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
   void didUpdateWidget(EcomsAnimatedLogo oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.animate != oldWidget.animate ||
-        widget.looping != oldWidget.looping) {
+        widget.looping != oldWidget.looping ||
+        widget.rest != oldWidget.rest) {
       _syncController(replay: widget.animate && !oldWidget.animate);
     }
   }
@@ -93,6 +119,9 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
   /// [replay] is true when the mark has just been asked to animate, so a
   /// one-shot entrance plays from the start.
   void _syncController({required bool replay}) {
+    if (!_moving || !_resting) {
+      _restTimer?.cancel();
+    }
     if (!_moving) {
       _fadeIn = false;
       _controller
@@ -100,7 +129,15 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
         ..value = 0;
       return;
     }
-    if (widget.looping) {
+    if (_resting) {
+      _fadeIn = false;
+      if (_controller.isAnimating) {
+        // Land this hop; the status listener then rests before the next.
+        _controller.forward();
+      } else if (!(_restTimer?.isActive ?? false)) {
+        _restBeforeHop();
+      }
+    } else if (widget.looping) {
       _fadeIn = false;
       if (!_controller.isAnimating) {
         _controller.repeat();
@@ -118,8 +155,20 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
     }
   }
 
+  /// Wait out one rest, then hop once. A timer rather than a padded
+  /// animation, so no frames are scheduled while the mark stands still.
+  void _restBeforeHop() {
+    _restTimer?.cancel();
+    _restTimer = Timer(widget.rest, () {
+      if (mounted && _moving && _resting) {
+        _controller.forward(from: 0);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _restTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -136,8 +185,8 @@ class _EcomsAnimatedLogoState extends State<EcomsAnimatedLogo>
           width: size,
           height: size,
           fit: BoxFit.contain,
-          // The source is 1254 px square. Decoding at display size keeps a
-          // ~6 MB bitmap off the low-end phones this app targets.
+          // The source is 1416 px square. Decoding at display size keeps an
+          // ~8 MB bitmap off the low-end phones this app targets.
           cacheWidth: (size * pixelRatio).ceil(),
           // Smooth sampling while the mark is scaled and tilted.
           filterQuality: FilterQuality.medium,

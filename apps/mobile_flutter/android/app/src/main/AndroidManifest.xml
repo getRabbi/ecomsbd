@@ -53,11 +53,15 @@
         <!-- Status-bar icon for the push notifications Firebase displays while
              the app is in the background. Android draws small icons from
              their alpha channel only, so this is a white silhouette of the
-             brand mark; the full-colour launcher icon would show as a blank
-             shape. -->
+             brand mark (the same one as the themed launcher icon); the
+             full-colour launcher icon would show as a blank shape. The colour
+             tints that silhouette in the notification shade. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_ecomsbd" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/ecomsbd_notification" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
