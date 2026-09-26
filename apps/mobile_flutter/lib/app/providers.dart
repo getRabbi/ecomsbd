@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/api/api_client.dart';
+import '../core/network/network_monitor.dart';
 import '../core/storage/token_store.dart';
 import '../data/auth/auth_controller.dart';
 import '../data/auth/auth_repository.dart';
@@ -38,6 +39,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   repository.client = ApiClient(
     sessionProvider: repository,
     appVersion: ref.watch(appVersionProvider),
+    reachability: ref.watch(networkMonitorProvider.notifier),
   );
   ref.onDispose(repository.dispose);
   return repository;
@@ -73,12 +75,22 @@ final pendingMutationCountProvider = StreamProvider<int>((ref) {
   return ref.watch(databaseProvider).watchPendingCount();
 });
 
-/// Whether the last API attempt failed for lack of a connection.
+/// Whether the API is reachable, for the whole app (see [NetworkMonitor]).
 ///
-/// A real connectivity subscription arrives with the sync engine in Phase B;
-/// until then this is driven by API results, which is what actually matters —
-/// a device can be on wifi with no route to the server.
-final isOfflineProvider = StateProvider<bool>((ref) => false);
+/// Every request reports its outcome to it; `main` also connects it to the
+/// phone's network state and lets it probe the server while offline.
+final networkMonitorProvider = StateNotifierProvider<NetworkMonitor, bool>(
+  (ref) => NetworkMonitor(),
+);
+
+/// Whether the app is offline. Drives the app-wide banner, and screens that
+/// word things differently without a connection.
+///
+/// Decided by request outcomes, which is what actually matters — a device can
+/// be on wifi with no route to the server.
+final isOfflineProvider = Provider<bool>(
+  (ref) => ref.watch(networkMonitorProvider),
+);
 
 /// Devices flagged as low-end, used to switch off expensive blur.
 final isLowEndDeviceProvider = StateProvider<bool>((ref) => false);

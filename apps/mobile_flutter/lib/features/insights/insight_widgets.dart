@@ -422,7 +422,7 @@ List<Widget> sourcedSection<T>(
         EmptyState(
           icon: Icons.error_outline,
           title: context.tr('ins.couldNotLoad'),
-          message: '$error',
+          message: context.tr('common.somethingWentWrong'),
         ),
     ],
     data: (sourced) => <Widget>[

@@ -139,6 +139,7 @@ class AuthController extends StateNotifier<AuthState> {
   bool _signingOut = false;
   Timer? _restoreRetry;
   int _restoreAttempts = 0;
+  Future<void>? _restoring;
 
   /// 2, 4, 8, 16, then every 30 seconds.
   static Duration _backoff(int attempt) =>
@@ -153,7 +154,13 @@ class AuthController extends StateNotifier<AuthState> {
   /// Only the server rejecting the credential ends the session. Offline, a
   /// timeout, a 5xx or a busy database is the server failing to answer, and
   /// says nothing about the session, so it is kept.
-  Future<void> restore() async {
+  ///
+  /// A call while one is running joins it: reconnecting, a retry tick and a
+  /// Supabase sign-in event can all ask at once, and one `/me` answers them.
+  Future<void> restore() =>
+      _restoring ??= _restore().whenComplete(() => _restoring = null);
+
+  Future<void> _restore() async {
     _restoreRetry?.cancel();
     if (_repository.isRecovering) {
       state = const AuthState(stage: AuthStage.passwordRecovery);
@@ -311,7 +318,9 @@ class AuthController extends StateNotifier<AuthState> {
         verificationSent: verificationSent,
       );
     } on ApiError catch (error) {
-      if (!error.isOffline && error.code != ApiErrorCode.serviceUnavailable) {
+      if (!error.isOffline &&
+          !error.isTimeout &&
+          error.code != ApiErrorCode.serviceUnavailable) {
         rethrow;
       }
       state = AuthState(

@@ -79,7 +79,7 @@ void main() {
 
       // A dashboard that fell back to plausible fixtures would be worse than
       // one that fails: the seller could not tell the difference.
-      expect(find.text('No connection'), findsOneWidget);
+      expect(find.text('No internet connection'), findsOneWidget);
       expect(find.textContaining('৳4,805'), findsNothing);
     });
 

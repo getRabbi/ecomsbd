@@ -7,6 +7,7 @@ import '../../design/tokens.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/app_strings_data.dart';
+import '../shared/network_status.dart';
 
 /// The phone's view of the Integrations Hub: what is connected, whether it is
 /// healthy, and what needs fixing. Adding a store, provider sign-in and
@@ -18,7 +19,8 @@ class IntegrationsScreen extends ConsumerStatefulWidget {
   ConsumerState<IntegrationsScreen> createState() => _IntegrationsState();
 }
 
-class _IntegrationsState extends ConsumerState<IntegrationsScreen> {
+class _IntegrationsState extends ConsumerState<IntegrationsScreen>
+    with ReloadOnReconnect {
   Map<String, dynamic>? _hub;
   List<dynamic> _issues = const [];
   final Set<String> _queued = <String>{};
@@ -31,10 +33,18 @@ class _IntegrationsState extends ConsumerState<IntegrationsScreen> {
     Future.microtask(() => _run(_load));
   }
 
+  @override
+  void onReconnect() {
+    if (_error != null && !_busy) _run(_load);
+  }
+
   Future<void> _load() async {
     final api = ref.read(apiClientProvider);
-    final hub = await api.get('/integrations');
-    final issues = await api.get('/integrations/issues');
+    // Asked together: neither depends on the other.
+    final [hub, issues] = await Future.wait(<Future<Map<String, dynamic>>>[
+      api.get('/integrations'),
+      api.get('/integrations/issues'),
+    ]);
     if (mounted) {
       setState(() {
         _hub = hub;
@@ -80,7 +90,7 @@ class _IntegrationsState extends ConsumerState<IntegrationsScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _run(_load),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [

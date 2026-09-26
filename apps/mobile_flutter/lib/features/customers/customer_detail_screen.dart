@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/crm_repository.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../l10n/app_strings.dart';
 import '../risk/external_risk_card.dart';
+import '../shared/data_state.dart';
 import 'crm_records_screen.dart';
 import 'crm_widgets.dart';
 
@@ -118,12 +120,17 @@ class _CustomerDetailState extends ConsumerState<CustomerDetailScreen> {
       appBar: AppBar(title: Text(context.tr('crm.customer'))),
       body: detail.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(
-          child: TextButton(
-            onPressed: () =>
-                ref.invalidate(crmCustomerProvider(widget.customerId)),
-            child: Text(context.tr('common.retry')),
-          ),
+        // What went wrong, not just a bare Retry: offline, slow and refused
+        // each read differently.
+        error: (error, _) => ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            ErrorStateCard(
+              error: ApiError.from(error),
+              onRetry: () =>
+                  ref.invalidate(crmCustomerProvider(widget.customerId)),
+            ),
+          ],
         ),
         data: (customer) {
           final canWrite = customer['can_write'] == true;

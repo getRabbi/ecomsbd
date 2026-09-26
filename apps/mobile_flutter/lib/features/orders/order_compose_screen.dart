@@ -919,7 +919,9 @@ class _ItemRow extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: LabelledField(
-                label: 'Item ${index + 1}',
+                label: context.tr('oc.itemN', <String, Object?>{
+                  'n': index + 1,
+                }),
                 controller: item.name,
                 hint: 'Cotton Abaya XL',
               ),

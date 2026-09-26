@@ -6,6 +6,7 @@ import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/network_status.dart';
 
 /// Forecasts on the phone (V3.6): items likely to run out with the suggested
 /// reorder, and the cash outlook. The full breakdown and accuracy live on web.
@@ -21,7 +22,8 @@ class ForecastScreen extends ConsumerStatefulWidget {
   ConsumerState<ForecastScreen> createState() => _ForecastScreenState();
 }
 
-class _ForecastScreenState extends ConsumerState<ForecastScreen> {
+class _ForecastScreenState extends ConsumerState<ForecastScreen>
+    with ReloadOnReconnect {
   List<dynamic> _items = [];
   Map<dynamic, dynamic> _counts = const {};
   Map<dynamic, dynamic> _method = const {};
@@ -36,6 +38,11 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
   void initState() {
     super.initState();
     Future.microtask(_load);
+  }
+
+  @override
+  void onReconnect() {
+    if (_error != null || (_cash == null && !_cashForbidden)) _load();
   }
 
   /// Items without enough sales history get no forecast, so they are never
@@ -66,28 +73,35 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
       _error = null;
     });
     final api = ref.read(apiClientProvider);
-    try {
-      final demand = await api.get(
-        '/forecasting/demand',
-        query: {'filter': 'at_risk'},
-      );
-      if (!mounted) return;
-      setState(() {
+    // Independent reads, asked together: one after the other they took two
+    // full round trips before the screen was complete.
+    final ((demand, demandError), (cash, cashError)) = await (
+      _read(api.get('/forecasting/demand', query: {'filter': 'at_risk'})),
+      _read(api.get('/forecasting/cash')),
+    ).wait;
+    if (!mounted) return;
+    setState(() {
+      if (demand != null) {
         _items = demand['items'] as List;
         _counts = (demand['counts'] as Map?) ?? const {};
         _method = (demand['method'] as Map?) ?? const {};
         _canDraft = demand['can_draft'] == true;
-      });
-    } on ApiError catch (e) {
-      if (mounted) setState(() => _error = _message(e));
-    }
+      }
+      if (demandError != null) _error = _message(demandError);
+      if (cash != null) _cash = cash;
+      if (cashError != null) _cashForbidden = cashError.statusCode == 403;
+      _busy = false;
+    });
+  }
+
+  /// A read's body or its failure, so two can run together and fail apart.
+  static Future<(Map<String, dynamic>?, ApiError?)> _read(
+    Future<Map<String, dynamic>> call,
+  ) async {
     try {
-      final cash = await api.get('/forecasting/cash');
-      if (mounted) setState(() => _cash = cash);
-    } on ApiError catch (e) {
-      if (mounted) setState(() => _cashForbidden = e.statusCode == 403);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      return (await call, null);
+    } on ApiError catch (error) {
+      return (null, error);
     }
   }
 
@@ -250,7 +264,9 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
                     padding: const EdgeInsets.all(12),
                     children: [
                       Text(context.tr('fc.hint')),
-                      if (!_busy && _items.isEmpty)
+                      // Only a list that loaded is known to be empty: a failed
+                      // load must not say nothing will run out.
+                      if (!_busy && _error == null && _items.isEmpty)
                         Padding(
                           padding: const EdgeInsets.all(24),
                           child: Text(

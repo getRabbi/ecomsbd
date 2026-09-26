@@ -32,6 +32,7 @@ class AuthRepository implements SessionProvider {
   StreamSubscription<Uri>? _linkSubscription;
   String? _lastCallback;
   String? _deviceSessionId;
+  bool _attachingDevice = false;
   final _push = PushRegistration();
   bool get isRecovering => _recovering;
   final _invalidations = StreamController<ApiError>.broadcast();
@@ -97,6 +98,12 @@ class AuthRepository implements SessionProvider {
     try {
       return await action();
     } on AuthException catch (error) {
+      // The SDK raises this with no status when Supabase could not be reached
+      // at all. That is the seller's connection, not a failed sign-in.
+      if (error is AuthRetryableFetchException && error.statusCode == null) {
+        _client?.reachability?.reportUnreachable();
+        throw ApiError.offline();
+      }
       throw ApiError(
         code: switch (error.code) {
           'email_not_confirmed' => 'EMAIL_NOT_VERIFIED',
@@ -234,38 +241,56 @@ class AuthRepository implements SessionProvider {
   Future<AccountProfile> fetchProfile() async {
     final profile = AccountProfile.fromJson(await api.get('/me'));
     if (_deviceSessionId != profile.sessionId) {
-      try {
-        await api.post(
-          '/auth/device',
-          body: {
-            'install_id': await _tokens.installId(() => const Uuid().v4()),
-            'platform':
-                !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-                ? 'ANDROID'
-                : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                ? 'IOS'
-                : 'UNKNOWN',
-          },
-        );
-        _deviceSessionId = profile.sessionId;
-        _push.listen(_registerPush);
-        unawaited(_syncPush());
-      } on ApiError catch (error) {
-        // /me has already confirmed the session; attaching this install is
-        // push bookkeeping. A failure to answer is retried on the next
-        // profile fetch rather than ending a valid session (a 500 here once
-        // signed a seller out at launch). A rejected credential still does.
-        if (error.isAuthFailure || error.code == ApiErrorCode.forbidden) {
-          rethrow;
-        }
-      }
+      // /me has confirmed the session; attaching this install is push
+      // bookkeeping, so the seller does not wait on the splash for it (it
+      // held every launch for another 3-5 s round trip).
+      unawaited(_attachDevice(profile.sessionId));
     }
     return _profile = profile;
   }
 
-  Future<void> _syncPush() async {
-    final token = await _push.token();
-    if (token != null) await _registerPush(token);
+  /// Attach this install, with its push token when one is ready, in a single
+  /// request.
+  ///
+  /// A failure to answer is retried on the next profile fetch rather than
+  /// ending a valid session (a 500 here once signed a seller out at launch).
+  /// A revoked or invalid credential still signs out, through the client's
+  /// session invalidation.
+  Future<void> _attachDevice(String sessionId) async {
+    if (_attachingDevice) return;
+    _attachingDevice = true;
+    try {
+      final pending = _push.token();
+      String? token;
+      try {
+        token = await pending.timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        // Register without it now; send it once Firebase has one.
+        unawaited(
+          pending.then((late) async {
+            if (late != null) await _registerPush(late);
+          }),
+        );
+      }
+      await api.post(
+        '/auth/device',
+        body: {
+          'install_id': await _tokens.installId(() => const Uuid().v4()),
+          'platform': !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+              ? 'ANDROID'
+              : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+              ? 'IOS'
+              : 'UNKNOWN',
+          if (token != null) 'push_token': token,
+        },
+      );
+      _deviceSessionId = sessionId;
+      _push.listen(_registerPush);
+    } on ApiError {
+      // Retried on the next profile fetch.
+    } finally {
+      _attachingDevice = false;
+    }
   }
 
   Future<void> _registerPush(String token) async {

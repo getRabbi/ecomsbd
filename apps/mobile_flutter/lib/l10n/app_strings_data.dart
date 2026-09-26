@@ -123,8 +123,12 @@ const Map<String, String> _commonEn = <String, String>{
   'common.customer': 'Customer',
   'common.couldNotLoad': 'Could not load',
   'common.couldNotLoadThis': 'Could not load this.',
-  'common.noConnectionTitle': 'No connection',
+  'common.noConnectionTitle': 'No internet connection',
   'common.offline': 'Offline',
+  'common.somethingWentWrong': 'Something went wrong. Please try again.',
+  'net.offlineTitle': 'No internet connection',
+  'net.offlineBody': 'Check your connection and try again',
+  'net.checking': 'Checking…',
   'common.upToDate': 'Up to date',
   'common.markRead': 'Mark read',
   'common.notEnoughData': 'Not enough data',
@@ -176,8 +180,8 @@ const Map<String, String> _commonEn = <String, String>{
       'You can still create and edit orders. Courier booking needs a '
       'connection.',
   'error.offlineListBody':
-      'Nothing is saved on this device for this list yet. You can still create '
-      'and edit — it will sync when you are online.',
+      'Nothing here is saved on this phone yet. It will load by itself when '
+      'you are back online.',
 
   'plan.lockedTitle': 'Not included in your plan',
   'plan.lockedBody':
@@ -228,6 +232,10 @@ const Map<String, String> _commonBn = <String, String>{
   'common.couldNotLoadThis': 'এটি লোড করা যায়নি।',
   'common.noConnectionTitle': 'ইন্টারনেট সংযোগ নেই',
   'common.offline': 'অফলাইন',
+  'common.somethingWentWrong': 'কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।',
+  'net.offlineTitle': 'ইন্টারনেট সংযোগ নেই',
+  'net.offlineBody': 'সংযোগ পরীক্ষা করে আবার চেষ্টা করুন',
+  'net.checking': 'দেখা হচ্ছে…',
   'common.upToDate': 'সব আপডেট আছে',
   'common.markRead': 'পড়া হয়েছে',
   'common.notEnoughData': 'যথেষ্ট তথ্য নেই',
@@ -278,8 +286,7 @@ const Map<String, String> _commonBn = <String, String>{
       'অর্ডার তৈরি আর এডিট এখনও করতে পারবেন। কুরিয়ার বুকিংয়ের জন্য '
       'ইন্টারনেট লাগবে।',
   'error.offlineListBody':
-      'এই তালিকার কিছুই এখনও এই ফোনে সেভ নেই। তৈরি আর এডিট এখনও করতে '
-      'পারবেন — অনলাইনে গেলে সিঙ্ক হয়ে যাবে।',
+      'এখানের কিছুই এখনও এই ফোনে সেভ নেই। অনলাইনে ফিরলে নিজেই লোড হবে।',
 
   'plan.lockedTitle': 'আপনার প্ল্যানে এটি নেই',
   'plan.lockedBody':
@@ -1244,7 +1251,7 @@ const Map<String, String> _settingsEn = <String, String>{
   'settings.signOutTitle': 'Sign out of this device?',
   'settings.signOutBody':
       'Anything waiting to sync will be sent first. You can sign back in with '
-      'the same number.',
+      'the same account.',
   'settings.needsConnection':
       '{what} needs a connection. Nothing is saved on this phone for it, '
       'because a stale answer here could be wrong.',
@@ -1287,7 +1294,7 @@ const Map<String, String> _settingsBn = <String, String>{
   'settings.appVersion': 'অ্যাপ ভার্সন',
   'settings.signOutTitle': 'এই ডিভাইস থেকে সাইন আউট করবেন?',
   'settings.signOutBody':
-      'সিঙ্কের অপেক্ষায় থাকা সবকিছু আগে পাঠিয়ে দেওয়া হবে। একই নম্বর দিয়ে '
+      'সিঙ্কের অপেক্ষায় থাকা সবকিছু আগে পাঠিয়ে দেওয়া হবে। একই অ্যাকাউন্ট দিয়ে '
       'আবার সাইন ইন করতে পারবেন।',
   'settings.needsConnection':
       '{what} দেখতে ইন্টারনেট লাগবে। এর কিছুই এই ফোনে সেভ রাখা হয় না, কারণ '
@@ -1357,6 +1364,8 @@ const Map<String, String> _authErrEn = <String, String>{
       'That email and password do not match. Please try again.',
   'autherr.offline':
       'No internet connection. Check your connection and try again.',
+  'autherr.timeout':
+      'The server is taking too long to respond. Please try again.',
   // Android collapses a dismissal, a rejected OAuth client and a failed
   // Google account reauth into the same code, so this copy names no
   // cause: observed on device as '[16] Account reauth failed' while the
@@ -1395,6 +1404,7 @@ const Map<String, String> _authErrBn = <String, String>{
   'autherr.invalidCredentials':
       'এই ইমেইল আর পাসওয়ার্ড মিলছে না। আবার চেষ্টা করুন।',
   'autherr.offline': 'ইন্টারনেট সংযোগ নেই। সংযোগ দেখে আবার চেষ্টা করুন।',
+  'autherr.timeout': 'সার্ভার সাড়া দিতে দেরি করছে। একটু পরে আবার চেষ্টা করুন।',
   'autherr.googleIncomplete':
       'Google সাইন ইন শেষ হয়নি। আবার চেষ্টা করতে পারেন, বা ইমেইল দিয়ে '
       'সাইন ইন করুন।',
@@ -1511,6 +1521,7 @@ const Map<String, String> _secEn = <String, String>{
       'Every phone or tablet signed in to this shop. Signing one out takes effect immediately.',
   'as.othersSignedOut': 'Every other device has been signed out.',
   'as.receivesNotifications': 'Receives notifications',
+  'as.lastUsed': 'Last used {when}',
   'as.signOutOneBody':
       'That device will be signed out straight away and will stop receiving notifications. Anything it had not synced yet stays on it until someone signs in again.',
   'as.signOutOthers': 'Sign out every other device',
@@ -1991,6 +2002,7 @@ const Map<String, String> _secEn = <String, String>{
   'oc.lowConfidence':
       'Not much could be read from that message. Fill in what is missing — nothing has been guessed.',
   'oc.message': 'Message',
+  'oc.itemN': 'Item {n}',
   'oc.name': 'Name',
   'oc.noteHint': 'Optional — anything the courier should know',
   'oc.pasteInstead': 'Paste a message instead',
@@ -2340,6 +2352,7 @@ const Map<String, String> _secBn = <String, String>{
       'এই শপে সাইন ইন করা প্রতিটি ফোন বা ট্যাব। কোনোটিকে সাইন আউট করলে সাথে সাথেই কাজ করে।',
   'as.othersSignedOut': 'বাকি সব ডিভাইস সাইন আউট হয়ে গেছে।',
   'as.receivesNotifications': 'নোটিফিকেশন পায়',
+  'as.lastUsed': 'শেষ ব্যবহার {when}',
   'as.signOutOneBody':
       'ওই ডিভাইসটি সাথে সাথে সাইন আউট হয়ে যাবে আর নোটিফিকেশন পাওয়া বন্ধ হবে। যা সিঙ্ক হয়নি সেটি কেউ আবার সাইন ইন না করা পর্যন্ত ওই ফোনেই থাকবে।',
   'as.signOutOthers': 'বাকি সব ডিভাইস সাইন আউট করুন',
@@ -2814,6 +2827,7 @@ const Map<String, String> _secBn = <String, String>{
   'oc.lowConfidence':
       'ওই মেসেজ থেকে বেশি কিছু পড়া যায়নি। যা নেই তা লিখে দিন — কিছুই অনুমান করা হয়নি।',
   'oc.message': 'মেসেজ',
+  'oc.itemN': 'পণ্য {n}',
   'oc.name': 'নাম',
   'oc.noteHint': 'ঐচ্ছিক — কুরিয়ারের যা জানা দরকার',
   'oc.pasteInstead': 'বরং মেসেজ পেস্ট করি',

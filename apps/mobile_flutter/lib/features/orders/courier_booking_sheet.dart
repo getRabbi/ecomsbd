@@ -630,7 +630,7 @@ class _CourierPicker extends ConsumerWidget {
           : EmptyState(
               icon: Icons.error_outline,
               title: context.tr('common.couldNotLoad'),
-              message: '$error',
+              message: context.tr('common.somethingWentWrong'),
             ),
       data: (rows) {
         if (rows.isEmpty) {
@@ -946,7 +946,7 @@ class _AreaPickerSheetState extends ConsumerState<_AreaPickerSheet> {
                     : EmptyState(
                         icon: Icons.error_outline,
                         title: context.tr('common.couldNotLoad'),
-                        message: '$error',
+                        message: context.tr('common.somethingWentWrong'),
                       ),
                 data: (rows) {
                   final matches = <DeliveryArea>[

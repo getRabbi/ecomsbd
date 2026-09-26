@@ -853,9 +853,8 @@ class _CaseSheetState extends ConsumerState<_CaseSheet> {
         future: _detail,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            final error = snapshot.error;
             return Text(
-              error is ApiError ? error.displayMessage : '$error',
+              ApiError.from(snapshot.error!).displayMessage,
               style: EcomsbdType.body,
             );
           }

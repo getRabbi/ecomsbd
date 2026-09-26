@@ -47,6 +47,9 @@ class ApiErrorCode {
 
   /// No connection. Produced by the client, not the server.
   static const String offline = 'CLIENT_OFFLINE';
+
+  /// The server took too long to answer. Produced by the client.
+  static const String timeout = 'CLIENT_TIMEOUT';
 }
 
 /// A typed API failure.
@@ -81,12 +84,30 @@ class ApiError implements Exception {
   }
 
   /// No usable connection.
+  ///
+  /// Shown wherever a screen prints an error's message, so it names only the
+  /// cause and the fix; what still works offline differs by screen.
   factory ApiError.offline() => const ApiError(
     code: ApiErrorCode.offline,
-    messageBn: 'ইন্টারনেট সংযোগ নেই। অফলাইনে অর্ডার তৈরি করা যাবে।',
-    messageEn: 'No connection. You can still create and edit orders offline.',
+    messageBn: 'ইন্টারনেট সংযোগ নেই। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।',
+    messageEn: 'No internet connection. Check your connection and try again.',
     retryable: true,
   );
+
+  /// A read the server was too slow to answer. Nothing changed, so a retry is
+  /// safe. (A write that timed out is ambiguous and is not built here.)
+  factory ApiError.timeout() => const ApiError(
+    code: ApiErrorCode.timeout,
+    messageBn: 'সার্ভার সাড়া দিতে দেরি করছে। একটু পরে আবার চেষ্টা করুন।',
+    messageEn: 'The server is taking too long to respond. Please try again.',
+    retryable: true,
+  );
+
+  /// [error] as an [ApiError], for display. Anything else — a parsing bug, a
+  /// platform failure — becomes a generic retryable error, so its raw text
+  /// never reaches the screen.
+  factory ApiError.from(Object error) =>
+      error is ApiError ? error : ApiError.unexpected(error);
 
   /// A transport or parsing failure with no structured body.
   factory ApiError.unexpected(Object cause) => ApiError(
@@ -126,6 +147,8 @@ class ApiError implements Exception {
       code == ApiErrorCode.unauthenticated;
 
   bool get isOffline => code == ApiErrorCode.offline;
+
+  bool get isTimeout => code == ApiErrorCode.timeout;
 
   /// The shop's plan does not include this. Not a failure: the screen should
   /// say so and point at the plans, not offer a retry that cannot succeed.

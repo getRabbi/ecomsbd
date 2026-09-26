@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/analytics/models.dart';
@@ -41,8 +40,6 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pending = ref.watch(pendingMutationCountProvider).valueOrNull ?? 0;
-    final isOffline = ref.watch(isOfflineProvider);
     final home = ref.watch(homeMetricsProvider);
     final shopName = ref.watch(shopNameProvider);
 
@@ -65,10 +62,6 @@ class HomeScreen extends ConsumerWidget {
           EcomsbdSpacing.bottomNavClearance,
         ),
         children: <Widget>[
-          if (isOffline) ...<Widget>[
-            OfflineBanner(pendingCount: pending),
-            const SizedBox(height: EcomsbdSpacing.sm),
-          ],
           _HomeBody(
             home: home,
             shopName: shopName ?? context.tr('common.yourShop'),

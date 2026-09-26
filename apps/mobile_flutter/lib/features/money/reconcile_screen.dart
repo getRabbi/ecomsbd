@@ -150,7 +150,7 @@ class _ReconcileScreenState extends ConsumerState<ReconcileScreen> {
             EmptyState(
               icon: Icons.error_outline,
               title: context.tr('common.couldNotLoad'),
-              message: '$error',
+              message: context.tr('common.somethingWentWrong'),
             ),
         ],
       ),

@@ -8,6 +8,7 @@ import '../../design/components/badges.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
+import '../shared/data_state.dart' show formatRelative;
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
 import '../../l10n/app_strings.dart';
@@ -147,8 +148,12 @@ class _DeviceCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Last used ${formatRelativeDay(device.lastSeenAt)}'
-                  '${device.appVersion == null ? '' : ' · v${device.appVersion}'}',
+                  context.tr('as.lastUsed', <String, Object?>{
+                        'when': formatRelative(device.lastSeenAt),
+                      }) +
+                      (device.appVersion == null
+                          ? ''
+                          : ' · v${device.appVersion}'),
                   style: EcomsbdType.caption.copyWith(
                     color: EcomsbdColors.muted,
                   ),
@@ -282,13 +287,4 @@ class _LogoutOthersButtonState extends ConsumerState<_LogoutOthersButton> {
       if (mounted) setState(() => _busy = false);
     }
   }
-}
-
-String formatRelativeDay(DateTime value) {
-  final difference = DateTime.now().difference(value);
-  if (difference.inMinutes < 2) return 'just now';
-  if (difference.inHours < 1) return '${difference.inMinutes} minutes ago';
-  if (difference.inHours < 24) return '${difference.inHours} hours ago';
-  if (difference.inDays == 1) return 'yesterday';
-  return '${difference.inDays} days ago';
 }

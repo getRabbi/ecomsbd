@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- The launch window, shown until Flutter draws its first frame: the brand
+     mark at the size the Flutter splash draws it (110dp), on the app's page
+     colour, in both themes (the app itself is light-only). Centred in the
+     window, which sits between the system bars, it lands where the
+     edge-to-edge Flutter splash puts it. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="?android:colorBackground" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <item android:drawable="@color/ecomsbd_launch_background" />
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/launch_mark" />
+    </item>
 </layer-list>

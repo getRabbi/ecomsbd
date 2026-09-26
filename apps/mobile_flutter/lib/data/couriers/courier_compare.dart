@@ -371,6 +371,10 @@ class _SampleCard {
 final courierComparisonProvider = FutureProvider.autoDispose
     .family<CourierComparison, CompareRequest>((ref, request) async {
       final repository = ref.watch(courierRepositoryProvider);
+      // History does not depend on the couriers, so it is asked for now rather
+      // than after them: one after another they were three round trips.
+      final rtoHistory = _orNull(ref.watch(rtoCouriersProvider.future));
+      final returnHistory = _orNull(ref.watch(returnReportProvider.future));
       var couriers = const <BookableCourier>[];
       try {
         // Watched, not fetched: typing a COD amount makes a new request per
@@ -395,28 +399,21 @@ final courierComparisonProvider = FutureProvider.autoDispose
       }
 
       final history = <String, ({int? bps, bool sufficient, int shipments})>{};
-      try {
-        final report = (await ref.watch(rtoCouriersProvider.future)).value;
-        for (final line in report.items) {
-          history[line.provider.toLowerCase()] = (
-            bps: line.counts.rtoRateBps,
-            sufficient: line.counts.sufficient,
-            shipments: line.counts.completed,
-          );
-        }
-      } on ApiError {
-        // No history available.
+      // Null when unavailable: no history is still a comparison.
+      final report = (await rtoHistory)?.value;
+      for (final line in report?.items ?? const []) {
+        history[line.provider.toLowerCase()] = (
+          bps: line.counts.rtoRateBps,
+          sufficient: line.counts.sufficient,
+          shipments: line.counts.completed,
+        );
       }
       Money? returnAverage;
-      try {
-        final returns = (await ref.watch(returnReportProvider.future)).value;
-        if (returns.returnCount > 0) {
-          returnAverage = Money(
-            returns.returnDeliveryCost.paisa ~/ returns.returnCount,
-          );
-        }
-      } on ApiError {
-        // No return cost history.
+      final returns = (await returnHistory)?.value;
+      if (returns != null && returns.returnCount > 0) {
+        returnAverage = Money(
+          returns.returnDeliveryCost.paisa ~/ returns.returnCount,
+        );
       }
 
       final merged = <CourierRateEstimate>[
@@ -441,3 +438,12 @@ final courierComparisonProvider = FutureProvider.autoDispose
       });
       return CourierComparison(origin: origin, estimates: merged);
     });
+
+/// [future]'s value, or null when the API could not supply it.
+Future<T?> _orNull<T>(Future<T> future) async {
+  try {
+    return await future;
+  } on ApiError {
+    return null;
+  }
+}

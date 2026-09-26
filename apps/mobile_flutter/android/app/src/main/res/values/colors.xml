@@ -3,4 +3,7 @@
     <color name="ic_launcher_background">#FFFFFF</color>
     <!-- Notification accent: the brand mark's orange (its measured median). -->
     <color name="ecomsbd_notification">#FD5501</color>
+    <!-- The launch window: EcomsbdColors.background, the page colour the
+         Flutter splash draws, so the hand-over does not flash. -->
+    <color name="ecomsbd_launch_background">#F2F5F8</color>
 </resources>

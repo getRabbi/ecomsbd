@@ -71,6 +71,12 @@ dependencies:
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
 
+  # Whether the phone has any network at all, so the offline banner appears
+  # (and recovery starts) the moment Wi-Fi or data drops or returns instead of
+  # on the next failed request. It is only a hint: reaching the API is still
+  # what decides "online" (lib/core/network/network_monitor.dart).
+  connectivity_plus: ^7.3.1
+
   # Deliberately NOT included:
   #   - a chart package: every chart in the prototype is a CustomPainter, which
   #     keeps the glass styling exact and adds no dependency (docs/ADR/0002).

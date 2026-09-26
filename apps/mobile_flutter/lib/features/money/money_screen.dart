@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/analytics/analytics_providers.dart';
@@ -39,7 +38,11 @@ class MoneyScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(moneySummaryProvider);
-    final isOffline = ref.watch(isOfflineProvider);
+    // The sections under the summary are their own requests. They start with
+    // it, not once it has arrived, which doubled the time to a complete tab.
+    ref
+      ..listen(courierBalancesProvider, (_, _) {})
+      ..listen(reconciliationItemListProvider, (_, _) {});
 
     return RefreshIndicator(
       edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
@@ -63,24 +66,13 @@ class MoneyScreen extends ConsumerWidget {
             title: context.tr('money.title'),
             description: context.tr('money.description'),
           ),
-          if (isOffline) ...<Widget>[
-            const OfflineBanner(),
-            const SizedBox(height: EcomsbdSpacing.sm),
-          ],
           ...async.when(
             loading: () => <Widget>[const DashboardSkeleton()],
             error: (error, _) => <Widget>[
-              if (error is ApiError)
-                ErrorStateCard(
-                  error: error,
-                  onRetry: () => ref.invalidate(moneySummaryProvider),
-                )
-              else
-                EmptyState(
-                  icon: Icons.error_outline,
-                  title: context.tr('money.couldNotLoadTitle'),
-                  message: '$error',
-                ),
+              ErrorStateCard(
+                error: ApiError.from(error),
+                onRetry: () => ref.invalidate(moneySummaryProvider),
+              ),
             ],
             data: (sourced) => _body(context, ref, sourced),
           ),

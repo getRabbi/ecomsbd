@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/env.dart';
 import '../design/theme.dart';
+import '../features/shared/network_status.dart';
 import '../l10n/app_locale.dart';
 import '../l10n/app_strings.dart';
 import 'router.dart';
@@ -56,7 +57,10 @@ class EcomsbdApp extends ConsumerWidget {
             // page. Screens that set their own (EcomsbdScaffold) still win.
             child: AnnotatedRegion<SystemUiOverlayStyle>(
               value: ecomsbdLightOverlay,
-              child: child ?? const SizedBox.shrink(),
+              // One offline banner for the whole app, sign-in included.
+              child: NetworkStatusFrame(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         );

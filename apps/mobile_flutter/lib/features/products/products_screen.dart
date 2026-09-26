@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
 import '../../design/components/badges.dart';
-import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
@@ -55,7 +53,6 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(productListProvider);
     final controller = ref.read(productListProvider.notifier);
-    final isOffline = ref.watch(isOfflineProvider);
 
     return Scaffold(
       backgroundColor: EcomsbdColors.background,
@@ -96,10 +93,6 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       ),
                     ],
                   ),
-                  if (isOffline) ...<Widget>[
-                    const OfflineBanner(),
-                    const SizedBox(height: EcomsbdSpacing.sm),
-                  ],
                   if (state.isStale) ...<Widget>[
                     StaleDataNotice(
                       fetchedAt: state.fetchedAt,

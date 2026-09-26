@@ -88,7 +88,7 @@ class CashflowScreen extends ConsumerWidget {
                         EmptyState(
                           icon: Icons.error_outline,
                           title: context.tr('money.couldNotLoadTitle'),
-                          message: '$error',
+                          message: context.tr('common.somethingWentWrong'),
                         ),
                     ],
                     data: (sourced) => <Widget>[

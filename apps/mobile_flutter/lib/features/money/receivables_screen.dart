@@ -610,7 +610,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
             ),
             const SizedBox(height: EcomsbdSpacing.md),
             LabelledField(
-              label: 'Reason',
+              label: context.tr('common.reason'),
               controller: _reason,
               maxLines: 2,
               hint: context.tr('recv.reasonHint'),
@@ -688,7 +688,7 @@ class _ReasonDialogState extends State<_ReasonDialog> {
           ),
           const SizedBox(height: EcomsbdSpacing.md),
           LabelledField(
-            label: 'Reason',
+            label: context.tr('common.reason'),
             controller: _reason,
             maxLines: 2,
             onChanged: (_) => setState(() {}),

@@ -144,7 +144,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final state = ref.watch(orderListProvider);
     final controller = ref.read(orderListProvider.notifier);
     final pending = ref.watch(pendingMutationCountProvider).valueOrNull ?? 0;
-    final isOffline = ref.watch(isOfflineProvider);
 
     return Stack(
       children: <Widget>[
@@ -166,10 +165,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 title: context.tr('orders.title'),
                 description: context.tr('orders.description'),
               ),
-              if (isOffline) ...<Widget>[
-                OfflineBanner(pendingCount: pending, onRetry: _sync),
-                const SizedBox(height: EcomsbdSpacing.sm),
-              ] else if (pending > 0) ...<Widget>[
+              // Whether the app is online is the app-wide banner's job; this
+              // is only what has not reached the server yet.
+              if (pending > 0) ...<Widget>[
                 _PendingBanner(count: pending, onSync: _sync),
                 const SizedBox(height: EcomsbdSpacing.sm),
               ],

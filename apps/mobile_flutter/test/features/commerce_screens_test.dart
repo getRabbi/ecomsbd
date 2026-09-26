@@ -98,7 +98,7 @@ void main() {
 
       // The distinction that matters: "we cannot reach the server" is not the
       // same statement as "you have no products".
-      expect(find.text('No connection'), findsOneWidget);
+      expect(find.text('No internet connection'), findsOneWidget);
       expect(find.text('No products yet'), findsNothing);
     });
 
@@ -276,7 +276,7 @@ void main() {
       final harness = CommerceHarness()..offline = true;
       await pumpCommerceScreen(tester, const OrdersScreen(), harness: harness);
 
-      expect(find.text('No connection'), findsOneWidget);
+      expect(find.text('No internet connection'), findsOneWidget);
       expect(find.text('No orders yet'), findsNothing);
     });
 

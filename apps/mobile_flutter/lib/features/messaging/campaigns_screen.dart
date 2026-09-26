@@ -5,6 +5,7 @@ import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/network_status.dart';
 
 /// Campaign monitoring on the phone: status, results and an emergency stop.
 ///
@@ -16,7 +17,8 @@ class CampaignsScreen extends ConsumerStatefulWidget {
   ConsumerState<CampaignsScreen> createState() => _CampaignsScreenState();
 }
 
-class _CampaignsScreenState extends ConsumerState<CampaignsScreen> {
+class _CampaignsScreenState extends ConsumerState<CampaignsScreen>
+    with ReloadOnReconnect {
   List<dynamic> _campaigns = [];
   Map<String, dynamic>? _overview;
   Map<String, dynamic>? _catalog;
@@ -29,6 +31,11 @@ class _CampaignsScreenState extends ConsumerState<CampaignsScreen> {
   void initState() {
     super.initState();
     Future.microtask(() => _run(_load));
+  }
+
+  @override
+  void onReconnect() {
+    if (_error != null) _run(_load);
   }
 
   Future<void> _load() async {

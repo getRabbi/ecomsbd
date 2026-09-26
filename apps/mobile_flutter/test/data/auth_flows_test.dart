@@ -376,7 +376,8 @@ void main() {
         ),
       );
       await controller.restore();
-      expect(controller.state.error!.code, ApiErrorCode.serviceUnavailable);
+      expect(controller.state.error!.code, ApiErrorCode.timeout);
+      expect(controller.state.error!.retryable, isTrue);
       await expectKeptThenRecovers();
     });
 
@@ -401,6 +402,36 @@ void main() {
         expect(auth.currentSession, isNotNull);
       },
     );
+
+    test('the splash does not wait for the device attach', () async {
+      await launch();
+      final held = Completer<FakeReply>();
+      api.on('POST', '/auth/device', (_) => held.future);
+      await controller.restore();
+      expect(controller.state.stage, AuthStage.ready);
+      await pumpEventQueue();
+      // Sent, and still unanswered: Home is already open.
+      expect(api.to('POST', '/auth/device'), hasLength(1));
+      held.complete(const FakeReply(<String, dynamic>{}));
+      await pumpEventQueue();
+      // One request attaches the install; the push token rides along with it
+      // when Firebase has one, instead of a second call.
+      expect(api.to('POST', '/auth/device'), hasLength(1));
+      expect(
+        api.to('POST', '/auth/device').single.jsonBody['install_id'],
+        'test-install',
+      );
+    });
+
+    test('concurrent restores share one profile request', () async {
+      await launch();
+      await Future.wait(<Future<void>>[
+        controller.restore(),
+        controller.restore(),
+      ]);
+      expect(controller.state.stage, AuthStage.ready);
+      expect(api.to('GET', '/me'), hasLength(1));
+    });
 
     test('a seller already in Home stays there through a 500', () async {
       expect(
@@ -430,6 +461,16 @@ void main() {
         expect(api.to('GET', '/me'), hasLength(1));
       });
     }
+
+    test('signing in with no connection says so', () async {
+      transport.unreachable = true;
+      expect(
+        await controller.login('seller@example.com', 'strong password'),
+        isFalse,
+      );
+      expect(controller.state.error!.code, ApiErrorCode.offline);
+      expect(auth.currentSession, isNull);
+    });
 
     test('a Supabase refresh that cannot connect is not a sign-out', () async {
       final streamed = _StreamedAuthRepository(tokenStore: tokens, auth: auth);

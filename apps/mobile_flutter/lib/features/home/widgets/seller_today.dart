@@ -62,9 +62,12 @@ const int _queueLimit = 50;
 
 /// Read from the server's own order statuses; nothing is counted on a guess.
 ///
-/// Starts after Home's main figures and reads one status at a time: the
-/// server's database pooler has few connections, and a burst of parallel
-/// Home requests exhausted it on a real device (EMAXCONNSESSION → 500s).
+/// Starts after Home's main figures, so launch is not one burst: the server's
+/// database pooler has few connections, and a burst of Home requests once
+/// exhausted it on a real device (EMAXCONNSESSION → 500s). The three statuses
+/// are then read together — the API now caps its own pool and queues extra
+/// requests instead of failing them — because one after another they held
+/// the attention card back by two more round trips.
 final sellerQueueProvider = FutureProvider<SellerQueue>((ref) async {
   try {
     await ref.watch(homeMetricsProvider.future);
@@ -72,10 +75,10 @@ final sellerQueueProvider = FutureProvider<SellerQueue>((ref) async {
     // The queue is still worth reading when the summary failed.
   }
   final orders = ref.watch(ordersRepositoryProvider);
-  final pages = <Sourced<PagedResult<SellerOrder>>>[
+  final pages = await Future.wait(<Future<Sourced<PagedResult<SellerOrder>>>>[
     for (final status in const <String>['DRAFT', 'CONFIRMED', 'PACKED'])
-      await orders.list(status: status, limit: _queueLimit),
-  ];
+      orders.list(status: status, limit: _queueLimit),
+  ]);
   final drafts = pages[0].value;
   final toBook = <SellerOrder>[
     ...pages[1].value.items,
