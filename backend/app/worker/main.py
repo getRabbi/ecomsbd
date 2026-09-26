@@ -65,7 +65,11 @@ async def startup(ctx: dict[str, Any]) -> None:
     import app.models  # noqa: F401  (registers every mapper)
 
     install_tenancy_guards()
-    get_engine(settings)
+    # The process-wide engine is built here, first, so it takes the worker's
+    # smaller pool; every job session in this process shares it.
+    get_engine(
+        settings.model_copy(update={"database_pool_size": settings.worker_database_pool_size})
+    )
     if settings.push_transport == "fcm":
         from app.notifications.transport import FcmPushTransport
 

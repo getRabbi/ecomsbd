@@ -370,3 +370,40 @@ class TestSanitizedSnapshot:
         assert snapshot["credential_encryption_key"] == "<set>"
         assert snapshot["app_env"] == AppEnv.PRODUCTION
         assert REAL_SECRET not in str(snapshot)
+
+
+class TestDatabasePoolBudget:
+    """The API and the worker share Supabase's session pooler (15 slots).
+
+    Every pooled connection pins a slot, so the per-process pools must add up
+    to less than that with room for a rollout's overlapping container. 10+10
+    per process could open 40, and did: EMAXCONNSESSION 500s on every route.
+    """
+
+    def test_production_pool_is_bounded_with_no_overflow(self) -> None:
+        from app.db.session import _engine_kwargs
+
+        kwargs = _engine_kwargs(production_settings())
+        assert kwargs["pool_size"] == 5
+        assert kwargs["max_overflow"] == 0
+
+    async def test_worker_builds_the_engine_with_its_own_smaller_pool(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import importlib
+
+        from app.core.config import get_settings
+
+        live = get_settings()
+        # The worker module validates its Redis settings at import.
+        monkeypatch.setattr(live, "redis_url", "redis://localhost:6379/0")
+        worker = importlib.import_module("app.worker.main")
+        built: list[Settings] = []
+        monkeypatch.setattr(worker, "get_engine", built.append)
+        monkeypatch.setattr(worker, "configure_logging", lambda **_: None)
+
+        await worker.startup({})
+
+        assert built[0].database_pool_size == live.worker_database_pool_size == 4
+        assert built[0].database_max_overflow == 0
+        assert live.database_pool_size + live.worker_database_pool_size < 15
