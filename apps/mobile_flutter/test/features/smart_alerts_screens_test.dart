@@ -59,6 +59,8 @@ void main() {
         harness: harness,
       );
 
+      // The categories are one horizontally scrolling row.
+      await tester.ensureVisible(find.text('Returns & RTO'));
       await tester.tap(find.text('Returns & RTO'));
       await settle(tester);
 

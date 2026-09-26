@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,13 +9,16 @@ import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
 import '../../data/couriers/courier_providers.dart';
+import '../../data/couriers/models.dart';
 import '../../data/local/tables.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
+import '../couriers/courier_compare_screen.dart';
 import '../products/inventory_sheets.dart';
+import '../risk/risk_review_sheet.dart';
 import '../shared/data_state.dart';
 import 'courier_booking_sheet.dart';
 import 'dispatch_sheet.dart';
@@ -95,11 +100,11 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
 
     return async.when(
       loading: () => DetailScaffold(
-        title: 'Order',
+        title: context.tr('od.title'),
         children: <Widget>[SkeletonLoader.card(height: 200)],
       ),
       error: (error, _) => DetailScaffold(
-        title: 'Order',
+        title: context.tr('od.title'),
         children: <Widget>[
           if (error is ApiError)
             ErrorStateCard(
@@ -333,6 +338,36 @@ class _OrderBody extends ConsumerWidget {
           Text(
             context.tr('od.noCourierContact'),
             style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted2),
+          ),
+        ],
+        if (order.customerId != null &&
+            const <String>{
+              'DRAFT',
+              'CONFIRMED',
+              'PACKED',
+            }.contains(order.status)) ...<Widget>[
+          const SizedBox(height: EcomsbdSpacing.sm),
+          GlassListRow(
+            leading: Icon(
+              Icons.shield_outlined,
+              color: order.riskState == 'HIGH'
+                  ? EcomsbdColors.red
+                  : EcomsbdColors.ink,
+            ),
+            title: context.tr('rrv.entry'),
+            subtitle: context.tr('rrv.entrySub', <String, Object?>{
+              'state': riskLabel(order.riskState),
+            }),
+            onTap: busy
+                ? null
+                : () async {
+                    final cancel = await RiskReviewSheet.review(
+                      context,
+                      order: order,
+                      canCancel: next.contains('CANCELLED'),
+                    );
+                    if (cancel) onTransition('CANCELLED');
+                  },
           ),
         ],
         if (order.status == 'PACKED' ||
@@ -616,6 +651,9 @@ class _SendItSection extends ConsumerWidget {
       data: (value) => value,
       orElse: () => false,
     );
+    final bookable = <BookableCourier>[
+      ...?ref.watch(bookableCouriersProvider).valueOrNull,
+    ].where((courier) => courier.bookable).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -627,6 +665,33 @@ class _SendItSection extends ConsumerWidget {
               : context.tr('od.manualMode'),
         ),
         if (courierReady) ...<Widget>[
+          OutlinedButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final provider = await CourierCompareScreen.open(
+                      context,
+                      order: order,
+                    );
+                    if (provider == null || !context.mounted) return;
+                    final result = await CourierBookingSheet.show(
+                      context,
+                      order: order,
+                      provider: provider,
+                    );
+                    if (result != null) {
+                      ref.invalidate(orderProvider(order.id));
+                    }
+                  },
+            icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+            label: Text(context.tr('cmp.entry')),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
+              shape: const StadiumBorder(),
+              textStyle: EcomsbdType.label,
+            ),
+          ),
+          const SizedBox(height: EcomsbdSpacing.xs),
           FilledButton.icon(
             onPressed: busy
                 ? null
@@ -640,7 +705,15 @@ class _SendItSection extends ConsumerWidget {
                     }
                   },
             icon: const Icon(Icons.local_shipping_outlined, size: 18),
-            label: Text(context.tr('book.title')),
+            // Names the courier the sheet opens on; with several to choose
+            // from, the sheet asks, so the button stays generic.
+            label: Text(
+              bookable.length == 1
+                  ? context.tr('book.title', <String, Object?>{
+                      'provider': bookable.first.displayName,
+                    })
+                  : context.tr('home.quick.book'),
+            ),
             style: FilledButton.styleFrom(
               backgroundColor: EcomsbdColors.orange,
               minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
@@ -669,7 +742,13 @@ class _SendItSection extends ConsumerWidget {
               textStyle: EcomsbdType.label,
             ),
           ),
-        ] else
+        ] else ...<Widget>[
+          TextButton.icon(
+            onPressed: () =>
+                unawaited(CourierCompareScreen.open(context, order: order)),
+            icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+            label: Text(context.tr('cmp.entrySample')),
+          ),
           FilledButton.icon(
             onPressed: busy
                 ? null
@@ -691,6 +770,7 @@ class _SendItSection extends ConsumerWidget {
               textStyle: EcomsbdType.label,
             ),
           ),
+        ],
       ],
     );
   }

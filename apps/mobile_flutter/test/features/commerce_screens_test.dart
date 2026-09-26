@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:ecomsbd/data/commerce/models.dart';
 import 'package:ecomsbd/data/local/database.dart';
 import 'package:ecomsbd/data/local/tables.dart';
@@ -193,7 +195,7 @@ void main() {
   });
 
   group('Orders', () {
-    testWidgets('a card keeps courier, risk and profit separate', (
+    testWidgets('a compact card keeps courier and risk separate', (
       tester,
     ) async {
       final harness = CommerceHarness()
@@ -206,11 +208,11 @@ void main() {
 
       expect(find.text('CP-20260910-0042'), findsOneWidget);
       expect(find.text('৳1,250'), findsWidgets);
-      // Four separate facts, and three of them say plainly that nothing has
-      // been computed yet rather than showing a plausible-looking value.
+      // COD, courier and risk as separate facts; the two not yet computed say
+      // so plainly. Profit lives on the order detail, not the feed card.
       expect(find.text('Not booked'), findsOneWidget);
       expect(find.text('Not checked'), findsOneWidget);
-      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('Pending'), findsNothing);
       expectNoOverflow(tester);
     });
 
@@ -228,9 +230,16 @@ void main() {
       await pumpCommerceScreen(tester, const OrdersScreen(), harness: harness);
 
       // Master spec section 1.4: courier state and money state are separate,
-      // and merging them is how unpaid money gets hidden.
-      expect(find.text('Delivered'), findsOneWidget);
-      expect(find.text('Pending'), findsOneWidget);
+      // and merging them is how unpaid money gets hidden. The card states the
+      // courier's "Delivered" and claims nothing about the money.
+      expect(
+        find.descendant(
+          of: find.byType(SellerOrderCard),
+          matching: find.text('Delivered'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Paid'), findsNothing);
     });
 
     testWidgets('queued work is visible and offers a sync', (tester) async {
@@ -281,6 +290,42 @@ void main() {
       expect(find.text('No orders yet'), findsOneWidget);
       expect(find.textContaining('paste a message'), findsOneWidget);
     });
+
+    testWidgets('the last card scrolls clear of the floating add buttons', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson(
+          'GET',
+          '/orders',
+          page(<Map<String, dynamic>>[
+            for (var i = 1; i <= 8; i++)
+              orderJson(id: 'o$i', number: 'CP-20260910-000$i'),
+          ]),
+        )
+        ..adapter.onJson('GET', '/orders/o8', orderJson(id: 'o8'));
+      await pumpCommerceScreen(tester, const OrdersScreen(), harness: harness);
+
+      // Scrolled as far as the feed goes.
+      await tester.drag(find.byType(ListView).first, const Offset(0, -6000));
+      await settle(tester);
+
+      final controls = find.byType(FloatingActionButton);
+      expect(controls, findsNWidgets(2));
+      final controlsTop = math.min(
+        tester.getRect(controls.at(0)).top,
+        tester.getRect(controls.at(1)).top,
+      );
+      final lastCard = find.byType(SellerOrderCard).last;
+      expect(tester.getRect(lastCard).bottom, lessThanOrEqualTo(controlsTop));
+
+      // Its "•••" is the button that answers, not the paste or add button.
+      await tester.tap(
+        find.descendant(of: lastCard, matching: find.text('•••')),
+      );
+      await settle(tester);
+      expect(find.byType(OrderDetailScreen), findsOneWidget);
+    });
   });
 
   group('Order detail', () {
@@ -316,10 +361,12 @@ void main() {
         harness: harness,
       );
 
+      await scrollTo(tester, find.text('Mark packed'));
       expect(find.text('Mark packed'), findsOneWidget);
       expect(find.text('Cancel order'), findsOneWidget);
       // CONFIRMED cannot jump straight to the courier.
       expect(find.text('Hand to courier'), findsNothing);
+      await scrollTo(tester, find.text('None of these contacts a courier.'));
       expect(find.text('None of these contacts a courier.'), findsOneWidget);
     });
 

@@ -141,15 +141,16 @@ class EcomsbdBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
+        // 135°, warm to cool, as the final prototype's page.
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: <Color>[
             EcomsbdColors.gradientTop,
             EcomsbdColors.gradientMid,
             EcomsbdColors.gradientBottom,
           ],
-          stops: <double>[0.0, 0.62, 1.0],
+          stops: <double>[0.0, 0.32, 1.0],
         ),
       ),
       child: Stack(
@@ -160,13 +161,6 @@ class EcomsbdBackground extends StatelessWidget {
             width: 320,
             height: 320,
             child: _Wash(color: EcomsbdColors.washOrange),
-          ),
-          const Positioned(
-            right: -90,
-            top: -100,
-            width: 300,
-            height: 300,
-            child: _Wash(color: EcomsbdColors.washBlue),
           ),
           Positioned.fill(child: child),
         ],

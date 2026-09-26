@@ -19,6 +19,8 @@ import 'integrations_strings.dart';
 import 'forecasting_strings.dart';
 import 'procurement_strings.dart';
 import 'risk_provider_strings.dart';
+import 'final_ui_strings.dart';
+import 'seller_ops_strings.dart';
 import 'developer_strings.dart';
 
 final Map<String, String> banglaStrings = <String, String>{
@@ -34,6 +36,8 @@ final Map<String, String> banglaStrings = <String, String>{
   ...riskProviderBn,
   ...developerBn,
   ...integrationsBn,
+  ...sellerOpsBn,
+  ...finalUiBn,
   ..._commonBn,
   ..._authBn,
   ..._onboardingBn,
@@ -70,6 +74,8 @@ final Map<String, String> englishStrings = <String, String>{
   ...riskProviderEn,
   ...developerEn,
   ...integrationsEn,
+  ...sellerOpsEn,
+  ...finalUiEn,
   ..._commonEn,
   ..._authEn,
   ..._onboardingEn,
@@ -2017,6 +2023,7 @@ const Map<String, String> _secEn = <String, String>{
   'od.discount': 'Discount',
   'od.firstOrder': 'This is their first order with you.',
   'od.handToCourier': 'Hand to a courier',
+  'od.title': 'Order',
   'od.items': 'Items',
   'od.itemsTotal': 'Items total',
   'od.keepIt': 'Keep it',
@@ -2839,6 +2846,7 @@ const Map<String, String> _secBn = <String, String>{
   'od.discount': 'ছাড়',
   'od.firstOrder': 'আপনার কাছে এটিই তাদের প্রথম অর্ডার।',
   'od.handToCourier': 'কুরিয়ারে দিয়ে দিন',
+  'od.title': 'অর্ডার',
   'od.items': 'পণ্য',
   'od.itemsTotal': 'পণ্যের মোট',
   'od.keepIt': 'রেখে দিন',

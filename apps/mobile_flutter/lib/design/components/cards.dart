@@ -86,8 +86,11 @@ class HeroMoneyCard extends StatelessWidget {
                         Flexible(
                           child: Text(
                             eyebrow.toUpperCase(),
-                            style: EcomsbdType.eyebrow.copyWith(
-                              color: EcomsbdColors.muted2,
+                            style: trackedFor(
+                              eyebrow,
+                              EcomsbdType.eyebrow.copyWith(
+                                color: EcomsbdColors.muted2,
+                              ),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -175,9 +178,9 @@ class _HeroKpiTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(11),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xBDF5F8FA),
+        color: EcomsbdColors.cell,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -186,7 +189,10 @@ class _HeroKpiTile extends StatelessWidget {
         children: <Widget>[
           Text(
             kpi.label.toUpperCase(),
-            style: EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
+            style: trackedFor(
+              kpi.label,
+              EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -249,8 +255,9 @@ class MetricTile extends StatelessWidget {
               children: <Widget>[
                 Text(
                   label.toUpperCase(),
-                  style: EcomsbdType.eyebrow.copyWith(
-                    color: EcomsbdColors.muted2,
+                  style: trackedFor(
+                    label,
+                    EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -284,7 +291,8 @@ class MetricTile extends StatelessWidget {
   }
 }
 
-/// `.quick` — a large tap target in the quick-actions grid.
+/// `.quick` — a compact action in the 2×2 quick-actions grid: a white
+/// card with a soft orange icon, a title and one quiet line.
 class QuickActionTile extends StatelessWidget {
   const QuickActionTile({
     required this.icon,
@@ -306,50 +314,54 @@ class QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const radius = BorderRadius.all(Radius.circular(18));
     return Opacity(
       opacity: enabled ? 1 : 0.55,
-      child: GlassSurface(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? onTap : null,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(EcomsbdSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    width: 36,
-                    height: 36,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: EcomsbdColors.orangeSoft,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, size: 19, color: EcomsbdColors.orange),
+      child: Material(
+        color: Colors.white,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: radius,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 100),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: EcomsbdColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: EcomsbdColors.peach,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(height: EcomsbdSpacing.sm),
-                  Text(
-                    title,
-                    style: EcomsbdType.bodyStrong,
-                    // Bangla runs wider than the English this tile was sized
-                    // for, so the title wraps rather than being cut short.
-                    maxLines: 2,
+                  child: Icon(icon, size: 19, color: EcomsbdColors.orange),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  style: EcomsbdType.bodyStrong.copyWith(fontSize: 14.5),
+                  // Bangla runs wider than the English this tile was sized
+                  // for, so the title wraps rather than being cut short.
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  subtitle,
+                  style: EcomsbdType.caption.copyWith(
+                    color: EcomsbdColors.muted,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: EcomsbdType.caption.copyWith(
-                      color: EcomsbdColors.muted,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),
@@ -678,16 +690,16 @@ class GlassListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0x94FFFFFF),
+      color: Colors.white,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(11),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xF0FFFFFF)),
+            border: Border.all(color: EcomsbdColors.line),
           ),
           child: Row(
             children: <Widget>[

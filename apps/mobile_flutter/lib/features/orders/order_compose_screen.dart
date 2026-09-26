@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,10 +53,18 @@ class _DraftItem {
 /// explicit, separate action, because an external create is irreversible
 /// (section 62.17).
 class OrderComposeScreen extends ConsumerStatefulWidget {
-  const OrderComposeScreen({super.key, this.startWithPaste = false});
+  const OrderComposeScreen({
+    super.key,
+    this.startWithPaste = false,
+    this.initialParsed,
+  });
 
   /// Open straight on the paste tab.
   final bool startWithPaste;
+
+  /// A message already parsed elsewhere (the Inbox), opened straight on the
+  /// review form so the seller checks every field before saving.
+  final ParsedOrder? initialParsed;
 
   @override
   ConsumerState<OrderComposeScreen> createState() => _OrderComposeScreenState();
@@ -88,6 +98,20 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
   Set<String> _uncertain = <String>{};
 
   String? _sourceText;
+
+  @override
+  void initState() {
+    super.initState();
+    final parsed = widget.initialParsed;
+    if (parsed != null) {
+      _paste.text = parsed.sourceText;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyParsed(parsed);
+        unawaited(_lookupCustomer());
+      });
+    }
+  }
 
   @override
   void dispose() {

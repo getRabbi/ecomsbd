@@ -109,10 +109,13 @@ class CommerceSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `.searchbox`: a flat white field with the card hairline, not a pill.
     return GlassSurface(
-      borderRadius: EcomsbdRadii.round,
-      fill: EcomsbdColors.glassStrong,
-      shadows: EcomsbdShadows.soft,
+      borderRadius: BorderRadius.circular(18),
+      fill: Colors.white,
+      borderColor: EcomsbdColors.line,
+      shadows: const <BoxShadow>[],
+      blurSigma: 0,
       padding: const EdgeInsets.symmetric(horizontal: EcomsbdSpacing.md),
       child: TextField(
         controller: controller,
@@ -157,34 +160,39 @@ class FilterToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `.chip`: a 40dp capsule drawn inside a 48dp tap target, so the row of
+    // filters stays compact without shrinking what a thumb can hit.
     return Semantics(
       button: true,
       selected: selected,
-      child: Material(
-        color: selected ? EcomsbdColors.orange : Colors.white,
-        borderRadius: EcomsbdRadii.round,
-        child: InkWell(
-          onTap: () => onChanged(!selected),
-          borderRadius: EcomsbdRadii.round,
-          child: Container(
-            constraints: const BoxConstraints(
-              minHeight: EcomsbdTouch.minTarget,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              borderRadius: EcomsbdRadii.round,
-              border: Border.all(
-                color: selected ? EcomsbdColors.orange : EcomsbdColors.stroke,
+      child: InkWell(
+        onTap: () => onChanged(!selected),
+        customBorder: const StadiumBorder(),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: EcomsbdTouch.minTarget),
+          child: Center(
+            widthFactor: 1,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: selected ? EcomsbdColors.orange : Colors.white,
+                borderRadius: EcomsbdRadii.round,
+                border: Border.all(
+                  color: selected ? EcomsbdColors.orange : EcomsbdColors.line,
+                ),
               ),
-            ),
-            // widthFactor keeps the chip as wide as its label; Container's
-            // own `alignment` expanded it to the full width a Wrap offers.
-            child: Align(
-              widthFactor: 1,
-              child: Text(
-                label,
-                style: EcomsbdType.chip.copyWith(
-                  color: selected ? Colors.white : EcomsbdColors.ink,
+              // widthFactor keeps the chip as wide as its label; Container's
+              // own `alignment` expanded it to the full width a Wrap offers.
+              child: Align(
+                widthFactor: 1,
+                child: Text(
+                  label,
+                  style: EcomsbdType.chip.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : EcomsbdColors.ink,
+                  ),
                 ),
               ),
             ),

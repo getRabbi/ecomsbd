@@ -4,19 +4,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
+import '../../data/analytics/analytics_providers.dart';
 import '../../data/commerce/repository_support.dart';
 import '../../data/money/models.dart';
 import '../../data/money/money_providers.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
+import '../../design/components/seller_blocks.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
+import '../couriers/courier_compare_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/responsive.dart';
 import 'cases_screen.dart';
 import 'cashflow_screen.dart';
+import 'money_sections.dart';
 import 'payouts_screen.dart';
 import 'receivables_screen.dart';
 
@@ -39,7 +43,13 @@ class MoneyScreen extends ConsumerWidget {
 
     return RefreshIndicator(
       edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
-      onRefresh: () async => ref.invalidate(moneySummaryProvider),
+      onRefresh: () async {
+        ref.invalidate(moneySummaryProvider);
+        ref.invalidate(courierBalancesProvider);
+        ref.invalidate(profitReportProvider);
+        ref.invalidate(rtoCouriersProvider);
+        await ref.read(reconciliationItemListProvider.notifier).refresh();
+      },
       child: ListView(
         padding: EdgeInsets.fromLTRB(
           EcomsbdSpacing.page,
@@ -140,12 +150,13 @@ class MoneyScreen extends ConsumerWidget {
         const SizedBox(height: EcomsbdSpacing.sm),
       ],
       if (!summary.unexplainedPayout.isZero) ...<Widget>[
-        ProviderHealthBanner(
-          provider: context.tr('money.unexplained', <String, Object?>{
+        AlertStrip(
+          icon: Icons.help_outline_rounded,
+          tone: Tone.warning,
+          title: context.tr('money.unexplained', <String, Object?>{
             'amount': summary.unexplainedPayout.format(),
           }),
           detail: context.tr('money.unexplainedDetail'),
-          tone: Tone.info,
           actionLabel: context.tr('money.payouts'),
           onAction: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const PayoutsScreen()),
@@ -153,21 +164,24 @@ class MoneyScreen extends ConsumerWidget {
         ),
         const SizedBox(height: EcomsbdSpacing.sm),
       ],
+      const PayoutMismatchSection(),
       SectionHeader(
         title: context.tr('money.agingTitle'),
         subtitle: context.tr('money.agingSub'),
       ),
       _AgingCard(bands: summary.aging, total: summary.outstanding),
+      const CourierReceivableSection(),
       SectionHeader(
         title: context.tr('money.deductionsTitle'),
         subtitle: context.tr('money.deductionsSub'),
       ),
       _DeductionsCard(summary: summary),
-      const SizedBox(height: EcomsbdSpacing.md),
+      const CourierSpendSection(),
+      const SizedBox(height: 12),
       ResponsiveGrid(
         minTileWidth: 150,
         maxColumns: 2,
-        spacing: EcomsbdSpacing.xs,
+        spacing: 10,
         children: <Widget>[
           QuickActionTile(
             icon: Icons.receipt_long_outlined,
@@ -195,6 +209,12 @@ class MoneyScreen extends ConsumerWidget {
               MaterialPageRoute<void>(builder: (_) => const CashflowScreen()),
             ),
           ),
+          QuickActionTile(
+            icon: Icons.local_shipping_outlined,
+            title: context.tr('money.courierCosts'),
+            subtitle: context.tr('money.courierCostsSub'),
+            onTap: () => CourierCompareScreen.open(context),
+          ),
         ],
       ),
     ];
@@ -209,10 +229,11 @@ class _CasesBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProviderHealthBanner(
-      provider: context.trPlural('money.casesBanner', count),
+    return AlertStrip(
+      icon: Icons.priority_high_rounded,
+      tone: Tone.bad,
+      title: context.trPlural('money.casesBanner', count),
       detail: context.tr('money.casesDetail'),
-      tone: Tone.warning,
       actionLabel: context.tr('common.open'),
       onAction: onOpen,
     );
@@ -249,26 +270,23 @@ class _AgingCard extends StatelessWidget {
     }
 
     return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
       child: Column(
         children: <Widget>[
-          for (final band in bands)
-            Padding(
-              padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
-              child: MoneyAgingRow(
-                // The band already reads "8-14 days" and comes from the
-                // server; the parcel count goes in the label so the row stays
-                // one line at 360dp.
-                label: context.trPlural(
-                  'money.bandLabel',
-                  band.parcelCount,
-                  <String, Object?>{'band': band.displayLabel},
-                ),
-                amount: band.outstanding,
-                fraction: total.paisa == 0
-                    ? 0
-                    : band.outstanding.paisa / total.paisa,
-                tone: band.isOverdue ? Tone.bad : Tone.info,
+          for (var i = 0; i < bands.length; i++)
+            KpiLine(
+              // The band already reads "8-14 days" and comes from the
+              // server; the parcel count goes in the label.
+              label: context.trPlural(
+                'money.bandLabel',
+                bands[i].parcelCount,
+                <String, Object?>{'band': bands[i].displayLabel},
               ),
+              value: bands[i].outstanding.format(),
+              valueColor: bands[i].isOverdue && !bands[i].outstanding.isZero
+                  ? EcomsbdColors.red
+                  : null,
+              isLast: i == bands.length - 1,
             ),
         ],
       ),
@@ -307,27 +325,18 @@ class _DeductionsCard extends StatelessWidget {
     ];
 
     return GlassCard(
+      padding: const EdgeInsets.fromLTRB(15, 4, 15, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          for (final row in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      row.label,
-                      style: EcomsbdType.body.copyWith(
-                        color: row.unknown && !row.amount.isZero
-                            ? EcomsbdColors.amber
-                            : null,
-                      ),
-                    ),
-                  ),
-                  MoneyText(row.amount, style: EcomsbdType.bodyStrong),
-                ],
-              ),
+          for (var i = 0; i < rows.length; i++)
+            KpiLine(
+              label: rows[i].label,
+              value: rows[i].amount.format(),
+              labelColor: rows[i].unknown && !rows[i].amount.isZero
+                  ? EcomsbdColors.amber
+                  : null,
+              isLast: i == rows.length - 1,
             ),
           if (summary.hasUnknownDeductions) ...<Widget>[
             const SizedBox(height: EcomsbdSpacing.xs),

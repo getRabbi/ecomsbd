@@ -14,7 +14,7 @@ class EcomsbdColors {
 
   // --- surfaces -------------------------------------------------------------
   /// `--bg`
-  static const Color background = Color(0xFFEEF2F6);
+  static const Color background = Color(0xFFF2F5F8);
 
   /// `--bg2`
   static const Color backgroundLight = Color(0xFFF8FAFC);
@@ -22,9 +22,12 @@ class EcomsbdColors {
   /// Warm/cool wash behind the page, matching the prototype's body gradient.
   static const Color washOrange = Color(0x18FF4500);
   static const Color washBlue = Color(0x1A2C64D8);
-  static const Color gradientTop = Color(0xFFFBFCFD);
-  static const Color gradientMid = Color(0xFFEDF1F5);
-  static const Color gradientBottom = Color(0xFFE9EEF3);
+
+  /// The final prototype's warm off-white page: peach in the top-left corner
+  /// fading to a cool light grey (`body` gradient under `.app`).
+  static const Color gradientTop = Color(0xFFFBF3EF);
+  static const Color gradientMid = Color(0xFFF4F7F9);
+  static const Color gradientBottom = Color(0xFFEEF3F8);
 
   // --- ink ------------------------------------------------------------------
   /// `--ink`
@@ -107,6 +110,62 @@ class EcomsbdColors {
   static const Color miniTile = Color(0xFFF3F6F8);
   static const Color tagBackground = Color(0xFFEDF1F4);
   static const Color tagInk = Color(0xFF596570);
+
+  // --- final prototype surfaces --------------------------------------------
+  /// `--line` — the hairline border on every flat white card.
+  static const Color line = Color(0xFFE6EBF0);
+
+  /// Divider between rows inside a `.list-card`.
+  static const Color lineSoft = Color(0xFFEDF0F3);
+
+  /// `--peach` — the soft orange behind a row or quick-action icon.
+  static const Color peach = Color(0xFFFFF0EA);
+
+  /// `.cell`, `.money-tile` — the grey inset tile inside a white card.
+  static const Color cell = Color(0xFFF6F8FA);
+
+  /// `.btn.secondary`
+  static const Color buttonSecondary = Color(0xFFF1F3F6);
+
+  /// `.eyebrow`, `.group-title` and `.cell small`.
+  static const Color eyebrowInk = Color(0xFF98A5B3);
+
+  /// `.nav-btn` when not selected.
+  static const Color navInactive = Color(0xFF6F7C8A);
+
+  /// `.hero` — the Home summary card: deep navy into blue.
+  static const List<Color> heroGradient = <Color>[
+    Color(0xFF0F1D2E),
+    Color(0xFF153B61),
+    Color(0xFF2F69D9),
+  ];
+
+  /// `.daily-card` — the dark suggestions card.
+  static const List<Color> dailyGradient = <Color>[
+    Color(0xFF101C2B),
+    Color(0xFF142D48),
+    Color(0xFF1B4770),
+  ];
+
+  /// Secondary text on the dark hero and suggestions cards.
+  static const Color onDarkMuted = Color(0xFFC7D3DF);
+  static const Color onDarkFaint = Color(0xFF9CA9B7);
+
+  /// `.saving-card` — the warm courier-saving preview.
+  static const Color savingBorder = Color(0xFFFFE0D3);
+  static const Color savingDivider = Color(0xFFF6E7E0);
+  static const Color savingIcon = Color(0xFFFFEADF);
+
+  /// `.alert-strip.bad`
+  static const Color alertBadFill = Color(0xFFFFF5F5);
+  static const Color alertBadBorder = Color(0xFFFFD7D7);
+  static const Color alertBadIcon = Color(0xFFFFE5E5);
+
+  /// `.detect-card` — the dashed order-from-chat panel.
+  static const Color detectBorder = Color(0xFFFFB794);
+  static const Color detectFill = Color(0xFFFFF9F5);
+  static const Color detectInk = Color(0xFFC84A11);
+  static const Color detectCellBorder = Color(0xFFF3E3DC);
 }
 
 /// Corner radii. `--r-xl` … `--r-sm`.
@@ -114,7 +173,7 @@ class EcomsbdRadii {
   const EcomsbdRadii._();
 
   static const double xl = 30;
-  static const double lg = 24;
+  static const double lg = 22;
   static const double md = 18;
   static const double sm = 13;
   static const double pill = 999;
@@ -122,6 +181,12 @@ class EcomsbdRadii {
   static const BorderRadius cardLarge = BorderRadius.all(Radius.circular(lg));
   static const BorderRadius cardMedium = BorderRadius.all(Radius.circular(md));
   static const BorderRadius cardSmall = BorderRadius.all(Radius.circular(sm));
+
+  /// `.list-card`, `.order`, `.progress-card` — the flat white card.
+  static const BorderRadius card = BorderRadius.all(Radius.circular(20));
+
+  /// `.attention-item`, `.alert-strip`, `.spend-row`.
+  static const BorderRadius row = BorderRadius.all(Radius.circular(16));
   static const BorderRadius round = BorderRadius.all(Radius.circular(pill));
 }
 
@@ -152,6 +217,16 @@ class EcomsbdShadows {
   static const List<BoxShadow> strong = <BoxShadow>[
     BoxShadow(color: Color(0x1C0F1823), blurRadius: 54, offset: Offset(0, 18)),
     BoxShadow(color: Color(0x0A0F1823), blurRadius: 12, offset: Offset(0, 3)),
+  ];
+
+  /// `.card` — restrained; flat cards carry only their hairline border.
+  static const List<BoxShadow> card = <BoxShadow>[
+    BoxShadow(color: Color(0x0A172337), blurRadius: 18, offset: Offset(0, 6)),
+  ];
+
+  /// `.hero` and `.daily-card`.
+  static const List<BoxShadow> hero = <BoxShadow>[
+    BoxShadow(color: Color(0x380F2A47), blurRadius: 36, offset: Offset(0, 14)),
   ];
 
   static const List<BoxShadow> soft = <BoxShadow>[
@@ -212,6 +287,36 @@ class EcomsbdType {
     height: 1.15,
     fontWeight: FontWeight.w800,
     letterSpacing: -0.7,
+  );
+
+  /// `h1` — a tab's screen title in the final prototype.
+  static const TextStyle screenTitle = TextStyle(
+    fontFamily: family,
+    fontFamilyFallback: fallback,
+    fontSize: 31,
+    height: 1.08,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -1.0,
+  );
+
+  /// `.section-head h2`.
+  static const TextStyle sectionHead = TextStyle(
+    fontFamily: family,
+    fontFamilyFallback: fallback,
+    fontSize: 19,
+    height: 1.2,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.4,
+  );
+
+  /// `.eyebrow` / `.group-title` — wide-tracked uppercase context line.
+  static const TextStyle eyebrowWide = TextStyle(
+    fontFamily: family,
+    fontFamilyFallback: fallback,
+    fontSize: 11,
+    height: 1.25,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 1.4,
   );
 
   static const TextStyle sectionTitle = TextStyle(
@@ -295,6 +400,13 @@ class EcomsbdType {
     fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
   );
 }
+
+final RegExp _bangla = RegExp('[\u0980-\u09FF]');
+
+/// Wide letter-spacing suits uppercase Latin labels. Bangla is shaped from
+/// conjuncts that tracking pulls apart, so a Bangla label drops it.
+TextStyle trackedFor(String text, TextStyle style) =>
+    _bangla.hasMatch(text) ? style.copyWith(letterSpacing: 0) : style;
 
 /// Minimum interactive sizes (master spec section 124).
 class EcomsbdTouch {

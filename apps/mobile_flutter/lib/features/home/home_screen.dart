@@ -5,48 +5,42 @@ import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/analytics/models.dart';
+import '../../data/channels/channel_models.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/repository_support.dart';
-import '../../data/money/money_providers.dart';
-import '../../data/money/models.dart' show AgingBand;
-import '../../design/charts/bar_charts.dart' as charts;
-import '../../design/charts/donut_chart.dart';
 import '../../design/charts/line_chart.dart';
-import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
+import '../../design/components/seller_blocks.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
-import '../notifications/notification_centre_screen.dart';
+import '../expenses/expenses_screen.dart';
 import '../orders/order_compose_screen.dart';
-import '../products/products_screen.dart';
-import '../risk/risk_check_screen.dart';
 import '../shared/data_state.dart';
-import '../shared/responsive.dart';
-import 'widgets/seller_hero.dart';
+import 'widgets/seller_today.dart';
 
 /// The Home dashboard — the seller's daily money control screen.
 ///
 /// Master spec section 1.1: this is not a generic analytics dashboard. The
-/// order of the page is the order of the seller's questions: how much money is
-/// out there, what needs my attention, how is the business trending.
+/// order of the page is the order of the seller's questions, as the final
+/// prototype lays it out: how did today go (the dark summary), what needs me,
+/// what should I do first, what would booking cost, the everyday actions, and
+/// only then how the business is trending — one compact card, with the full
+/// charts a tap away in Insights.
 ///
 /// Every figure comes from `/v1/analytics/home`, `/v1/analytics/profit` and
-/// the money core. Nothing on this screen is a fixture: a dashboard that falls
-/// back to plausible demo numbers when a call fails is worse than one that
-/// says it could not load, because the seller cannot tell the difference.
+/// the order queue. Nothing on this screen is a fixture: a dashboard that
+/// falls back to plausible demo numbers when a call fails is worse than one
+/// that says it could not load, because the seller cannot tell the difference.
 class HomeScreen extends ConsumerWidget {
-  const HomeScreen({super.key, this.onOpenMenu, this.onNavigate});
-
-  final VoidCallback? onOpenMenu;
+  const HomeScreen({super.key, this.onNavigate});
 
   /// Route name to push, used by the quick actions and section links.
   final ValueChanged<String>? onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final topInset = MediaQuery.viewPaddingOf(context).top;
     final pending = ref.watch(pendingMutationCountProvider).valueOrNull ?? 0;
     final isOffline = ref.watch(isOfflineProvider);
     final home = ref.watch(homeMetricsProvider);
@@ -57,103 +51,75 @@ class HomeScreen extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(homeMetricsProvider);
         ref.invalidate(profitReportProvider);
-        ref.invalidate(moneySummaryProvider);
-        ref.invalidate(productProfitProvider);
         ref.invalidate(returnReportProvider);
+        ref.invalidate(sellerQueueProvider);
+        ref.invalidate(setupProgressProvider);
+        ref.invalidate(salesChannelsProvider);
         await ref.read(homeMetricsProvider.future);
       },
-      child: CustomScrollView(
-        slivers: <Widget>[
-          // Hero and body share one sliver on purpose. A viewport paints its
-          // first sliver last, so a card lifted into the hero from a separate
-          // sliver had its top edge painted over by the hero.
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                SellerHero(
-                  shopName: shopName ?? context.tr('common.yourShop'),
-                  subtitle: _heroSubtitle(context, home.valueOrNull?.value),
-                  chips: _heroChips(context, home.valueOrNull?.value),
-                  topInset: topInset + EcomsbdLayout.topBarHeight,
-                ),
-                Transform.translate(
-                  // The money card lifts out of the hero, as in the prototype.
-                  offset: const Offset(0, -31),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: EcomsbdSpacing.page,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        if (isOffline) ...<Widget>[
-                          OfflineBanner(pendingCount: pending),
-                          const SizedBox(height: EcomsbdSpacing.sm),
-                        ],
-                        _HomeBody(home: home, onNavigate: onNavigate),
-                        const SizedBox(
-                          height: EcomsbdSpacing.bottomNavClearance,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          EcomsbdSpacing.page,
+          EcomsbdLayout.shellTopPadding(context) - EcomsbdSpacing.xs,
+          EcomsbdSpacing.page,
+          EcomsbdSpacing.bottomNavClearance,
+        ),
+        children: <Widget>[
+          if (isOffline) ...<Widget>[
+            OfflineBanner(pendingCount: pending),
+            const SizedBox(height: EcomsbdSpacing.sm),
+          ],
+          _HomeBody(
+            home: home,
+            shopName: shopName ?? context.tr('common.yourShop'),
+            onNavigate: onNavigate,
           ),
         ],
       ),
     );
   }
-
-  static String _heroSubtitle(BuildContext context, HomeMetrics? metrics) {
-    if (metrics == null) return context.tr('home.loadingToday');
-    return context.trPlural(
-      'home.heroSubtitle',
-      metrics.ordersToday,
-      <String, Object?>{'delivered': metrics.deliveredToday},
-    );
-  }
-
-  static List<String> _heroChips(BuildContext context, HomeMetrics? metrics) {
-    if (metrics == null) return const <String>[];
-    return <String>[
-      if (metrics.codOverdue.paisa > 0)
-        context.tr('home.chipOverdue', <String, Object?>{
-          'amount': metrics.codOverdue.format(),
-        }),
-      if (metrics.mismatchCount > 0)
-        context.trPlural('home.chipMismatch', metrics.mismatchCount),
-      if (metrics.returnedToday > 0)
-        context.tr('home.chipReturned', <String, Object?>{
-          'count': metrics.returnedToday,
-        }),
-    ];
-  }
 }
 
 class _HomeBody extends ConsumerWidget {
-  const _HomeBody({required this.home, this.onNavigate});
+  const _HomeBody({
+    required this.home,
+    required this.shopName,
+    this.onNavigate,
+  });
 
   final AsyncValue<Sourced<HomeMetrics>> home;
+  final String shopName;
   final ValueChanged<String>? onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return home.when(
-      loading: () => const ContentLoader(minHeight: 260),
-      error: (error, _) => ErrorStateCard(
-        // Only ApiError reaches here: the repositories translate everything
-        // they raise, and anything else is a bug worth seeing as a crash
-        // rather than as a tidy "could not load" card.
-        error: error is ApiError ? error : ApiError.unexpected(error),
-        onRetry: () => ref.invalidate(homeMetricsProvider),
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _HomeHero(shopName: shopName, onNavigate: onNavigate),
+          const SizedBox(height: EcomsbdSpacing.md),
+          const ContentLoader(minHeight: 220),
+        ],
+      ),
+      error: (error, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _HomeHero(shopName: shopName, onNavigate: onNavigate),
+          const SizedBox(height: EcomsbdSpacing.md),
+          ErrorStateCard(
+            // Only ApiError reaches here: the repositories translate
+            // everything they raise, and anything else is a bug worth seeing
+            // as a crash rather than as a tidy "could not load" card.
+            error: error is ApiError ? error : ApiError.unexpected(error),
+            onRetry: () => ref.invalidate(homeMetricsProvider),
+          ),
+        ],
       ),
       data: (sourced) {
         final metrics = sourced.value;
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             if (sourced.isStale) ...<Widget>[
               StaleDataNotice(
@@ -162,33 +128,26 @@ class _HomeBody extends ConsumerWidget {
               ),
               const SizedBox(height: EcomsbdSpacing.sm),
             ],
-            _CodOutstandingCard(metrics: metrics),
-            const SizedBox(height: EcomsbdSpacing.md),
+            _HomeHero(
+              shopName: shopName,
+              metrics: metrics,
+              onNavigate: onNavigate,
+            ),
+            TodayAttention(metrics: metrics, onNavigate: onNavigate),
+            TodaySuggestions(metrics: metrics, onNavigate: onNavigate),
+            const CourierSavingPreview(),
+            SectionHeader(
+              title: context.tr('home.quickTitle'),
+              subtitle: context.tr('home.quickSub'),
+            ),
             _QuickActions(onNavigate: onNavigate),
-            const SizedBox(height: EcomsbdSpacing.md),
-            _NeedsAttention(metrics: metrics, onNavigate: onNavigate),
             SectionHeader(
-              title: context.tr('home.businessPulse'),
-              subtitle: context.tr('home.businessPulseSub'),
-              actionLabel: context.tr('home.fullAnalytics'),
-              onAction: () => onNavigate?.call('insights'),
+              title: context.tr('home.todayTitle'),
+              subtitle: context.tr('home.todaySub'),
             ),
-            const _PulseCharts(),
-            const SizedBox(height: EcomsbdSpacing.md),
-            const _PerformanceCharts(),
-            const SizedBox(height: EcomsbdSpacing.md),
-            const _ProductCharts(),
-            SectionHeader(
-              title: context.tr('home.liveActivity'),
-              subtitle: context.tr('home.liveActivitySub'),
-              actionLabel: context.tr('home.allActivity'),
-              onAction: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const NotificationCentreScreen(),
-                ),
-              ),
-            ),
-            const _ActivityFeed(),
+            _TodayProgress(metrics: metrics),
+            const SalesChannelStrip(),
+            _BusinessPulse(onNavigate: onNavigate),
           ],
         );
       },
@@ -196,58 +155,301 @@ class _HomeBody extends ConsumerWidget {
   }
 }
 
-class _CodOutstandingCard extends StatelessWidget {
-  const _CodOutstandingCard({required this.metrics});
+/// `.hero` — today's summary on one dark card: the shop, sales, and the four
+/// figures a seller checks first.
+class _HomeHero extends StatelessWidget {
+  const _HomeHero({required this.shopName, this.metrics, this.onNavigate});
+
+  final String shopName;
+
+  /// Null while today's figures load or when they failed; every figure then
+  /// reads as a dash rather than a zero.
+  final HomeMetrics? metrics;
+  final ValueChanged<String>? onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = metrics;
+    const dash = '—';
+    final profitNegative = m != null && m.contributionProfit.paisa < 0;
+    final stats = <DarkMiniStat>[
+      DarkMiniStat(
+        value: m == null ? dash : '${m.ordersToday}',
+        label: context.tr('home.stat.orders'),
+      ),
+      DarkMiniStat(
+        value: m == null ? dash : '${m.deliveredToday}',
+        label: context.tr('home.stat.delivered'),
+      ),
+      DarkMiniStat(
+        value: m == null ? dash : m.codOutstanding.formatCompact(),
+        label: context.tr('home.stat.codDue'),
+      ),
+      DarkMiniStat(
+        value: m == null ? dash : m.contributionProfit.formatCompact(),
+        label: context.tr('home.stat.profit'),
+        valueColor: profitNegative ? const Color(0xFFFFB4B4) : Colors.white,
+      ),
+    ];
+
+    return DarkPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            context.tr('home.heroEyebrow').toUpperCase(),
+            style: trackedFor(
+              context.tr('home.heroEyebrow'),
+              EcomsbdType.eyebrowWide.copyWith(color: const Color(0xFFAEBDCB)),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            shopName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EcomsbdType.heroTitle.copyWith(
+              color: Colors.white,
+              fontSize: 24,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        m == null ? dash : m.grossSales.format(),
+                        style: EcomsbdType.heroMoney.copyWith(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      m == null
+                          ? context.tr('home.loadingToday')
+                          : '${context.tr('home.salesToday')} · '
+                                '${context.trPlural('home.heroSubtitle', m.ordersToday, <String, Object?>{'delivered': m.deliveredToday})}',
+                      style: EcomsbdType.caption.copyWith(
+                        color: EcomsbdColors.onDarkMuted,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onNavigate == null
+                    ? null
+                    : () => onNavigate!('money'),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0x21FFFFFF),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: EcomsbdType.label.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                child: Text('${context.tr('nav.money')} →'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // The prototype's own breakpoint: four across, two on a very
+              // narrow card.
+              final columns = constraints.maxWidth >= 290 ? 4 : 2;
+              const gap = 8.0;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: <Widget>[
+                  for (final stat in stats) SizedBox(width: width, child: stat),
+                ],
+              );
+            },
+          ),
+          if (m != null && m.hasEstimates) ...<Widget>[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 15,
+                  color: Color(0xFFFFD08A),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    m.profitCaveat,
+                    style: EcomsbdType.caption.copyWith(
+                      color: EcomsbdColors.onDarkMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// `.quick-grid` — the four everyday actions, two by two.
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({this.onNavigate});
+
+  final ValueChanged<String>? onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final tiles = <Widget>[
+      QuickActionTile(
+        icon: Icons.add_rounded,
+        title: context.tr('home.quick.newOrder'),
+        subtitle: context.tr('home.quick.newOrderSub'),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const OrderComposeScreen()),
+        ),
+      ),
+      QuickActionTile(
+        icon: Icons.forum_outlined,
+        title: context.tr('home.quick.reply'),
+        subtitle: context.tr('home.quick.replySub'),
+        onTap: () => onNavigate?.call('inbox'),
+      ),
+      QuickActionTile(
+        icon: Icons.local_shipping_outlined,
+        title: context.tr('home.quick.book'),
+        subtitle: context.tr('home.quick.bookSub'),
+        onTap: () => onNavigate?.call('orders:confirmed'),
+      ),
+      QuickActionTile(
+        icon: Icons.payments_outlined,
+        title: context.tr('home.quick.expense'),
+        subtitle: context.tr('home.quick.expenseSub'),
+        onTap: () => ExpenseSheet.show(context),
+      ),
+    ];
+    return Column(
+      children: <Widget>[
+        for (var row = 0; row < tiles.length; row += 2) ...<Widget>[
+          if (row > 0) const SizedBox(height: 10),
+          // Equal heights in a row, even when a Bangla title wraps.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(child: tiles[row]),
+                const SizedBox(width: 10),
+                Expanded(child: tiles[row + 1]),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// `.progress-card` — how today's finished parcels went, and where today's
+/// money stands.
+class _TodayProgress extends StatelessWidget {
+  const _TodayProgress({required this.metrics});
 
   final HomeMetrics metrics;
 
   @override
   Widget build(BuildContext context) {
-    return HeroMoneyCard(
-      eyebrow: context.tr('home.codEyebrow'),
-      amount: metrics.codOutstanding,
-      subtitle: _subtitleFor(context),
-      quality: metrics.hasEstimates
-          ? DataQuality.estimated
-          : DataQuality.actual,
-      trailing: metrics.codOverdue.paisa > 0
-          ? StatusChip(
-              label: context.tr('home.chipOverdue', <String, Object?>{
-                'amount': metrics.codOverdue.format(),
-              }),
-              tone: Tone.bad,
-            )
-          : null,
-      kpis: <HeroKpi>[
-        HeroKpi(
-          label: context.tr('home.realizedToday'),
-          value: metrics.realizedRevenue.formatCompact(),
-          caption: context.tr('home.deliveredCaption', <String, Object?>{
-            'count': metrics.deliveredToday,
-          }),
-        ),
-        HeroKpi(
-          label: context.tr('home.profitToday'),
-          value: metrics.contributionProfit.formatCompact(),
-          caption: context.tr('home.contribution'),
-          tone: metrics.contributionProfit.paisa < 0 ? Tone.bad : null,
-        ),
-        HeroKpi(
-          label: context.tr('home.mismatch'),
-          value: metrics.mismatch.formatCompact(),
-          caption: context.tr('home.openCaption', <String, Object?>{
-            'count': metrics.mismatchCount,
-          }),
-          tone: metrics.mismatchCount > 0 ? Tone.bad : null,
-        ),
-      ],
+    final finished = metrics.deliveredToday + metrics.returnedToday;
+    final fraction = finished == 0 ? 0.0 : metrics.deliveredToday / finished;
+
+    return GlassCard(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  finished == 0
+                      ? context.tr('home.progressNone')
+                      : context.tr('home.progressTitle', <String, Object?>{
+                          'delivered': metrics.deliveredToday,
+                          'returned': metrics.returnedToday,
+                        }),
+                  style: EcomsbdType.bodyStrong,
+                ),
+              ),
+              if (finished > 0)
+                Text(
+                  '${(fraction * 100).round()}%',
+                  style: EcomsbdType.bodyStrong,
+                ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 9,
+              color: const Color(0xFFEEF1F4),
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: fraction,
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: <Color>[EcomsbdColors.orange, Color(0xFFFF875C)],
+                    ),
+                  ),
+                  child: SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            context.tr('home.progressMoney', <String, Object?>{
+              'realized': metrics.realizedRevenue.format(),
+              'cod': metrics.codOutstanding.format(),
+            }),
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _codLine(context),
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+        ],
+      ),
     );
   }
 
   /// Says what is known about *when* the money lands, and admits when nothing
   /// is known. Master spec section 140: courier settlement timing is never
   /// invented, so unforecast money is called that rather than shown as due.
-  String _subtitleFor(BuildContext context) {
+  String _codLine(BuildContext context) {
     if (metrics.codOutstanding.paisa == 0) {
       return context.tr('home.codNothing');
     }
@@ -263,156 +465,91 @@ class _CodOutstandingCard extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({this.onNavigate});
+/// The 30-day trend in one compact card, last on the page. The full charts —
+/// COD ageing, the delivery funnel, products, returns — live in Insights.
+class _BusinessPulse extends ConsumerWidget {
+  const _BusinessPulse({this.onNavigate});
 
   final ValueChanged<String>? onNavigate;
-
-  @override
-  Widget build(BuildContext context) {
-    return ResponsiveGrid(
-      minTileWidth: 150,
-      maxColumns: 4,
-      spacing: EcomsbdSpacing.xs,
-      children: <Widget>[
-        QuickActionTile(
-          icon: Icons.add_rounded,
-          title: context.tr('home.quick.newOrder'),
-          subtitle: context.tr('home.quick.newOrderSub'),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const OrderComposeScreen()),
-          ),
-        ),
-        QuickActionTile(
-          icon: Icons.shield_outlined,
-          title: context.tr('home.quick.riskCheck'),
-          subtitle: context.tr('home.quick.riskCheckSub'),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const RiskCheckScreen()),
-          ),
-        ),
-        QuickActionTile(
-          icon: Icons.receipt_long_outlined,
-          title: context.tr('home.quick.addPayout'),
-          subtitle: context.tr('home.quick.addPayoutSub'),
-          onTap: () => onNavigate?.call('money'),
-        ),
-        QuickActionTile(
-          icon: Icons.inventory_2_outlined,
-          title: context.tr('home.quick.products'),
-          subtitle: context.tr('home.quick.productsSub'),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProductsScreen()),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NeedsAttention extends StatelessWidget {
-  const _NeedsAttention({required this.metrics, this.onNavigate});
-
-  final HomeMetrics metrics;
-  final ValueChanged<String>? onNavigate;
-
-  @override
-  Widget build(BuildContext context) {
-    return AttentionCard(
-      items: <AttentionItem>[
-        for (final alert in metrics.alerts)
-          AttentionItem(
-            title: alert.title,
-            detail: alert.detail,
-            tone: _tone(alert.severity),
-            onTap: () => onNavigate?.call('money'),
-          ),
-      ],
-      actionLabel: metrics.alerts.isEmpty ? null : context.tr('home.reviewAll'),
-      onAction: metrics.alerts.isEmpty ? null : () => onNavigate?.call('money'),
-      side: DarkHighlightPanel(
-        label: context.tr('home.todaysContribution'),
-        value: metrics.contributionProfit.format(),
-        description: metrics.profitCaveat,
-        actionLabel: context.tr('home.openProfitBreakdown'),
-        onAction: () => onNavigate?.call('insights'),
-      ),
-    );
-  }
-
-  static Tone _tone(String severity) => switch (severity) {
-    'CRITICAL' => Tone.bad,
-    'WARNING' => Tone.warning,
-    'ACTION' => Tone.info,
-    _ => Tone.neutral,
-  };
-}
-
-class _PulseCharts extends ConsumerWidget {
-  const _PulseCharts();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profit = ref.watch(profitReportProvider);
-    final money = ref.watch(moneySummaryProvider);
+    final report = profit.valueOrNull?.value;
+    final rate = _deliveredRate(report);
 
-    return ResponsiveGrid(
-      minTileWidth: 320,
-      maxColumns: 2,
-      spacing: EcomsbdSpacing.sm,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        PremiumChartCard(
-          title: context.tr('chart.contributionProfit'),
-          subtitle: context.tr('chart.contributionProfitSub'),
-          trailing: profit.valueOrNull == null
-              ? null
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
+        SectionHeader(
+          title: context.tr('home.businessPulse'),
+          subtitle: context.tr('home.pulseSub'),
+          actionLabel: context.tr('home.fullAnalytics'),
+          onAction: () => onNavigate?.call('insights'),
+        ),
+        GlassCard(
+          padding: const EdgeInsets.fromLTRB(15, 14, 15, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      context.tr('chart.contributionProfit'),
+                      style: EcomsbdType.bodyStrong,
+                    ),
+                  ),
+                  if (report != null)
                     Text(
-                      profit.valueOrNull!.value.contributionProfit
-                          .formatCompact(),
+                      report.contributionProfit.formatCompact(),
                       style: EcomsbdType.metricValue,
                     ),
-                    if (profit.valueOrNull!.value.marginLabel != null)
-                      Text(
-                        profit.valueOrNull!.value.marginLabel!,
-                        style: EcomsbdType.chip.copyWith(
-                          color: EcomsbdColors.muted,
-                        ),
-                      ),
-                  ],
-                ),
-          child: ChartData<ProfitReport>(
-            value: profit,
-            emptyMessage: context.tr('chart.emptyNoSettled'),
-            isEmpty: (report) => report.parcelCount == 0,
-            builder: (report) =>
-                ProfitTrendChart(points: _trendPoints(context, report.series)),
-          ),
-        ),
-        PremiumChartCard(
-          title: context.tr('chart.codPosition'),
-          subtitle: context.tr('chart.codPositionSub'),
-          child: ChartData<List<AgingBand>>(
-            value: money.whenData(
-              (sourced) => sourced.map((summary) => summary.aging),
-            ),
-            emptyMessage: context.tr('chart.emptyNoCod'),
-            isEmpty: (bands) =>
-                bands.every((band) => band.outstanding.paisa == 0),
-            builder: (bands) => Center(
-              child: CodDonutChart(
-                slices: _agingSlices(bands),
-                centerValue: money.valueOrNull!.value.outstanding
-                    .formatCompact(),
+                ],
               ),
-            ),
+              const SizedBox(height: EcomsbdSpacing.sm),
+              ChartData<ProfitReport>(
+                value: profit,
+                height: 120,
+                emptyMessage: context.tr('chart.emptyNoSettled'),
+                isEmpty: (report) => report.parcelCount == 0,
+                builder: (report) => ProfitTrendChart(
+                  height: 120,
+                  points: _trendPoints(context, report.series),
+                ),
+              ),
+              if (report != null && report.parcelCount > 0) ...<Widget>[
+                const SizedBox(height: 4),
+                KpiLine(
+                  label: context.tr('home.pulseParcels'),
+                  value: '${report.parcelCount}',
+                  isLast: rate == null,
+                ),
+                if (rate != null)
+                  KpiLine(
+                    label: context.tr('home.pulseDelivered'),
+                    value: '${rate.toStringAsFixed(1)}%',
+                    isLast: true,
+                  ),
+              ],
+            ],
           ),
         ),
       ],
     );
+  }
+
+  static double? _deliveredRate(ProfitReport? report) {
+    if (report == null || report.funnel.isEmpty) return null;
+    final dispatched = report.funnel.first.count;
+    if (dispatched == 0) return null;
+    final delivered = report.funnel
+        .firstWhere(
+          (stage) => stage.label == 'Delivered',
+          orElse: () => const FunnelStage(label: 'Delivered', count: 0),
+        )
+        .count;
+    return delivered * 100 / dispatched;
   }
 
   static List<TrendPoint> _trendPoints(
@@ -434,28 +571,6 @@ class _PulseCharts extends ConsumerWidget {
     ];
   }
 
-  static List<DonutSlice> _agingSlices(List<AgingBand> bands) {
-    const palette = <Color>[
-      EcomsbdColors.green,
-      EcomsbdColors.blue,
-      EcomsbdColors.orange,
-      EcomsbdColors.red,
-    ];
-    final slices = <DonutSlice>[];
-    for (var index = 0; index < bands.length; index++) {
-      final band = bands[index];
-      if (band.outstanding.paisa == 0) continue;
-      slices.add(
-        DonutSlice(
-          label: band.label,
-          value: band.outstanding.paisa,
-          color: palette[index % palette.length],
-        ),
-      );
-    }
-    return slices;
-  }
-
   static String _weekday(BuildContext context, DateTime date) =>
       switch (date.weekday) {
         DateTime.monday => context.tr('weekday.mon'),
@@ -465,251 +580,5 @@ class _PulseCharts extends ConsumerWidget {
         DateTime.friday => context.tr('weekday.fri'),
         DateTime.saturday => context.tr('weekday.sat'),
         _ => context.tr('weekday.sun'),
-      };
-}
-
-class _PerformanceCharts extends ConsumerWidget {
-  const _PerformanceCharts();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profit = ref.watch(profitReportProvider);
-    final returns = ref.watch(returnReportProvider);
-
-    return ResponsiveGrid(
-      minTileWidth: 320,
-      maxColumns: 2,
-      spacing: EcomsbdSpacing.sm,
-      children: <Widget>[
-        PremiumChartCard(
-          title: context.tr('chart.deliveryFunnel'),
-          subtitle: context.tr('chart.last30'),
-          trailing: _successChip(context, profit.valueOrNull?.value),
-          child: ChartData<ProfitReport>(
-            value: profit,
-            emptyMessage: context.tr('chart.emptyNoDispatched'),
-            isEmpty: (report) =>
-                report.funnel.isEmpty || report.funnel.first.count == 0,
-            builder: (report) => charts.DeliveryFunnelChart(
-              stages: <charts.FunnelStage>[
-                for (final stage in report.funnel)
-                  charts.FunnelStage(label: stage.label, count: stage.count),
-              ],
-            ),
-          ),
-        ),
-        PremiumChartCard(
-          title: context.tr('chart.courierHealth'),
-          subtitle: context.tr('chart.courierHealthSub'),
-          child: ChartData<ReturnReport>(
-            value: returns,
-            emptyMessage: context.tr('chart.emptyNoCourierSample'),
-            isEmpty: (report) => report.byCourier.isEmpty,
-            builder: (report) => _CourierRows(lines: report.byCourier),
-          ),
-        ),
-      ],
-    );
-  }
-
-  static Widget? _successChip(BuildContext context, ProfitReport? report) {
-    if (report == null || report.funnel.isEmpty) return null;
-    final dispatched = report.funnel.first.count;
-    if (dispatched == 0) return null;
-    final delivered = report.funnel
-        .firstWhere(
-          (stage) => stage.label == 'Delivered',
-          orElse: () => const FunnelStage(label: 'Delivered', count: 0),
-        )
-        .count;
-    final rate = delivered * 100 / dispatched;
-    return StatusChip(
-      label: context.tr('home.deliveredRate', <String, Object?>{
-        'rate': rate.toStringAsFixed(1),
-      }),
-      tone: rate >= 85 ? Tone.good : Tone.warning,
-    );
-  }
-}
-
-/// Return rate per courier, with the sample-size rule visible.
-///
-/// Master spec section 24: a ranking is not shown before the sample supports
-/// it. A courier with three parcels gets "Not enough data" rather than a
-/// percentage the seller might act on.
-class _CourierRows extends StatelessWidget {
-  const _CourierRows({required this.lines});
-
-  final List<RateLine> lines;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        for (final line in lines.take(4))
-          Padding(
-            padding: const EdgeInsets.only(bottom: EcomsbdSpacing.xs),
-            child: GlassListRow(
-              leading: RowIcon(label: line.label.substring(0, 1).toUpperCase()),
-              title: line.label,
-              subtitle: context.tr(
-                'courier.finishedReturned',
-                <String, Object?>{
-                  'finished': line.parcelCount,
-                  'returned': line.returnCount,
-                },
-              ),
-              trailing: line.hasEnoughSample
-                  ? Text(
-                      context.tr('courier.backRate', <String, Object?>{
-                        'rate': line.rateLabel,
-                      }),
-                      style: EcomsbdType.money,
-                    )
-                  : StatusChip(
-                      label: context.tr('common.notEnoughData'),
-                      tone: Tone.neutral,
-                    ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _ProductCharts extends ConsumerWidget {
-  const _ProductCharts();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final products = ref.watch(productProfitProvider);
-    final returns = ref.watch(returnReportProvider);
-
-    return ResponsiveGrid(
-      minTileWidth: 320,
-      maxColumns: 2,
-      spacing: EcomsbdSpacing.sm,
-      children: <Widget>[
-        PremiumChartCard(
-          title: context.tr('chart.topProducts'),
-          subtitle: context.tr('chart.topProductsSub'),
-          child: ChartData<List<ProductLine>>(
-            value: products,
-            emptyMessage: context.tr('chart.emptyNoDelivered'),
-            isEmpty: (rows) => rows.isEmpty,
-            builder: (rows) => charts.HorizontalBarChart(
-              data: <charts.HorizontalBarDatum>[
-                for (final row in rows.take(5))
-                  charts.HorizontalBarDatum(
-                    label: row.productName,
-                    value: row.profit.paisa.abs(),
-                    displayValue: row.profit.formatCompact(),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        PremiumChartCard(
-          title: context.tr('chart.returnPressure'),
-          subtitle: context.tr('chart.returnPressureSub'),
-          trailing: returns.valueOrNull == null
-              ? null
-              : StatusChip(
-                  label: returns.valueOrNull!.value.directLoss.format(),
-                  tone: returns.valueOrNull!.value.directLoss.paisa > 0
-                      ? Tone.bad
-                      : Tone.neutral,
-                ),
-          child: ChartData<ReturnReport>(
-            value: returns,
-            emptyMessage: context.tr('chart.emptyNoReturns'),
-            isEmpty: (report) => report.returnCount == 0,
-            builder: (report) => charts.HorizontalBarChart(
-              accent: charts.BarAccent.red,
-              data: <charts.HorizontalBarDatum>[
-                for (final line
-                    in report.byProduct
-                        .where((line) => line.returnCount > 0)
-                        .take(5))
-                  charts.HorizontalBarDatum(
-                    label: line.label,
-                    value: line.returnCount,
-                    displayValue: line.hasEnoughSample
-                        ? line.rateLabel
-                        : '${line.returnCount} of ${line.parcelCount}',
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The most recent notifications, which is what "live activity" actually is.
-class _ActivityFeed extends ConsumerWidget {
-  const _ActivityFeed();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notifications = ref.watch(notificationListProvider);
-    final items = notifications.items.take(3).toList();
-
-    if (notifications.isLoading && items.isEmpty) {
-      return const ContentLoader(minHeight: 150);
-    }
-    if (items.isEmpty) {
-      return EmptyState(
-        icon: Icons.notifications_none_rounded,
-        title: context.tr('activity.nothingTitle'),
-        message: context.tr('activity.nothingBody'),
-      );
-    }
-
-    return Column(
-      children: <Widget>[
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
-            child: SellerFeedCard(
-              author: 'ecomsbd',
-              timestamp: formatRelative(item.createdAt),
-              headline: item.title,
-              body: item.body,
-              avatarLabel: _avatarFor(item.severity),
-              status: StatusChip(
-                label: _severityLabel(context, item.severity),
-                tone: _severityTone(item.severity),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  static String _avatarFor(NotificationSeverity severity) => switch (severity) {
-    NotificationSeverity.critical => '!',
-    NotificationSeverity.warning => '⚠',
-    NotificationSeverity.action => '→',
-    NotificationSeverity.info => 'i',
-  };
-
-  static String _severityLabel(
-    BuildContext context,
-    NotificationSeverity severity,
-  ) => switch (severity) {
-    NotificationSeverity.critical => context.tr('severity.critical'),
-    NotificationSeverity.warning => context.tr('severity.warning'),
-    NotificationSeverity.action => context.tr('severity.action'),
-    NotificationSeverity.info => context.tr('severity.info'),
-  };
-
-  static Tone _severityTone(NotificationSeverity severity) =>
-      switch (severity) {
-        NotificationSeverity.critical => Tone.bad,
-        NotificationSeverity.warning => Tone.warning,
-        NotificationSeverity.action => Tone.info,
-        NotificationSeverity.info => Tone.neutral,
       };
 }

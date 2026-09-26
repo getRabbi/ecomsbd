@@ -7,6 +7,7 @@ import '../../data/commerce/repository_support.dart';
 import '../../data/local/tables.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/states.dart';
+import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_locale.dart';
@@ -266,12 +267,18 @@ class DetailScaffold extends StatelessWidget {
     required this.children,
     super.key,
     this.subtitle,
+    this.eyebrow,
     this.actions = const <Widget>[],
     this.bottomBar,
   });
 
   final String title;
   final String? subtitle;
+
+  /// When set, the title is drawn as the final prototype's large header
+  /// (eyebrow, title, one line) at the top of the page, and the bar above it
+  /// carries only the back control and [actions].
+  final String? eyebrow;
   final List<Widget> children;
   final List<Widget> actions;
   final Widget? bottomBar;
@@ -303,29 +310,32 @@ class DetailScaffold extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: EcomsbdSpacing.xs),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Text(
-                            title,
-                            style: EcomsbdType.sectionTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (subtitle != null)
+                    if (eyebrow != null)
+                      const Spacer()
+                    else
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
                             Text(
-                              subtitle!,
-                              style: EcomsbdType.caption.copyWith(
-                                color: EcomsbdColors.muted,
-                              ),
+                              title,
+                              style: EcomsbdType.sectionTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                        ],
+                            if (subtitle != null)
+                              Text(
+                                subtitle!,
+                                style: EcomsbdType.caption.copyWith(
+                                  color: EcomsbdColors.muted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
                     ...actions,
                   ],
                 ),
@@ -338,7 +348,15 @@ class DetailScaffold extends StatelessWidget {
                     EcomsbdSpacing.page,
                     EcomsbdSpacing.xxl,
                   ),
-                  children: children,
+                  children: <Widget>[
+                    if (eyebrow != null)
+                      PageHeader(
+                        eyebrow: eyebrow,
+                        title: title,
+                        description: subtitle,
+                      ),
+                    ...children,
+                  ],
                 ),
               ),
               if (bottomBar != null) bottomBar!,

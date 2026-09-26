@@ -1,26 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/analytics/analytics_providers.dart';
+import '../../data/commerce/list_controllers.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
-import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import '../home/home_screen.dart';
-import '../insights/insights_screen.dart';
-import '../menu/menu_overlay.dart';
+import '../inbox/inbox_screen.dart';
+import '../menu/more_screen.dart';
 import '../money/money_screen.dart';
 import '../notifications/notification_centre_screen.dart';
 import '../orders/orders_screen.dart';
 import '../search/search_screen.dart';
 import '../shared/responsive.dart';
 
-/// The signed-in shell: four tabs plus the menu overlay.
+/// The signed-in shell: five tabs — Home, Orders, Inbox, Money, More.
 ///
-/// The menu opens from the hamburger in the top bar and from nowhere else in
-/// the chrome — not from a bottom-bar tab, and not from the title pill.
+/// More is the one door to every other tool; the top bar carries only new
+/// order, search and notifications, and the title pill is a label.
 ///
 /// Tab state is kept in an [IndexedStack] so scroll position and any in-progress
 /// form survive switching tabs — a seller mid-way through entering an order must
@@ -39,7 +41,7 @@ class MainShellState extends ConsumerState<MainShell> {
 
   /// Tabs the seller has actually opened.
   ///
-  /// An [IndexedStack] builds every child eagerly, so all four tabs used to
+  /// An [IndexedStack] builds every child eagerly, so every tab used to
   /// load their data during launch. Unopened tabs are a placeholder until
   /// first use; opened ones stay mounted, which is what keeps scroll position
   /// and half-entered forms alive across a tab switch.
@@ -58,28 +60,43 @@ class MainShellState extends ConsumerState<MainShell> {
     });
   }
 
-  Future<void> _openMenu() async {
-    await MenuOverlay.show(context);
-  }
-
   void _openSearch() {
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const GlobalSearchScreen()));
   }
 
+  /// Route names used by Home, Money and More.
+  ///
+  /// `orders:<group>` opens Orders on one filter group, e.g.
+  /// `orders:confirmed` for orders waiting for a courier booking.
   void _navigateByName(String name) {
-    switch (name) {
+    final parts = name.split(':');
+    switch (parts.first) {
       case 'orders':
+        if (parts.length > 1) {
+          final group = OrderFilterGroup.values.where(
+            (value) => value.name == parts[1],
+          );
+          if (group.isNotEmpty) {
+            ref.read(orderListProvider.notifier).setGroup(group.first);
+          }
+        }
         _select(MainDestination.orders);
+      case 'inbox':
+        _select(MainDestination.inbox);
       case 'money':
         _select(MainDestination.money);
       case 'insights':
-        _select(MainDestination.insights);
+        unawaited(
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const InsightsPage())),
+        );
       case 'home':
         _select(MainDestination.home);
       default:
-        _openMenu();
+        _select(MainDestination.more);
     }
   }
 
@@ -89,27 +106,22 @@ class MainShellState extends ConsumerState<MainShell> {
       return const SizedBox.shrink();
     }
     return switch (tab) {
-      MainDestination.home => HomeScreen(
-        onOpenMenu: _openMenu,
-        onNavigate: _navigateByName,
-      ),
+      MainDestination.home => HomeScreen(onNavigate: _navigateByName),
       MainDestination.orders => OrdersScreen(onNavigate: _navigateByName),
+      MainDestination.inbox => InboxScreen(onNavigate: _navigateByName),
       MainDestination.money => MoneyScreen(onNavigate: _navigateByName),
-      MainDestination.insights => const InsightsScreen(),
+      MainDestination.more => MoreScreen(onNavigate: _navigateByName),
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final isHome = _current == MainDestination.home;
-
+    // Every tab, Home included, starts below the bar on the light page: the
+    // Home summary is a card in the page, not a full-bleed band under it.
     return EcomsbdScaffold(
-      // Home's navy hero runs under the status bar, so its icons flip to light.
-      overlayStyle: isHome ? ecomsbdDarkOverlay : ecomsbdLightOverlay,
-      extendBehindTopBar: isHome,
       topBar: GlassTopBar(
         // The current section's name, as a label. Every tab reads the same
-        // way, and the hamburger on the right is the menu's only entry.
+        // way; every other tool lives under More.
         leading: BrandPill(label: _current.labelIn(context)),
         actions: <Widget>[
           GlassIconButton(
@@ -128,11 +140,6 @@ class MainShellState extends ConsumerState<MainShell> {
                 builder: (_) => const NotificationCentreScreen(),
               ),
             ),
-          ),
-          GlassIconButton(
-            icon: Icons.menu_rounded,
-            tooltip: context.tr('nav.menu'),
-            onPressed: _openMenu,
           ),
         ],
       ),
