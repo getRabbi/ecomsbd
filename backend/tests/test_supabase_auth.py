@@ -18,7 +18,7 @@ from app.api import deps
 from app.auth.identities import AuthIdentity, AuthProvider
 from app.auth.supabase import SupabaseVerifier, resolve_session, resolve_user
 from app.core.config import Settings
-from app.core.errors import AuthenticationError, ConflictError
+from app.core.errors import AuthenticationError, ConflictError, ErrorCode
 from app.core.security import TokenService
 from app.db.session import get_sessionmaker
 from app.main import create_app
@@ -92,8 +92,12 @@ async def test_rotation_and_stale_cache_fail_closed(supabase, monkeypatch):
     monkeypatch.setattr(verifier, "_fetch_keys", original)
     verifier._fetched = time.monotonic() - 601
     verifier._attempted = time.monotonic()
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(AuthenticationError) as rejected:
         await verifier.verify(token())
+    # Still fails closed, but as the provider being unreachable: a client that
+    # read INVALID_TOKEN here discarded a session that was fine.
+    assert rejected.value.code == ErrorCode.SERVICE_UNAVAILABLE
+    assert rejected.value.http_status == 503
 
 
 async def test_mapping_verified_link_and_ambiguous_conflict(db, supabase):

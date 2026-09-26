@@ -27,6 +27,15 @@ def invalid_token() -> AuthenticationError:
     return AuthenticationError("Invalid Supabase session", code=ErrorCode.INVALID_TOKEN)
 
 
+def provider_unavailable() -> AuthenticationError:
+    """The key set could not be read: the request fails, the token is not judged."""
+    return AuthenticationError(
+        "Authentication provider unavailable",
+        code=ErrorCode.SERVICE_UNAVAILABLE,
+        http_status=503,
+    )
+
+
 @dataclass(frozen=True)
 class SupabaseClaims:
     subject: uuid.UUID
@@ -53,7 +62,10 @@ class SupabaseVerifier:
             if now - self._attempted < 30:
                 if now - self._fetched < 600:
                     return self._keys
-                raise invalid_token()
+                # A fetch failed moments ago and no fresh key set is held: the
+                # provider is unreachable, which says nothing about this token.
+                # INVALID_TOKEN here made clients discard sessions that were fine.
+                raise provider_unavailable()
             self._attempted = now
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
@@ -63,11 +75,7 @@ class SupabaseVerifier:
                     if not isinstance(keys, list) or len(keys) > 20:
                         raise ValueError("Invalid key set")
             except (httpx.HTTPError, ValueError, KeyError) as exc:
-                raise AuthenticationError(
-                    "Authentication provider unavailable",
-                    code=ErrorCode.SERVICE_UNAVAILABLE,
-                    http_status=503,
-                ) from exc
+                raise provider_unavailable() from exc
             self._keys, self._fetched = keys, now
             return keys
 

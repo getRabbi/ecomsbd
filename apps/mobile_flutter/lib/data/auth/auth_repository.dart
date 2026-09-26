@@ -234,20 +234,31 @@ class AuthRepository implements SessionProvider {
   Future<AccountProfile> fetchProfile() async {
     final profile = AccountProfile.fromJson(await api.get('/me'));
     if (_deviceSessionId != profile.sessionId) {
-      await api.post(
-        '/auth/device',
-        body: {
-          'install_id': await _tokens.installId(() => const Uuid().v4()),
-          'platform': !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-              ? 'ANDROID'
-              : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-              ? 'IOS'
-              : 'UNKNOWN',
-        },
-      );
-      _deviceSessionId = profile.sessionId;
-      _push.listen(_registerPush);
-      unawaited(_syncPush());
+      try {
+        await api.post(
+          '/auth/device',
+          body: {
+            'install_id': await _tokens.installId(() => const Uuid().v4()),
+            'platform':
+                !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+                ? 'ANDROID'
+                : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                ? 'IOS'
+                : 'UNKNOWN',
+          },
+        );
+        _deviceSessionId = profile.sessionId;
+        _push.listen(_registerPush);
+        unawaited(_syncPush());
+      } on ApiError catch (error) {
+        // /me has already confirmed the session; attaching this install is
+        // push bookkeeping. A failure to answer is retried on the next
+        // profile fetch rather than ending a valid session (a 500 here once
+        // signed a seller out at launch). A rejected credential still does.
+        if (error.isAuthFailure || error.code == ApiErrorCode.forbidden) {
+          rethrow;
+        }
+      }
     }
     return _profile = profile;
   }

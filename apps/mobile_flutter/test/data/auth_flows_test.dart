@@ -17,6 +17,34 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'fake_api.dart';
 import 'supabase_fake.dart';
 
+const _shopProfile = <String, dynamic>{
+  'user_id': 'internal-user',
+  'session_id': 'internal-session',
+  'locale': 'bn',
+  'tenant_id': 'existing-shop',
+  'role': 'OWNER',
+  'permissions': ['order.view'],
+  'needs_onboarding': false,
+  'tenants': [],
+};
+
+FakeReply _error(int status, String code) => FakeReply(<String, dynamic>{
+  'code': code,
+  'message_bn': '',
+  'message_en': 'server said $code',
+  'retryable': status >= 500,
+}, statusCode: status);
+
+/// Lets a test drive the Supabase auth stream directly.
+class _StreamedAuthRepository extends AuthRepository {
+  _StreamedAuthRepository({required super.tokenStore, super.auth});
+
+  final changes = StreamController<sb.AuthState>.broadcast();
+
+  @override
+  Stream<sb.AuthState> get authChanges => changes.stream;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late SupabaseTransport transport;
@@ -43,16 +71,7 @@ void main() {
       sessionProvider: repository,
       dio: Dio()..httpClientAdapter = api,
     );
-    api.onJson('GET', '/me', {
-      'user_id': 'internal-user',
-      'session_id': 'internal-session',
-      'locale': 'bn',
-      'tenant_id': 'existing-shop',
-      'role': 'OWNER',
-      'permissions': ['order.view'],
-      'needs_onboarding': false,
-      'tenants': [],
-    });
+    api.onJson('GET', '/me', _shopProfile);
     api.onJson('POST', '/auth/logout', {});
     api.onJson('POST', '/auth/device', {});
     controller = AuthController(
@@ -291,4 +310,153 @@ void main() {
       );
     },
   );
+
+  group('restore when the server cannot answer', () {
+    // A launch with a saved session, retrying at once so a test can watch it.
+    Future<void> launch() async {
+      controller.dispose();
+      controller = AuthController(
+        repository,
+        providerSignIn: ProviderCredential(),
+        restoreRetryDelay: (_) => Duration.zero,
+      );
+      await auth.setInitialSession(jsonEncode(transport.session));
+    }
+
+    Future<void> reaches(AuthStage stage) async {
+      if (controller.state.stage == stage) return;
+      final reached = Completer<void>();
+      final remove = controller.addListener((state) {
+        if (state.stage == stage && !reached.isCompleted) reached.complete();
+      }, fireImmediately: false);
+      try {
+        await reached.future.timeout(const Duration(seconds: 5));
+      } finally {
+        remove();
+      }
+    }
+
+    // Kept, but not guessed into onboarding: the splash waits, then Home.
+    Future<void> expectKeptThenRecovers() async {
+      expect(auth.currentSession, isNotNull);
+      expect(controller.state.stage, AuthStage.restoring);
+      expect(controller.state.error, isNotNull);
+      expect(authRedirect(controller.state, Routes.home), Routes.splash);
+      api.offline = false;
+      api.onJson('GET', '/me', _shopProfile);
+      await reaches(AuthStage.ready);
+      expect(controller.state.profile!.tenantId, 'existing-shop');
+      expect(auth.currentSession, isNotNull);
+    }
+
+    test('valid session + 500 keeps the session and retries', () async {
+      await launch();
+      api.on('GET', '/me', (_) => _error(500, 'INTERNAL_ERROR'));
+      await controller.restore();
+      expect(controller.state.error!.statusCode, 500);
+      await expectKeptThenRecovers();
+    });
+
+    test('valid session + no connection keeps the session', () async {
+      await launch();
+      api.offline = true;
+      await controller.restore();
+      expect(controller.state.error!.isOffline, isTrue);
+      await expectKeptThenRecovers();
+    });
+
+    test('valid session + timeout keeps the session', () async {
+      await launch();
+      api.on(
+        'GET',
+        '/me',
+        (_) => throw DioException(
+          requestOptions: RequestOptions(path: '/me'),
+          type: DioExceptionType.receiveTimeout,
+        ),
+      );
+      await controller.restore();
+      expect(controller.state.error!.code, ApiErrorCode.serviceUnavailable);
+      await expectKeptThenRecovers();
+    });
+
+    test(
+      'valid session + temporary backend error (503) keeps the session',
+      () async {
+        await launch();
+        api.on('GET', '/me', (_) => _error(503, 'SERVICE_UNAVAILABLE'));
+        await controller.restore();
+        await expectKeptThenRecovers();
+      },
+    );
+
+    test(
+      'a failed device attach after /me confirmed the session opens Home',
+      () async {
+        await launch();
+        api.on('POST', '/auth/device', (_) => _error(500, 'INTERNAL_ERROR'));
+        await controller.restore();
+        expect(controller.state.stage, AuthStage.ready);
+        expect(controller.state.profile!.tenantId, 'existing-shop');
+        expect(auth.currentSession, isNotNull);
+      },
+    );
+
+    test('a seller already in Home stays there through a 500', () async {
+      expect(
+        await controller.login('seller@example.com', 'strong password'),
+        isTrue,
+      );
+      api.on('GET', '/me', (_) => _error(500, 'INTERNAL_ERROR'));
+      await controller.restore();
+      expect(controller.state.stage, AuthStage.ready);
+      expect(controller.state.profile!.tenantId, 'existing-shop');
+      expect(auth.currentSession, isNotNull);
+    });
+
+    for (final (status, code) in [
+      (401, 'INVALID_TOKEN'),
+      (401, 'SESSION_REVOKED'),
+      (403, 'FORBIDDEN'),
+    ]) {
+      test('$status $code clears the local session', () async {
+        await launch();
+        api.on('GET', '/me', (_) => _error(status, code));
+        await controller.restore();
+        expect(controller.state.stage, AuthStage.signedOut);
+        expect(controller.state.error!.code, code);
+        expect(auth.currentSession, isNull);
+        await pumpEventQueue();
+        expect(api.to('GET', '/me'), hasLength(1));
+      });
+    }
+
+    test('a Supabase refresh that cannot connect is not a sign-out', () async {
+      final streamed = _StreamedAuthRepository(tokenStore: tokens, auth: auth);
+      streamed.client = ApiClient(
+        sessionProvider: streamed,
+        dio: Dio()..httpClientAdapter = api,
+      );
+      final seller = AuthController(
+        streamed,
+        providerSignIn: ProviderCredential(),
+      );
+      addTearDown(() async {
+        seller.dispose();
+        streamed.dispose();
+        await streamed.changes.close();
+      });
+      expect(
+        await seller.login('seller@example.com', 'strong password'),
+        isTrue,
+      );
+      streamed.changes.addError(sb.AuthRetryableFetchException());
+      await pumpEventQueue();
+      expect(seller.state.stage, AuthStage.ready);
+
+      streamed.changes.addError(const sb.AuthException('bad callback'));
+      await pumpEventQueue();
+      expect(seller.state.stage, AuthStage.signedOut);
+    });
+  });
 }
