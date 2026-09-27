@@ -167,4 +167,37 @@ void main() {
     expect(posts.single.jsonBody['product_id'], 'p1');
     expect(find.textContaining('PO-00007'), findsOneWidget);
   });
+
+  testWidgets('offline, it says so and does not claim nothing will run out, '
+      'then fills in once back online', (tester) async {
+    final fake = buildFakeApi();
+    _demand(fake, canDraft: false);
+    fake.adapter.onJson('GET', '/forecasting/cash', {
+      'inflow': {'next_7_days': 0},
+      'outflow': {'next_7_days': 0, 'overdue': 0},
+      'net_7_days_paisa': 0,
+      'net_14_days_paisa': 0,
+      'committed_on_open_orders_paisa': 0,
+    });
+    fake.adapter.offline = true;
+    await tester.pumpWidget(_app(fake, 'en'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No internet connection'), findsOneWidget);
+    expect(find.text('Nothing is likely to run out right now.'), findsNothing);
+    expect(find.text('Borka'), findsNothing);
+
+    fake.adapter.offline = false;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ForecastScreen)),
+    );
+    final monitor = container.read(networkMonitorProvider.notifier);
+    monitor.reportUnreachable();
+    await tester.pump();
+    monitor.reportReachable();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No internet connection'), findsNothing);
+    expect(find.text('Borka'), findsOneWidget);
+  });
 }

@@ -137,7 +137,7 @@ class _RtoScreenState extends ConsumerState<RtoScreen> {
                         EmptyState(
                           icon: Icons.error_outline,
                           title: context.tr('rto.couldNotLoad'),
-                          message: '$error',
+                          message: context.tr('common.somethingWentWrong'),
                         ),
                     ],
                     data: (sourced) => <Widget>[

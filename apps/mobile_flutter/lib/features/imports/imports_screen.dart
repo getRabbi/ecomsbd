@@ -261,7 +261,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
               Expanded(
                 child: _TemplateTile(
                   icon: Icons.inventory_2_outlined,
-                  title: 'Products',
+                  title: context.tr('entity.products'),
                   subtitle: context.tr('imp.productsSub'),
                   selected: _template == 'PRODUCTS',
                   onTap: () => setState(() => _template = 'PRODUCTS'),
@@ -271,7 +271,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
               Expanded(
                 child: _TemplateTile(
                   icon: Icons.receipt_long_outlined,
-                  title: 'Orders',
+                  title: context.tr('nav.orders'),
                   subtitle: context.tr('imp.ordersSub'),
                   selected: _template == 'ORDERS',
                   onTap: () => setState(() => _template = 'ORDERS'),
@@ -396,7 +396,7 @@ class _ImportsScreenState extends ConsumerState<ImportsScreen> {
         spacing: EcomsbdSpacing.xs,
         children: <Widget>[
           MetricTile(
-            label: 'Ready',
+            label: context.tr('imp.ready'),
             value: '${batch.readyCount}',
             caption: context.tr('imp.willBeCreated'),
             tone: Tone.good,

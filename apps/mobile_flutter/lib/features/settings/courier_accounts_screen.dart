@@ -180,7 +180,7 @@ class _CourierList extends ConsumerWidget {
         : EmptyState(
             icon: Icons.error_outline,
             title: context.tr('common.couldNotLoad'),
-            message: '$error',
+            message: context.tr('common.somethingWentWrong'),
           );
   }
 
@@ -1307,7 +1307,7 @@ class _StorePickerSheet extends ConsumerWidget {
                 : EmptyState(
                     icon: Icons.error_outline,
                     title: context.tr('common.couldNotLoad'),
-                    message: '$error',
+                    message: context.tr('common.somethingWentWrong'),
                   ),
             data: (rows) => rows.isEmpty
                 ? EmptyState(

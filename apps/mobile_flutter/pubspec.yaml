@@ -3,7 +3,7 @@ description: "ecomsbd — Bangladesh F-commerce seller financial operations."
 publish_to: "none"
 
 # version+build. The build number is what Play orders releases by.
-version: 3.0.0+300
+version: 3.0.1+301
 
 environment:
   sdk: ^3.12.0
@@ -71,6 +71,12 @@ dependencies:
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
 
+  # Whether the phone has any network at all, so the offline banner appears
+  # (and recovery starts) the moment Wi-Fi or data drops or returns instead of
+  # on the next failed request. It is only a hint: reaching the API is still
+  # what decides "online" (lib/core/network/network_monitor.dart).
+  connectivity_plus: ^7.3.1
+
   # Deliberately NOT included:
   #   - a chart package: every chart in the prototype is a CustomPainter, which
   #     keeps the glass styling exact and adds no dependency (docs/ADR/0002).
@@ -85,8 +91,8 @@ dev_dependencies:
   drift_dev: ^2.21.0
   http: ^1.6.0
 
-  # Generates the launcher icons from assets/icon/icon.png (configured at the
-  # end of this file). Build-time only; nothing from it ships in the app.
+  # Generates the launcher icons from the sources in assets/icon (configured
+  # at the end of this file). Build-time only; nothing from it ships in the app.
   flutter_launcher_icons: ^0.14.4
 
 flutter:
@@ -94,10 +100,13 @@ flutter:
 
   assets:
     - assets/fonts/
-    # The transparent brand mark, animated in-app by EcomsAnimatedLogo.
-    # assets/icon/icon.png is deliberately not bundled: it is only the launcher
-    # icon source, read when icons are generated, and would add 1 MB to the app.
-    - assets/icon/logo_mark.png
+    # The brand mark on transparency, shown in-app by EcomsBrandMark and
+    # EcomsAnimatedLogo. Derived from logo_mark.png, the mark as delivered on
+    # white: only the white backdrop and its drop shadow are removed and the
+    # canvas padded; the artwork's own pixels are unchanged. The other files in
+    # assets/icon are icon sources, read only when launcher icons are generated,
+    # and are deliberately not bundled.
+    - assets/icon/logo_mark_transparent.png
 
   fonts:
     # Reddit Sans is the product typeface (locked UI direction).
@@ -127,22 +136,28 @@ flutter:
 
 # Launcher icons. Regenerate with `dart run flutter_launcher_icons`.
 #
-# icon.png is the edge-to-edge app icon, used exactly as supplied. The adaptive
-# foreground keeps a 16% inset: the full-bleed square then covers the whole
-# visible 72dp area, and the bag's body (within a centred circle 89% of the
-# source's width) sits inside the 66dp safe zone that no launcher mask crops.
-# Keep any replacement's key artwork within a centred circle 90% wide.
+# Every source is derived from assets/icon/logo_mark.png, the brand mark as
+# delivered on white:
+#   logo_mark_transparent.png  the mark with the backdrop removed. The adaptive
+#       foreground insets it 23% per side, which keeps every opaque pixel inside
+#       the centred 66dp circle no launcher mask crops (19.3% is the minimum),
+#       over the white the mark was delivered on.
+#   logo_mark_monochrome.png   a one-colour silhouette on the same canvas, for
+#       Android 13+ themed icons. The status-bar icon
+#       (res/drawable-*/ic_stat_ecomsbd.png) is the same silhouette.
+#   icon.png                   the mark on white, framed as the adaptive icon
+#       appears under a square mask: the legacy (API 24-25) icon and the store
+#       icon source.
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
   # The package cannot read `flutter.minSdkVersion` from build.gradle.kts;
   # this is the value the Flutter toolchain supplies.
   min_sdk_android: 24
-  # The artwork's edge colour (measured median); seen only if a launcher
-  # shifts the layers.
-  adaptive_icon_background: "#FD6C05"
-  adaptive_icon_foreground: "assets/icon/icon.png"
-  adaptive_icon_foreground_inset: 16
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/logo_mark_transparent.png"
+  adaptive_icon_foreground_inset: 23
+  adaptive_icon_monochrome: "assets/icon/logo_mark_monochrome.png"
   # iOS: there is no ios/ project yet, and generating into a missing one fails.
   # After `flutter create --platforms=ios .`, set this to true and regenerate;
   # iOS applies its own mask to the full square, which this source suits.

@@ -32,23 +32,34 @@ import '../shared/inputs.dart';
 ///   insurance value here: Steadfast V1 documents none, and a field the courier
 ///   ignores misleads the seller who filled it in.
 class CourierBookingSheet extends ConsumerStatefulWidget {
-  const CourierBookingSheet({required this.order, super.key});
+  const CourierBookingSheet({
+    required this.order,
+    super.key,
+    this.initialProvider,
+  });
 
   final SellerOrder order;
+
+  /// The courier picked on the cost comparison, preselected here.
+  final String? initialProvider;
 
   static Future<BookingItem?> show(
     BuildContext context, {
     required SellerOrder order,
+    String? provider,
   }) {
     return showModalBottomSheet<BookingItem>(
       context: context,
       isScrollControlled: true,
+      // Keeps the sheet below the status bar when the keyboard pushes it up.
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       // A booking is in flight behind this sheet; dismissing it by tapping
       // outside would hide an outcome the seller has to see.
       isDismissible: false,
       enableDrag: false,
-      builder: (_) => CourierBookingSheet(order: order),
+      builder: (_) =>
+          CourierBookingSheet(order: order, initialProvider: provider),
     );
   }
 
@@ -73,7 +84,7 @@ class _CourierBookingSheetState extends ConsumerState<CourierBookingSheet> {
 
   /// The courier this booking goes to. Chosen from the couriers the server
   /// says are bookable, never defaulted to a hard-coded provider name.
-  String? _provider;
+  late String? _provider = widget.initialProvider;
   BookingItem? _result;
   ApiError? _error;
 
@@ -619,7 +630,7 @@ class _CourierPicker extends ConsumerWidget {
           : EmptyState(
               icon: Icons.error_outline,
               title: context.tr('common.couldNotLoad'),
-              message: '$error',
+              message: context.tr('common.somethingWentWrong'),
             ),
       data: (rows) {
         if (rows.isEmpty) {
@@ -935,7 +946,7 @@ class _AreaPickerSheetState extends ConsumerState<_AreaPickerSheet> {
                     : EmptyState(
                         icon: Icons.error_outline,
                         title: context.tr('common.couldNotLoad'),
-                        message: '$error',
+                        message: context.tr('common.somethingWentWrong'),
                       ),
                 data: (rows) {
                   final matches = <DeliveryArea>[

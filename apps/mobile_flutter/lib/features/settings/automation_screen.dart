@@ -6,6 +6,7 @@ import '../../core/api/api_error.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/automation_strings.dart';
+import '../shared/network_status.dart';
 
 /// Automation on the phone (V3.4): workflows on/off, run status, failures and
 /// retry, and simple recipes. Building and editing stays on the web; the
@@ -16,7 +17,8 @@ class AutomationScreen extends ConsumerStatefulWidget {
   ConsumerState<AutomationScreen> createState() => _AutomationState();
 }
 
-class _AutomationState extends ConsumerState<AutomationScreen> {
+class _AutomationState extends ConsumerState<AutomationScreen>
+    with ReloadOnReconnect {
   List<dynamic> _workflows = [];
   List<dynamic> _failures = [];
   List<dynamic> _recipes = [];
@@ -33,6 +35,11 @@ class _AutomationState extends ConsumerState<AutomationScreen> {
   void initState() {
     super.initState();
     Future.microtask(() => _run(_load));
+  }
+
+  @override
+  void onReconnect() {
+    if (_error != null) _run(_load);
   }
 
   Future<void> _load() async {

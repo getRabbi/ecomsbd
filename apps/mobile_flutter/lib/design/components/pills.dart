@@ -69,8 +69,9 @@ class BrandPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           // The same 30dp slot the placeholder round mark used, so the pill
-          // keeps its size on every screen.
-          const EcomsBrandMark(size: 30),
+          // keeps its size on every screen. The mark hops now and then; the
+          // hop is paint-only and stays inside the pill.
+          const EcomsBrandMark(size: 30, animate: true),
           const SizedBox(width: EcomsbdSpacing.sm),
           Flexible(
             child: Semantics(

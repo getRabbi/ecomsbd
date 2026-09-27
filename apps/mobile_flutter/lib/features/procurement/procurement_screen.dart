@@ -7,6 +7,7 @@ import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/network_status.dart';
 
 /// Purchasing on the phone (V3.5): follow purchase orders, receive goods,
 /// look up suppliers and see where stock is. Building purchase orders and
@@ -17,7 +18,8 @@ class ProcurementScreen extends ConsumerStatefulWidget {
   ConsumerState<ProcurementScreen> createState() => _ProcurementScreenState();
 }
 
-class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
+class _ProcurementScreenState extends ConsumerState<ProcurementScreen>
+    with ReloadOnReconnect {
   List<dynamic> _orders = [], _suppliers = [], _stock = [];
   bool _busy = false;
   String? _error;
@@ -27,6 +29,11 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
   void initState() {
     super.initState();
     Future.microtask(_load);
+  }
+
+  @override
+  void onReconnect() {
+    if (_error != null) _load();
   }
 
   Future<void> _load() async {

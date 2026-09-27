@@ -76,7 +76,7 @@ class _StockHistoryScreenState extends ConsumerState<StockHistoryScreen> {
           error: (error, _) => EmptyState(
             icon: Icons.error_outline,
             title: context.tr('sh.error'),
-            message: '$error',
+            message: context.tr('common.somethingWentWrong'),
           ),
           data: (page) {
             if (page.value.items.isEmpty) {

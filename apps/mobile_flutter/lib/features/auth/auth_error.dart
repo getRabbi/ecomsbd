@@ -8,6 +8,7 @@ String authErrorMessage(BuildContext context, ApiError error) =>
     switch (error.code) {
       'INVALID_CREDENTIALS' => context.tr('autherr.invalidCredentials'),
       ApiErrorCode.offline => context.tr('autherr.offline'),
+      ApiErrorCode.timeout => context.tr('autherr.timeout'),
       // Android cannot tell a dismissal from a rejected OAuth registration,
       // so this copy does not claim the seller cancelled anything.
       'GOOGLE_INCOMPLETE' => context.tr('autherr.googleIncomplete'),

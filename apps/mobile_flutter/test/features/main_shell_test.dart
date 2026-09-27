@@ -5,6 +5,7 @@ import 'package:ecomsbd/design/components/pills.dart';
 import 'package:ecomsbd/design/glass.dart';
 import 'package:ecomsbd/design/theme.dart';
 import 'package:ecomsbd/features/menu/menu_overlay.dart';
+import 'package:ecomsbd/features/menu/more_screen.dart';
 import 'package:ecomsbd/features/shell/main_shell.dart';
 import 'package:ecomsbd/l10n/app_locale.dart';
 import 'package:ecomsbd/l10n/app_strings.dart';
@@ -23,9 +24,9 @@ import 'commerce_harness.dart';
 ///
 /// The claims under test are the navigation contract:
 ///
-/// * the bottom bar carries the four destinations and no Menu tab;
-/// * the hamburger is the menu's one entry in the chrome — the section title
-///   beside the brand mark is a label and opens nothing;
+/// * the bottom bar carries the five destinations — Home, Orders, Inbox,
+///   Money, More — and More replaces the old hamburger menu;
+/// * the section title beside the brand mark is a label and opens nothing;
 /// * the unread badge reads 1–9, 10–99 and then 99+, and sits wholly inside the
 ///   action pill, which clips anything that hangs outside it.
 ///
@@ -121,10 +122,16 @@ void main() {
   });
 
   group('Bottom bar', () {
-    testWidgets('has the four destinations and no Menu tab', (tester) async {
+    testWidgets('has the five destinations and no Menu tab', (tester) async {
       await _pumpShell(tester);
 
-      for (final label in <String>['Home', 'Orders', 'Money', 'Insights']) {
+      for (final label in <String>[
+        'Home',
+        'Orders',
+        'Inbox',
+        'Money',
+        'More',
+      ]) {
         expect(
           find.descendant(of: _bottomBar, matching: find.text(label)),
           findsOneWidget,
@@ -139,11 +146,11 @@ void main() {
         find.descendant(of: _bottomBar, matching: find.byIcon(Icons.menu)),
         findsNothing,
       );
-      expect(MainDestination.values, hasLength(4));
+      expect(MainDestination.values, hasLength(5));
     });
 
     for (final size in <Size>[referencePhone, largePhone, _smallPhone]) {
-      testWidgets('spreads the four tabs evenly, with the active one centred '
+      testWidgets('spreads the five tabs evenly, with the active one centred '
           '(${size.width.toInt()}dp)', (tester) async {
         await _pumpShell(tester, size: size);
 
@@ -151,26 +158,21 @@ void main() {
           of: _bottomBar,
           matching: find.byType(Expanded),
         );
-        expect(slots, findsNWidgets(4), reason: 'no empty fifth slot');
+        expect(slots, findsNWidgets(5), reason: 'no empty sixth slot');
         final rects = <Rect>[
-          for (var i = 0; i < 4; i++) tester.getRect(slots.at(i)),
+          for (var i = 0; i < 5; i++) tester.getRect(slots.at(i)),
         ];
         for (final rect in rects) {
           expect(rect.width, closeTo(rects.first.width, 0.01));
         }
-        for (var i = 1; i < 4; i++) {
+        for (var i = 1; i < 5; i++) {
           expect(rects[i].left, closeTo(rects[i - 1].right, 0.01));
         }
 
-        // The raised white circle behind the active tab.
+        // The white tile behind the active tab.
         final raised = find.descendant(
           of: _bottomBar,
-          matching: find.byWidgetPredicate(
-            (widget) =>
-                widget is Container &&
-                widget.constraints ==
-                    const BoxConstraints.tightFor(width: 61, height: 61),
-          ),
+          matching: find.byKey(BottomGlassNavigation.activeTileKey),
         );
         for (final tab in MainDestination.values) {
           await _openTab(tester, tab);
@@ -202,19 +204,16 @@ void main() {
   });
 
   group('Top bar', () {
-    testWidgets('the hamburger opens the menu from every tab', (tester) async {
+    testWidgets('More is a tab, so no tab carries a hamburger', (tester) async {
       await _pumpShell(tester);
 
       for (final tab in MainDestination.values) {
         await _openTab(tester, tab);
-        await tester.tap(find.byTooltip('Menu'));
-        await settle(tester, frames: 8, step: const Duration(milliseconds: 50));
-        expect(find.byType(MenuOverlay), findsOneWidget, reason: tab.name);
-
-        await tester.tap(find.byTooltip('Close menu'));
-        await settle(tester, frames: 8, step: const Duration(milliseconds: 50));
-        expect(find.byType(MenuOverlay), findsNothing);
+        expect(find.byTooltip('Menu'), findsNothing, reason: tab.name);
       }
+      await _openTab(tester, MainDestination.more);
+      expect(find.byType(MoreScreen), findsOneWidget);
+      expect(find.byType(MenuOverlay), findsNothing);
     });
 
     testWidgets('the section title is a label, not a way into the menu', (

@@ -87,9 +87,15 @@ class AuthState {
 
 /// Owns the session lifecycle.
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository, {ProviderSignIn? providerSignIn})
-    : _providerSignIn = providerSignIn ?? NativeProviderSignIn(),
-      super(const AuthState.restoring()) {
+  AuthController(
+    this._repository, {
+    ProviderSignIn? providerSignIn,
+    // How long to wait before asking again after a restore the server could
+    // not answer. Injected by tests only.
+    Duration Function(int attempt)? restoreRetryDelay,
+  }) : _providerSignIn = providerSignIn ?? NativeProviderSignIn(),
+       _restoreRetryDelay = restoreRetryDelay ?? _backoff,
+       super(const AuthState.restoring()) {
     _invalidationSub = _repository.onSessionInvalid.listen(_onInvalidated);
     _authSub = _repository.authChanges.listen(
       (event) {
@@ -105,6 +111,13 @@ class AuthController extends StateNotifier<AuthState> {
         }
       },
       onError: (Object error) {
+        // A token refresh that could not reach Supabase (no connection, 5xx).
+        // The SDK keeps the session and tries again on its next tick, so a
+        // signed-in seller is not sent to the login screen for it.
+        if (error is sb.AuthRetryableFetchException &&
+            state.stage != AuthStage.signedOut) {
+          return;
+        }
         state = const AuthState(
           stage: AuthStage.signedOut,
           error: ApiError(
@@ -120,16 +133,35 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthRepository _repository;
   final ProviderSignIn _providerSignIn;
+  final Duration Function(int attempt) _restoreRetryDelay;
   late final StreamSubscription<ApiError> _invalidationSub;
   late final StreamSubscription<sb.AuthState> _authSub;
   bool _signingOut = false;
+  Timer? _restoreRetry;
+  int _restoreAttempts = 0;
+  Future<void>? _restoring;
+
+  /// 2, 4, 8, 16, then every 30 seconds.
+  static Duration _backoff(int attempt) =>
+      Duration(seconds: attempt >= 4 ? 30 : 2 << attempt);
 
   /// Restore the stored session and confirm it is still valid.
   ///
   /// The stored token is not trusted on its own: a session revoked from
   /// another device must not appear signed in here, so the profile is fetched
   /// before the app leaves the splash screen.
-  Future<void> restore() async {
+  ///
+  /// Only the server rejecting the credential ends the session. Offline, a
+  /// timeout, a 5xx or a busy database is the server failing to answer, and
+  /// says nothing about the session, so it is kept.
+  ///
+  /// A call while one is running joins it: reconnecting, a retry tick and a
+  /// Supabase sign-in event can all ask at once, and one `/me` answers them.
+  Future<void> restore() =>
+      _restoring ??= _restore().whenComplete(() => _restoring = null);
+
+  Future<void> _restore() async {
+    _restoreRetry?.cancel();
     if (_repository.isRecovering) {
       state = const AuthState(stage: AuthStage.passwordRecovery);
       return;
@@ -141,24 +173,44 @@ class AuthController extends StateNotifier<AuthState> {
     }
     try {
       final profile = await _repository.fetchProfile();
+      _restoreAttempts = 0;
       if (!_repository.isRecovering) {
         state = AuthState(stage: _stageFor(profile), profile: profile);
       }
     } on ApiError catch (error) {
-      if (error.isOffline) {
-        // Offline launch: the stored session is the best information available
-        // and the app is offline-first, so the seller continues into cached
-        // screens rather than being bounced to a login they cannot complete.
+      // A refresh the SDK found invalid has already removed the session.
+      if (_rejectsSession(error) ||
+          await _repository.currentSession() == null) {
+        await _repository.signOutLocally();
+        state = AuthState(stage: AuthStage.signedOut, error: error);
+        return;
+      }
+      final known = state.profile;
+      if (known != null && known.userId == stored.userId) {
+        // Confirmed earlier in this run: keep the seller where they were.
         state = AuthState(
-          stage: stored.hasTenant ? AuthStage.ready : AuthStage.needsOnboarding,
+          stage: _stageFor(known),
+          profile: known,
           error: error,
         );
         return;
       }
-      await _repository.signOutLocally();
-      state = AuthState(stage: AuthStage.signedOut, error: error);
+      // Nothing confirmed yet this launch, so the right screen is unknown.
+      // Guessing "no shop" would open onboarding over an existing shop and
+      // could create a second one, so wait on the splash and ask again.
+      state = AuthState(stage: AuthStage.restoring, error: error);
+      _restoreRetry = Timer(_restoreRetryDelay(_restoreAttempts++), () {
+        if (mounted && state.stage == AuthStage.restoring) {
+          unawaited(restore());
+        }
+      });
     }
   }
+
+  /// The server said this credential is no good (a 401 auth code, or a 403),
+  /// as opposed to failing to answer.
+  static bool _rejectsSession(ApiError error) =>
+      error.isAuthFailure || error.code == ApiErrorCode.forbidden;
 
   Future<OtpChallenge?> requestOtp(String phone) async {
     state = state.copyWith(isBusy: true, clearError: true);
@@ -266,7 +318,9 @@ class AuthController extends StateNotifier<AuthState> {
         verificationSent: verificationSent,
       );
     } on ApiError catch (error) {
-      if (!error.isOffline && error.code != ApiErrorCode.serviceUnavailable) {
+      if (!error.isOffline &&
+          !error.isTimeout &&
+          error.code != ApiErrorCode.serviceUnavailable) {
         rethrow;
       }
       state = AuthState(
@@ -419,6 +473,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   @override
   void dispose() {
+    _restoreRetry?.cancel();
     unawaited(_invalidationSub.cancel());
     unawaited(_authSub.cancel());
     super.dispose();

@@ -191,6 +191,23 @@ final customerProvider = FutureProvider.family<Customer, String>((ref, id) {
 // Orders
 // --------------------------------------------------------------------------- //
 
+/// The seller-facing order filters, over the server's own statuses.
+///
+/// The status values are the API's and are not changed; a group only decides
+/// which of them a chip shows. Groups may overlap: "Action needed" is every
+/// order the seller still has to move before it reaches a courier.
+enum OrderFilterGroup {
+  all(<String>{}),
+  actionNeeded(<String>{'DRAFT', 'CONFIRMED', 'PACKED'}),
+  confirmed(<String>{'CONFIRMED', 'PACKED'}),
+  courier(<String>{'FULFILLMENT_STARTED'}),
+  delivered(<String>{'COMPLETED'});
+
+  const OrderFilterGroup(this.statuses);
+
+  final Set<String> statuses;
+}
+
 class OrderListController extends PagedListController<SellerOrder> {
   OrderListController(this._repository) {
     refresh();
@@ -200,19 +217,48 @@ class OrderListController extends PagedListController<SellerOrder> {
 
   String _search = '';
   String? _status;
+  OrderFilterGroup _group = OrderFilterGroup.all;
   String? _customerId;
 
   String get search => _search;
   String? get status => _status;
+  OrderFilterGroup get group => _group;
 
   @override
-  Future<Sourced<PagedResult<SellerOrder>>> fetchPage({String? cursor}) {
-    return _repository.list(
-      cursor: cursor,
-      search: _search.isEmpty ? null : _search,
-      status: _status,
-      customerId: _customerId,
-    );
+  Future<Sourced<PagedResult<SellerOrder>>> fetchPage({String? cursor}) async {
+    final statuses = _status != null ? <String>{_status!} : _group.statuses;
+    if (statuses.length <= 1) {
+      return _repository.list(
+        cursor: cursor,
+        search: _search.isEmpty ? null : _search,
+        status: statuses.isEmpty ? null : statuses.first,
+        customerId: _customerId,
+      );
+    }
+    // The server filters on one status at a time, so a group of several is
+    // filtered here — reading on a few pages when one has nothing to show.
+    var next = cursor;
+    for (var round = 0; ; round++) {
+      final page = await _repository.list(
+        cursor: next,
+        search: _search.isEmpty ? null : _search,
+        customerId: _customerId,
+      );
+      final kept = page.value.items
+          .where((order) => statuses.contains(order.status))
+          .toList();
+      final more = page.value.hasMore && page.value.nextCursor != null;
+      if (kept.isNotEmpty || !more || round >= 4) {
+        return page.map(
+          (result) => PagedResult<SellerOrder>(
+            items: kept,
+            nextCursor: result.nextCursor,
+            hasMore: result.hasMore,
+          ),
+        );
+      }
+      next = page.value.nextCursor;
+    }
   }
 
   void setSearch(String value) {
@@ -222,6 +268,12 @@ class OrderListController extends PagedListController<SellerOrder> {
 
   void setStatus(String? value) {
     _status = value;
+    refresh();
+  }
+
+  void setGroup(OrderFilterGroup value) {
+    _status = null;
+    _group = value;
     refresh();
   }
 

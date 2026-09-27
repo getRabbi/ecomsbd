@@ -43,16 +43,17 @@ class FakeApiAdapter implements HttpClientAdapter {
   FakeApiAdapter();
 
   final List<RecordedRequest> requests = <RecordedRequest>[];
-  final Map<String, FakeReply Function(RecordedRequest)> _routes =
-      <String, FakeReply Function(RecordedRequest)>{};
+  final Map<String, FutureOr<FakeReply> Function(RecordedRequest)> _routes =
+      <String, FutureOr<FakeReply> Function(RecordedRequest)>{};
 
   /// When true every request fails the way a dead connection does.
   bool offline = false;
 
+  /// Route a request. The handler may return a future, to hold a reply back.
   void on(
     String method,
     String path,
-    FakeReply Function(RecordedRequest) handler,
+    FutureOr<FakeReply> Function(RecordedRequest) handler,
   ) {
     _routes['${method.toUpperCase()} $path'] = handler;
   }
@@ -105,7 +106,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       );
     }
 
-    final reply = handler(request);
+    final reply = await handler(request);
     return ResponseBody.fromString(
       jsonEncode(reply.body),
       reply.statusCode,

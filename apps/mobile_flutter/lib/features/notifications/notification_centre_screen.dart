@@ -5,6 +5,7 @@ import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/analytics/analytics_providers.dart';
 import '../../data/analytics/models.dart';
+import '../../data/commerce/paged_list_controller.dart';
 import '../../design/components/badges.dart';
 import '../../design/components/cards.dart';
 import '../../design/components/surfaces.dart';
@@ -14,6 +15,7 @@ import '../../l10n/app_strings.dart';
 import '../imports/imports_screen.dart';
 import '../insights/rto_screen.dart';
 import '../money/cases_screen.dart';
+import '../money/payouts_screen.dart';
 import '../money/receivables_screen.dart';
 import '../customers/customers_screen.dart';
 import '../orders/order_detail_screen.dart';
@@ -52,11 +54,32 @@ IconData notificationCategoryIcon(String category) => switch (category) {
 /// Only screens that stand on their own are opened. A target this build does
 /// not know opens nothing — the row already says what happened, and landing on
 /// the wrong screen is worse than staying put.
+/// How the centre groups notifications: what needs the seller first, then
+/// what happened, then what could grow the business.
+enum NotificationGroup { action, updates, growth }
+
+NotificationGroup notificationGroupOf(AppNotification notification) {
+  final kind = notification.kind;
+  if (kind == 'WEEKLY_SUMMARY' ||
+      kind.contains('MILESTONE') ||
+      kind.contains('TREND') ||
+      kind.contains('REPEAT') ||
+      notification.category == 'CRM') {
+    return NotificationGroup.growth;
+  }
+  if (!notification.isResolved &&
+      notification.severity != NotificationSeverity.info) {
+    return NotificationGroup.action;
+  }
+  return NotificationGroup.updates;
+}
+
 Widget? notificationDestination(AppNotification notification) {
   final id = notification.targetId;
   return switch (notification.targetRoute) {
     'customers' => const CustomersScreen(initialSegment: 'FOLLOW_UP_DUE'),
     'receivables' => const ReceivablesScreen(),
+    'payouts' || 'payout' => const PayoutsScreen(),
     'reconciliation' || 'reconciliation_case' => const CasesScreen(),
     'returns' => const RtoScreen(),
     'import' || 'imports' => const ImportsScreen(),
@@ -90,6 +113,19 @@ class NotificationCentreScreen extends ConsumerWidget {
     final state = ref.watch(notificationListProvider);
     final controller = ref.read(notificationListProvider.notifier);
     final unread = state.items.where((item) => !item.isRead).length;
+    final grouped = <AppNotification>[
+      for (final group in NotificationGroup.values)
+        ...state.items.where((item) => notificationGroupOf(item) == group),
+    ];
+    final groupStarts = <String, NotificationGroup>{};
+    for (final group in NotificationGroup.values) {
+      for (final item in grouped) {
+        if (notificationGroupOf(item) == group) {
+          groupStarts[item.id] = group;
+          break;
+        }
+      }
+    }
 
     return Scaffold(
       backgroundColor: EcomsbdColors.background,
@@ -114,13 +150,7 @@ class NotificationCentreScreen extends ConsumerWidget {
                         icon: const Icon(Icons.arrow_back_rounded),
                         tooltip: context.tr('common.back'),
                       ),
-                      Expanded(
-                        child: PageHeader(
-                          eyebrow: context.tr('notif.eyebrow'),
-                          title: context.tr('notif.title'),
-                          description: context.tr('notif.description'),
-                        ),
-                      ),
+                      const Spacer(),
                       if (unread > 0)
                         TextButton(
                           onPressed: () async {
@@ -130,6 +160,11 @@ class NotificationCentreScreen extends ConsumerWidget {
                           child: Text(context.tr('common.markRead')),
                         ),
                     ],
+                  ),
+                  PageHeader(
+                    eyebrow: context.tr('notif.eyebrow'),
+                    title: context.tr('notif.title'),
+                    description: context.tr('notif.description'),
                   ),
                   if (state.isStale) ...<Widget>[
                     StaleDataNotice(
@@ -156,28 +191,44 @@ class NotificationCentreScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: EcomsbdSpacing.xs),
-                  Wrap(
-                    spacing: EcomsbdSpacing.xs,
-                    runSpacing: EcomsbdSpacing.xs,
-                    children: <Widget>[
-                      FilterToggle(
-                        label: context.tr('notif.cat.all'),
-                        selected: controller.category == null,
-                        onChanged: (_) => controller.setCategory(null),
-                      ),
-                      for (final category in notificationCategories)
+                  // One scrolling row: wrapped, the categories took three
+                  // rows of a phone screen before the first notification.
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: <Widget>[
                         FilterToggle(
-                          label: context.tr('notif.cat.$category'),
-                          selected: controller.category == category,
-                          onChanged: (selected) => controller.setCategory(
-                            selected ? category : null,
-                          ),
+                          label: context.tr('notif.cat.all'),
+                          selected: controller.category == null,
+                          onChanged: (_) => controller.setCategory(null),
                         ),
-                    ],
+                        for (final category in notificationCategories) ...[
+                          const SizedBox(width: EcomsbdSpacing.xs),
+                          FilterToggle(
+                            label: context.tr('notif.cat.$category'),
+                            selected: controller.category == category,
+                            onChanged: (selected) => controller.setCategory(
+                              selected ? category : null,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: EcomsbdSpacing.sm),
                   PagedListBody<AppNotification>(
-                    state: state,
+                    // Grouped, keeping the server's newest-first order inside
+                    // each group.
+                    state: PagedListState<AppNotification>(
+                      items: grouped,
+                      isLoading: state.isLoading,
+                      isLoadingMore: state.isLoadingMore,
+                      hasMore: state.hasMore,
+                      nextCursor: state.nextCursor,
+                      error: state.error,
+                      origin: state.origin,
+                      fetchedAt: state.fetchedAt,
+                    ),
                     onRetry: controller.refresh,
                     onLoadMore: controller.loadMore,
                     emptyIcon: Icons.notifications_none_rounded,
@@ -185,12 +236,39 @@ class NotificationCentreScreen extends ConsumerWidget {
                         ? context.tr('notif.nothingUnread')
                         : context.tr('activity.nothingTitle'),
                     emptyMessage: context.tr('activity.nothingBody'),
-                    itemBuilder: (context, notification) => Padding(
-                      padding: const EdgeInsets.only(bottom: EcomsbdSpacing.sm),
-                      child: NotificationRow(
-                        notification: notification,
-                        onTap: () => _open(context, ref, notification),
-                      ),
+                    itemBuilder: (context, notification) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        if (groupStarts[notification.id] case final group?)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              2,
+                              EcomsbdSpacing.xs,
+                              2,
+                              EcomsbdSpacing.xs,
+                            ),
+                            child: Text(
+                              context.tr('ng.${group.name}').toUpperCase(),
+                              style: trackedFor(
+                                context.tr('ng.${group.name}'),
+                                EcomsbdType.eyebrow.copyWith(
+                                  color: group == NotificationGroup.action
+                                      ? EcomsbdColors.orange
+                                      : EcomsbdColors.muted,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: EcomsbdSpacing.sm,
+                          ),
+                          child: NotificationRow(
+                            notification: notification,
+                            onTap: () => _open(context, ref, notification),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

@@ -42,6 +42,9 @@ class ProviderCredential extends ProviderSignIn {
 class SupabaseTransport extends http.BaseClient {
   final requests = <http.Request>[];
   String? failCode;
+
+  /// When true every request fails the way a phone with no connection does.
+  bool unreachable = false;
   Map<String, dynamic> get user => {
     'id': '00000000-0000-4000-8000-000000000001',
     'aud': 'authenticated',
@@ -68,6 +71,7 @@ class SupabaseTransport extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final r = request as http.Request;
     requests.add(r);
+    if (unreachable) throw http.ClientException('Failed host lookup', r.url);
     final error = failCode;
     failCode = null;
     Object body = {};

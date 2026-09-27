@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/app.dart';
+import 'app/network_recovery.dart';
 import 'l10n/app_locale.dart';
 import 'data/auth/supabase_bootstrap.dart';
 import 'data/notifications/push_registration.dart';
@@ -31,12 +32,15 @@ Future<void> main() async {
   // seller's language instead of flipping to it a frame later.
   final savedLocale = await loadSavedLocale();
 
+  final recovery = NetworkRecoveryObserver();
   final container = ProviderContainer(
     overrides: <Override>[
       localeProvider.overrideWith((ref) => LocaleController(savedLocale)),
     ],
+    observers: <ProviderObserver>[recovery],
   );
   await _bootstrap(container);
+  startNetworkRecovery(container, recovery);
 
   runApp(
     UncontrolledProviderScope(container: container, child: const EcomsbdApp()),

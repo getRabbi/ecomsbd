@@ -168,8 +168,16 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------- database ---
     database_url: str = "postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd"
     database_echo: bool = False
-    database_pool_size: int = 10
-    database_max_overflow: int = 10
+    # Per-process pool. Production reaches Postgres through Supabase's session
+    # pooler, where every open client connection pins one of a small, fixed
+    # number of server slots (15) shared by the API, the worker and any
+    # container a rollout briefly overlaps. Idle pooled connections keep their
+    # slot, and an overflow connection asks for a new one exactly when a burst
+    # arrives, so the pool is bounded with no overflow: a request that finds it
+    # full waits here (up to the timeout) instead of being refused by the
+    # pooler with EMAXCONNSESSION. 10+10 per process was up to 40 against 15.
+    database_pool_size: int = 5
+    database_max_overflow: int = 0
     database_pool_timeout_seconds: int = 30
 
     # -------------------------------------------------------------- redis ---
@@ -486,6 +494,9 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------- workers ---
     worker_queue_name: str = "ecomsbd:jobs"
     worker_max_jobs: int = 10
+    #: The worker's share of the pooler budget (see ``database_pool_size``).
+    #: Jobs beyond it wait for a connection rather than opening another.
+    worker_database_pool_size: int = 4
     outbox_batch_size: int = 50
     outbox_max_attempts: int = 12
 

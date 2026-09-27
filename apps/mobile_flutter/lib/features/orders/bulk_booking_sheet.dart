@@ -48,6 +48,9 @@ class BulkBookingSheet extends ConsumerStatefulWidget {
 }
 
 class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
+  /// The courier the whole batch goes to.
+  static const String _provider = 'steadfast';
+
   bool _busy = false;
   BookingReport? _report;
   ApiError? _error;
@@ -83,7 +86,10 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
     try {
       final report = await ref
           .read(courierRepositoryProvider)
-          .bookBulk(_bookable.map((order) => order.id).toList());
+          .bookBulk(
+            _bookable.map((order) => order.id).toList(),
+            provider: _provider,
+          );
       ref.invalidate(moneySummaryProvider);
       ref.invalidate(homeMetricsProvider);
       await ref.read(orderListProvider.notifier).refresh();
@@ -125,6 +131,19 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
     );
   }
 
+  /// The courier's name for the title, or a neutral word before the list of
+  /// couriers has loaded.
+  String get _courierName {
+    final rows =
+        ref.watch(bookableCouriersProvider).value ?? const <BookableCourier>[];
+    for (final row in rows) {
+      if (row.provider == _provider) {
+        return row.displayName;
+      }
+    }
+    return context.tr('common.courier');
+  }
+
   Widget _buildReview() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,7 +151,10 @@ class _BulkBookingSheetState extends ConsumerState<BulkBookingSheet> {
       children: <Widget>[
         const _Grip(),
         const SizedBox(height: EcomsbdSpacing.md),
-        Text(context.tr('book.title'), style: EcomsbdType.sectionTitle),
+        Text(
+          context.tr('book.title', <String, Object?>{'provider': _courierName}),
+          style: EcomsbdType.sectionTitle,
+        ),
         const SizedBox(height: 3),
         Text(
           '${_bookable.length} of ${widget.orders.length} selected orders can '

@@ -79,20 +79,22 @@ void main() {
 
       // A dashboard that fell back to plausible fixtures would be worse than
       // one that fails: the seller could not tell the difference.
-      expect(find.text('No connection'), findsOneWidget);
+      expect(find.text('No internet connection'), findsOneWidget);
       expect(find.textContaining('৳4,805'), findsNothing);
     });
 
-    testWidgets('the prototype charts all render, at 360dp and wider', (
+    testWidgets('keeps one compact trend; the full charts live in Insights', (
       tester,
     ) async {
       final harness = analyticsHarness();
       await pumpCommerceScreen(tester, const HomeScreen(), harness: harness);
 
+      // Operational sections come first; the 30-day trend is one card at the
+      // end of the page, and COD ageing and the funnel are not repeated here.
+      await scrollTo(tester, find.byType(ProfitTrendChart));
       expect(find.byType(ProfitTrendChart), findsOneWidget);
-      expect(find.byType(CodDonutChart), findsOneWidget);
-      await scrollTo(tester, find.byType(DeliveryFunnelChart));
-      expect(find.byType(DeliveryFunnelChart), findsOneWidget);
+      expect(find.byType(CodDonutChart), findsNothing);
+      expect(find.byType(DeliveryFunnelChart), findsNothing);
       expectNoOverflow(tester);
     });
 

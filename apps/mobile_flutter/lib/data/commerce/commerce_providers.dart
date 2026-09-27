@@ -117,21 +117,18 @@ final unsyncedOrderCountProvider = StreamProvider<int>((ref) {
 /// background poll on a metered connection is a cost the seller did not agree
 /// to.
 class SyncController extends StateNotifier<AsyncValue<SyncReport>> {
-  SyncController(this._engine, this._ref)
+  SyncController(this._engine)
     : super(const AsyncValue<SyncReport>.data(SyncReport()));
 
   final SyncEngine _engine;
-  final Ref _ref;
 
   Future<SyncReport> sync() async {
     state = const AsyncValue<SyncReport>.loading();
     try {
+      // The offline banner needs no update here: every request the engine
+      // makes reports its outcome to the network monitor.
       final report = await _engine.run();
       state = AsyncValue<SyncReport>.data(report);
-      // The banner tracks whether the *last attempt* reached the server, which
-      // is what the seller actually needs to know.
-      _ref.read(isOfflineProvider.notifier).state =
-          report.error?.isOffline ?? false;
       return report;
     } on Object catch (error, stack) {
       state = AsyncValue<SyncReport>.error(error, stack);
@@ -142,5 +139,5 @@ class SyncController extends StateNotifier<AsyncValue<SyncReport>> {
 
 final syncControllerProvider =
     StateNotifierProvider<SyncController, AsyncValue<SyncReport>>((ref) {
-      return SyncController(ref.watch(syncEngineProvider), ref);
+      return SyncController(ref.watch(syncEngineProvider));
     });

@@ -4,15 +4,13 @@ import '../../l10n/app_strings.dart';
 import '../glass.dart';
 import '../tokens.dart';
 
-/// The four main destinations (master spec section 3).
+/// The five main destinations, in this order.
 ///
-/// Fixed at four, in this order. The bottom bar is the app's spine and
-/// reordering it would relearn every seller's muscle memory.
-///
-/// Menu is not one of them. It opens from the hamburger in the top bar, which
-/// every main tab carries; a Menu tab as well was a second door to the same
-/// room, and it cost the four real destinations a fifth of the bar.
-enum MainDestination { home, orders, money, insights }
+/// Home, Orders, Inbox, Money and More. Everything else — Insights, products,
+/// customers, courier tools, settings — opens from More or from the screen
+/// that needs it, so the bar never grows past five. More replaces the old
+/// hamburger menu rather than duplicating it.
+enum MainDestination { home, orders, inbox, money, more }
 
 extension MainDestinationLabel on MainDestination {
   /// The tab's name in the selected language.
@@ -24,16 +22,17 @@ extension MainDestinationLabel on MainDestination {
   IconData get icon => switch (this) {
     MainDestination.home => Icons.home_rounded,
     MainDestination.orders => Icons.receipt_long_rounded,
+    MainDestination.inbox => Icons.forum_rounded,
     MainDestination.money => Icons.payments_rounded,
-    MainDestination.insights => Icons.insights_rounded,
+    MainDestination.more => Icons.grid_view_rounded,
   };
 }
 
-/// `.bottom-nav` — the floating glass bar with a raised circular active item.
+/// `.bottom-nav` — the floating glass bar of five equal slots.
 ///
-/// The active item lifts out of the bar and sits inside its own white circle
-/// with an orange dot; that lift is the signature of the locked design and is
-/// reproduced here rather than approximated with a Material indicator.
+/// The selected slot is a white rounded tile inside the bar, with the icon and
+/// label in ink; the others are muted. Nothing rises out of the bar and there
+/// is no second indicator, matching the final prototype's compact hierarchy.
 class BottomGlassNavigation extends StatelessWidget {
   const BottomGlassNavigation({
     required this.current,
@@ -44,50 +43,48 @@ class BottomGlassNavigation extends StatelessWidget {
   final MainDestination current;
   final ValueChanged<MainDestination> onSelected;
 
+  /// Marks the selected slot's tile, so tests can find it.
+  static const Key activeTileKey = ValueKey<String>('bottom-nav-active');
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
     // The bar is fixed while the page scrolls beneath it, and it still carries
-    // a live blur. Its own layer keeps every scroll frame from repainting the
-    // raised active item and its shadows along with the content.
+    // a live blur. Its own layer keeps every scroll frame from repainting it
+    // along with the content.
     return RepaintBoundary(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(11, 0, 11, 8 + bottomInset),
-        child: SizedBox(
-          height: EcomsbdTouch.bottomNavHeight,
-          child: Stack(
-            fit: StackFit.expand,
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              // Clip the backdrop to the pill, while allowing the active item
-              // to rise above it without expanding the blur to the whole page.
-              const Positioned.fill(
-                child: GlassSurface(
-                  borderRadius: EcomsbdRadii.round,
-                  fill: Color(0xB0FFFFFF),
-                  borderColor: Color(0xFAFFFFFF),
-                  shadows: EcomsbdShadows.bottomNav,
-                  blurSigma: 24,
-                  child: SizedBox.expand(),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-                child: Row(
-                  children: <Widget>[
-                    for (final destination in MainDestination.values)
-                      Expanded(
-                        child: _NavItem(
-                          destination: destination,
-                          isActive: destination == current,
-                          onTap: () => onSelected(destination),
-                        ),
+        padding: EdgeInsets.fromLTRB(14, 0, 14, 10 + bottomInset),
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(30),
+          fill: const Color(0xE6FAFCFD),
+          borderColor: const Color(0xF2FFFFFF),
+          shadows: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x29121F30),
+              blurRadius: 45,
+              offset: Offset(0, 15),
+            ),
+          ],
+          blurSigma: 24,
+          child: SizedBox(
+            height: EcomsbdTouch.bottomNavHeight,
+            child: Padding(
+              padding: const EdgeInsets.all(7),
+              child: Row(
+                children: <Widget>[
+                  for (final destination in MainDestination.values)
+                    Expanded(
+                      child: _NavItem(
+                        destination: destination,
+                        isActive: destination == current,
+                        onTap: () => onSelected(destination),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -108,68 +105,47 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = isActive ? EcomsbdColors.ink : EcomsbdColors.navInactive;
+    const radius = BorderRadius.all(Radius.circular(24));
     return Semantics(
       selected: isActive,
       button: true,
       label: destination.labelIn(context),
       child: InkWell(
         onTap: onTap,
-        customBorder: const CircleBorder(),
+        borderRadius: radius,
         child: AnimatedContainer(
+          key: isActive ? BottomGlassNavigation.activeTileKey : null,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
-          transform: Matrix4.translationValues(0, isActive ? -13 : 0, 0),
-          transformAlignment: Alignment.center,
-          child: Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
+          decoration: BoxDecoration(
+            color: isActive ? Colors.white : Colors.transparent,
+            borderRadius: radius,
+            boxShadow: isActive
+                ? const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x14141F30),
+                      blurRadius: 18,
+                      offset: Offset(0, 5),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              if (isActive)
-                Container(
-                  width: 61,
-                  height: 61,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xEDFFFFFF),
-                    border: Border.all(color: const Color(0xFCFFFFFF)),
-                    boxShadow: EcomsbdShadows.pill,
-                  ),
+              Icon(destination.icon, size: 21, color: color),
+              const SizedBox(height: 3),
+              Text(
+                destination.labelIn(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EcomsbdType.chip.copyWith(
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
+                  color: color,
                 ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(
-                    destination.icon,
-                    size: 21,
-                    color: isActive
-                        ? const Color(0xFF111820)
-                        : EcomsbdColors.muted,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    destination.labelIn(context),
-                    style: EcomsbdType.eyebrow.copyWith(
-                      letterSpacing: 0,
-                      color: isActive
-                          ? const Color(0xFF111820)
-                          : EcomsbdColors.muted,
-                    ),
-                  ),
-                ],
               ),
-              if (isActive)
-                Positioned(
-                  top: -2,
-                  right: 12,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: EcomsbdColors.orange,
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

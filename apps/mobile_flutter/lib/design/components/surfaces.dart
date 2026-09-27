@@ -54,14 +54,35 @@ class EcomsbdScaffold extends StatelessWidget {
                     ? child
                     : SafeArea(bottom: false, child: child),
               ),
+              // `.topbar`: a frosted band the width of the screen, so a page
+              // scrolled under the pills reads as passing behind the header
+              // rather than showing between them.
               if (topBar != null)
                 Positioned(
                   left: 0,
                   right: 0,
                   top: 0,
-                  child: SafeArea(bottom: false, child: topBar!),
+                  child: GlassSurface(
+                    borderRadius: BorderRadius.zero,
+                    fill: const Color(0xC7F4F7FA),
+                    borderColor: null,
+                    shadows: const <BoxShadow>[],
+                    blurSigma: 22,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Color(0x8CFFFFFF)),
+                        ),
+                      ),
+                      child: SafeArea(bottom: false, child: topBar!),
+                    ),
+                  ),
                 ),
-              if (bottomBar != null)
+              // Hidden while the keyboard is up: the body resizes, so the
+              // floating bar would otherwise ride up and cover the field
+              // being typed into.
+              if (bottomBar != null &&
+                  MediaQuery.viewInsetsOf(context).bottom == 0)
                 Positioned(left: 0, right: 0, bottom: 0, child: bottomBar!),
             ],
           ),
@@ -71,7 +92,8 @@ class EcomsbdScaffold extends StatelessWidget {
   }
 }
 
-/// `.glass-card` — the standard frosted card.
+/// `.card.flat` / `.list-card` — the standard card: white, a hairline border,
+/// no shadow. The final prototype draws almost every surface this way.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     required this.child,
@@ -79,7 +101,7 @@ class GlassCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(EcomsbdSpacing.md),
     this.margin,
     this.onTap,
-    this.borderRadius = EcomsbdRadii.cardLarge,
+    this.borderRadius = EcomsbdRadii.card,
   });
 
   final Widget child;
@@ -93,6 +115,9 @@ class GlassCard extends StatelessWidget {
     return GlassSurface(
       margin: margin,
       borderRadius: borderRadius,
+      fill: Colors.white,
+      borderColor: EcomsbdColors.line,
+      shadows: const <BoxShadow>[],
       // This is the card that appears a dozen times in a scrolling list, so
       // it takes the thickened fill rather than a live blur. See GlassSurface.
       blurSigma: 0,
@@ -105,8 +130,8 @@ class GlassCard extends StatelessWidget {
   }
 }
 
-/// `.glass-card.glass-strong` — a more opaque card with a deeper shadow, used
-/// where content must stay legible over a busy hero.
+/// `.card` — the white card with a restrained shadow, for a panel that leads
+/// its section (a money summary, a detected order).
 class StrongGlassCard extends StatelessWidget {
   const StrongGlassCard({
     required this.child,
@@ -126,8 +151,9 @@ class StrongGlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassSurface(
-      fill: EcomsbdColors.glassStrong,
-      shadows: EcomsbdShadows.strong,
+      fill: Colors.white,
+      borderColor: EcomsbdColors.line,
+      shadows: EcomsbdShadows.card,
       margin: margin,
       borderRadius: borderRadius,
       // Already near-opaque at 0xE0, so the live blur behind it was paying for
@@ -182,28 +208,28 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `.section-head`: a strong title, a quiet line under it, and an orange
+    // text link level with the subtitle's baseline.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        3,
-        EcomsbdSpacing.md,
-        3,
-        EcomsbdSpacing.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(3, 18, 3, EcomsbdSpacing.sm),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: subtitle == null
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.end,
         children: <Widget>[
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(title, style: EcomsbdType.sectionTitle),
+                Text(title, style: EcomsbdType.sectionHead),
                 if (subtitle != null) ...<Widget>[
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle!,
-                    style: EcomsbdType.caption.copyWith(
+                    style: EcomsbdType.body.copyWith(
                       color: EcomsbdColors.muted,
+                      height: 1.35,
                     ),
                   ),
                 ],
@@ -214,10 +240,13 @@ class SectionHeader extends StatelessWidget {
             TextButton(
               onPressed: onAction,
               style: TextButton.styleFrom(
-                minimumSize: const Size(0, EcomsbdTouch.minTarget),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 foregroundColor: EcomsbdColors.orange,
-                textStyle: EcomsbdType.chip,
+                textStyle: EcomsbdType.label.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               child: Text(actionLabel!),
             ),
@@ -242,31 +271,36 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `.eyebrow` + `h1` + `.sub`: the flow line, a large title, one sentence.
+    // Aligned with the cards below it rather than indented past them.
     return Padding(
-      // A page title sat directly against the header above it. The top inset
-      // is part of the header rhythm rather than a per-screen adjustment.
-      padding: const EdgeInsets.fromLTRB(
-        EcomsbdSpacing.lg,
-        EcomsbdSpacing.xs,
-        EcomsbdSpacing.lg,
-        EcomsbdSpacing.md,
-      ),
+      padding: const EdgeInsets.fromLTRB(3, EcomsbdSpacing.xxs, 3, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          if (eyebrow != null)
+          if (eyebrow != null) ...<Widget>[
             Text(
               eyebrow!.toUpperCase(),
-              style: EcomsbdType.eyebrow.copyWith(color: EcomsbdColors.muted2),
+              style: trackedFor(
+                eyebrow!,
+                EcomsbdType.eyebrowWide.copyWith(
+                  color: EcomsbdColors.eyebrowInk,
+                ),
+              ),
             ),
-          const SizedBox(height: 4),
-          Text(title, style: EcomsbdType.pageTitle),
+            const SizedBox(height: 6),
+          ],
+          Text(title, style: EcomsbdType.screenTitle),
           if (description != null) ...<Widget>[
-            const SizedBox(height: 5),
+            const SizedBox(height: 6),
             Text(
               description!,
-              style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+              style: EcomsbdType.body.copyWith(
+                color: EcomsbdColors.muted,
+                fontSize: 14,
+                height: 1.4,
+              ),
             ),
           ],
         ],

@@ -566,6 +566,9 @@ void main() {
 
       expect(find.text('1 held back'), findsOneWidget);
       expect(find.textContaining('1 of 2 selected orders'), findsOneWidget);
+      // The title names the courier, never the raw placeholder.
+      expect(find.text('Book with Steadfast'), findsOneWidget);
+      expect(find.textContaining('{provider}'), findsNothing);
     });
   });
 

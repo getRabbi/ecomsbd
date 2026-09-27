@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 import '../env.dart';
+import '../network/network_monitor.dart';
 import '../storage/token_store.dart';
 import 'api_error.dart';
 
@@ -33,6 +34,7 @@ class ApiClient {
     required SessionProvider sessionProvider,
     Dio? dio,
     String? appVersion,
+    this.reachability,
   }) : _sessions = sessionProvider,
        _uuid = const Uuid(),
        _dio = dio ?? Dio() {
@@ -58,6 +60,10 @@ class ApiClient {
   final SessionProvider _sessions;
   final Uuid _uuid;
 
+  /// Told whether each request reached the server, which is what drives the
+  /// app-wide offline state.
+  final ReachabilityReporter? reachability;
+
   /// Guards refresh so a burst of 401s produces one refresh, not many. Several
   /// concurrent refreshes would rotate the token repeatedly and trip the
   /// server's reuse detection, killing the session.
@@ -70,7 +76,17 @@ class ApiClient {
     RequestInterceptorHandler handler,
   ) async {
     if (options.extra['skipAuth'] != true) {
-      final session = await _sessions.currentSession();
+      var session = await _sessions.currentSession();
+      if (session != null && _expiresSoon(session)) {
+        // A token already known to be expired would only earn a 401 and a
+        // second round trip; refresh it first. The one on a launch after an
+        // hour away cost a whole round trip before the first screen.
+        try {
+          session = await _refreshOnce() ?? session;
+        } on Object {
+          // Send what there is: the server's answer decides what happens next.
+        }
+      }
       if (session != null) {
         options.headers['authorization'] = 'Bearer ${session.accessToken}';
       }
@@ -197,8 +213,15 @@ class ApiClient {
     try {
       response = await request();
     } on DioException catch (error) {
-      throw _translateTransportError(error);
+      final translated = _translateTransportError(error);
+      if (translated.isOffline) {
+        reachability?.reportUnreachable();
+      } else if (error.response != null) {
+        reachability?.reportReachable();
+      }
+      throw translated;
     }
+    reachability?.reportReachable();
 
     if (response.statusCode != null && response.statusCode! < 300) {
       return response;
@@ -225,6 +248,15 @@ class ApiClient {
     throw error;
   }
 
+  static bool _expiresSoon(StoredSession session) {
+    final expiresAt = session.accessTokenExpiresAt;
+    // Epoch zero means the expiry is unknown; let the server judge it.
+    if (expiresAt.millisecondsSinceEpoch == 0) return false;
+    return expiresAt.isBefore(
+      DateTime.now().toUtc().add(const Duration(seconds: 20)),
+    );
+  }
+
   Future<StoredSession?> _refreshOnce() {
     return _inFlightRefresh ??= _sessions.refreshSession().whenComplete(() {
       _inFlightRefresh = null;
@@ -246,21 +278,28 @@ class ApiClient {
   }
 
   ApiError _translateTransportError(DioException error) {
+    // No connection could be made within the connect timeout either: nothing
+    // was sent, and the seller's next step is the same as with no signal.
     final isOffline =
         error.error is SocketException ||
-        error.type == DioExceptionType.connectionError;
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout;
     if (isOffline) {
       return ApiError.offline();
     }
 
-    if (error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
+    if (error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.sendTimeout) {
+      final method = error.requestOptions.method.toUpperCase();
+      if (method == 'GET' || method == 'HEAD') {
+        // A read that was slow changed nothing, so asking again is safe.
+        return ApiError.timeout();
+      }
       // A timeout means the outcome is UNKNOWN, not failed. For a request that
       // creates something externally, the caller must treat this as ambiguous
       // and let the server reconcile (master spec sections 11, 36, 126).
       return const ApiError(
-        code: ApiErrorCode.serviceUnavailable,
+        code: ApiErrorCode.timeout,
         messageBn: 'সার্ভার সাড়া দিচ্ছে না। আমরা আগের চেষ্টাটি যাচাই করছি।',
         messageEn:
             'The server did not respond in time. The outcome is unconfirmed.',

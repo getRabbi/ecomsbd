@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/network_status.dart';
 
 class MessagingScreen extends ConsumerStatefulWidget {
   const MessagingScreen({super.key});
@@ -13,7 +14,8 @@ class MessagingScreen extends ConsumerStatefulWidget {
   ConsumerState<MessagingScreen> createState() => _MessagingScreenState();
 }
 
-class _MessagingScreenState extends ConsumerState<MessagingScreen> {
+class _MessagingScreenState extends ConsumerState<MessagingScreen>
+    with ReloadOnReconnect {
   List<dynamic> _channels = [],
       _contacts = [],
       _customers = [],
@@ -34,6 +36,11 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> {
   void initState() {
     super.initState();
     Future.microtask(_load);
+  }
+
+  @override
+  void onReconnect() {
+    if (_error != null) _load();
   }
 
   @override

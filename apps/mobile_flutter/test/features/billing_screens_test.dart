@@ -208,7 +208,7 @@ void main() {
       // The one thing this screen must never do: render a plan it could not
       // read. "Free" would be indistinguishable from a real answer.
       expect(find.text('Starter'), findsNothing);
-      expect(find.text('No connection'), findsOneWidget);
+      expect(find.text('No internet connection'), findsOneWidget);
     });
   });
 

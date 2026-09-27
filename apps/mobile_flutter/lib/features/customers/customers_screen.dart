@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
 import '../../data/commerce/crm_repository.dart';
 import '../../data/commerce/commerce_providers.dart';
 import 'crm_widgets.dart';
 import '../../design/components/badges.dart';
-import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
 import '../../design/glass.dart';
 import '../../design/tokens.dart';
@@ -66,7 +64,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final moneyAvailable = ref
         .watch(customersRepositoryProvider)
         .moneyAvailable;
-    final isOffline = ref.watch(isOfflineProvider);
 
     return Scaffold(
       backgroundColor: EcomsbdColors.background,
@@ -100,10 +97,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       ),
                     ],
                   ),
-                  if (isOffline) ...<Widget>[
-                    const OfflineBanner(),
-                    const SizedBox(height: EcomsbdSpacing.sm),
-                  ],
                   if (state.isStale) ...<Widget>[
                     StaleDataNotice(
                       fetchedAt: state.fetchedAt,
