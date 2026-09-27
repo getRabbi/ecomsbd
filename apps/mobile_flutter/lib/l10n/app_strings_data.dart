@@ -24,6 +24,10 @@ import 'seller_ops_strings.dart';
 import 'developer_strings.dart';
 
 final Map<String, String> banglaStrings = <String, String>{
+  'launch.currentAccess': 'বর্তমান অ্যাক্সেস',
+  'launch.fullAccess': 'সম্পূর্ণ অ্যাক্সেস — ফ্রি লঞ্চ',
+  'launch.message':
+      'ecomsbd-এর সব ফিচার বর্তমানে বিনামূল্যে ব্যবহার করা যাচ্ছে।',
   'messaging.title': 'গ্রাহককে মেসেজ',
   'sources.title': 'অর্ডারের উৎস',
   'network.title': 'বেনামি নেটওয়ার্ক বেঞ্চমার্ক',
@@ -62,6 +66,9 @@ final Map<String, String> banglaStrings = <String, String>{
 };
 
 final Map<String, String> englishStrings = <String, String>{
+  'launch.currentAccess': 'Current access',
+  'launch.fullAccess': 'Full access — Free launch',
+  'launch.message': 'All ecomsbd features are currently available for free.',
   'messaging.title': 'Customer messaging',
   'sources.title': 'Order sources',
   'network.title': 'Anonymous benchmarks',

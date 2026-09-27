@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { CurrentAccess } from '@/components/current-access';
 
 import { PageHeader } from '@/components/shell';
 import { Card, ErrorState, Row } from '@/components/ui';
@@ -43,6 +44,7 @@ export default function SettingsPage() {
       <PageHeader title={t('set.title')} subtitle={t('set.subtitle')} />
 
       <div className="content">
+        <CurrentAccess />
         <Card>
           {loading ? (
             <p className="card__hint">{t('common.loading')}</p>

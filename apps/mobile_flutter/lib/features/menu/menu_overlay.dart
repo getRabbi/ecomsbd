@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/billing/billing_providers.dart';
 
 import '../../app/providers.dart';
 import '../../design/glass.dart';
@@ -294,14 +295,14 @@ class MenuOverlay extends ConsumerWidget {
   }
 }
 
-class _MenuSection extends StatelessWidget {
+class _MenuSection extends ConsumerWidget {
   const _MenuSection({required this.titleKey, required this.items});
 
   final String titleKey;
   final List<_MenuItem> items;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -321,7 +322,12 @@ class _MenuSection extends StatelessWidget {
           minTileWidth: 160,
           maxColumns: 2,
           spacing: EcomsbdSpacing.sm,
-          children: <Widget>[for (final item in items) _MenuTile(item: item)],
+          children: <Widget>[
+            for (final item in items)
+              if (item.titleKey != 'menu.subscription' ||
+                  ref.watch(showPlanUiProvider))
+                _MenuTile(item: item),
+          ],
         ),
       ],
     );

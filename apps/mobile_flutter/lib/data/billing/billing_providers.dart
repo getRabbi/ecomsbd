@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../account/account_repository.dart';
 import '../account/models.dart';
+import '../commerce/commerce_providers.dart';
 import 'billing_repository.dart';
 import 'models.dart';
 
@@ -21,7 +24,10 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 });
 
 /// Everything the plans screen needs.
-final billingOverviewProvider = FutureProvider<BillingOverview>((ref) {
+final billingOverviewProvider = FutureProvider.autoDispose<BillingOverview>((
+  ref,
+) {
+  ref.watch(entitlementsProvider);
   return ref.watch(billingRepositoryProvider).overview();
 });
 
@@ -29,8 +35,16 @@ final billingOverviewProvider = FutureProvider<BillingOverview>((ref) {
 ///
 /// Used by screens that gate a control on a plan. They ask the server; they do
 /// not consult a flag the app is holding.
-final entitlementsProvider = FutureProvider<Entitlements>((ref) {
+final entitlementsProvider = FutureProvider.autoDispose<Entitlements>((ref) {
+  ref.watch(tenantIdProvider);
+  final refresh = Timer(const Duration(minutes: 1), ref.invalidateSelf);
+  ref.onDispose(refresh.cancel);
   return ref.watch(billingRepositoryProvider).entitlements();
+});
+
+/// Never flash purchase navigation while the authoritative state is unknown.
+final showPlanUiProvider = Provider<bool>((ref) {
+  return ref.watch(entitlementsProvider).valueOrNull?.freeLaunchMode == false;
 });
 
 /// Metered usage, refreshed on demand. The client never counts.

@@ -423,8 +423,8 @@ async def get_auth_service(
     )
 
 
-async def get_entitlements(db: DbSession) -> EntitlementService:
-    return EntitlementService(db)
+async def get_entitlements(db: DbSession, settings: SettingsDep) -> EntitlementService:
+    return EntitlementService(db, settings=settings)
 
 
 _registry: BillingProviderRegistry | None = None

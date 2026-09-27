@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/billing/billing_providers.dart';
 
 import '../../design/components/pills.dart';
 import '../../design/components/seller_blocks.dart';
@@ -220,6 +221,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   }
 
   bool _matches(BuildContext context, _Tool tool) {
+    if (tool.titleKey == 'menu.subscription' &&
+        !ref.watch(showPlanUiProvider)) {
+      return false;
+    }
     if (_query.isEmpty) return true;
     final text = '${context.tr(tool.titleKey)} ${context.tr(tool.subtitleKey)}'
         .toLowerCase();

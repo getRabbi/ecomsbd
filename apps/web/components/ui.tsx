@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 
 import { ApiError } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { useAccess } from '@/lib/access-context';
+import { launchCopy } from '@/lib/access';
 
 /** Small shared pieces. Deliberately plain — the tables are the product here. */
 
@@ -113,13 +115,17 @@ export function EmptyState({
  * seller and already localised by the request's language header.
  */
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  const { t } = useSession();
+  const { t, locale } = useSession();
+  const access = useAccess()?.data;
 
   let title = t('common.couldNotLoad');
   let hint = t('err.offline');
 
   if (error instanceof ApiError) {
     hint = error.message;
+    if (error.status === 402 && access?.free_launch_mode) {
+      hint = launchCopy[locale].message;
+    }
     if (error.isPermissionFailure) {
       title = t('err.forbidden');
     }

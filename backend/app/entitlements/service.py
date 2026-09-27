@@ -29,7 +29,7 @@ plan.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 import sqlalchemy as sa
@@ -38,7 +38,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.core.clock import utc_now
-from app.core.errors import EntitlementRequiredError
+from app.core.config import Settings, get_settings
+from app.core.errors import EntitlementRequiredError, RateLimitedError
 from app.entitlements.catalog import UNLIMITED, Entitlement, PlanCode, PlanDefinition, get_plan
 from app.entitlements.models import Subscription, SubscriptionStatus
 from app.entitlements.usage import (
@@ -123,6 +124,9 @@ class EntitlementSnapshot:
     in_grace: bool = False
     ends_at_period_end: bool = False
     usage: tuple[UsageView, ...] = ()
+    free_launch_mode: bool = False
+    billing_enabled: bool = False
+    effective_access: str = "plan"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -134,14 +138,24 @@ class EntitlementSnapshot:
             "in_grace": self.in_grace,
             "ends_at_period_end": self.ends_at_period_end,
             "usage": [view.as_dict() for view in self.usage],
+            "free_launch_mode": self.free_launch_mode,
+            "billing_enabled": self.billing_enabled,
+            "effective_access": self.effective_access,
         }
 
 
 class EntitlementService:
     """Resolves a tenant's plan and enforces its entitlements."""
 
-    def __init__(self, session: AsyncSession, *, timezone_name: str | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        timezone_name: str | None = None,
+        settings: Settings | None = None,
+    ) -> None:
         self._db = session
+        self._settings = settings or get_settings()
         self._timezone = timezone_name
         self._cache: dict[uuid.UUID, ResolvedEntitlements] = {}
 
@@ -176,8 +190,21 @@ class EntitlementService:
         return resolved
 
     async def plan_for(self, tenant_id: uuid.UUID) -> PlanDefinition:
-        """The tenant's effective plan."""
-        return (await self._resolved(tenant_id)).plan
+        """Effective capabilities, retaining the real plan's identity.
+
+        This copy is never persisted. All enforcement paths (including workers,
+        imports, standing limits and usage counters) consume this same policy.
+        Provider switches, permissions and operational limits live outside it.
+        """
+        plan = (await self._resolved(tenant_id)).plan
+        if not self._settings.free_launch_mode:
+            return plan
+        values = {
+            key: True if isinstance(value, bool) else UNLIMITED
+            for key, value in plan.entitlements.items()
+        }
+        values[Entitlement.RISK_CHECKS_DAILY] = self._settings.risk_checks_daily_safety_limit
+        return replace(plan, entitlements=values)
 
     # ------------------------------------------------------------ snapshot ---
 
@@ -186,6 +213,7 @@ class EntitlementService:
     ) -> EntitlementSnapshot:
         """The entitlement payload returned to the client."""
         resolved = await self._resolved(tenant_id)
+        effective = await self.plan_for(tenant_id)
         usage: tuple[UsageView, ...] = ()
         if include_usage:
             usage = tuple(await self.usage(tenant_id))
@@ -194,7 +222,10 @@ class EntitlementService:
             status=resolved.status,
             source=resolved.source,
             valid_until=resolved.valid_until,
-            entitlements={str(k): v for k, v in resolved.plan.entitlements.items()},
+            entitlements={str(k): v for k, v in effective.entitlements.items()},
+            free_launch_mode=self._settings.free_launch_mode,
+            billing_enabled=self._settings.billing_enabled,
+            effective_access="full_access" if self._settings.free_launch_mode else "plan",
             in_grace=resolved.in_grace,
             ends_at_period_end=resolved.ends_at_period_end,
             usage=usage,
@@ -243,6 +274,12 @@ class EntitlementService:
         used: int | None = None,
         cap: int | None = None,
     ) -> None:
+        if self._settings.free_launch_mode and entitlement is Entitlement.RISK_CHECKS_DAILY:
+            raise RateLimitedError(
+                "The daily risk-check safety limit has been reached.",
+                message_bn="আজকের নিরাপদ রিস্ক চেকের সীমা শেষ হয়েছে।",
+                details={"reason": "safety_limit", "limit": cap},
+            )
         plan = await self.plan_for(tenant_id)
         context: dict[str, object] = {
             "entitlement": str(entitlement),

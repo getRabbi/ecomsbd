@@ -437,6 +437,14 @@ class BillingService:
         callback that arrives while the response is still in flight has
         something to attach itself to.
         """
+        if not self._settings.purchases_enabled:
+            from app.core.errors import ServiceUnavailableError
+
+            raise ServiceUnavailableError(
+                "Plan purchases are currently unavailable.",
+                message_bn="প্ল্যান কেনা বর্তমানে বন্ধ আছে।",
+                details={"reason": "billing_disabled"},
+            )
         provider = self._registry.get(provider_kind)
         reference = f"ecomsbd-{new_id().hex}"
 

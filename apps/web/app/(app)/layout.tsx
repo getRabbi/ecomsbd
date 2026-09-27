@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 
 import { Shell } from '@/components/shell';
 import { useSession } from '@/lib/session';
+import { AccessProvider } from '@/lib/access-context';
 
 /**
  * Every signed-in screen sits under this layout.
@@ -41,5 +42,5 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return <Shell>{children}</Shell>;
+  return <AccessProvider key={session.user.id}><Shell>{children}</Shell></AccessProvider>;
 }
