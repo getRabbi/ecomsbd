@@ -319,6 +319,17 @@ class Settings(BaseSettings):
     fcm_credentials_json: SecretStr | None = None
 
     # ----------------------------------------------------------- billing ---
+    # Backend-only launch policy. Stored subscriptions are never changed.
+    free_launch_mode: bool = False
+    billing_enabled: bool = False
+    # First-party risk lookup also protects against phone-number probing.
+    # Keep a plan-independent ceiling during free launch (the existing top tier).
+    risk_checks_daily_safety_limit: int = Field(default=500, ge=1)
+
+    @property
+    def purchases_enabled(self) -> bool:
+        return self.billing_enabled and not self.free_launch_mode
+
     # Plan pricing and entitlement values are product-validation data, not
     # technical constants (master spec section 26), so both are overridable
     # without a release. JSON objects keyed by plan code, e.g.

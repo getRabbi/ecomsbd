@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../data/billing/billing_providers.dart';
+import '../billing/free_launch_notice.dart';
 import '../../data/commerce/paged_list_controller.dart';
 import '../../data/commerce/repository_support.dart';
 import '../../data/local/tables.dart';
@@ -104,14 +106,18 @@ class SyncBadge extends StatelessWidget {
 /// Uses the server's own Bangla message rather than inventing copy: the wording
 /// of a money error is a product decision that belongs on the server (master
 /// spec section 46).
-class ErrorStateCard extends StatelessWidget {
+class ErrorStateCard extends ConsumerWidget {
   const ErrorStateCard({required this.error, super.key, this.onRetry});
 
   final ApiError error;
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (error.isPlanLimited &&
+        ref.watch(entitlementsProvider).valueOrNull?.freeLaunchMode == true) {
+      return const FreeLaunchNotice();
+    }
     if (error.isOffline) {
       return EmptyState(
         icon: Icons.cloud_off_rounded,
@@ -451,11 +457,16 @@ class ChartData<T> extends StatelessWidget {
 /// This is not a failure and must not read like one: "Could not load this"
 /// sends a seller on the free plan looking for a connection problem that does
 /// not exist. It says what is going on and where to change it.
-class PlanLockedNotice extends StatelessWidget {
+class PlanLockedNotice extends ConsumerWidget {
   const PlanLockedNotice({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final access = ref.watch(entitlementsProvider);
+    if (access.valueOrNull?.freeLaunchMode == true) {
+      return const FreeLaunchNotice();
+    }
+    if (!ref.watch(showPlanUiProvider)) return const SizedBox.shrink();
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: EcomsbdSpacing.md),

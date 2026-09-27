@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs tests/access.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

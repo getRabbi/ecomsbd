@@ -54,6 +54,9 @@ def settings(tmp_path_factory: pytest.TempPathFactory):
             "DATABASE_URL": _test_database_url(tmp_path),
             "LOG_JSON": "false",
             "LOG_LEVEL": "WARNING",
+            # Existing paid-mode tests explicitly exercise the retained architecture.
+            "FREE_LAUNCH_MODE": "false",
+            "BILLING_ENABLED": "true",
             # Production defers SMS sign-in (no gateway chosen), so
             # PHONE_OTP_LOGIN_ENABLED defaults to false and every OTP endpoint
             # answers FEATURE_DISABLED. The suite signs in over OTP, so without

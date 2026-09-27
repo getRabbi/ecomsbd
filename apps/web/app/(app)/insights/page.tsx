@@ -10,6 +10,8 @@ import type { Cash, Comparison, Counts, Couriers, Customers, Explanation, Invent
 import { formatDate, formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useApi, type AsyncState } from '@/lib/useApi';
+import { useAccess } from '@/lib/access-context';
+import { showPlanLock } from '@/lib/access';
 
 const BASE = '/analytics/insights';
 const PAGE = 20;
@@ -32,7 +34,8 @@ function Result<T>({ state, children }: { state: AsyncState<T>; children: (data:
 
 function Locked({ reason }: { reason: string | null }) {
   const { t } = useSession();
-  return reason ? <p className="card__hint">{t(reason === 'PERMISSION' ? 'ins.moneyLockedRole' : 'ins.planLocked')}</p> : null;
+  const access = useAccess()?.data ?? null;
+  return showPlanLock(access, reason) ? <p className="card__hint">{t(reason === 'PERMISSION' ? 'ins.moneyLockedRole' : 'ins.planLocked')}</p> : null;
 }
 
 function Facts({ items }: { items: Explanation[] }) {

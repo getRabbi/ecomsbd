@@ -11,6 +11,7 @@ import '../features/auth/phone_login_screen.dart';
 import '../features/onboarding/shop_setup_screen.dart';
 import '../features/shell/main_shell.dart';
 import '../features/splash/splash_screen.dart';
+import '../features/billing/plans_screen.dart';
 import 'providers.dart';
 
 /// Route paths. Named constants so a typo is a compile error.
@@ -29,6 +30,12 @@ class Routes {
   static const String verify = '/login/verify';
   static const String onboarding = '/onboarding';
   static const String home = '/home';
+  static const Set<String> plans = {
+    '/plans',
+    '/upgrade',
+    '/subscription',
+    '/pricing',
+  };
 }
 
 String? authRedirect(
@@ -68,7 +75,10 @@ String? authRedirect(
       location == Routes.selectShop ? null : Routes.selectShop,
     AuthStage.needsOnboarding =>
       location == Routes.onboarding ? null : Routes.onboarding,
-    AuthStage.ready => location == Routes.home ? null : Routes.home,
+    AuthStage.ready =>
+      location == Routes.home || Routes.plans.contains(location)
+          ? null
+          : Routes.home,
   };
 }
 
@@ -236,6 +246,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.home,
         builder: (context, state) => const MainShell(),
       ),
+      for (final path in Routes.plans)
+        GoRoute(path: path, builder: (context, state) => const PlansScreen()),
     ],
     errorBuilder: (context, state) =>
         const SplashScreen(message: 'Taking you back…'),

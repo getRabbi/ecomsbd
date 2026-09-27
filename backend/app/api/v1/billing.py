@@ -101,6 +101,9 @@ async def get_entitlements(
     """
     snapshot = await entitlements.snapshot(principal.require_tenant())
     return EntitlementsResponse(
+        free_launch_mode=snapshot.free_launch_mode,
+        billing_enabled=snapshot.billing_enabled,
+        effective_access=snapshot.effective_access,
         plan=str(snapshot.plan),
         status=snapshot.status,
         source=snapshot.source,

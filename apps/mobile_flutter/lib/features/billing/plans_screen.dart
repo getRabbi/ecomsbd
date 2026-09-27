@@ -12,6 +12,7 @@ import '../shared/data_state.dart';
 import '../shared/responsive.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/app_locale.dart';
+import 'free_launch_notice.dart';
 
 /// Read where no `BuildContext` exists, so the active locale is resolved
 /// directly -- the same approach `formatRelative` and `order_status.dart` use.
@@ -36,6 +37,29 @@ class PlansScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final access = ref.watch(entitlementsProvider);
+    if (access.valueOrNull?.freeLaunchMode == true) {
+      return DetailScaffold(
+        title: context.tr('launch.currentAccess'),
+        children: const <Widget>[FreeLaunchNotice()],
+      );
+    }
+    if (!access.hasValue) {
+      return DetailScaffold(
+        title: context.tr('launch.currentAccess'),
+        children: <Widget>[
+          if (access.hasError)
+            ErrorStateCard(
+              error: access.error is ApiError
+                  ? access.error! as ApiError
+                  : ApiError.unexpected(access.error!),
+              onRetry: () => ref.invalidate(entitlementsProvider),
+            )
+          else
+            const Center(child: CircularProgressIndicator()),
+        ],
+      );
+    }
     final overview = ref.watch(billingOverviewProvider);
 
     return Scaffold(

@@ -73,10 +73,14 @@ class Entitlements {
     required this.entitlements,
     this.source,
     this.validUntil,
+    this.freeLaunchMode = false,
+    this.billingEnabled = false,
   });
 
   factory Entitlements.fromJson(Map<String, dynamic> json) {
     return Entitlements(
+      freeLaunchMode: json['free_launch_mode'] as bool? ?? false,
+      billingEnabled: json['billing_enabled'] as bool? ?? false,
       plan: json['plan'] as String,
       status: json['status'] as String,
       source: json['source'] as String?,
@@ -94,6 +98,8 @@ class Entitlements {
   final String status;
   final String? source;
   final DateTime? validUntil;
+  final bool freeLaunchMode;
+  final bool billingEnabled;
   final Map<String, dynamic> entitlements;
 
   bool get isFree => plan == 'free';

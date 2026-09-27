@@ -280,6 +280,9 @@ class PlanResponse(BaseModel):
 
 
 class EntitlementsResponse(BaseModel):
+    free_launch_mode: bool = False
+    billing_enabled: bool = False
+    effective_access: str = "plan"
     plan: str
     status: str
     source: str | None

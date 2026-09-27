@@ -349,23 +349,32 @@ class _SubscriptionRow extends ConsumerWidget {
 
     return _SettingsRow(
       icon: Icons.star_outline_rounded,
-      title: context.tr('settings.subscription'),
+      title: context.tr(
+        entitlements.valueOrNull?.freeLaunchMode == true
+            ? 'launch.currentAccess'
+            : 'settings.subscription',
+      ),
       subtitle: entitlements.when(
-        data: (value) => switch (value.status) {
-          // The status codes are API values and are matched, never shown.
-          'GRACE' || 'PAST_DUE' => context.tr('settings.paymentProblem'),
-          'CANCEL_AT_PERIOD_END' => context.tr('settings.endsSoon'),
-          _ => context.tr('settings.planName', <String, Object?>{
-            'plan': '${value.plan[0].toUpperCase()}${value.plan.substring(1)}',
-          }),
-        },
+        data: (value) => value.freeLaunchMode
+            ? context.tr('launch.fullAccess')
+            : switch (value.status) {
+                // The status codes are API values and are matched, never shown.
+                'GRACE' || 'PAST_DUE' => context.tr('settings.paymentProblem'),
+                'CANCEL_AT_PERIOD_END' => context.tr('settings.endsSoon'),
+                _ => context.tr('settings.planName', <String, Object?>{
+                  'plan':
+                      '${value.plan[0].toUpperCase()}${value.plan.substring(1)}',
+                }),
+              },
         loading: () => context.tr('common.loading'),
         // Never guess. A screen that says "Free" because the network failed is
         // telling the seller something that may not be true.
         error: (_, __) => context.tr('settings.couldNotCheckPlan'),
       ),
       trailing: entitlements.maybeWhen(
-        data: (value) => value.status == 'GRACE' || value.status == 'PAST_DUE'
+        data: (value) =>
+            !value.freeLaunchMode &&
+                (value.status == 'GRACE' || value.status == 'PAST_DUE')
             ? StatusChip(
                 label: context.tr('settings.actionNeeded'),
                 tone: Tone.bad,

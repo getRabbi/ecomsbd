@@ -27,7 +27,7 @@ from app.billing.providers.bkash_web import BkashApiClient, BkashWebBillingProvi
 from app.billing.providers.google_play import GooglePlayBillingProvider, PlayApiClient
 from app.billing.providers.manual import AdminManualBillingProvider
 from app.common.feature_flags import FlagKey
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 
 __all__ = [
     "PROVIDER_FLAGS",
@@ -91,6 +91,7 @@ class ChannelPolicy:
 
     channel: DistributionChannel
     providers: tuple[ProviderAvailability, ...]
+    purchases_enabled: bool = True
 
     @property
     def purchasable(self) -> tuple[ProviderAvailability, ...]:
@@ -103,7 +104,7 @@ class ChannelPolicy:
 
     @property
     def allows_external_payment_cta(self) -> bool:
-        return self.channel.allows_external_payment_cta
+        return self.purchases_enabled and self.channel.allows_external_payment_cta
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -117,8 +118,14 @@ class ChannelPolicy:
 class BillingProviderRegistry:
     """Looks up providers and answers "what may this build offer?"."""
 
-    def __init__(self, providers: dict[BillingProviderKind, BillingProvider]) -> None:
+    def __init__(
+        self,
+        providers: dict[BillingProviderKind, BillingProvider],
+        *,
+        settings: Settings | None = None,
+    ) -> None:
         self._providers = providers
+        self._settings = settings or get_settings()
 
     def get(self, kind: BillingProviderKind | str) -> BillingProvider:
         try:
@@ -154,6 +161,8 @@ class BillingProviderRegistry:
         """
         from app.billing.providers.base import ProviderBlocker
 
+        if not self._settings.purchases_enabled:
+            return ChannelPolicy(channel=channel, providers=(), purchases_enabled=False)
         allowed = _CHANNEL_PROVIDERS.get(channel, ())
         results: list[ProviderAvailability] = []
         for kind, provider in self._providers.items():
@@ -199,5 +208,6 @@ def build_registry(
             BillingProviderKind.PLAY: GooglePlayBillingProvider(settings, api=play_api),
             BillingProviderKind.BKASH_WEB: BkashWebBillingProvider(settings, api=bkash_api),
             BillingProviderKind.MANUAL_ADMIN: AdminManualBillingProvider(),
-        }
+        },
+        settings=settings,
     )
