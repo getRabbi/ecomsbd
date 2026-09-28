@@ -1,24 +1,20 @@
 # Android identity and release signing
 
 The permanent `applicationId`, namespace and activity package are
-`com.smply.app`. Keep future Play/Google/Firebase Android registrations aligned
+`com.ecomsbd.app`. Keep future Play/Google/Firebase Android registrations aligned
 with this ID. This change does not configure those providers or change Apple IDs.
 
-## 1. Create the private release/upload key
+## 1. Preserve the existing release/upload key
 
-No ecomsbd release keystore is configured in this checkout. If you already have
-its production key elsewhere, use it instead of generating a replacement.
-Otherwise run this in **PowerShell**, with `keytool` from your JDK on PATH:
+The package migration uses the existing `CN=ecomsbd Upload` key. Its SHA-1 is
+`A6:65:21:D5:5B:86:A6:C4:A7:6F:24:DD:DF:A7:23:8A:8A:E2:12:6F`.
+Do not generate a replacement key for the new package. Restore the existing
+private keystore and credentials from the owner's backup if they are missing.
 
-```powershell
-keytool -genkeypair -v -keystore "$env:USERPROFILE\ecomsbd-upload.jks" -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias ecomsbd-upload
-```
-
-The command prompts you for passwords and certificate details; no password is
-provided by the project or placed in shell history. Do not overwrite an existing
-keystore. Keep the key outside the repository, make an encrypted backup and save
-the passwords in your password manager. The alias above is an example you may
-change; Gradle reads your actual alias from private configuration.
+Keep the key outside the repository, retain an encrypted backup, and save the
+passwords in your password manager. Gradle reads the existing alias from private
+configuration. Provider setup is documented in
+[Android package migration](../../../docs/ANDROID_PACKAGE_MIGRATION.md).
 
 ## 2. Configure signing locally or through CI secrets
 
@@ -35,7 +31,7 @@ Fill these four values in that ignored file:
 - `storeFile`: absolute keystore path, such as
   `C:/Users/YourName/ecomsbd-upload.jks` (forward slashes avoid Java-properties escapes).
 - `storePassword`: the keystore password you chose.
-- `keyAlias`: the alias you chose (`ecomsbd-upload` if using the command above).
+- `keyAlias`: the existing key's alias (`ecomsbd-upload`).
 - `keyPassword`: that key's password, including when it equals the store password.
 
 For CI, inject secrets as environment variables instead of writing this file:

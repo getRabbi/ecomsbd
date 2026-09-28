@@ -36,7 +36,7 @@ class SecurePkceStorage extends GotrueAsyncStorage {
 }
 
 bool isAuthCallback(Uri uri) =>
-    uri.scheme == 'com.smply.app' &&
+    uri.scheme == 'com.ecomsbd.app' &&
     uri.host == 'auth' &&
     uri.path == '/callback';
 
