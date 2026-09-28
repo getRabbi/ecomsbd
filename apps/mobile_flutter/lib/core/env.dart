@@ -24,7 +24,7 @@ class Env {
 
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-  static const authRedirectUrl = 'com.smply.app://auth/callback';
+  static const authRedirectUrl = 'com.ecomsbd.app://auth/callback';
 
   static const String apiVersionPrefix = '/v1';
 

@@ -46,7 +46,7 @@ tasks.matching { it.name == "preReleaseBuild" || it.name == "validateSigningRele
 
 android {
     // Permanent Android identity, explicitly chosen by the owner.
-    namespace = "com.smply.app"
+    namespace = "com.ecomsbd.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -56,7 +56,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.smply.app"
+        applicationId = "com.ecomsbd.app"
 
         // Android-first, low-end devices in scope (master spec section 53).
         // minSdk comes from the Flutter toolchain so plugin requirements and the

@@ -104,7 +104,7 @@ void main() {
       );
       expect(
         transport.requests.first.url.queryParameters['redirect_to'],
-        'com.smply.app://auth/callback',
+        'com.ecomsbd.app://auth/callback',
       );
     },
   );
@@ -210,7 +210,7 @@ void main() {
         await controller.restore();
         Uri? launched;
         final callback = Uri.parse(
-          'com.smply.app://auth/callback?code=apple-code',
+          'com.ecomsbd.app://auth/callback?code=apple-code',
         );
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
@@ -232,7 +232,7 @@ void main() {
         expect(launched!.queryParameters['provider'], 'apple');
         expect(
           launched!.queryParameters['redirect_to'],
-          'com.smply.app://auth/callback',
+          'com.ecomsbd.app://auth/callback',
         );
         expect(launched!.queryParameters['code_challenge'], isNotEmpty);
         expect(launched!.queryParameters['code_challenge_method'], 's256');
@@ -265,7 +265,7 @@ void main() {
     () async {
       await repository.forgotPassword('seller@example.com');
       await repository.handleAuthLink(
-        Uri.parse('com.smply.app://auth/callback?code=valid-code'),
+        Uri.parse('com.ecomsbd.app://auth/callback?code=valid-code'),
       );
       await Future<void>.delayed(Duration.zero);
       expect(controller.state.stage, AuthStage.passwordRecovery);
@@ -289,9 +289,13 @@ void main() {
       await repository.handleAuthLink(
         Uri.parse('https://evil.example/auth/callback?code=bad'),
       );
+      // A callback intended for the old installation must not exchange a code.
+      await repository.handleAuthLink(
+        Uri.parse('com.smply.app://auth/callback?code=old-install'),
+      );
       expect(transport.requests.length, before);
       expect(
-        isAuthCallback(Uri.parse('com.smply.app://wrong/callback')),
+        isAuthCallback(Uri.parse('com.ecomsbd.app://wrong/callback')),
         isFalse,
       );
     },

@@ -1,4 +1,4 @@
-package com.smply.app
+package com.ecomsbd.app
 
 import io.flutter.embedding.android.FlutterActivity
 
