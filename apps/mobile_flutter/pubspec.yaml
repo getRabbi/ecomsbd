@@ -99,6 +99,12 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # iOS plugins resolve through CocoaPods, not Swift Package Manager (on by
+  # default since Flutter 3.44): ios/Podfile compiles file_picker without its
+  # photo and music pickers, and only CocoaPods honours those flags.
+  config:
+    enable-swift-package-manager: false
+
   assets:
     - assets/fonts/
     # The brand mark on transparency, shown in-app by EcomsBrandMark and
@@ -159,10 +165,8 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/icon/logo_mark_transparent.png"
   adaptive_icon_foreground_inset: 23
   adaptive_icon_monochrome: "assets/icon/logo_mark_monochrome.png"
-  # iOS: there is no ios/ project yet, and generating into a missing one fails.
-  # After `flutter create --platforms=ios .`, set this to true and regenerate;
   # iOS applies its own mask to the full square, which this source suits.
   # icon.png has no alpha channel; remove_alpha_ios guards against a future
   # export that does, which the App Store would reject.
-  ios: false
+  ios: true
   remove_alpha_ios: true

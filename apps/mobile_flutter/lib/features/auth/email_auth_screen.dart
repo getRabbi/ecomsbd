@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../app/providers.dart';
 import '../../core/env.dart';
@@ -128,12 +129,15 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
             ),
             const SizedBox(height: EcomsbdSpacing.sm),
             if (Env.appleSignInEnabled)
-              OutlinedButton.icon(
-                onPressed: state.isBusy
-                    ? null
-                    : () => _provider(SignInProvider.apple),
-                icon: const Icon(Icons.apple),
-                label: Text(context.tr('auth.continueWithApple')),
+              // Apple's own button: App Review holds Sign in with Apple to
+              // its artwork and wording, which a Material icon does not meet.
+              SignInWithAppleButton(
+                key: const Key('auth-apple'),
+                text: context.tr('auth.continueWithApple'),
+                style: SignInWithAppleButtonStyle.whiteOutlined,
+                onPressed: () {
+                  if (!state.isBusy) _provider(SignInProvider.apple);
+                },
               ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: EcomsbdSpacing.md),

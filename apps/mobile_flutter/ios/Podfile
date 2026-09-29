@@ -1,0 +1,60 @@
+# iOS 15 is the floor of the Firebase Apple SDK that firebase_core 4 and
+# firebase_messaging 16 pull in. Keep IPHONEOS_DEPLOYMENT_TARGET in
+# Runner.xcodeproj/project.pbxproj the same.
+platform :ios, '15.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# The app only picks CSV/TXT documents (FileType.custom). Compiling out
+# file_picker's photo and music pickers keeps the Photos and MediaPlayer APIs
+# out of the binary, so no photo-library or Apple Music purpose strings are
+# needed. These flags only work through CocoaPods, which is why pubspec.yaml
+# turns Swift Package Manager off.
+Pod::PICKER_MEDIA = false
+Pod::PICKER_AUDIO = false
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      # Pods that still declare an older minimum would otherwise warn, or fail
+      # to link against the iOS 15 Firebase frameworks.
+      if Gem::Version.new(config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_s) < Gem::Version.new('15.0')
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
+    end
+  end
+end

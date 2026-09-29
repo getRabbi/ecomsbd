@@ -1,0 +1,189 @@
+# Codemagic: the ecomsbd iOS release.
+#
+# One workflow, started on demand (it has no triggers), that turns this
+# repository into a signed App Store IPA and uploads it to App Store Connect
+# for TestFlight. It never submits anything for review. Android is built and
+# signed locally and is not touched here.
+#
+# Set up in Codemagic, never committed:
+#   - Team integration `wtm_app_store_connect`: the team's App Store Connect
+#     API key. It signs, looks up the build number and uploads.
+#   - Environment group `ecomsbd_ios`, all secure:
+#       ECOMSBD_PRODUCTION_JSON_B64    base64 of apps/mobile_flutter/env/production.json
+#       GOOGLE_SERVICE_INFO_PLIST_B64  base64 of the Firebase iOS config for
+#                                      com.ecomsbd.app (project ecomsbd-11bdb)
+#       CERTIFICATE_PRIVATE_KEY        RSA key of the Apple Distribution
+#                                      certificate used for App Store signing
+#
+# The steps run cheapest-to-fail first: the App Store Connect app record and
+# code signing are settled before anything is compiled.
+
+workflows:
+  ios-release:
+    name: ecomsbd iOS release (App Store IPA to TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: wtm_app_store_connect
+    environment:
+      # The Flutter the app is developed and tested with.
+      flutter: 3.44.1
+      xcode: latest
+      cocoapods: default
+      groups:
+        - ecomsbd_ios
+      vars:
+        BUNDLE_ID: com.ecomsbd.app
+        APP_DIR: apps/mobile_flutter
+    scripts:
+      - name: App Store Connect app and next build number
+        script: |
+          set -euo pipefail
+          APP_ID=$(app-store-connect apps list \
+            --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+            | python3 -c 'import json,sys; s=sys.stdin.read().strip(); a=json.loads(s) if s else []; print(a[0]["id"] if a else "")')
+          if [ -z "$APP_ID" ]; then
+            echo "MANUAL_APP_RECORD_REQUIRED: App Store Connect has no app for $BUNDLE_ID." >&2
+            exit 1
+          fi
+          # Empty when the app has no build yet; then this is build 1.
+          LATEST=$(app-store-connect get-latest-build-number "$APP_ID" --platform IOS --all-versions)
+          if [ -z "$LATEST" ]; then BUILD_NUMBER=1; else BUILD_NUMBER=$((LATEST + 1)); fi
+          # The marketing version comes from pubspec; its +build is Android's.
+          BUILD_NAME=$(sed -n 's/^version: *\([0-9.]*\)+.*/\1/p' "$APP_DIR/pubspec.yaml")
+          {
+            echo "APP_STORE_APP_ID=$APP_ID"
+            echo "BUILD_NUMBER=$BUILD_NUMBER"
+            echo "BUILD_NAME=$BUILD_NAME"
+          } >> "$CM_ENV"
+          {
+            echo "app_store_app_id=$APP_ID"
+            echo "latest_uploaded_build=${LATEST:-none}"
+            echo "version=$BUILD_NAME"
+            echo "build_number=$BUILD_NUMBER"
+          } | tee "$CM_BUILD_DIR/ios-release-summary.txt"
+
+      # Reuses the Apple Distribution certificate whose key is
+      # CERTIFICATE_PRIVATE_KEY, creating it on first use, and the App Store
+      # profile for the bundle id (created with the App ID's capabilities).
+      - name: App Store code signing
+        script: |
+          set -euo pipefail
+          : "${CERTIFICATE_PRIVATE_KEY:?Set CERTIFICATE_PRIVATE_KEY in the ecomsbd_ios group}"
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS --type IOS_APP_STORE --strict-match-identifier --create
+          keychain add-certificates
+
+      - name: Production config and Firebase plist
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          : "${ECOMSBD_PRODUCTION_JSON_B64:?Set ECOMSBD_PRODUCTION_JSON_B64 in the ecomsbd_ios group}"
+          : "${GOOGLE_SERVICE_INFO_PLIST_B64:?Set GOOGLE_SERVICE_INFO_PLIST_B64 in the ecomsbd_ios group}"
+          echo "$ECOMSBD_PRODUCTION_JSON_B64" | base64 --decode > env/production.json
+          echo "$GOOGLE_SERVICE_INFO_PLIST_B64" | base64 --decode > ios/Runner/GoogleService-Info.plist
+          plutil -lint ios/Runner/GoogleService-Info.plist ios/Runner/Info.plist
+          # Fails the build, not a tester's phone. Prints no keys.
+          python3 - <<'PY'
+          import json, plistlib, sys
+
+          env = json.load(open("env/production.json"))
+          fire = plistlib.load(open("ios/Runner/GoogleService-Info.plist", "rb"))
+          info = plistlib.load(open("ios/Runner/Info.plist", "rb"))
+          problems = []
+          if env.get("ECOMSBD_API_BASE_URL") != "https://api.scalemyprints.com":
+              problems.append("ECOMSBD_API_BASE_URL is not the production API")
+          for key in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "GOOGLE_CLIENT_ID_WEB"):
+              if not env.get(key):
+                  problems.append(f"{key} is empty")
+          ios_client = info.get("GIDClientID", "")
+          if env.get("GOOGLE_CLIENT_ID_IOS") not in ("", None, ios_client):
+              problems.append("GOOGLE_CLIENT_ID_IOS differs from GIDClientID")
+          if ios_client.split("-")[0] != env.get("GOOGLE_CLIENT_ID_WEB", "").split("-")[0]:
+              problems.append("iOS and web Google clients are in different projects")
+          reversed_id = "com.googleusercontent.apps." + ios_client.removesuffix(
+              ".apps.googleusercontent.com"
+          )
+          schemes = [s for t in info["CFBundleURLTypes"] for s in t["CFBundleURLSchemes"]]
+          if reversed_id not in schemes:
+              problems.append("the Google reversed client id is not a URL scheme")
+          if fire.get("BUNDLE_ID") != "com.ecomsbd.app" or ":ios:" not in fire.get("GOOGLE_APP_ID", ""):
+              problems.append("GoogleService-Info.plist is not the com.ecomsbd.app iOS config")
+          if problems:
+              sys.exit("Config check failed: " + "; ".join(problems))
+          print("Config OK: production API, Firebase", fire["PROJECT_ID"], "iOS app for", fire["BUNDLE_ID"])
+          PY
+
+      - name: Flutter packages and generated code
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          flutter --version
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: CocoaPods and signing settings
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          flutter build ios --release --config-only --no-codesign \
+            --dart-define-from-file=env/production.json \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
+          xcode-project use-profiles --project ios/Runner.xcodeproj \
+            --export-options-plist "$HOME/export_options.plist"
+
+      - name: Build the signed IPA
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          flutter build ipa --release \
+            --dart-define-from-file=env/production.json \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --export-options-plist="$HOME/export_options.plist" \
+            2>&1 | tee "$CM_BUILD_DIR/flutter-build-ipa.log"
+
+      # Checks the signed bytes that will be uploaded, not the project.
+      - name: Verify the IPA
+        script: |
+          set -euo pipefail
+          IPA=$(ls "$APP_DIR"/build/ios/ipa/*.ipa | head -1)
+          WORK=$(mktemp -d)
+          unzip -q "$IPA" -d "$WORK"
+          APP=$(ls -d "$WORK"/Payload/*.app)
+          plist() { /usr/libexec/PlistBuddy -c "Print :$2" "$1"; }
+          security cms -D -i "$APP/embedded.mobileprovision" > "$WORK/profile.plist"
+          codesign -d --entitlements - --xml "$APP" > "$WORK/entitlements.plist" 2>/dev/null
+          AUTHORITY=$(codesign -dvv "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)
+          fail() { echo "IPA check failed: $1" >&2; exit 1; }
+          [ "$(plist "$APP/Info.plist" CFBundleIdentifier)" = "$BUNDLE_ID" ] || fail "bundle id"
+          [ "$(plist "$APP/Info.plist" CFBundleShortVersionString)" = "$BUILD_NAME" ] || fail "version"
+          [ "$(plist "$APP/Info.plist" CFBundleVersion)" = "$BUILD_NUMBER" ] || fail "build number"
+          [ "$(plist "$WORK/entitlements.plist" get-task-allow)" = "false" ] || fail "debuggable"
+          [ "$(plist "$WORK/entitlements.plist" aps-environment)" = "production" ] || fail "aps-environment"
+          [ "$(plist "$WORK/entitlements.plist" com.apple.developer.applesignin:0)" = "Default" ] || fail "Sign in with Apple"
+          if plist "$WORK/profile.plist" ProvisionedDevices >/dev/null 2>&1; then fail "not an App Store profile"; fi
+          case "$AUTHORITY" in "Apple Distribution"*|"iPhone Distribution"*) ;; *) fail "signed by $AUTHORITY" ;; esac
+          [ "$(plist "$APP/GoogleService-Info.plist" BUNDLE_ID)" = "$BUNDLE_ID" ] || fail "Firebase config"
+          [ -f "$APP/PrivacyInfo.xcprivacy" ] || fail "privacy manifest"
+          [ ! -d "$APP/Frameworks/DKImagePickerController.framework" ] || fail "photo picker compiled in"
+          {
+            echo "ipa=$(basename "$IPA") $(stat -f%z "$IPA") bytes sha256=$(shasum -a 256 "$IPA" | cut -d' ' -f1)"
+            echo "bundle_id=$BUNDLE_ID"
+            echo "signed_by=$AUTHORITY"
+            echo "profile=$(plist "$WORK/profile.plist" Name)"
+            echo "team=$(plist "$WORK/profile.plist" TeamIdentifier:0)"
+            echo "aps_environment=production get_task_allow=false sign_in_with_apple=Default"
+          } | tee -a "$CM_BUILD_DIR/ios-release-summary.txt"
+
+    artifacts:
+      - apps/mobile_flutter/build/ios/ipa/*.ipa
+      - apps/mobile_flutter/build/ios/archive/Runner.xcarchive/dSYMs/*.dSYM
+      - flutter-build-ipa.log
+      - ios-release-summary.txt
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Upload only. TestFlight beta review and App Review stay manual.
+        submit_to_testflight: false
+        submit_to_app_store: false

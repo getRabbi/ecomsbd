@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>ecomsbd</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<!-- The two languages the app ships (lib/l10n). Without this list iOS
+	     reports only English to Flutter, whatever the phone is set to. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>bn</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>ecomsbd</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<!-- Supabase email-confirmation and password-reset links
+		     (Env.authRedirectUrl, com.ecomsbd.app://auth/callback), the same
+		     scheme the Android intent filter handles. -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.ecomsbd.app.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.ecomsbd.app</string>
+			</array>
+		</dict>
+		<!-- Google Sign-In returns to the app on the iOS OAuth client's
+		     reversed id. That client (bundle com.ecomsbd.app) is in Google
+		     Cloud project 939255107253, the same project as the web client
+		     Supabase verifies (GOOGLE_CLIENT_ID_WEB, used as serverClientId). -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.ecomsbd.app.google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.939255107253-gi6clm3kdbr2a00qoekr9aor3mq1r2le</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- The iOS OAuth client id. Public, like the scheme above; Firebase's
+	     GoogleService-Info.plist carries none because sign-in is not in the
+	     Firebase project. -->
+	<key>GIDClientID</key>
+	<string>939255107253-gi6clm3kdbr2a00qoekr9aor3mq1r2le.apps.googleusercontent.com</string>
+	<!-- Only standard HTTPS/TLS, which is exempt: answers export compliance
+	     for every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<!-- Portrait only, as main.dart locks it: every screen is a
+	     single-column layout. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>

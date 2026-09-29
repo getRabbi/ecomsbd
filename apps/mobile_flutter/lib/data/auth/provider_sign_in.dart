@@ -70,6 +70,14 @@ ApiError providerSignInError(
 
 class NativeProviderSignIn implements ProviderSignIn {
   static Future<void>? _googleInitialization;
+
+  /// The raw nonce bound into Google ID tokens on iOS.
+  ///
+  /// The iOS Google SDK always puts a nonce in the ID token, and Supabase
+  /// rejects a token carrying a nonce it was not given. GoogleSignIn can be
+  /// initialized only once per process, so one nonce serves that process;
+  /// Supabase checks the token's nonce against the SHA-256 of this value.
+  static String? _googleNonce;
   String? _nonce;
   @override
   String? get nonce => _nonce;
@@ -97,14 +105,23 @@ class NativeProviderSignIn implements ProviderSignIn {
         }
         final google = GoogleSignIn.instance;
         try {
-          await (_googleInitialization ??= google.initialize(
-            serverClientId: Env.googleServerClientId,
-            clientId: _isApplePlatform && Env.googleIosClientId.isNotEmpty
-                ? Env.googleIosClientId
-                : null,
-          ));
+          await (_googleInitialization ??= () {
+            // Android sends no nonce; Supabase then checks only the audience.
+            _googleNonce = _isApplePlatform
+                ? Supabase.instance.client.auth.generateRawNonce()
+                : null;
+            return google.initialize(
+              serverClientId: Env.googleServerClientId,
+              // Null falls back to GIDClientID in ios/Runner/Info.plist.
+              clientId: _isApplePlatform && Env.googleIosClientId.isNotEmpty
+                  ? Env.googleIosClientId
+                  : null,
+              nonce: _googleNonce == null ? null : _sha256(_googleNonce!),
+            );
+          }());
         } on Object {
           _googleInitialization = null;
+          _googleNonce = null;
           rethrow;
         }
         if (!google.supportsAuthenticate()) {
@@ -112,6 +129,7 @@ class NativeProviderSignIn implements ProviderSignIn {
         }
         final account = await google.authenticate();
         token = account.authentication.idToken;
+        _nonce = _googleNonce;
       } else {
         // Android is handled by Supabase's hosted PKCE flow in AuthController.
         if (!_isApplePlatform || !await SignInWithApple.isAvailable()) {
@@ -119,7 +137,7 @@ class NativeProviderSignIn implements ProviderSignIn {
         }
         _nonce = Supabase.instance.client.auth.generateRawNonce();
         final credential = await SignInWithApple.getAppleIDCredential(
-          nonce: sha256.convert(utf8.encode(_nonce!)).toString(),
+          nonce: _sha256(_nonce!),
           scopes: const [AppleIDAuthorizationScopes.email],
         );
         token = credential.identityToken;
@@ -160,6 +178,10 @@ class NativeProviderSignIn implements ProviderSignIn {
       throw providerSignInError(provider);
     }
   }
+
+  /// What the provider embeds in the ID token; Supabase gets the raw value.
+  static String _sha256(String rawNonce) =>
+      sha256.convert(utf8.encode(rawNonce)).toString();
 
   @override
   Future<void> signOut() async {
