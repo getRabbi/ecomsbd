@@ -86,6 +86,7 @@ export default function SettingsPage() {
         <div style={{ marginTop: 18 }}>
           <Card title={t('legal.title')}>
             <Link className="btn" href={locale === 'bn' ? '/privacy-policy/bn' : '/privacy-policy'}>{t('legal.privacy')}</Link>
+            <Link className="btn" style={{ margin: '8px 0 0 8px' }} href={locale === 'bn' ? '/account-deletion/bn' : '/account-deletion'}>{t('legal.deletion')}</Link>
           </Card>
         </div>
       </div>

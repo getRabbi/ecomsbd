@@ -1,8 +1,9 @@
 # Public privacy policy audit — 29 September 2026
 
-**Draft: do not merge/publish until a real privacy contact has been added to
-both language versions and production DNS is corrected.** There is currently
-no contact section; the draft's contact references must be resolved before release.
+The operator confirmed `uprightseo24@gmail.com` as the monitored privacy,
+support and deletion contact. Both languages now include that address and a
+public, email-based account-deletion request resource. No company/legal entity
+name has been invented. Publication status is recorded below.
 
 Scope: `com.ecomsbd.app`, the current Next.js web client, FastAPI/worker data
 paths, and read-only production provider configuration. Historical `PRIVACY.md`
@@ -57,27 +58,32 @@ The owner should review retention and erasure coverage separately before
 declaring full Google Play account-deletion compliance. Merely disclosing a
 software gap does not establish a valid reason to retain every affected field.
 
-## Publication prerequisites
+## Publication and account-deletion request resource
 
-- A monitored privacy/support contact is absent from tracked app/docs and from
-  `SUPPORT_EMAIL` in the production secret group. Obtain it from the operator;
-  never invent an address or repurpose a Git commit author's address.
+- The confirmed privacy/support/deletion email is `uprightseo24@gmail.com`.
+  Public pages share this value in `apps/web/lib/legal.ts`. The privacy contact
+  section discloses that Google (Gmail) handles messages sent to the mailbox.
 - No legal company name, postal address or DPO was established. The policy
   identifies the app by its actual product name. Do not fabricate an entity.
 - Play Console target-age settings are not in the repo. Ask the operator to
   confirm them. Use a business-service/not-directed-to-children statement
   without an invented numeric age threshold.
-- `https://scalemyprints.com/privacy-policy` currently returns Cloudflare 403,
-  “DNS points to prohibited IP”. The saved Cloudflare API credential is rejected.
+- The initial public URL check returned Cloudflare 403, “DNS points to prohibited
+  IP”. The configured Cloudflare token was verified as expired, and Wrangler
+  had no active sign-in. This is a DNS origin problem, not a WAF rule to disable.
   The Vercel project initially had only `ecomsbd-web.vercel.app` assigned.
   `scalemyprints.com` has now been added to that existing project, verified,
   with no redirect. Vercel still reports DNS misconfiguration. Its recommended
   apex CNAME target is `3a4bb86386d4f59a.vercel-dns-017.com` (Cloudflare supports
   apex flattening); the operator must correct the existing apex record using
   valid Cloudflare access. Do not replace unrelated API/MX/TXT records.
-- A separate public account-deletion request resource is still needed. This
-  policy route only publishes information and does not submit deletion requests.
-  Do not paste it into Play Console as a deletion endpoint.
+- `/account-deletion` and `/account-deletion/bn` provide a public request path
+  through the monitored email, including the subject, required account/shop
+  details, identity/authority verification, in-app option, removal categories
+  and honest retention limits. No login or reinstallation is required to email
+  a request. Clicking the mailto link opens a compose window; sending the email
+  submits the request. It does not silently delete an account. Use this URL,
+  not the privacy-policy URL, for Play's account-deletion URL field.
 
 Google's current requirements were checked against its
 [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en)
@@ -86,7 +92,7 @@ Publication of a privacy URL alone does not certify all Data safety/deletion dec
 
 ## Web implementation and review
 
-The routes `/privacy-policy` and `/privacy-policy/bn` are server components
+The privacy and account-deletion routes, including their Bangla versions, are server components
 outside the authenticated `(app)` layout. Both languages render complete HTML
 with real anchor links and language URLs, requiring no JavaScript to read or
 switch language. App UI links reuse the existing English/Bangla catalogues;
@@ -95,15 +101,23 @@ a localization refactor. Metadata includes canonical/alternate URLs and permits
 indexing on these public routes.
 
 Links are added to the signed-out web footer, web sidebar footer, web Settings
-and mobile Settings → Your data and privacy. `url_launcher`, already present
+and mobile Settings → Your data and privacy. Account-deletion help is linked
+from web Legal settings, the public footer, the privacy policy and the mobile
+account-closing section. `url_launcher`, already present
 transitively, is declared directly for opening the policy in the device browser.
 No business behavior is changed. The mobile link ships with the next app build.
 
 Validation completed locally: web typecheck, lint and production build passed
-(build used the existing public production Supabase/API configuration). Both
-policy URLs returned 200 from the production build, logged out, at 390px and
-1440px widths with JavaScript both enabled and disabled. Language navigation,
-section anchors, package identity, visible date and overflow checks passed;
-there were no browser page errors. The signed-out footer link passed. Focused
-Flutter analysis of the changed privacy screen passed; no backend/mobile full
-suite was run. The live target has not passed: it returns Cloudflare 403.
+(build used the existing public production Supabase/API configuration). On the
+final contact/deletion-page revision, direct HTTP checks of all four language
+URLs returned 200, without login, cookies, redirects or JavaScript. Visible
+email, mailto links, language links and section anchors passed; there were no
+placeholder strings or old package references. Desktop (1440px) and mobile
+(390px) rendering was inspected with JavaScript disabled and no horizontal
+overflow. No backend or mobile suite was run for the final revision.
+
+Cloudflare's token-verification API still reports the configured token as
+`expired`. The apex record cannot be inspected or corrected with that token.
+No firewall, WAF, bot-protection or other unrelated security setting was changed.
+Correcting the apex DNS record needs renewed zone-scoped DNS access; passing
+application checks alone does not make the custom-domain URLs ready for Play.

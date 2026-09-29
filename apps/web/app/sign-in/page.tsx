@@ -151,6 +151,7 @@ export default function SignInPage() {
         </Card>
         <footer style={{ marginTop: 24, textAlign: 'center' }}>
           <Link href="/privacy-policy" className="btn btn--ghost btn--sm">{t('legal.privacy')}</Link>
+          <Link href="/account-deletion" className="btn btn--ghost btn--sm">{t('legal.deletion')}</Link>
         </footer>
       </div>
     </main>

@@ -2199,8 +2199,8 @@ const Map<String, String> _secEn = <String, String>{
   'priv.stayOpen': 'Your account will stay open.',
   'priv.title': 'Your data',
   'priv.policy': 'Privacy Policy',
-  'priv.policyOpenError':
-      'Could not open the policy. Visit scalemyprints.com/privacy-policy in your browser.',
+  'priv.deletionHelp': 'Account deletion help or email request',
+  'priv.legalOpenError': 'Could not open the page. Visit {url} in your browser.',
   'priv.willClose': 'Your account will close',
   'prod.add': 'Add product',
   'prod.description':
@@ -3027,8 +3027,8 @@ const Map<String, String> _secBn = <String, String>{
   'priv.stayOpen': 'আপনার অ্যাকাউন্ট খোলা থাকবে।',
   'priv.title': 'আপনার তথ্য',
   'priv.policy': 'গোপনীয়তা নীতি',
-  'priv.policyOpenError':
-      'নীতিটি খোলা যায়নি। ব্রাউজারে scalemyprints.com/privacy-policy দেখুন।',
+  'priv.deletionHelp': 'অ্যাকাউন্ট মুছে ফেলার সহায়তা বা ইমেইলে অনুরোধ',
+  'priv.legalOpenError': 'পৃষ্ঠাটি খোলা যায়নি। ব্রাউজারে {url} দেখুন।',
   'priv.willClose': 'আপনার অ্যাকাউন্ট বন্ধ হবে',
   'prod.add': 'প্রোডাক্ট যোগ করুন',
   'prod.description':

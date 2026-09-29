@@ -30,6 +30,12 @@
 .footer { max-width: 1184px; margin: auto; padding: 26px 32px; display: flex; flex-wrap: wrap; gap: 16px 28px; border-top: 1px solid var(--stroke); color: var(--muted); font-size: 13px; }
 .footer span { margin-right: auto; }
 .footer a { text-decoration: underline; text-underline-offset: 3px; }
+.deletionMain { max-width: 900px; }
+.steps { color: #374351; font-size: 16px; line-height: 1.85; padding-left: 24px; }
+.steps li + li { margin-top: 12px; }
+.requestContact { display: flex; align-items: flex-start; flex-direction: column; gap: 16px; padding: 22px; margin: 20px 0; background: var(--brand-soft); border: 1px solid var(--stroke); border-radius: var(--radius); }
+.requestContact > a:first-child { font-size: clamp(16px, 3vw, 21px); font-weight: 650; }
+.requestContact .requestButton { display: inline-block; padding: 12px 18px; color: white; background: var(--brand-ink); border-radius: 8px; text-decoration: none; font-weight: 600; }
 @media (max-width: 850px) {
   .layout { grid-template-columns: 1fr; gap: 28px; }
   .contents { position: static; }
@@ -47,6 +53,7 @@
   .article { padding: 0 20px 26px; }
   .article h2 { font-size: 20px; }
   .article p { font-size: 15px; }
+  .steps { font-size: 15px; }
   .footer { padding: 24px 20px; }
 }
 @media print {

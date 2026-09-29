@@ -104,6 +104,7 @@ export const strings = {
     'common.nothingHere': 'Nothing here yet',
     'common.language': 'Language',
     'legal.privacy': 'Privacy Policy',
+    'legal.deletion': 'Account deletion help',
     'legal.title': 'Legal',
 
     'orders.title': 'Orders',
@@ -736,6 +737,7 @@ export const strings = {
     'common.nothingHere': 'এখনও কিছু নেই',
     'common.language': 'ভাষা',
     'legal.privacy': 'গোপনীয়তা নীতি',
+    'legal.deletion': 'অ্যাকাউন্ট মুছে ফেলার সহায়তা',
     'legal.title': 'আইনি তথ্য',
 
     'orders.title': 'অর্ডার',

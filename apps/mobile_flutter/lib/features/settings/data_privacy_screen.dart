@@ -37,6 +37,30 @@ class DataPrivacyScreen extends ConsumerWidget {
         (kind: 'PROFIT_SUMMARY', labelKey: 'priv.profitSummary'),
       ];
 
+  Future<void> _openLegalPage(BuildContext context, String path) async {
+    final localizedPath = AppStrings.of(context).locale == AppLocale.bn
+        ? '$path/bn'
+        : path;
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.https('scalemyprints.com', localizedPath),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      // Keep the address available when no browser can open it.
+    }
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('priv.legalOpenError', <String, Object?>{
+            'url': 'https://scalemyprints.com$localizedPath',
+          })),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final privacy = ref.watch(privacyStatusProvider);
@@ -77,32 +101,7 @@ class DataPrivacyScreen extends ConsumerWidget {
                     title: Text(context.tr('priv.policy')),
                     subtitle: const Text('scalemyprints.com/privacy-policy'),
                     trailing: const Icon(Icons.open_in_new_rounded),
-                    onTap: () async {
-                      final path = AppStrings.of(context).locale == AppLocale.bn
-                          ? '/privacy-policy/bn'
-                          : '/privacy-policy';
-                      try {
-                        final opened = await launchUrl(
-                          Uri.https('scalemyprints.com', path),
-                          mode: LaunchMode.externalApplication,
-                        );
-                        if (!opened && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(context.tr('priv.policyOpenError')),
-                            ),
-                          );
-                        }
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(context.tr('priv.policyOpenError')),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                    onTap: () => _openLegalPage(context, '/privacy-policy'),
                   ),
                 ),
 
@@ -113,6 +112,11 @@ class DataPrivacyScreen extends ConsumerWidget {
                 const _ExportSection(kinds: _exports),
 
                 SectionHeader(title: context.tr('priv.closingAccount')),
+                TextButton.icon(
+                  onPressed: () => _openLegalPage(context, '/account-deletion'),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: Text(context.tr('priv.deletionHelp')),
+                ),
                 privacy.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(EcomsbdSpacing.lg),
