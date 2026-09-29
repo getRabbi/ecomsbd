@@ -116,6 +116,9 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar__footer">
+        <Link href={locale === 'bn' ? '/privacy-policy/bn' : '/privacy-policy'} className="btn btn--ghost btn--sm">
+          {t('legal.privacy')}
+        </Link>
         <label className="field" style={{ marginBottom: 8 }}>
           <span className="field__label">{t('common.language')}</span>
           <select

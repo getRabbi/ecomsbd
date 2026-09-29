@@ -103,6 +103,9 @@ export const strings = {
     'common.couldNotLoad': 'Could not load this.',
     'common.nothingHere': 'Nothing here yet',
     'common.language': 'Language',
+    'legal.privacy': 'Privacy Policy',
+    'legal.deletion': 'Account deletion help',
+    'legal.title': 'Legal',
 
     'orders.title': 'Orders',
     'orders.subtitle': 'Every order in your shop, newest first.',
@@ -733,6 +736,9 @@ export const strings = {
     'common.couldNotLoad': 'এটি লোড করা যায়নি।',
     'common.nothingHere': 'এখনও কিছু নেই',
     'common.language': 'ভাষা',
+    'legal.privacy': 'গোপনীয়তা নীতি',
+    'legal.deletion': 'অ্যাকাউন্ট মুছে ফেলার সহায়তা',
+    'legal.title': 'আইনি তথ্য',
 
     'orders.title': 'অর্ডার',
     'orders.subtitle': 'আপনার দোকানের সব অর্ডার, নতুনগুলো আগে।',

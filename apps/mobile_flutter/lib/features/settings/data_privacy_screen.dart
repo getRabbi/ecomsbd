@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_error.dart';
 import '../../data/account/models.dart';
@@ -12,6 +13,7 @@ import '../billing/plans_screen.dart' show formatDay;
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
 import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
 
 /// Export your data, or close your account.
 ///
@@ -34,6 +36,30 @@ class DataPrivacyScreen extends ConsumerWidget {
         (kind: 'RECONCILIATION', labelKey: 'priv.codReconciliation'),
         (kind: 'PROFIT_SUMMARY', labelKey: 'priv.profitSummary'),
       ];
+
+  Future<void> _openLegalPage(BuildContext context, String path) async {
+    final localizedPath = AppStrings.of(context).locale == AppLocale.bn
+        ? '$path/bn'
+        : path;
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.https('scalemyprints.com', localizedPath),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      // Keep the address available when no browser can open it.
+    }
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('priv.legalOpenError', <String, Object?>{
+            'url': 'https://scalemyprints.com$localizedPath',
+          })),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,6 +94,17 @@ class DataPrivacyScreen extends ConsumerWidget {
                   ],
                 ),
 
+                GlassCard(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.policy_outlined),
+                    title: Text(context.tr('priv.policy')),
+                    subtitle: const Text('scalemyprints.com/privacy-policy'),
+                    trailing: const Icon(Icons.open_in_new_rounded),
+                    onTap: () => _openLegalPage(context, '/privacy-policy'),
+                  ),
+                ),
+
                 SectionHeader(
                   title: context.tr('priv.export'),
                   subtitle: context.tr('priv.exportSub'),
@@ -75,6 +112,11 @@ class DataPrivacyScreen extends ConsumerWidget {
                 const _ExportSection(kinds: _exports),
 
                 SectionHeader(title: context.tr('priv.closingAccount')),
+                TextButton.icon(
+                  onPressed: () => _openLegalPage(context, '/account-deletion'),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: Text(context.tr('priv.deletionHelp')),
+                ),
                 privacy.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(EcomsbdSpacing.lg),
