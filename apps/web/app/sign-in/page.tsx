@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 
 import { Card } from '@/components/ui';
@@ -148,6 +149,9 @@ export default function SignInPage() {
             </button>
           </form>
         </Card>
+        <footer style={{ marginTop: 24, textAlign: 'center' }}>
+          <Link href="/privacy-policy" className="btn btn--ghost btn--sm">{t('legal.privacy')}</Link>
+        </footer>
       </div>
     </main>
   );

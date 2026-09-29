@@ -36,7 +36,7 @@ interface Tenant {
  * seller can read off the screen they are already on.
  */
 export default function SettingsPage() {
-  const { t } = useSession();
+  const { t, locale } = useSession();
   const { data, loading, error, reload } = useApi<Tenant>('/tenant');
 
   return (
@@ -81,6 +81,11 @@ export default function SettingsPage() {
         <div style={{ marginTop: 18 }}>
           <Card title={t('rp.title')} hint={t('rp.subtitle')}>
             <Link className="btn" href="/settings/risk-provider">{t('nav.riskProvider')}</Link>
+          </Card>
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <Card title={t('legal.title')}>
+            <Link className="btn" href={locale === 'bn' ? '/privacy-policy/bn' : '/privacy-policy'}>{t('legal.privacy')}</Link>
           </Card>
         </div>
       </div>

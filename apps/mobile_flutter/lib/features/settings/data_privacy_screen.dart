@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_error.dart';
 import '../../data/account/models.dart';
@@ -12,6 +13,7 @@ import '../billing/plans_screen.dart' show formatDay;
 import '../shared/responsive.dart';
 import 'settings_screen.dart' show SettingsError;
 import '../../l10n/app_strings.dart';
+import '../../l10n/app_locale.dart';
 
 /// Export your data, or close your account.
 ///
@@ -66,6 +68,42 @@ class DataPrivacyScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+
+                GlassCard(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.policy_outlined),
+                    title: Text(context.tr('priv.policy')),
+                    subtitle: const Text('scalemyprints.com/privacy-policy'),
+                    trailing: const Icon(Icons.open_in_new_rounded),
+                    onTap: () async {
+                      final path = AppStrings.of(context).locale == AppLocale.bn
+                          ? '/privacy-policy/bn'
+                          : '/privacy-policy';
+                      try {
+                        final opened = await launchUrl(
+                          Uri.https('scalemyprints.com', path),
+                          mode: LaunchMode.externalApplication,
+                        );
+                        if (!opened && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(context.tr('priv.policyOpenError')),
+                            ),
+                          );
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(context.tr('priv.policyOpenError')),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
                 ),
 
                 SectionHeader(

@@ -2198,6 +2198,9 @@ const Map<String, String> _secEn = <String, String>{
   'priv.removedPermanently': 'Permanently removed',
   'priv.stayOpen': 'Your account will stay open.',
   'priv.title': 'Your data',
+  'priv.policy': 'Privacy Policy',
+  'priv.policyOpenError':
+      'Could not open the policy. Visit scalemyprints.com/privacy-policy in your browser.',
   'priv.willClose': 'Your account will close',
   'prod.add': 'Add product',
   'prod.description':
@@ -3023,6 +3026,9 @@ const Map<String, String> _secBn = <String, String>{
   'priv.removedPermanently': 'একেবারে মুছে ফেলা হবে',
   'priv.stayOpen': 'আপনার অ্যাকাউন্ট খোলা থাকবে।',
   'priv.title': 'আপনার তথ্য',
+  'priv.policy': 'গোপনীয়তা নীতি',
+  'priv.policyOpenError':
+      'নীতিটি খোলা যায়নি। ব্রাউজারে scalemyprints.com/privacy-policy দেখুন।',
   'priv.willClose': 'আপনার অ্যাকাউন্ট বন্ধ হবে',
   'prod.add': 'প্রোডাক্ট যোগ করুন',
   'prod.description':
