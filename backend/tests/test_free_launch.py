@@ -11,14 +11,18 @@ from app.entitlements.catalog import UNLIMITED, Entitlement, PlanCode
 from app.entitlements.service import EntitlementService
 from app.tenants.models import TenantUser
 from tests.conftest_commerce import create_order, signed_in_shop
+from tests.integrations_fakes import live_settings
 from tests.test_auth_flow import auth_header
 from tests.test_entitlements import _subscription, _tenant
 
 
 @pytest.fixture(autouse=True)
 def launch(settings, monkeypatch):
-    monkeypatch.setattr(settings, "free_launch_mode", True)
-    monkeypatch.setattr(settings, "billing_enabled", False)
+    # Services built here take the session fixture; HTTP routes read the live
+    # settings, which differ once another suite has reset the cache.
+    for target in (settings, live_settings()):
+        monkeypatch.setattr(target, "free_launch_mode", True)
+        monkeypatch.setattr(target, "billing_enabled", False)
 
 
 @pytest.mark.parametrize("plan", list(PlanCode))
@@ -70,9 +74,8 @@ async def test_safety_cap_remains_and_reversal_reuses_usage(system_db, settings,
     assert orders.used == 21 and orders.limit == 20
 
 
-async def test_free_seller_402_bypass_and_configuration_reversal(
-    client, unique_phone, settings, monkeypatch
-):
+async def test_free_seller_402_bypass_and_configuration_reversal(client, unique_phone, monkeypatch):
+    settings = live_settings()
     shop = await signed_in_shop(client, unique_phone)
     headers = auth_header(shop)
     snapshot = (await client.get("/v1/billing/entitlements", headers=headers)).json()
@@ -109,7 +112,8 @@ async def test_auth_rbac_and_tenant_isolation_remain(client, unique_phone):
     ).status_code == 403
 
 
-async def test_external_setup_and_billing_gates_remain(client, unique_phone, settings, monkeypatch):
+async def test_external_setup_and_billing_gates_remain(client, unique_phone, monkeypatch):
+    settings = live_settings()
     shop = await signed_in_shop(client, unique_phone)
     headers = auth_header(shop)
     order = (await create_order(client, shop))["order"]
