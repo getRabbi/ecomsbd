@@ -18,9 +18,14 @@ export '../data/fake_api.dart';
 /// proves the widget renders a list, not that the app talks to the API it
 /// actually ships against.
 class CommerceHarness {
-  CommerceHarness() : db = EcomsbdDatabase.memory(), _fake = buildFakeApi() {
+  CommerceHarness({this.extraOverrides = const <Override>[]})
+    : db = EcomsbdDatabase.memory(),
+      _fake = buildFakeApi() {
     adapter = _fake.adapter;
   }
+
+  /// Screen-specific fakes, such as a platform sign-in sheet.
+  final List<Override> extraOverrides;
 
   final EcomsbdDatabase db;
   final ({dynamic client, FakeApiAdapter adapter}) _fake;
@@ -36,6 +41,7 @@ class CommerceHarness {
     // Home shows the shop name, which the real provider reads from the auth
     // controller, and that needs a live Supabase client.
     shopNameProvider.overrideWithValue('Test shop'),
+    ...extraOverrides,
   ];
 
   Future<void> dispose() => db.close();

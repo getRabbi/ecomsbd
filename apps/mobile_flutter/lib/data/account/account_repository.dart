@@ -78,9 +78,13 @@ class AccountRepository {
   /// says — the guard that matters is the ownership re-check and the
   /// cooling-off window — but requiring it makes the action deliberate rather
   /// than a mis-tap on the one screen that cannot be undone by tapping again.
+  ///
+  /// [appleAuthorizationCode] lets the server revoke a Sign in with Apple
+  /// seller's Apple tokens; see `apple_deletion_authorization.dart`.
   Future<DeletionSchedule> requestDeletion({
     required String confirm,
     String? reason,
+    String? appleAuthorizationCode,
   }) async {
     return DeletionSchedule.fromJson(
       await _api.post(
@@ -88,6 +92,8 @@ class AccountRepository {
         body: <String, dynamic>{
           'confirm': confirm,
           if (reason != null && reason.isNotEmpty) 'reason': reason,
+          if (appleAuthorizationCode != null)
+            'apple_authorization_code': appleAuthorizationCode,
         },
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:ecomsbd/data/account/apple_deletion_authorization.dart';
 import 'package:ecomsbd/features/billing/plans_screen.dart';
 import 'package:ecomsbd/features/settings/account_security_screen.dart';
 import 'package:ecomsbd/features/settings/data_privacy_screen.dart';
@@ -365,6 +366,39 @@ void main() {
       expect(confirm.onPressed, isNull);
     });
 
+    testWidgets('an Apple seller sends a fresh code with the request', (
+      tester,
+    ) async {
+      final harness = _deletionHarness(() async => 'apple-code');
+      await _closeAccount(tester, harness);
+
+      final sent = harness.adapter.to('POST', '/account/delete');
+      expect(sent, hasLength(1));
+      expect(sent.single.jsonBody, <String, dynamic>{
+        'confirm': 'CLOSE',
+        'apple_authorization_code': 'apple-code',
+      });
+    });
+
+    testWidgets('dismissing the Apple sheet closes nothing', (tester) async {
+      final harness = _deletionHarness(
+        () async => throw const AppleDeletionCancelled(),
+      );
+      await _closeAccount(tester, harness);
+
+      expect(harness.adapter.to('POST', '/account/delete'), isEmpty);
+    });
+
+    testWidgets('other sellers send no Apple code', (tester) async {
+      final harness = _deletionHarness(() async => null);
+      await _closeAccount(tester, harness);
+
+      expect(
+        harness.adapter.to('POST', '/account/delete').single.jsonBody,
+        <String, dynamic>{'confirm': 'CLOSE'},
+      );
+    });
+
     testWidgets('a scheduled deletion offers to keep the account', (
       tester,
     ) async {
@@ -548,6 +582,35 @@ Map<String, dynamic> _preferencesJson() {
     'push_transport_available': false,
     'sms_transport_available': false,
   };
+}
+
+CommerceHarness _deletionHarness(AppleDeletionAuthorizer apple) {
+  return CommerceHarness(
+      extraOverrides: [
+        appleDeletionAuthorizerProvider.overrideWithValue(apple),
+      ],
+    )
+    ..adapter.onJson('GET', '/account/privacy', _privacyJson())
+    ..adapter.onJson('GET', '/exports', <Map<String, dynamic>>[])
+    ..adapter.onJson('POST', '/account/delete', <String, dynamic>{
+      'status': 'SCHEDULED',
+      'scheduled_for': '2026-10-14T00:00:00Z',
+      'grace_days': 14,
+      'retention_note': 'Kept in anonymised form.',
+    });
+}
+
+/// Types the confirmation and closes the account.
+Future<void> _closeAccount(WidgetTester tester, CommerceHarness harness) async {
+  await pumpCommerceScreen(tester, const DataPrivacyScreen(), harness: harness);
+  await tester.drag(find.byType(ListView), const Offset(0, -900));
+  await settle(tester);
+  await tester.tap(find.text('Close my account'));
+  await settle(tester);
+  await tester.enterText(find.byType(TextField), 'CLOSE');
+  await settle(tester);
+  await tester.tap(find.widgetWithText(FilledButton, 'Close my account'));
+  await settle(tester);
 }
 
 Map<String, dynamic> _privacyJson({

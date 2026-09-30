@@ -40,6 +40,7 @@ from app.api.deps import (
     get_hasher,
     require_permission,
 )
+from app.auth.apple_revocation import revoke_apple_authorization
 from app.auth.models import AuthSession, Device, RevocationReason
 from app.common.audit import AuditAction, record_audit
 from app.core.clock import utc_now
@@ -402,6 +403,9 @@ class DeleteAccountPayload(BaseModel):
     #: Typed by the seller. A destructive, irreversible action gets a
     #: deliberate confirmation, not a checkbox.
     confirm: str = Field(min_length=1, max_length=200)
+    #: A fresh Sign in with Apple authorization code, sent by the iOS app when
+    #: the seller signed in with Apple, so their Apple tokens can be revoked.
+    apple_authorization_code: str | None = Field(default=None, min_length=1, max_length=1000)
 
 
 class DeletionRequestResponse(BaseModel):
@@ -446,18 +450,34 @@ async def request_deletion(
     payload: DeleteAccountPayload,
     principal: TenantPrincipal,
     db: DbSession,
+    settings: SettingsDep,
 ) -> DeletionRequestResponse:
     """Schedule deletion after a cooling-off period.
 
     Ownership is re-verified against the membership table inside the service —
     the token's role claim is not enough for the one irreversible action in the
     product.
+
+    A seller who signed in with Apple also has their Apple tokens revoked, once
+    the request is accepted (App Store Review Guideline 5.1.1(v)). That is best
+    effort and audited: Apple being unreachable does not block the deletion.
     """
+    tenant_id = principal.require_tenant()
     request = await PrivacyService(db).request_deletion(
-        tenant_id=principal.require_tenant(),
+        tenant_id=tenant_id,
         user_id=principal.user_id,
         reason=payload.reason,
     )
+    if payload.apple_authorization_code:
+        outcome = await revoke_apple_authorization(payload.apple_authorization_code, settings)
+        await record_audit(
+            db,
+            AuditAction.APPLE_AUTHORIZATION_REVOKED,
+            entity_type="user",
+            entity_id=principal.user_id,
+            context={"outcome": str(outcome)},
+            tenant_id=tenant_id,
+        )
     return DeletionRequestResponse(
         status=request.status,
         scheduled_for=request.scheduled_for,
