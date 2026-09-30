@@ -4,9 +4,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
-/// Android Firebase reads the app-module google-services configuration.
+bool get _isIos => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+/// Firebase reads android/app/google-services.json on Android and the
+/// GoogleService-Info.plist bundled into the iOS Runner on iOS.
 Future<void> initializePush() async {
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
     await Firebase.initializeApp();
   }
 }
@@ -18,15 +23,28 @@ class PushRegistration {
   Future<String?> token() async {
     if (!_available) return null;
     try {
-      final permission = await FirebaseMessaging.instance.requestPermission();
+      final messaging = FirebaseMessaging.instance;
+      final permission = await messaging.requestPermission();
       if (permission.authorizationStatus == AuthorizationStatus.denied) {
         return null;
       }
-      return await FirebaseMessaging.instance.getToken();
+      // iOS mints an FCM token only once APNs has issued the device token,
+      // and asking before that throws. If APNs is slow, onTokenRefresh
+      // delivers the token when it arrives.
+      if (_isIos && !await _apnsTokenReady(messaging)) return null;
+      return await messaging.getToken();
     } on FirebaseException {
       // Push is optional; the authenticated notification centre remains available.
       return null;
     }
+  }
+
+  static Future<bool> _apnsTokenReady(FirebaseMessaging messaging) async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      if (await messaging.getAPNSToken() != null) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return false;
   }
 
   void listen(Future<void> Function(String) register) {

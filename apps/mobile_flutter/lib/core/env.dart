@@ -31,8 +31,11 @@ class Env {
   // Keep this aligned with the backend flag. Off unless explicitly enabled.
   static const bool phoneOtpLoginEnabled = false;
 
-  // Apple launch is deferred until the iOS runner/provider work is complete.
-  static const bool appleSignInEnabled = false;
+  /// Native Sign in with Apple, offered on iOS only. Android has no native
+  /// Apple sign-in, and its hosted fallback needs an Apple Services ID that
+  /// is not configured, so the button stays off there.
+  static bool get appleSignInEnabled =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   // Public OAuth identifiers, never client secrets. Android uses the web
   // client id as serverClientId so the ID token is minted for the backend.

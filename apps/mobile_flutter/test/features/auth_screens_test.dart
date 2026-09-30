@@ -1,7 +1,9 @@
 import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/data/auth/auth_controller.dart';
+import 'package:ecomsbd/data/auth/provider_sign_in.dart';
 import 'package:ecomsbd/features/auth/email_auth_screen.dart';
 import 'package:ecomsbd/features/auth/verification_screen.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ecomsbd/l10n/app_strings.dart';
@@ -50,6 +52,25 @@ void main() {
       expect(find.textContaining('phone', findRichText: true), findsNothing);
     },
   );
+
+  testWidgets('iOS login adds Sign in with Apple beside Google and email', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await show(tester, const EmailAuthScreen());
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      expect(find.textContaining('Google'), findsWidgets);
+      expect(find.byKey(const Key('auth-apple')), findsOneWidget);
+      expect(find.text('Continue with Apple'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('auth-apple')));
+      await tester.pumpAndSettle();
+      expect(h.provider.requested, <SignInProvider>[SignInProvider.apple]);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('confirmation remains signed out and supports Supabase resend', (
     tester,

@@ -145,6 +145,8 @@ class AuditAction(StrEnum):
     ACCOUNT_DELETION_REQUESTED = "privacy.account_deletion_requested"
     ACCOUNT_DELETION_CANCELLED = "privacy.account_deletion_cancelled"
     ACCOUNT_DELETION_EXECUTED = "privacy.account_deletion_executed"
+    #: Sign in with Apple tokens revoked (or not) when deletion was requested.
+    APPLE_AUTHORIZATION_REVOKED = "privacy.apple_authorization_revoked"
     DEVICE_REVOKED = "auth.device_revoked"
 
     # Operations (phase F, sections 45, 49)

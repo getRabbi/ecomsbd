@@ -276,11 +276,7 @@ class AuthRepository implements SessionProvider {
         '/auth/device',
         body: {
           'install_id': await _tokens.installId(() => const Uuid().v4()),
-          'platform': !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-              ? 'ANDROID'
-              : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-              ? 'IOS'
-              : 'UNKNOWN',
+          'platform': _devicePlatform,
           if (token != null) 'push_token': token,
         },
       );
@@ -293,6 +289,17 @@ class AuthRepository implements SessionProvider {
     }
   }
 
+  /// The platform the API records for this device and its push token. A
+  /// refreshed token must not relabel an iPhone as Android.
+  static String get _devicePlatform {
+    if (kIsWeb) return 'UNKNOWN';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'ANDROID',
+      TargetPlatform.iOS => 'IOS',
+      _ => 'UNKNOWN',
+    };
+  }
+
   Future<void> _registerPush(String token) async {
     if (_auth.currentSession == null || _deviceSessionId == null) return;
     try {
@@ -300,7 +307,7 @@ class AuthRepository implements SessionProvider {
         '/auth/device',
         body: {
           'install_id': await _tokens.installId(() => const Uuid().v4()),
-          'platform': 'ANDROID',
+          'platform': _devicePlatform,
           'push_token': token,
         },
       );

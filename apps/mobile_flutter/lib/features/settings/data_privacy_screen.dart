@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_error.dart';
+import '../../data/account/apple_deletion_authorization.dart';
 import '../../data/account/models.dart';
 import '../../data/billing/billing_providers.dart';
 import '../../design/components/badges.dart';
@@ -53,9 +54,11 @@ class DataPrivacyScreen extends ConsumerWidget {
     if (!opened && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.tr('priv.legalOpenError', <String, Object?>{
-            'url': 'https://scalemyprints.com$localizedPath',
-          })),
+          content: Text(
+            context.tr('priv.legalOpenError', <String, Object?>{
+              'url': 'https://scalemyprints.com$localizedPath',
+            }),
+          ),
         ),
       );
     }
@@ -95,13 +98,18 @@ class DataPrivacyScreen extends ConsumerWidget {
                 ),
 
                 GlassCard(
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.policy_outlined),
-                    title: Text(context.tr('priv.policy')),
-                    subtitle: const Text('scalemyprints.com/privacy-policy'),
-                    trailing: const Icon(Icons.open_in_new_rounded),
-                    onTap: () => _openLegalPage(context, '/privacy-policy'),
+                  // Its own Material, so the card's fill does not hide the
+                  // tile's ink.
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.policy_outlined),
+                      title: Text(context.tr('priv.policy')),
+                      subtitle: const Text('scalemyprints.com/privacy-policy'),
+                      trailing: const Icon(Icons.open_in_new_rounded),
+                      onTap: () => _openLegalPage(context, '/privacy-policy'),
+                    ),
                   ),
                 ),
 
@@ -384,55 +392,28 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
   }
 
   Future<void> _requestDeletion() async {
-    final controller = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
     final strings = context.strings;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('priv.closeShopTitle')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(context.tr('priv.closeShopBody')),
-            const SizedBox(height: EcomsbdSpacing.md),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: 'CLOSE'),
-              textCapitalization: TextCapitalization.characters,
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.tr('common.cancel')),
-          ),
-          // Typed confirmation, not a checkbox. This is the one action in the
-          // product a seller cannot undo by tapping again.
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: controller,
-            builder: (context, value, _) => FilledButton(
-              onPressed: value.text.trim().toUpperCase() == 'CLOSE'
-                  ? () => Navigator.of(context).pop(true)
-                  : null,
-              child: Text(context.tr('priv.closeAccount')),
-            ),
-          ),
-        ],
-      ),
+      builder: (context) => const _CloseAccountDialog(),
     );
-    controller.dispose();
     if (!(confirmed ?? false)) return;
 
     setState(() => _busy = true);
     try {
+      // A Sign in with Apple seller confirms with Apple once more, so the
+      // server can revoke their Apple tokens along with the account.
+      final String? appleCode;
+      try {
+        appleCode = await ref.read(appleDeletionAuthorizerProvider)();
+      } on AppleDeletionCancelled {
+        return;
+      }
       final schedule = await ref
           .read(accountRepositoryProvider)
-          .requestDeletion(confirm: 'CLOSE');
+          .requestDeletion(confirm: 'CLOSE', appleAuthorizationCode: appleCode);
       ref.invalidate(privacyStatusProvider);
       messenger.showSnackBar(
         SnackBar(
@@ -465,6 +446,63 @@ class _DeletionSectionState extends ConsumerState<_DeletionSection> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+/// Asks for CLOSE to be typed. Owns its controller, so the text field is not
+/// left holding a disposed one while the dialog animates out.
+class _CloseAccountDialog extends StatefulWidget {
+  const _CloseAccountDialog();
+
+  @override
+  State<_CloseAccountDialog> createState() => _CloseAccountDialogState();
+}
+
+class _CloseAccountDialogState extends State<_CloseAccountDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('priv.closeShopTitle')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(context.tr('priv.closeShopBody')),
+          const SizedBox(height: EcomsbdSpacing.md),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'CLOSE'),
+            textCapitalization: TextCapitalization.characters,
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(context.tr('common.cancel')),
+        ),
+        // Typed confirmation, not a checkbox. This is the one action in the
+        // product a seller cannot undo by tapping again.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (context, value, _) => FilledButton(
+            onPressed: value.text.trim().toUpperCase() == 'CLOSE'
+                ? () => Navigator.of(context).pop(true)
+                : null,
+            child: Text(context.tr('priv.closeAccount')),
+          ),
+        ),
+      ],
+    );
   }
 }
 

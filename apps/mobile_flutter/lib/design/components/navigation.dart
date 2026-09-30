@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_strings.dart';
@@ -195,13 +197,18 @@ class GlassBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
+    // The keyboard when it is open, otherwise the home indicator or gesture
+    // bar: the floating sheet sits above whichever reaches higher.
+    final bottomClearance = math.max(
+      MediaQuery.viewInsetsOf(context).bottom,
+      MediaQuery.viewPaddingOf(context).bottom,
+    );
 
     return Padding(
       padding: EdgeInsets.only(
         left: EcomsbdSpacing.md,
         right: EcomsbdSpacing.md,
-        bottom: EcomsbdSpacing.md + viewInsets,
+        bottom: EcomsbdSpacing.md + bottomClearance,
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(

@@ -427,6 +427,23 @@ void main() {
       );
     });
 
+    for (final (platform, expected) in <(TargetPlatform, String)>[
+      (TargetPlatform.android, 'ANDROID'),
+      (TargetPlatform.iOS, 'IOS'),
+    ]) {
+      test('the device attaches as $expected on ${platform.name}', () async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        await launch();
+        await controller.restore();
+        await pumpEventQueue();
+        expect(
+          api.to('POST', '/auth/device').single.jsonBody['platform'],
+          expected,
+        );
+      });
+    }
+
     test('concurrent restores share one profile request', () async {
       await launch();
       await Future.wait(<Future<void>>[
