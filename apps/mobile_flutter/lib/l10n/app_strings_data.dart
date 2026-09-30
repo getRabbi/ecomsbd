@@ -2200,7 +2200,8 @@ const Map<String, String> _secEn = <String, String>{
   'priv.title': 'Your data',
   'priv.policy': 'Privacy Policy',
   'priv.deletionHelp': 'Account deletion help or email request',
-  'priv.legalOpenError': 'Could not open the page. Visit {url} in your browser.',
+  'priv.legalOpenError':
+      'Could not open the page. Visit {url} in your browser.',
   'priv.willClose': 'Your account will close',
   'prod.add': 'Add product',
   'prod.description':
