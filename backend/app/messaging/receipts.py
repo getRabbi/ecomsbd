@@ -2,8 +2,9 @@
 
 Statuses only ever move forward (sent -> delivered -> read) and only on a
 verified provider callback. Nothing here infers a delivery that a provider did
-not report, and message contents a customer sends are never stored: an inbound
-WhatsApp message is read for an opt-out keyword and dropped.
+not report. An inbound WhatsApp message is read here only for an opt-out
+keyword; customer messages are recorded separately, with their own retention,
+by chat-to-order (:mod:`app.chat_orders`), which never stores an opt-out.
 """
 
 from __future__ import annotations

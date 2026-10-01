@@ -6,9 +6,9 @@ the app to the Page's ``messages`` field. Webhook deliveries are signed with
 ``X-Hub-Signature-256: sha256=<hex HMAC of the raw body under the app secret>``
 and the subscription is verified with the ``hub.*`` challenge.
 
-This is connection health only. The V2 messaging domain sends transactional
-email; it has no Messenger conversation channel to link, so message contents
-are neither stored nor answered.
+Customer messages to a connected Page are recorded for chat-to-order
+(:mod:`app.chat_orders`), which reads them into draft orders for the seller to
+confirm. Nothing is ever sent back: replies stay in Messenger.
 """
 
 from __future__ import annotations
