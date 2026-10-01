@@ -138,6 +138,34 @@ def _parse_env_mapping(value: Any) -> Any:
     return json.loads(text)
 
 
+_PEM_HEADER = "-----BEGIN PRIVATE KEY-----"
+_PEM_FOOTER = "-----END PRIVATE KEY-----"
+
+
+def _apple_key_pem(raw: str) -> str | None:
+    """The .p8 key as PEM, whether it arrived armoured or as its bare body.
+
+    A dashboard or secret store often keeps only the base64 between the
+    markers, with its line breaks turned into spaces or dropped. That is the
+    whole key, so it is re-armoured here rather than refused: refusing it
+    stopped every API and worker process at boot, for a feature (Apple token
+    revocation) that is best effort. A value that is not base64 DER, such as a
+    file path, is still refused.
+    """
+    if "BEGIN PRIVATE KEY" in raw:
+        return raw
+    body = "".join(raw.split())
+    try:
+        der = base64.b64decode(body, validate=True)
+    except ValueError:
+        return None
+    # Every PKCS#8 key is an ASN.1 SEQUENCE, and no real one is this short.
+    if len(der) < 32 or der[0] != 0x30:
+        return None
+    lines = [body[i : i + 64] for i in range(0, len(body), 64)]
+    return "\n".join([_PEM_HEADER, *lines, _PEM_FOOTER]) + "\n"
+
+
 class Settings(BaseSettings):
     """Runtime configuration, loaded from environment and ``.env``."""
 
@@ -146,6 +174,9 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # A refused value is often a secret, and a boot failure is printed to
+        # the service log, so errors name the setting and never echo its value.
+        hide_input_in_errors=True,
     )
 
     # ---------------------------------------------------------------- app ---
@@ -650,19 +681,22 @@ class Settings(BaseSettings):
 
         A path instead of the contents, or a key whose newlines were eaten by a
         shell, both fail at the first sign-in rather than at boot — which is the
-        worst time to find out.
+        worst time to find out. The key's bare base64 body, without the PEM
+        markers, is the whole key and is accepted (see :func:`_apple_key_pem`).
         """
         if value is None:
             return None
         raw = value.get_secret_value().replace("\\n", "\n").strip()
         if not raw:
             return None
-        if "BEGIN PRIVATE KEY" not in raw:
+        pem = _apple_key_pem(raw)
+        if pem is None:
             raise ValueError(
                 "APPLE_PRIVATE_KEY must hold the PEM *contents* of the .p8 file "
-                "(a block starting '-----BEGIN PRIVATE KEY-----'), not a path to it"
+                "(the '-----BEGIN PRIVATE KEY-----' block, or the base64 between "
+                "its markers), not a path to it"
             )
-        return SecretStr(raw)
+        return SecretStr(pem)
 
     @field_validator("credential_encryption_key")
     @classmethod

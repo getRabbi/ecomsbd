@@ -246,6 +246,44 @@ class TestAuthMethods:
         with pytest.raises(ValueError, match="PEM"):
             production_settings(apple_private_key="/etc/secrets/AuthKey_ABC123.p8")
 
+    @staticmethod
+    def _throwaway_p8() -> str:
+        """A fresh P-256 key in .p8 (PKCS#8 PEM) form, as Apple issues them."""
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        return (
+            ec.generate_private_key(ec.SECP256R1())
+            .private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+            .decode()
+        )
+
+    @pytest.mark.parametrize("joiner", ["", " ", "\n"])
+    def test_an_apple_key_without_its_pem_markers_is_rearmoured(self, joiner: str) -> None:
+        """Production held only the base64 body, lines joined by spaces, and
+        every API and worker process refused to boot on it."""
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+        pem = self._throwaway_p8()
+        body_lines = [line for line in pem.splitlines() if "PRIVATE KEY" not in line]
+
+        settings = production_settings(apple_private_key=joiner.join(body_lines))
+
+        assert settings.apple_private_key is not None
+        stored = settings.apple_private_key.get_secret_value()
+        assert stored == pem
+        load_pem_private_key(stored.encode(), password=None)
+
+    def test_a_refused_apple_key_is_not_echoed_into_the_error(self) -> None:
+        with pytest.raises(ValueError) as refused:
+            production_settings(apple_private_key="/etc/secrets/AuthKey_ZXCV9876.p8")
+        assert "AuthKey_ZXCV9876" not in str(refused.value)
+        assert "APPLE_PRIVATE_KEY" in str(refused.value)
+
     def test_an_apple_key_with_escaped_newlines_is_accepted(self) -> None:
         settings = production_settings(apple_private_key=APPLE_KEY.replace("\n", "\\n"))
         assert settings.apple_private_key is not None
