@@ -89,6 +89,7 @@ def availability(provider: str) -> dict[str, Any]:
     }
     if provider == "WOOCOMMERCE":
         result["one_click"] = woocommerce.auth_endpoint_available()
+        result["one_click_app"] = woocommerce.auth_endpoint_available(app=True)
     return result
 
 
@@ -127,6 +128,19 @@ def webhook_url(conn: IntegrationConnection) -> str:
 
 def can_receive_webhooks() -> bool:
     return get_settings().public_base_url.startswith("https://")
+
+
+def return_url(conn: IntegrationConnection, result: str) -> str:
+    """Where a provider's sign-in page sends the seller when it is done.
+
+    The web dashboard when the seller started there and one is configured;
+    otherwise the API's own HTTPS return page, which hands over to the app.
+    """
+    web = (get_settings().public_web_url or "").rstrip("/")
+    if conn.config.get("return_to") != "app" and web:
+        return f"{web}/integrations/{conn.id}?result={result}"
+    base = get_settings().public_base_url.rstrip("/")
+    return f"{base}/v1/integration-callbacks/return?connection={conn.id}&result={result}"
 
 
 async def get(
@@ -743,6 +757,10 @@ def connection_view(
         view["account_id"] = conn.account_id
         view["import_from"] = conn.config.get("import_from")
         view["pages"] = conn.config.get("pages")
+        if conn.provider == "WOOCOMMERCE":
+            # The store sent keys back from its approval page; the next
+            # check proves them. Says nothing about the keys themselves.
+            view["keys_received"] = bool(conn.config.get("keys_received_at"))
     return view
 
 

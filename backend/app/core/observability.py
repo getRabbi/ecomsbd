@@ -28,11 +28,28 @@ __all__ = ["init_sentry"]
 log = get_logger(__name__)
 
 
+def _drop_frame_locals(event: dict[str, Any]) -> None:
+    """Remove captured local variables from every stack frame.
+
+    A frame's locals can hold a customer's chat message, an address or a
+    provider token; none of them is redactable by key name, so none is sent.
+    """
+    containers = [event.get("exception"), event.get("threads")]
+    for container in containers:
+        values = container.get("values") if isinstance(container, dict) else None
+        for value in values or []:
+            stack = value.get("stacktrace") if isinstance(value, dict) else None
+            for frame in (stack or {}).get("frames") or []:
+                if isinstance(frame, dict):
+                    frame.pop("vars", None)
+
+
 def _scrub(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
     """Redact an outgoing Sentry event and tag it with the trace context."""
     for section in ("request", "extra", "contexts", "breadcrumbs"):
         if section in event:
             event[section] = redact_value(event[section])
+    _drop_frame_locals(event)
 
     context = current_context()
     tags = event.setdefault("tags", {})

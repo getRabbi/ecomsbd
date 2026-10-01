@@ -279,7 +279,13 @@ async def shopify_compliance(db: AsyncSession, headers: dict[str, str], body: by
 
 
 async def whatsapp_event(db: AsyncSession, payload: dict[str, Any]) -> None:
-    """Delivery receipts and opt-out keywords for connected WhatsApp numbers."""
+    """Receipts, opt-outs and customer messages for connected WhatsApp numbers.
+
+    Receipts (``value.statuses``) and opt-out keywords go to V3.3 messaging as
+    before. Customer messages (``value.messages``) are also recorded for
+    chat-to-order; they are read into a draft later, by the worker.
+    """
+    from app.chat_orders import capture
     from app.messaging.receipts import whatsapp_value
 
     for entry in (payload.get("entry") or [])[:20]:
@@ -300,13 +306,18 @@ async def whatsapp_event(db: AsyncSession, payload: dict[str, Any]) -> None:
                 await whatsapp_value(db, conn.tenant_id, value)
                 async with _as_shop(db, conn):
                     service.mark_ok(conn, webhook=True)
+                    await capture.record(db, conn, capture.whatsapp_events(number, value))
 
 
 async def meta_event(db: AsyncSession, headers: dict[str, str], body: bytes) -> Ack:
-    """Page events refresh connection health only; message bodies are dropped.
+    """Verified Page and WhatsApp Business Account events.
 
-    WhatsApp Business Account events carry delivery receipts and opt-out
-    replies for V3.3 messaging; their message bodies are dropped too."""
+    Page events refresh connection health and record customer messages to the
+    Page for chat-to-order: the Page's own echoes, receipts and postbacks are
+    skipped, and a sender is only ever identified within the Page it wrote to.
+    WhatsApp events are handled by :func:`whatsapp_event`."""
+    from app.chat_orders import capture
+
     if not meta.valid_webhook(body, headers.get("x-hub-signature-256")):
         return Ack(401, {"received": False})
     try:
@@ -318,11 +329,16 @@ async def meta_event(db: AsyncSession, headers: dict[str, str], body: bytes) -> 
         return Ack(200)
     if not isinstance(payload, dict) or payload.get("object") != "page":
         return Ack(200)
-    page_ids = {
-        str(entry.get("id")) for entry in payload.get("entry") or [] if isinstance(entry, dict)
-    }
-    for page_id in sorted(page_ids)[:20]:
+    entries: dict[str, list[dict[str, Any]]] = {}
+    for entry in (payload.get("entry") or [])[:20]:
+        if isinstance(entry, dict) and entry.get("id"):
+            entries.setdefault(str(entry["id"]), []).append(entry)
+    for page_id in sorted(entries):
         for conn in await service.by_account(db, "MESSENGER", page_id):
             async with _as_shop(db, conn):
                 service.mark_ok(conn, webhook=True)
+                if conn.state != "CONNECTED":
+                    continue
+                for entry in entries[page_id]:
+                    await capture.record(db, conn, capture.messenger_events(page_id, entry))
     return Ack(200)

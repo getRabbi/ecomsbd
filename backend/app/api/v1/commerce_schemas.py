@@ -326,6 +326,13 @@ class OrderCreatePayload(BaseModel):
     #: Device-minted id. Makes an offline create replay-safe.
     client_id: uuid.UUID | None = None
 
+    @field_validator("channel", mode="before")
+    @classmethod
+    def _paste_alias(cls, value: object) -> object:
+        # The mobile app up to 3.0.3 sends "PASTE" for a pasted or detected
+        # order; without this every one of those saves was refused.
+        return OrderChannel.PASTE_PARSE if value == "PASTE" else value
+
 
 class OrderUpdatePayload(BaseModel):
     items: list[OrderItemPayload] | None = None

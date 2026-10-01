@@ -357,12 +357,27 @@ def _supplier_overdue(p: Params, locale: str) -> tuple[str, str]:
     )
 
 
+_CHANNELS = {"MESSENGER": "Messenger", "WHATSAPP": "WhatsApp"}
+
+
+def _chat_order_ready(p: Params, locale: str) -> tuple[str, str]:
+    # No customer name or product: a push is shown on a lock screen.
+    channel = _CHANNELS.get(str(p["provider"]), "Chat")
+    if locale == "bn":
+        return (
+            f"{channel} থেকে নতুন অর্ডার পাওয়া গেছে",
+            "ইনবক্সে দেখে নিশ্চিত করুন।",
+        )
+    return f"New order from {channel}", "Review it in the Inbox and confirm."
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
 
 _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.AUTOMATION: _automation,
+    NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

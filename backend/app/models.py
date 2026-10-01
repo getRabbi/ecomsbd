@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import app.analytics.network_models
 import app.automation.models
+import app.chat_orders.models
 import app.integrations.models
 import app.integrations.sync_models
 import app.messaging.models

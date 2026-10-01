@@ -194,6 +194,7 @@ class PrivacyService:
             await ObjectStorage(settings).delete_tenant(tenant_id)
             steps["personal_files_deleted"] = "R2 imports and exports; payout evidence retained"
         steps["customers_anonymised"] = await self._anonymise_customers(tenant_id)
+        steps["chat_messages_erased"] = await self._erase_chat(tenant_id)
         steps["addresses_anonymised"] = await self._anonymise_addresses(tenant_id)
         steps["owners_detached"] = await self._detach_members(tenant_id)
         steps["financial_records_retained"] = "ledger, payouts, receivables, profit snapshots"
@@ -429,6 +430,16 @@ class PrivacyService:
             customer.flag_reason = None
             customer.notes = None
         return len(customers)
+
+    async def _erase_chat(self, tenant_id: uuid.UUID) -> int:
+        """Customer messages, chat drafts and sender identities are deleted.
+
+        Unlike orders they are not a record of money: nothing needs them once
+        the shop is gone, and they are the rawest personal data the shop held.
+        """
+        from app.chat_orders.service import erase_tenant
+
+        return await erase_tenant(self._db, tenant_id)
 
     async def _anonymise_addresses(self, tenant_id: uuid.UUID) -> int:
         addresses = (

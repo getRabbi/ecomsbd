@@ -93,8 +93,10 @@ class OrderChannel(StrEnum):
     MANUAL = "MANUAL"
     PASTE_PARSE = "PASTE_PARSE"
     CSV_IMPORT = "CSV_IMPORT"
-    #: Reserved: Messenger/page ingestion is a later-phase feature.
+    #: Confirmed from a Messenger chat draft (chat-to-order).
     MESSENGER = "MESSENGER"
+    #: Confirmed from a WhatsApp chat draft (chat-to-order).
+    WHATSAPP = "WHATSAPP"
     API = "API"
 
 

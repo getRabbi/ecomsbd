@@ -187,6 +187,10 @@ class AuditAction(StrEnum):
     INTEGRATION_SYNC_STARTED = "integration.sync_started"
     INTEGRATION_EVENT_RETRIED = "integration.event_retried"
 
+    # Chat-to-order
+    CHAT_ORDER_CONFIRMED = "chat_order.confirmed"
+    CHAT_ORDER_IGNORED = "chat_order.ignored"
+
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"
     PURCHASE_ORDER_SAVED = "procurement.po_saved"

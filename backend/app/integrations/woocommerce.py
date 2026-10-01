@@ -60,9 +60,16 @@ def callback_url() -> str:
     return get_settings().public_base_url.rstrip("/") + "/v1/integration-callbacks/woocommerce"
 
 
-def auth_endpoint_available() -> bool:
+def auth_endpoint_available(*, app: bool = False) -> bool:
+    """Whether the store's one-click approval page can be used.
+
+    The store posts the keys to the API, so the API must be public HTTPS. A
+    seller who started on the web returns to the web dashboard, which must be
+    configured; one who started in the app returns to the API's own page.
+    """
     settings = get_settings()
-    return settings.public_base_url.startswith("https://") and bool(settings.public_web_url)
+    https = settings.public_base_url.startswith("https://")
+    return https and (app or bool(settings.public_web_url))
 
 
 def authorize_url(store: str, state: str, return_url: str) -> str:

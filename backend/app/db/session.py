@@ -49,6 +49,10 @@ def _engine_kwargs(settings: Settings) -> dict[str, Any]:
         "echo": settings.database_echo,
         "pool_pre_ping": True,
         "future": True,
+        # A failed statement's error text must not carry its bound values:
+        # they include customer messages, addresses and encrypted secrets, and
+        # error text reaches logs and Sentry.
+        "hide_parameters": not settings.database_echo,
     }
     if settings.is_sqlite or settings.app_env is AppEnv.TEST:
         # SQLite has no meaningful server-side pool; NullPool keeps the

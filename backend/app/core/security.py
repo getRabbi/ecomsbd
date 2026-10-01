@@ -157,6 +157,14 @@ class SecretHasher:
         """Hash for refresh tokens. The plaintext is never stored."""
         return self._hmac_hex(self._token_key, "token.v1", token)
 
+    def chat_identity_hash(self, provider: str, account: str, sender: str) -> str:
+        """Lookup key for a chat sender (a Page-scoped PSID or a WhatsApp id).
+
+        On the phone-search key, not the session key: a session-key rotation
+        must not split every customer's chat history into a new identity.
+        """
+        return self._hmac_hex(self._phone_key, "chat.v1", provider, account, sender)
+
     def ip_hash(self, ip: str | None) -> str | None:
         """Keyed hash of a client address.
 
