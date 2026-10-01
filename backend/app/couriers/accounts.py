@@ -38,10 +38,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.common.feature_flags import COURIER_PROVIDER_FLAGS, FeatureFlagService
 from app.common.provider_health import ProviderHealthService, ProviderKind
 from app.core.clock import utc_now
 from app.core.context import current_context
-from app.core.errors import ConflictError, ErrorCode, NotFoundError, ValidationError
+from app.core.errors import AppError, ConflictError, ErrorCode, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.security import CredentialVault
 from app.couriers.adapter import CourierAdapter, ValidationResult
@@ -63,10 +64,43 @@ __all__ = [
     "ConnectRequest",
     "CourierAccountService",
     "ValidationOutcome",
+    "ensure_provider_enabled",
     "resolve_account_by_webhook_token",
 ]
 
 log = get_logger(__name__)
+
+
+async def ensure_provider_enabled(session: AsyncSession, provider: str) -> None:
+    """Refuse new work with a courier its kill switch has turned off.
+
+    The flag is read for the shop in context, so a tenant override and a
+    percentage rollout count exactly as they do in the provider listing. It is
+    checked where new provider work starts (saving credentials, booking,
+    quoting), not only where a client decides whether to draw a button: a
+    request sent straight to the API, or a booking an automation makes, must
+    meet the same switch.
+
+    Managing what is already saved stays possible while a courier is off:
+    credentials can still be checked and removed, and parcels already booked
+    keep their tracking. Manual mode has no flag and is never refused.
+    """
+    name = provider.strip().lower()
+    flag = COURIER_PROVIDER_FLAGS.get(name)
+    if flag is None:
+        return
+    tenant_id = current_context().tenant_id
+    if await FeatureFlagService(session).is_enabled(flag, tenant_id=tenant_id):
+        return
+    manifest = load_manifest(name)
+    display = manifest.display_name if manifest is not None else name
+    raise AppError(
+        f"{display} is switched off for this shop right now. "
+        "Use manual courier mode in the meantime.",
+        code=ErrorCode.FEATURE_DISABLED,
+        message_bn=f"{display} এই মুহূর্তে এই শপের জন্য বন্ধ আছে। আপাতত ম্যানুয়াল কুরিয়ার মোড ব্যবহার করুন।",
+        details={"provider": name, "reason": str(BookableReason.NOT_ENABLED)},
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +243,7 @@ class CourierAccountService:
         """
         cleaned = request.cleaned()
         self._guard_inputs(cleaned)
+        await ensure_provider_enabled(self._db, cleaned.provider)
 
         adapter = self._require_adapter(cleaned.provider)
         outcome = await self._validate_with(

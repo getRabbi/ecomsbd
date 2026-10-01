@@ -54,7 +54,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ConflictError, ErrorCode, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.security import CredentialVault
-from app.couriers.accounts import CourierAccountService
+from app.couriers.accounts import CourierAccountService, ensure_provider_enabled
 from app.couriers.adapter import (
     BookingOutcome,
     BookingRequest,
@@ -779,6 +779,9 @@ class CourierBookingService:
     # ---------------------------------------------------------- internals --
 
     async def _require_account(self, provider: str) -> tuple[CourierAccount, CourierAdapter]:
+        # Before anything else: a courier switched off is refused the same way
+        # whether the booking came from the app, the API or an automation.
+        await ensure_provider_enabled(self._db, provider)
         account = await self._accounts.for_provider(provider)
         if account is None or not account.has_credentials:
             raise ConflictError(

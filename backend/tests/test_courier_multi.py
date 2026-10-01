@@ -31,6 +31,9 @@ from app.couriers.steadfast.adapter import SteadfastAdapter
 from app.couriers.steadfast.client import SteadfastClient, SteadfastConfig
 from app.couriers.steadfast.transport import FakeSteadfastTransport
 
+# Each test here is about a courier a shop may use, so the kill switches are on.
+pytestmark = pytest.mark.usefixtures("courier_flags_on")
+
 ALL_PROVIDERS = ("steadfast", "pathao", "redx")
 
 

@@ -1,13 +1,10 @@
-/// Integrations Hub copy for the phone. The phone lists, checks and fixes
-/// connections; developer setup and provider sign-in happen on the web.
+/// Integrations Hub copy for the phone. The phone checks and fixes
+/// connections; developer setup and provider sign-in happen on the web. The
+/// Connections & Integrations screen's own copy is under `conn.`.
 library;
 
 const integrationsEn = <String, String>{
   'int.title': 'Integrations',
-  'int.subtitle': 'Your stores and website. New orders arrive by themselves.',
-  'int.empty': 'No integrations yet. Add one from ecomsbd on the web.',
-  'int.webOnly':
-      'Adding a store, Shopify and Facebook sign-in, and website developer setup are on ecomsbd web.',
   'int.provider.SHOPIFY': 'Shopify',
   'int.provider.WOOCOMMERCE': 'WooCommerce',
   'int.provider.CUSTOM_WEBSITE': 'Custom website',
@@ -21,7 +18,6 @@ const integrationsEn = <String, String>{
   'int.health.DISCONNECTED': 'Disconnected',
   'int.health.DISABLED': 'Turned off',
   'int.health.SETUP_INCOMPLETE': 'Setup not finished',
-  'int.health.OFFICIAL_SETUP_REQUIRED': 'Official setup required',
   'int.ordersToday': 'Orders today: {count}',
   'int.problems': 'Problems: {count}',
   'int.lastSync': 'Last sync: {when}',
@@ -43,8 +39,6 @@ const integrationsEn = <String, String>{
   'int.consumerKey': 'Consumer key',
   'int.consumerSecret': 'Consumer secret',
   'int.saveKeys': 'Check and save keys',
-  'int.setupRequired':
-      'Official setup required. This connection opens once the provider approves ecomsbd.',
   'int.status.QUEUED': 'Waiting',
   'int.status.PROCESSED': 'Imported',
   'int.status.IGNORED': 'Skipped',
@@ -141,10 +135,6 @@ const integrationsEn = <String, String>{
 
 const integrationsBn = <String, String>{
   'int.title': 'ইন্টিগ্রেশন',
-  'int.subtitle': 'আপনার স্টোর ও ওয়েবসাইট। নতুন অর্ডার নিজে থেকেই আসে।',
-  'int.empty': 'এখনো কোনো ইন্টিগ্রেশন নেই। ecomsbd ওয়েব থেকে যোগ করুন।',
-  'int.webOnly':
-      'নতুন স্টোর যোগ, Shopify ও Facebook লগইন এবং ওয়েবসাইটের ডেভেলপার সেটআপ ecomsbd ওয়েবে করুন।',
   'int.provider.SHOPIFY': 'Shopify',
   'int.provider.WOOCOMMERCE': 'WooCommerce',
   'int.provider.CUSTOM_WEBSITE': 'নিজস্ব ওয়েবসাইট',
@@ -158,7 +148,6 @@ const integrationsBn = <String, String>{
   'int.health.DISCONNECTED': 'সংযোগ বিচ্ছিন্ন',
   'int.health.DISABLED': 'বন্ধ রাখা',
   'int.health.SETUP_INCOMPLETE': 'সেটআপ বাকি',
-  'int.health.OFFICIAL_SETUP_REQUIRED': 'অফিশিয়াল সেটআপ প্রয়োজন',
   'int.ordersToday': 'আজকের অর্ডার: {count}',
   'int.problems': 'সমস্যা: {count}',
   'int.lastSync': 'শেষ সিঙ্ক: {when}',
@@ -180,8 +169,6 @@ const integrationsBn = <String, String>{
   'int.consumerKey': 'Consumer key',
   'int.consumerSecret': 'Consumer secret',
   'int.saveKeys': 'কী যাচাই করে সেভ করুন',
-  'int.setupRequired':
-      'অফিশিয়াল সেটআপ প্রয়োজন। প্রোভাইডার ecomsbd-কে অনুমোদন দিলেই এটি চালু হবে।',
   'int.status.QUEUED': 'অপেক্ষায়',
   'int.status.PROCESSED': 'এসেছে',
   'int.status.IGNORED': 'বাদ দেওয়া',

@@ -59,6 +59,9 @@ from app.payouts.models import AdjustmentType, Payout, PayoutAdjustment, PayoutL
 from tests.conftest_commerce import create_order, create_product, signed_in_shop
 from tests.fixtures.steadfast import bodies
 
+# Each test here is about a courier a shop may use, so the kill switches are on.
+pytestmark = pytest.mark.usefixtures("courier_flags_on")
+
 API_KEY = "sfk-sync-test-key-abcd"
 SECRET_KEY = "sfs-sync-test-secret-wxyz"
 

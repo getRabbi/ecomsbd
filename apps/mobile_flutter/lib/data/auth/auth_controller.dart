@@ -428,13 +428,16 @@ class AuthController extends StateNotifier<AuthState> {
       return;
     }
     final token = await _providerSignIn.identityToken(provider);
-    await _adoptSession(
-      await _repository.signInWithProvider(
-        provider,
-        token,
-        nonce: _providerSignIn.nonce,
-      ),
+    final envelope = await _repository.signInWithProvider(
+      provider,
+      token,
+      nonce: _providerSignIn.nonce,
     );
+    try {
+      await _adoptSession(envelope);
+    } on ApiError catch (error) {
+      throw providerProfileError(provider, error);
+    }
   });
 
   Future<bool> forgotPassword(String email) =>

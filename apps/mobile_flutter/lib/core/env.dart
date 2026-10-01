@@ -46,6 +46,12 @@ class Env {
     'GOOGLE_CLIENT_ID_IOS',
   );
 
+  /// Host of the ecomsbd web dashboard (also serves the legal pages).
+  ///
+  /// Store and channel setup — a sign-in at Shopify or Meta, WooCommerce or
+  /// website keys — is done there, and the app links to its real pages.
+  static const String webDashboardHost = 'scalemyprints.com';
+
   /// Sentry DSN. Empty disables reporting.
   static const String sentryDsn = String.fromEnvironment('ECOMSBD_SENTRY_DSN');
 

@@ -1,198 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
+import '../../core/env.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/app_strings_data.dart';
-import '../shared/network_status.dart';
 
-/// The phone's view of the Integrations Hub: what is connected, whether it is
-/// healthy, and what needs fixing. Adding a store, provider sign-in and
-/// website developer setup are on the web, where a keyboard and copy-paste are.
-class IntegrationsScreen extends ConsumerStatefulWidget {
-  const IntegrationsScreen({super.key});
-
-  @override
-  ConsumerState<IntegrationsScreen> createState() => _IntegrationsState();
-}
-
-class _IntegrationsState extends ConsumerState<IntegrationsScreen>
-    with ReloadOnReconnect {
-  Map<String, dynamic>? _hub;
-  List<dynamic> _issues = const [];
-  final Set<String> _queued = <String>{};
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() => _run(_load));
-  }
-
-  @override
-  void onReconnect() {
-    if (_error != null && !_busy) _run(_load);
-  }
-
-  Future<void> _load() async {
-    final api = ref.read(apiClientProvider);
-    // Asked together: neither depends on the other.
-    final [hub, issues] = await Future.wait(<Future<Map<String, dynamic>>>[
-      api.get('/integrations'),
-      api.get('/integrations/issues'),
-    ]);
-    if (mounted) {
-      setState(() {
-        _hub = hub;
-        _issues = issues['items'] as List;
-      });
-    }
-  }
-
-  Future<void> _run(Future<void> Function() work) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await work();
-    } on ApiError catch (e) {
-      if (mounted) setState(() => _error = explain(context, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hub = _hub;
-    final items = (hub?['items'] as List?) ?? const [];
-    final providers = (hub?['providers'] as List?) ?? const [];
-    final canRetry = hub?['can_retry'] == true;
-    final blocked = providers.where(
-      (p) =>
-          p['available'] != true &&
-          !items.any((c) => c['provider'] == p['provider']),
-    );
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(context.tr('int.title')),
-        actions: [
-          IconButton(
-            tooltip: context.tr('int.title'),
-            onPressed: _busy ? null : () => _run(_load),
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => _run(_load),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_busy) const LinearProgressIndicator(),
-            if (_error != null)
-              Text(_error!, style: const TextStyle(color: EcomsbdColors.red)),
-            Text(context.tr('int.subtitle')),
-            const SizedBox(height: 4),
-            Text(
-              context.tr('int.webOnly'),
-              style: const TextStyle(color: EcomsbdColors.muted),
-            ),
-            const SizedBox(height: 12),
-            if (hub != null && items.isEmpty) Text(context.tr('int.empty')),
-            for (final c in items)
-              Card(
-                child: ListTile(
-                  key: ValueKey('connection-${c['id']}'),
-                  title: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text('${c['name']}'),
-                      HealthBadge(health: '${c['health']}'),
-                    ],
-                  ),
-                  subtitle: Text(
-                    [
-                      [
-                        context.tr('int.provider.${c['provider']}'),
-                        if (c['account_name'] != null) '${c['account_name']}',
-                      ].join(' · '),
-                      context.tr('int.ordersToday', {
-                        'count': c['orders_today'],
-                      }),
-                      context.tr('int.problems', {'count': c['open_issues']}),
-                      if ((c['open_conflicts'] ?? 0) as int > 0)
-                        context.tr('int.conflictsCount', {
-                          'count': c['open_conflicts'],
-                        }),
-                      context.tr('int.lastSync', {
-                        'when': when(context, c['last_sync_at']),
-                      }),
-                    ].join('\n'),
-                  ),
-                  isThreeLine: true,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            IntegrationDetailScreen(id: '${c['id']}'),
-                      ),
-                    );
-                    if (mounted) await _run(_load);
-                  },
-                ),
-              ),
-            for (final p in blocked)
-              ListTile(
-                title: Text(context.tr('int.provider.${p['provider']}')),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const HealthBadge(health: 'OFFICIAL_SETUP_REQUIRED'),
-                    Text(context.tr('int.setupRequired')),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            Text(
-              context.tr('int.issuesTitle'),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (hub != null && _issues.isEmpty)
-              Text(context.tr('int.noIssues')),
-            for (final issue in _issues)
-              IssueTile(
-                issue: issue as Map<String, dynamic>,
-                queued: _queued.contains(issue['id']),
-                canRetry: canRetry,
-                busy: _busy,
-                onRetry: () => _run(() async {
-                  await ref
-                      .read(apiClientProvider)
-                      .post('/integrations/events/${issue['id']}/retry');
-                  _queued.add('${issue['id']}');
-                }),
-                onResolve: () => _run(() async {
-                  await ref
-                      .read(apiClientProvider)
-                      .post('/integrations/events/${issue['id']}/resolve');
-                  await _load();
-                }),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+/// One store or channel connection: its health, its sync, its problems, and
+/// the fixes that can be made from a phone. Listed from the Connections &
+/// Integrations hub (`ConnectionsScreen`); connecting a new one, and signing
+/// in to a provider again, happen on the web.
 class IntegrationDetailScreen extends ConsumerStatefulWidget {
   const IntegrationDetailScreen({super.key, required this.id});
 
@@ -351,11 +172,23 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
                 c['provider'] == 'WOOCOMMERCE' &&
                 manage)
               ..._wooKeys(context),
-            if (state == 'AUTH_EXPIRED' && c['provider'] != 'WOOCOMMERCE')
+            if (state == 'AUTH_EXPIRED' && c['provider'] != 'WOOCOMMERCE') ...[
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(context.tr('int.reconnectWeb')),
               ),
+              if (manage)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('integration-reconnect-web'),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text(context.tr('conn.setUpOnWeb')),
+                    onPressed: () =>
+                        openWebDashboard(context, '/integrations/${widget.id}'),
+                  ),
+                ),
+            ],
             if (_sync != null) ..._syncSection(context, _sync!),
             if (_conflicts.isNotEmpty) ..._conflictSection(context),
             const SizedBox(height: 16),
@@ -580,11 +413,7 @@ class HealthBadge extends StatelessWidget {
       'CONNECTED' => (EcomsbdColors.green, EcomsbdColors.greenSoft),
       'DEGRADED' ||
       'SETUP_INCOMPLETE' ||
-      'DISABLED' ||
-      'OFFICIAL_SETUP_REQUIRED' => (
-        EcomsbdColors.amber,
-        EcomsbdColors.amberSoft,
-      ),
+      'DISABLED' => (EcomsbdColors.amber, EcomsbdColors.amberSoft),
       _ => (EcomsbdColors.red, EcomsbdColors.redSoft),
     };
     final key = 'int.health.$health';
@@ -702,6 +531,29 @@ String explain(BuildContext context, ApiError error) {
   return context.strings.locale == AppLocale.bn
       ? error.messageBn
       : error.messageEn;
+}
+
+/// Opens [path] on the ecomsbd web dashboard in the browser.
+///
+/// Only real dashboard pages are linked. When no browser opens, the address is
+/// shown instead, so the seller can type it on any device.
+Future<void> openWebDashboard(BuildContext context, String path) async {
+  final uri = Uri.https(Env.webDashboardHost, path);
+  var opened = false;
+  try {
+    opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } on Object {
+    // Shown below.
+  }
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr('conn.webOpenError', <String, Object?>{'url': '$uri'}),
+        ),
+      ),
+    );
+  }
 }
 
 String when(BuildContext context, Object? value) {

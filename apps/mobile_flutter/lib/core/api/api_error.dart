@@ -157,6 +157,22 @@ class ApiError implements Exception {
   /// Remaining OTP attempts, when the server reported them.
   int? get attemptsRemaining => details?['attempts_remaining'] as int?;
 
+  /// Where a sign-in failed, in a form safe to show and log, such as
+  /// `APPLE_SUPABASE_REJECTED 400 provider_disabled`. It never holds a token,
+  /// a nonce, an address or a provider's user id. Null for other errors.
+  String? get diagnostic => details?['diagnostic'] as String?;
+
+  /// This error with [diagnostic] attached; everything else is kept.
+  ApiError withDiagnostic(String diagnostic) => ApiError(
+    code: code,
+    messageBn: messageBn,
+    messageEn: messageEn,
+    retryable: retryable,
+    referenceId: referenceId,
+    details: <String, dynamic>{...?details, 'diagnostic': diagnostic},
+    statusCode: statusCode,
+  );
+
   /// Seller-facing message, in the selected language.
   ///
   /// Falls back to the other language rather than showing nothing: an error

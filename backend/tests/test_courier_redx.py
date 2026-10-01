@@ -67,6 +67,9 @@ from tests.conftest_commerce import create_order, create_product, signed_in_shop
 from tests.test_auth_flow import auth_header, sign_in
 from tests.test_courier_security import _demote
 
+# Each test here is about a courier a shop may use, so the kill switches are on.
+pytestmark = pytest.mark.usefixtures("courier_flags_on")
+
 # Synthetic, and deliberately not shaped like a real RedX token.
 TOKEN = "synthetic-redx-token-for-tests-9f3a"
 
