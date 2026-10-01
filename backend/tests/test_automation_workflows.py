@@ -803,6 +803,7 @@ async def _bookable(client, shop) -> dict:
     )["order"]
 
 
+@pytest.mark.usefixtures("courier_flags_on")
 async def test_courier_booking_happens_once_and_chains_with_causation(
     client, shop, headers, steadfast
 ):
@@ -848,6 +849,7 @@ async def test_courier_booking_happens_once_and_chains_with_causation(
     assert len(steadfast.calls_to("POST", "/create_order")) == 1
 
 
+@pytest.mark.usefixtures("courier_flags_on")
 async def test_an_ambiguous_booking_stops_and_is_never_retried(client, shop, headers, steadfast):
     from app.couriers.steadfast.errors import SteadfastAmbiguousError
 

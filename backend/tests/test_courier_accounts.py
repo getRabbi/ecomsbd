@@ -34,6 +34,9 @@ from tests.conftest_commerce import signed_in_shop
 from tests.fixtures.steadfast import bodies
 from tests.test_auth_flow import auth_header, sign_in
 
+# Each test here is about a courier a shop may use, so the kill switches are on.
+pytestmark = pytest.mark.usefixtures("courier_flags_on")
+
 # Synthetic. Deliberately *not* shaped like a live key: a test constant that
 # looks production-shaped trains reviewers to wave the pattern through, and a
 # secret scanner is right to flag one.

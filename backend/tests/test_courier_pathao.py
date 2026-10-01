@@ -42,6 +42,9 @@ from app.couriers.pathao.webhooks import (
     parse_pathao_events,
 )
 
+# Each test here is about a courier a shop may use, so the kill switches are on.
+pytestmark = pytest.mark.usefixtures("courier_flags_on")
+
 CLIENT_ID = "pathao-client-id-0001"
 CLIENT_SECRET = "pathao-client-secret-0001"
 STORE_ID = "12345"

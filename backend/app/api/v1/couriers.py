@@ -36,7 +36,7 @@ from app.api.deps import (
 from app.common.feature_flags import COURIER_PROVIDER_FLAGS
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
-from app.couriers.accounts import ConnectRequest
+from app.couriers.accounts import ConnectRequest, ensure_provider_enabled
 from app.couriers.adapter import Unavailable
 from app.couriers.capabilities import load_manifest
 from app.couriers.credentials import spec_for
@@ -613,6 +613,7 @@ async def delivery_areas(
     provider: str,
     principal: Booker,
     accounts: CourierAccountsDep,
+    db: DbSession,
     district_name: Annotated[str | None, Query(max_length=80)] = None,
     post_code: Annotated[int | None, Query(ge=1000, le=9999)] = None,
 ) -> list[DeliveryAreaResponse]:
@@ -622,6 +623,7 @@ async def delivery_areas(
     parcel has to pick its area. A courier without an area list answers an
     empty list, not an error, so the client needs no provider check.
     """
+    await ensure_provider_enabled(db, provider)
     account = await accounts.usable_account(provider)
     if account is None:
         raise NotFoundError("No usable courier account is connected for that provider")

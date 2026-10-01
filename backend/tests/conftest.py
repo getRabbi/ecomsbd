@@ -162,6 +162,52 @@ def unique_phone() -> str:
 # --------------------------------------------------------------------------- #
 
 
+@pytest_asyncio.fixture
+async def courier_flags_on(settings) -> AsyncIterator[None]:
+    """Turn every courier's kill switch on, globally, for one test.
+
+    The flags default to off, and connecting or booking with a courier whose
+    flag is off is refused. A test about how a courier behaves once a shop may
+    use it opts in with ``pytest.mark.usefixtures("courier_flags_on")``.
+
+    The rows are committed, because routes read them from their own session,
+    and removed afterwards: the test database lives for the whole session, and
+    a leftover global row would turn couriers on for every later test.
+    """
+    import sqlalchemy as sa
+
+    from app.common.feature_flags import COURIER_PROVIDER_FLAGS, FeatureFlag
+    from app.db.session import get_sessionmaker
+    from app.db.tenancy import install_tenancy_guards, mark_session_system
+
+    install_tenancy_guards()
+    import app.models  # noqa: F401
+
+    keys = [str(flag) for flag in COURIER_PROVIDER_FLAGS.values()]
+    factory = get_sessionmaker(settings)
+
+    async def _remove() -> None:
+        async with factory() as session:
+            mark_session_system(session.sync_session, "test fixture")
+            await session.execute(
+                sa.delete(FeatureFlag).where(
+                    FeatureFlag.key.in_(keys), FeatureFlag.tenant_id.is_(None)
+                )
+            )
+            await session.commit()
+
+    await _remove()
+    async with factory() as session:
+        mark_session_system(session.sync_session, "test fixture")
+        for key in keys:
+            session.add(FeatureFlag(key=key, enabled=True, rollout_percentage=100))
+        await session.commit()
+    try:
+        yield
+    finally:
+        await _remove()
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _no_live_courier() -> AsyncIterator[None]:
     """Refuse a real courier HTTP call from anywhere in the suite.
