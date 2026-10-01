@@ -44,29 +44,6 @@ Map<String, dynamic> issue({String id = 'e1', bool retryable = true}) => {
   'updated_at': '2026-09-24T08:00:00Z',
 };
 
-void hub(
-  ({ApiClient client, FakeApiAdapter adapter}) fake, {
-  bool canRetry = true,
-  List<dynamic>? issues,
-}) {
-  fake.adapter.onJson('GET', '/integrations', {
-    'providers': [
-      {'provider': 'SHOPIFY', 'available': true, 'blocker': null},
-      {
-        'provider': 'MESSENGER',
-        'available': false,
-        'blocker': 'META_APP_SETUP_REQUIRED',
-      },
-    ],
-    'items': [connection(health: 'DEGRADED', issues: 1)],
-    'can_manage': true,
-    'can_retry': canRetry,
-  });
-  fake.adapter.onJson('GET', '/integrations/issues', {
-    'items': issues ?? [issue()],
-  });
-}
-
 Map<String, dynamic> syncView({
   String inventory = 'ECOMSBD',
   int conflicts = 1,
@@ -116,64 +93,6 @@ void main() {
       expect(englishStrings[key], isNotNull, reason: key);
       expect(banglaStrings[key], isNotNull, reason: key);
     }
-  });
-
-  testWidgets('lists connections, real availability and health', (
-    tester,
-  ) async {
-    final fake = buildFakeApi();
-    hub(fake);
-    await pumpAtSize(
-      tester,
-      const IntegrationsScreen(),
-      overrides: [apiClientProvider.overrideWithValue(fake.client)],
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('My SHOPIFY'), findsOneWidget);
-    expect(find.text(englishStrings['int.health.DEGRADED']!), findsOneWidget);
-    expect(find.textContaining('Orders today: 3'), findsOneWidget);
-    // A provider without its official app is shown as such, never as a button.
-    expect(
-      find.text(englishStrings['int.health.OFFICIAL_SETUP_REQUIRED']!),
-      findsOneWidget,
-    );
-    expect(find.text(englishStrings['int.code.MISSING_PHONE']!), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('retry posts once and shows the queued state', (tester) async {
-    final fake = buildFakeApi();
-    hub(fake);
-    fake.adapter.onJson('POST', '/integrations/events/e1/retry', {
-      'id': 'e1',
-      'status': 'QUEUED',
-    });
-    await pumpAtSize(
-      tester,
-      const IntegrationsScreen(),
-      overrides: [apiClientProvider.overrideWithValue(fake.client)],
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text(englishStrings['int.retry']!));
-    await tester.tap(find.text(englishStrings['int.retry']!));
-    await tester.pumpAndSettle();
-    expect(fake.adapter.to('POST', '/integrations/events/e1/retry').length, 1);
-    expect(find.textContaining(englishStrings['int.queued']!), findsOneWidget);
-    expect(find.text(englishStrings['int.retry']!), findsNothing);
-  });
-
-  testWidgets('viewers see problems but no retry controls', (tester) async {
-    final fake = buildFakeApi();
-    hub(fake, canRetry: false);
-    await pumpAtSize(
-      tester,
-      const IntegrationsScreen(),
-      overrides: [apiClientProvider.overrideWithValue(fake.client)],
-    );
-    await tester.pumpAndSettle();
-    expect(find.text(englishStrings['int.code.MISSING_PHONE']!), findsWidgets);
-    expect(find.text(englishStrings['int.retry']!), findsNothing);
-    expect(find.text(englishStrings['int.resolve']!), findsNothing);
   });
 
   testWidgets('detail tests the connection and replaces WooCommerce keys', (
@@ -231,21 +150,6 @@ void main() {
       'consumer_secret': 'cs_abcdef123456',
     });
     expect(find.text(englishStrings['int.testOk']!), findsOneWidget);
-  });
-
-  testWidgets('renders in Bangla', (tester) async {
-    final fake = buildFakeApi();
-    hub(fake);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [apiClientProvider.overrideWithValue(fake.client)],
-        child: const MaterialApp(home: IntegrationsScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text(banglaStrings['int.title']!), findsOneWidget);
-    expect(find.text(banglaStrings['int.health.DEGRADED']!), findsOneWidget);
-    expect(find.text(banglaStrings['int.code.MISSING_PHONE']!), findsWidgets);
   });
 
   testWidgets('detail shows who controls stock, matches and conflicts', (

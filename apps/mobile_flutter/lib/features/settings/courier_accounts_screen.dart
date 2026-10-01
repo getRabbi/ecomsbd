@@ -45,7 +45,9 @@ class CourierAccountsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final viewOnly = _isForbidden(ref.watch(courierAccountsProvider).error);
+    final viewOnly = isCourierRoleRefusal(
+      ref.watch(courierAccountsProvider).error,
+    );
 
     return DetailScaffold(
       title: context.tr('ca.title'),
@@ -72,7 +74,7 @@ class CourierAccountsScreen extends ConsumerWidget {
 /// there is how this screen learns it is being read by someone who may look
 /// but not change anything. The role matrix stays on the server; the app hides
 /// what the server would refuse, and the server refuses it regardless.
-bool _isForbidden(Object? error) =>
+bool isCourierRoleRefusal(Object? error) =>
     error is ApiError && error.code == ApiErrorCode.forbidden;
 
 /// Where one courier stands for this shop.
@@ -106,11 +108,16 @@ enum CourierConnection {
 
 /// Work out a courier's state from what the server said.
 ///
+/// Shared with the Connections & Integrations hub, so the two screens can
+/// never disagree about a courier. "Disabled" comes only from the server's
+/// own switch for this shop; a courier that is switched on and has nothing
+/// saved yet is "not connected", with a Connect button.
+///
 /// Someone who may manage credentials has the account itself. Anyone else has
 /// only the booking-availability list, which says the same thing in booking
 /// terms — and is itself withheld from roles that cannot book, in which case
 /// the honest answer is "unknown".
-CourierConnection _connectionFor(
+CourierConnection courierConnectionFor(
   CourierProviderInfo info, {
   CourierAccount? account,
   BookableCourier? bookable,
@@ -144,6 +151,43 @@ CourierConnection _connectionFor(
     CourierAccountStatus.unknown => CourierConnection.unknown,
     _ => CourierConnection.notConnected,
   };
+}
+
+/// Whether a connected courier still cannot book because its mandatory
+/// pickup store has not been chosen. "Connected" alone would hide that.
+bool courierNeedsPickupStore(
+  CourierProviderInfo info,
+  CourierConnection connection, {
+  CourierAccount? account,
+  BookableCourier? bookable,
+  bool viewOnly = false,
+}) => viewOnly
+    ? bookable?.block == BookableBlock.needsPickupStore
+    : (info.connectForm?.requiresStore ?? false) &&
+          connection == CourierConnection.connected &&
+          account?.storeId == null;
+
+/// This shop's account for [provider] in [rows], if it has one.
+CourierAccount? courierAccountOf(List<CourierAccount>? rows, String provider) {
+  for (final row in rows ?? const <CourierAccount>[]) {
+    if (row.provider == provider) {
+      return row;
+    }
+  }
+  return null;
+}
+
+/// Whether [provider] can book, from the booking-availability list [rows].
+BookableCourier? bookableCourierOf(
+  List<BookableCourier>? rows,
+  String provider,
+) {
+  for (final row in rows ?? const <BookableCourier>[]) {
+    if (row.provider == provider) {
+      return row;
+    }
+  }
+  return null;
 }
 
 /// Whether stored credentials exist for this account.
@@ -218,8 +262,8 @@ class _CourierList extends ConsumerWidget {
             for (final info in couriers) ...<Widget>[
               _CourierRow(
                 info: info,
-                account: _accountFor(accounts.valueOrNull, info.provider),
-                bookable: _bookableFor(bookable, info.provider),
+                account: courierAccountOf(accounts.valueOrNull, info.provider),
+                bookable: bookableCourierOf(bookable, info.provider),
                 viewOnly: viewOnly,
               ),
               const SizedBox(height: EcomsbdSpacing.md),
@@ -228,30 +272,6 @@ class _CourierList extends ConsumerWidget {
         );
       },
     );
-  }
-
-  static CourierAccount? _accountFor(
-    List<CourierAccount>? rows,
-    String provider,
-  ) {
-    for (final row in rows ?? const <CourierAccount>[]) {
-      if (row.provider == provider) {
-        return row;
-      }
-    }
-    return null;
-  }
-
-  static BookableCourier? _bookableFor(
-    List<BookableCourier>? rows,
-    String provider,
-  ) {
-    for (final row in rows ?? const <BookableCourier>[]) {
-      if (row.provider == provider) {
-        return row;
-      }
-    }
-    return null;
   }
 }
 
@@ -270,26 +290,6 @@ class _CourierRow extends ConsumerWidget {
   final BookableCourier? bookable;
   final bool viewOnly;
 
-  Future<void> _connect(BuildContext context, WidgetRef ref) async {
-    final result = await ConnectCourierSheet.show(
-      context,
-      provider: info.provider,
-      form: info.connectForm,
-    );
-    if (result == null || !context.mounted) {
-      return;
-    }
-    _invalidateCourierState(ref, info.provider);
-    // Straight on to the account, where the outcome of the check is shown and
-    // anything still missing — a pickup store, the callback URL — is set up.
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            CourierAccountManageScreen(info: info, initialCheck: result),
-      ),
-    );
-  }
-
   void _manage(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -300,7 +300,7 @@ class _CourierRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final connection = _connectionFor(
+    final connection = courierConnectionFor(
       info,
       account: account,
       bookable: bookable,
@@ -311,11 +311,13 @@ class _CourierRow extends ConsumerWidget {
         !viewOnly && form != null && _hasCredentials(account);
     final canConnect =
         !viewOnly && connection == CourierConnection.notConnected;
-    final needsStore = viewOnly
-        ? bookable?.block == BookableBlock.needsPickupStore
-        : (form?.requiresStore ?? false) &&
-              connection == CourierConnection.connected &&
-              account?.storeId == null;
+    final needsStore = courierNeedsPickupStore(
+      info,
+      connection,
+      account: account,
+      bookable: bookable,
+      viewOnly: viewOnly,
+    );
 
     return GlassCard(
       child: Column(
@@ -369,7 +371,7 @@ class _CourierRow extends ConsumerWidget {
               )
             else
               FilledButton(
-                onPressed: () => _connect(context, ref),
+                onPressed: () => connectCourier(context, ref, info),
                 style: _primaryButton,
                 child: Text(context.tr('common.connect')),
               ),
@@ -545,6 +547,34 @@ class _OwnerOnlyNotice extends StatelessWidget {
   }
 }
 
+/// Connect [info]'s courier: the server-described form, then its account.
+///
+/// The one way in, used by this list and by the Connections & Integrations
+/// hub, so both save, check and land on the account the same way.
+Future<void> connectCourier(
+  BuildContext context,
+  WidgetRef ref,
+  CourierProviderInfo info,
+) async {
+  final result = await ConnectCourierSheet.show(
+    context,
+    provider: info.provider,
+    form: info.connectForm,
+  );
+  if (result == null || !context.mounted) {
+    return;
+  }
+  _invalidateCourierState(ref, info.provider);
+  // Straight on to the account, where the outcome of the check is shown and
+  // anything still missing — a pickup store, the callback URL — is set up.
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) =>
+          CourierAccountManageScreen(info: info, initialCheck: result),
+    ),
+  );
+}
+
 void _invalidateCourierState(WidgetRef ref, String provider) {
   ref.invalidate(courierAccountsProvider);
   ref.invalidate(bookableCouriersProvider);
@@ -702,7 +732,7 @@ class _CourierAccountManageScreenState
     final account = ref.watch(courierAccountProvider(_provider)).valueOrNull;
     final evidence = ref.watch(providerEvidenceProvider(_provider));
     final form = _form;
-    final connection = _connectionFor(widget.info, account: account);
+    final connection = courierConnectionFor(widget.info, account: account);
     final status = account?.status ?? CourierAccountStatus.disconnected;
     final hasCredentials = _hasCredentials(account);
     final connected = status == CourierAccountStatus.connected;

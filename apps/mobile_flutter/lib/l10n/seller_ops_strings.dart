@@ -203,17 +203,44 @@ const sellerOpsEn = <String, String>{
   'inbox.openOrder': 'Open existing order',
   'inbox.fromChat': 'Create order from this chat',
 
-  // Channels
-  'conn.title': 'Sales channels',
-  'conn.subtitle': 'Messages, orders and couriers flowing into one place',
-  'conn.channels': 'Channels',
-  'conn.couriers': 'Courier accounts',
+  // Connections & Integrations
+  'conn.title': 'Connections & Integrations',
+  'conn.subtitle':
+      'Your stores, sales channels and couriers, as they really are',
+  'conn.channels': 'Stores & sales channels',
+  'conn.couriers': 'Couriers',
   'conn.manage': 'Manage',
+  'conn.refresh': 'Refresh',
   'conn.unavailable': 'Connection status could not be loaded.',
   'conn.noCourierTitle': 'No courier connected',
   'conn.noCourierBody': 'Connect your courier account to book and track here.',
   'conn.note':
-      'A channel shows Connected only when EcomsBD’s server confirms the connection.',
+      'Something shows Connected only when EcomsBD’s server confirms the connection.',
+  'conn.summaryConnected': 'Connected: {count}',
+  'conn.summaryAttention': 'Needs attention: {count}',
+  'conn.attentionTitle': 'Needs your attention',
+  'conn.setUpOnWeb': 'Set up on web',
+  'conn.setUpOnWebNote':
+      'Connecting {provider} needs a sign-in or keys, so it is done in ecomsbd on the web. It shows here once connected.',
+  'conn.ownerConnects': 'Only the shop owner can connect this.',
+  'conn.reconnectNote':
+      'Sign in again on ecomsbd web to keep orders coming in.',
+  'conn.approvalPending': 'Awaiting approval',
+  'conn.approvalNote':
+      'ecomsbd is waiting for {approver} to approve its app. Nothing is wrong with your account, and there is nothing to do yet.',
+  'conn.notAvailableNote': 'ecomsbd does not connect to {provider} yet.',
+  'conn.unavailableNow': 'Unavailable',
+  'conn.unavailableNote':
+      'This connection is not available right now. Try again later.',
+  'conn.webOpenError': 'Could not open a browser. Open {url} on any device.',
+  'conn.about.SHOPIFY': 'Orders from your Shopify store',
+  'conn.about.WOOCOMMERCE': 'Orders from your WooCommerce website',
+  'conn.about.CUSTOM_WEBSITE': 'Orders from your own website, by API key',
+  'conn.about.MESSENGER': 'Facebook Page messages',
+  'conn.about.WHATSAPP': 'WhatsApp Business messages',
+  'conn.about.INSTAGRAM': 'Instagram DMs',
+
+  // Channels
   'chan.website': 'Website',
   'chan.websiteSub': 'Your store or Shopify / WooCommerce',
   'chan.facebook': 'Facebook',
@@ -236,8 +263,8 @@ const sellerOpsEn = <String, String>{
   'more.money': 'Money',
   'more.grow': 'Grow',
   'more.business': 'Business',
-  'more.website': 'Website & sales channels',
-  'more.websiteSub': 'Store, Facebook, WhatsApp',
+  'more.connections': 'Connections & Integrations',
+  'more.connectionsSub': 'Website, stores, channels and courier connections',
   'more.marketing': 'Marketing',
   'more.marketingSub': 'Campaigns to your customers',
   'more.compare': 'Courier cost comparison',
@@ -251,8 +278,6 @@ const sellerOpsEn = <String, String>{
   'more.customerInsights': 'Customer insights',
   'more.customerInsightsSub': 'New, returning and repeat buyers',
   'more.setupSub': 'First steps for a new shop',
-  'more.integrations': 'Integrations',
-  'more.integrationsSub': 'Connection health · sync issues',
   'more.comingSoon': 'Coming soon',
 
   // Money
@@ -493,17 +518,42 @@ const sellerOpsBn = <String, String>{
   'inbox.openOrder': 'আগের অর্ডার খুলুন',
   'inbox.fromChat': 'এই চ্যাট থেকে অর্ডার তৈরি',
 
-  // Channels
-  'conn.title': 'বিক্রির চ্যানেল',
-  'conn.subtitle': 'মেসেজ, অর্ডার আর কুরিয়ার এক জায়গায়',
-  'conn.channels': 'চ্যানেল',
-  'conn.couriers': 'কুরিয়ার অ্যাকাউন্ট',
+  // Connections & Integrations
+  'conn.title': 'কানেকশন ও ইন্টিগ্রেশন',
+  'conn.subtitle': 'আপনার স্টোর, বিক্রির চ্যানেল আর কুরিয়ার — আসল অবস্থাসহ',
+  'conn.channels': 'স্টোর ও বিক্রির চ্যানেল',
+  'conn.couriers': 'কুরিয়ার',
   'conn.manage': 'ম্যানেজ',
+  'conn.refresh': 'রিফ্রেশ',
   'conn.unavailable': 'সংযোগের অবস্থা লোড করা যায়নি।',
   'conn.noCourierTitle': 'কোনো কুরিয়ার যুক্ত নেই',
   'conn.noCourierBody':
       'এখানে বুক ও ট্র্যাক করতে কুরিয়ার অ্যাকাউন্ট যুক্ত করুন।',
-  'conn.note': 'EcomsBD-এর সার্ভার নিশ্চিত করলেই কেবল চ্যানেল "যুক্ত" দেখায়।',
+  'conn.note': 'EcomsBD-এর সার্ভার নিশ্চিত করলেই কেবল "যুক্ত" দেখায়।',
+  'conn.summaryConnected': 'যুক্ত: {count}',
+  'conn.summaryAttention': 'দেখা দরকার: {count}',
+  'conn.attentionTitle': 'যেগুলো দেখা দরকার',
+  'conn.setUpOnWeb': 'ওয়েবে সেটআপ করুন',
+  'conn.setUpOnWebNote':
+      '{provider} যুক্ত করতে লগইন বা কী লাগে, তাই এটি ecomsbd ওয়েবে করতে হয়। যুক্ত হলে এখানে দেখাবে।',
+  'conn.ownerConnects': 'শুধু শপের মালিক এটি যুক্ত করতে পারেন।',
+  'conn.reconnectNote': 'অর্ডার আসা চালু রাখতে ecomsbd ওয়েবে আবার লগইন করুন।',
+  'conn.approvalPending': 'অনুমোদনের অপেক্ষায়',
+  'conn.approvalNote':
+      'ecomsbd-এর অ্যাপ অনুমোদনের জন্য {approver}-এর অপেক্ষায় আছে। আপনার অ্যাকাউন্টে কোনো সমস্যা নেই, এখন কিছু করার দরকার নেই।',
+  'conn.notAvailableNote': 'ecomsbd এখনো {provider}-এর সাথে যুক্ত হয় না।',
+  'conn.unavailableNow': 'এখন পাওয়া যাচ্ছে না',
+  'conn.unavailableNote':
+      'এই সংযোগটি এখন পাওয়া যাচ্ছে না। পরে আবার চেষ্টা করুন।',
+  'conn.webOpenError': 'ব্রাউজার খোলা যায়নি। যেকোনো ডিভাইসে {url} খুলুন।',
+  'conn.about.SHOPIFY': 'আপনার Shopify স্টোরের অর্ডার',
+  'conn.about.WOOCOMMERCE': 'আপনার WooCommerce ওয়েবসাইটের অর্ডার',
+  'conn.about.CUSTOM_WEBSITE': 'নিজস্ব ওয়েবসাইটের অর্ডার, API কী দিয়ে',
+  'conn.about.MESSENGER': 'ফেসবুক পেজের মেসেজ',
+  'conn.about.WHATSAPP': 'WhatsApp Business-এর মেসেজ',
+  'conn.about.INSTAGRAM': 'ইনস্টাগ্রামের DM',
+
+  // Channels
   'chan.website': 'ওয়েবসাইট',
   'chan.websiteSub': 'আপনার স্টোর বা Shopify / WooCommerce',
   'chan.facebook': 'ফেসবুক',
@@ -526,8 +576,8 @@ const sellerOpsBn = <String, String>{
   'more.money': 'টাকা',
   'more.grow': 'বৃদ্ধি',
   'more.business': 'ব্যবসা',
-  'more.website': 'ওয়েবসাইট ও বিক্রির চ্যানেল',
-  'more.websiteSub': 'স্টোর, ফেসবুক, WhatsApp',
+  'more.connections': 'কানেকশন ও ইন্টিগ্রেশন',
+  'more.connectionsSub': 'ওয়েবসাইট, স্টোর, চ্যানেল ও কুরিয়ার সংযোগ',
   'more.marketing': 'মার্কেটিং',
   'more.marketingSub': 'কাস্টমারদের জন্য ক্যাম্পেইন',
   'more.compare': 'কুরিয়ার খরচ তুলনা',
@@ -541,8 +591,6 @@ const sellerOpsBn = <String, String>{
   'more.customerInsights': 'কাস্টমার বিশ্লেষণ',
   'more.customerInsightsSub': 'নতুন, ফিরে আসা ও নিয়মিত ক্রেতা',
   'more.setupSub': 'নতুন দোকানের প্রথম ধাপ',
-  'more.integrations': 'ইন্টিগ্রেশন',
-  'more.integrationsSub': 'সংযোগের অবস্থা · সিঙ্কের সমস্যা',
   'more.comingSoon': 'শীঘ্রই আসছে',
 
   // Money

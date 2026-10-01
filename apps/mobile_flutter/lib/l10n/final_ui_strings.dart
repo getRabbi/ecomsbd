@@ -57,8 +57,6 @@ const finalUiEn = <String, String>{
   // More
   'more.eyebrow': 'Everything else, grouped clearly',
   'more.description': 'Find any tool without remembering where it lives.',
-  'more.connectionHealth': 'Connection health',
-  'more.connectionHealthSub': 'Check what is syncing automatically',
 
   // Courier compare and connections
   'cmp.eyebrow': 'Delivery cost intelligence',
@@ -120,8 +118,6 @@ const finalUiBn = <String, String>{
   // More
   'more.eyebrow': 'বাকি সব টুল, গুছিয়ে রাখা',
   'more.description': 'কোন টুল কোথায় আছে মনে না রেখেই খুঁজে নিন।',
-  'more.connectionHealth': 'কানেকশনের অবস্থা',
-  'more.connectionHealthSub': 'কী কী অটো সিঙ্ক হচ্ছে দেখুন',
 
   // Courier compare and connections
   'cmp.eyebrow': 'ডেলিভারি খরচের হিসাব',

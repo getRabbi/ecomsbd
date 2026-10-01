@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 
-import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
+import 'integration_hub.dart';
 
 /// Sales and messaging channels, and the inbox boundary.
 ///
@@ -92,7 +92,7 @@ List<ChannelStatus> channelStatusesFromHub(Map<String, dynamic> hub) {
 final salesChannelsProvider = FutureProvider.autoDispose<List<ChannelStatus>>((
   ref,
 ) async {
-  final hub = await ref.watch(apiClientProvider).get('/integrations');
+  final hub = await ref.watch(integrationsHubProvider.future);
   return channelStatusesFromHub(hub);
 });
 

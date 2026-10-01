@@ -24,7 +24,6 @@ import '../products/products_screen.dart';
 import '../risk/risk_check_screen.dart';
 import '../settings/connections_screen.dart';
 import '../settings/courier_accounts_screen.dart';
-import '../settings/integrations_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/team_screen.dart';
 import '../shared/inputs.dart';
@@ -84,9 +83,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           open: _page(CustomersScreen.new),
         ),
         _Tool(
-          Icons.storefront_outlined,
-          'more.website',
-          'more.websiteSub',
+          Icons.hub_outlined,
+          'more.connections',
+          'more.connectionsSub',
           open: _page(ConnectionsScreen.new),
         ),
         _Tool(
@@ -163,18 +162,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           'more.analytics',
           'more.analyticsSub',
           open: _page(InsightsPage.new),
-        ),
-        _Tool(
-          Icons.hub_outlined,
-          'more.integrations',
-          'more.integrationsSub',
-          open: _page(IntegrationsScreen.new),
-        ),
-        _Tool(
-          Icons.sensors_rounded,
-          'more.connectionHealth',
-          'more.connectionHealthSub',
-          open: _page(ConnectionsScreen.new),
         ),
       ],
     ),
