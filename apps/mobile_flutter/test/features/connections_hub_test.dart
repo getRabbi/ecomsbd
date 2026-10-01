@@ -23,7 +23,7 @@ import 'commerce_harness.dart';
 ///
 /// * every store, channel and courier is listed with the state the server
 ///   gave — a provider waiting on its own app approval says so and offers
-///   nothing, one ready to connect links to the real web setup page;
+///   nothing, one ready to connect is connected right here (no web page);
 /// * a courier the server switched on with nothing saved reads "Not
 ///   connected" with a Connect button — "Disabled" only when the server says
 ///   the courier is off for this shop;
@@ -244,7 +244,7 @@ void main() {
           'provider': 'X',
           'available': true,
         }),
-        IntegrationSetupState.setUpOnWeb,
+        IntegrationSetupState.canConnect,
       );
       expect(providerSetupState(null), IntegrationSetupState.notImplemented);
     });
@@ -270,7 +270,9 @@ void main() {
       // The old dead end is gone.
       expect(find.text('Official setup required'), findsNothing);
 
-      // WooCommerce and a custom website link to the real web setup page.
+      // WooCommerce and a custom website connect natively; nothing sends the
+      // seller to a web dashboard.
+      expect(find.text(_en('conn.setUpOnWeb')), findsNothing);
       expect(find.byKey(const ValueKey('hub-setup-WOOCOMMERCE')), findsOne);
       expect(find.byKey(const ValueKey('hub-setup-CUSTOM_WEBSITE')), findsOne);
       expect(find.byKey(const ValueKey('hub-setup-SHOPIFY')), findsNothing);
@@ -478,7 +480,8 @@ void main() {
         find.text(banglaStrings['conn.approvalPending']!),
         findsNWidgets(3),
       );
-      expect(find.text(banglaStrings['common.connect']!), findsNWidgets(3));
+      // Three couriers and the custom website (WooCommerce has a connection).
+      expect(find.text(banglaStrings['common.connect']!), findsNWidgets(4));
       expectNoOverflow(tester);
     });
 

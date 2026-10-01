@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/analytics/analytics_providers.dart';
+import '../../data/chat_orders/chat_orders.dart';
 import '../../data/commerce/list_controllers.dart';
+import '../../data/notifications/push_registration.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/pills.dart';
 import '../../design/components/surfaces.dart';
@@ -50,6 +52,34 @@ class MainShellState extends ConsumerState<MainShell> {
   };
 
   static const List<MainDestination> _tabs = MainDestination.values;
+
+  StreamSubscription<Map<String, dynamic>>? _pushTaps;
+
+  @override
+  void initState() {
+    super.initState();
+    // A tapped push lands on what it is about: a chat order opens the Inbox.
+    _pushTaps = pushTaps().listen(_openFromPush);
+    unawaited(
+      initialPushTap().then((data) {
+        if (data != null && mounted) _openFromPush(data);
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_pushTaps?.cancel());
+    super.dispose();
+  }
+
+  void _openFromPush(Map<String, dynamic> data) {
+    if (data['route'] == 'inbox' || data['kind'] == 'CHAT_ORDER_READY') {
+      ref.invalidate(chatDraftsProvider);
+      ref.invalidate(chatOrderSummaryProvider);
+      _select(MainDestination.inbox);
+    }
+  }
 
   int get _index => _tabs.indexOf(_current).clamp(0, _tabs.length - 1);
 

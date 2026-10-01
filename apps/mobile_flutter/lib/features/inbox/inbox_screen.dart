@@ -6,13 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
 import '../../data/channels/channel_models.dart';
+import '../../data/chat_orders/chat_orders.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/list_controllers.dart';
 import '../../data/commerce/models.dart';
 import '../../data/commerce/orders_repository.dart';
 import '../../design/components/badges.dart';
-import '../../design/components/cards.dart';
-import '../../design/components/navigation.dart';
 import '../../design/components/seller_blocks.dart';
 import '../../design/components/states.dart';
 import '../../design/components/surfaces.dart';
@@ -24,15 +23,15 @@ import '../orders/order_detail_screen.dart';
 import '../settings/connections_screen.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import 'chat_order_widgets.dart';
 
-/// The Inbox tab: customer conversations from every channel, and the step
-/// from a message to an order.
+/// The Inbox tab: order automation for Messenger and WhatsApp, not a chat app.
 ///
-/// Conversations come from an [InboxSource]. None can read inbound chats yet,
-/// so the list says that plainly rather than showing an empty inbox as if no
-/// customer wrote. Turning a message into an order works today: it uses the
-/// same server parser as "paste an order", and the seller reviews every field
-/// before anything is saved.
+/// Customers keep chatting in Messenger or WhatsApp. The server reads each
+/// burst of messages into one draft order with the same parser as "paste a
+/// message", and the seller reviews, edits and confirms it here — or ignores
+/// it. Nothing becomes an order without that confirmation. Pasting a message
+/// by hand still works, for chats from anywhere else.
 class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key, this.onNavigate});
 
@@ -46,6 +45,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   final TextEditingController _message = TextEditingController();
 
   SalesChannel? _channel;
+
+  /// `review` (ready and needs-info), `ready` or `needs_info`.
+  String _status = 'review';
+  final Set<String> _acting = <String>{};
   bool _detecting = false;
   ApiError? _error;
   ParsedOrder? _parsed;
@@ -121,24 +124,89 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     );
   }
 
-  Future<void> _openThread(InboxThread thread) async {
-    final text = await InboxThreadSheet.show(context, thread);
-    if (text == null || !mounted) return;
-    _message.text = text;
-    await _detect();
+  void _refreshChat() {
+    ref.invalidate(chatDraftsProvider);
+    ref.invalidate(chatOrderSummaryProvider);
+    ref.invalidate(chatAttentionProvider);
   }
+
+  Future<void> _review(ChatDraft draft) async {
+    final saved = await Navigator.of(context).push<SavedOrder>(
+      MaterialPageRoute<SavedOrder>(
+        builder: (_) => OrderComposeScreen(chatDraft: draft),
+      ),
+    );
+    if (saved == null || !mounted) return;
+    _refreshChat();
+    await ref.read(orderListProvider.notifier).refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr('orders.savedNumber', <String, Object?>{
+            'number': saved.order.orderNumber,
+          }),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _ignore(ChatDraft draft) async {
+    setState(() => _acting.add(draft.id));
+    try {
+      await ref.read(chatOrdersRepositoryProvider).ignore(draft.id);
+      _refreshChat();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('cho.ignored'))));
+      }
+    } on ApiError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
+      }
+    } finally {
+      if (mounted) setState(() => _acting.remove(draft.id));
+    }
+  }
+
+  Future<void> _resolve(ChatAttentionItem item) async {
+    try {
+      await ref.read(chatOrdersRepositoryProvider).resolveAttention(item.id);
+      ref.invalidate(chatAttentionProvider);
+    } on ApiError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.displayMessage)));
+      }
+    }
+  }
+
+  /// The chat provider a channel filter shows; null shows every one.
+  String? get _provider => switch (_channel) {
+    SalesChannel.facebook => 'MESSENGER',
+    SalesChannel.whatsapp => 'WHATSAPP',
+    null => null,
+    _ => 'NONE',
+  };
 
   @override
   Widget build(BuildContext context) {
-    final threads = ref.watch(inboxThreadsProvider);
+    final drafts = ref.watch(chatDraftsProvider(_status));
+    final summary = ref.watch(chatOrderSummaryProvider).valueOrNull;
+    final attention = ref.watch(chatAttentionProvider).valueOrNull;
     final channels = ref.watch(salesChannelsProvider);
+    final provider = _provider;
 
     return RefreshIndicator(
       edgeOffset: EcomsbdLayout.shellRefreshOffset(context),
       onRefresh: () async {
-        ref.invalidate(inboxThreadsProvider);
+        _refreshChat();
         ref.invalidate(salesChannelsProvider);
-        await ref.read(inboxThreadsProvider.future);
+        await ref.read(chatDraftsProvider(_status).future);
       },
       child: ListView(
         padding: EdgeInsets.fromLTRB(
@@ -175,40 +243,96 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             ),
           ),
           SectionHeader(
-            title: context.tr('inbox.waiting'),
-            subtitle: context.tr('inbox.waitingSub'),
+            title: context.tr('cho.sectionTitle'),
+            subtitle: context.tr('cho.sectionSub'),
           ),
-          threads.when(
+          Wrap(
+            spacing: EcomsbdSpacing.xs,
+            runSpacing: EcomsbdSpacing.xs,
+            children: <Widget>[
+              for (final (key, label) in <(String, String)>[
+                ('review', context.tr('cho.filterAll')),
+                (
+                  'ready',
+                  context.tr('cho.filterReady', <String, Object?>{
+                    'count': summary?.ready ?? 0,
+                  }),
+                ),
+                (
+                  'needs_info',
+                  context.tr('cho.filterNeedsInfo', <String, Object?>{
+                    'count': summary?.needsInfo ?? 0,
+                  }),
+                ),
+              ])
+                FilterToggle(
+                  key: ValueKey('chat-filter-$key'),
+                  label: label,
+                  selected: _status == key,
+                  onChanged: (_) => setState(() => _status = key),
+                ),
+            ],
+          ),
+          const SizedBox(height: EcomsbdSpacing.sm),
+          if (summary != null && !summary.anyChannel)
+            _ConnectChatCard(onManage: _manageChannels),
+          drafts.when(
             loading: () => const ContentLoader(minHeight: 90),
-            error: (_, __) => _NotSyncedCard(onManage: _manageChannels),
+            error: (error, _) => error is ApiError
+                ? ErrorStateCard(error: error, onRetry: _refreshChat)
+                : const SizedBox.shrink(),
             data: (list) {
-              if (list == null) {
-                return _NotSyncedCard(onManage: _manageChannels);
-              }
               final shown = list
-                  .where((t) => _channel == null || t.channel == _channel)
+                  .where((d) => provider == null || d.provider == provider)
                   .toList();
               if (shown.isEmpty) {
                 return EmptyState(
                   icon: Icons.forum_outlined,
-                  title: context.tr('inbox.emptyTitle'),
-                  message: context.tr('inbox.emptyBody'),
+                  title: context.tr('cho.emptyTitle'),
+                  message: context.tr('cho.emptyBody'),
                 );
               }
               return Column(
                 children: <Widget>[
-                  for (final thread in shown)
+                  for (final draft in shown)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 9),
-                      child: ConversationRow(
-                        thread: thread,
-                        onTap: () => unawaited(_openThread(thread)),
+                      child: ChatDraftCard(
+                        draft: draft,
+                        busy: _acting.contains(draft.id),
+                        onReview: () => unawaited(_review(draft)),
+                        onIgnore: () => unawaited(_ignore(draft)),
                       ),
                     ),
                 ],
               );
             },
           ),
+          if (attention != null && attention.isNotEmpty) ...<Widget>[
+            SectionHeader(
+              title: context.tr('cho.attentionTitle'),
+              subtitle: context.tr('cho.attentionSub'),
+            ),
+            for (final item in attention)
+              if (provider == null || item.provider == provider)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: ChatAttentionTile(
+                    item: item,
+                    onOpenOrder: item.orderId == null
+                        ? null
+                        : () => unawaited(
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    OrderDetailScreen(orderId: item.orderId!),
+                              ),
+                            ),
+                          ),
+                    onDone: () => unawaited(_resolve(item)),
+                  ),
+                ),
+          ],
           SectionHeader(
             title: context.tr('inbox.detectTitle'),
             subtitle: context.tr('inbox.detectSub'),
@@ -316,8 +440,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   }
 }
 
-class _NotSyncedCard extends StatelessWidget {
-  const _NotSyncedCard({required this.onManage});
+/// No Messenger or WhatsApp is connected, so no chat can become a draft.
+class _ConnectChatCard extends StatelessWidget {
+  const _ConnectChatCard({required this.onManage});
 
   final VoidCallback onManage;
 
@@ -328,20 +453,21 @@ class _NotSyncedCard extends StatelessWidget {
       child: Row(
         children: <Widget>[
           const SoftIcon(
-            icon: Icons.sync_disabled_rounded,
+            icon: Icons.forum_outlined,
             tone: Tone.neutral,
             size: 36,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              context.tr('inbox.notSynced'),
+              context.tr('cho.connectFirst'),
               style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
             ),
           ),
           TextButton(
+            key: const Key('chat-connect-channels'),
             onPressed: onManage,
-            child: Text(context.tr('conn.manage')),
+            child: Text(context.tr('common.connect')),
           ),
         ],
       ),
@@ -594,111 +720,6 @@ class _DashedBorderPainter extends CustomPainter {
       oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
-/// `.inbox-row` — avatar, name, last message, channel and time, unread count.
-class ConversationRow extends StatelessWidget {
-  const ConversationRow({required this.thread, super.key, this.onTap});
-
-  final InboxThread thread;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final unread = thread.unreadCount;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: EcomsbdColors.line),
-          ),
-          child: Row(
-            children: <Widget>[
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[Color(0xFF153B61), Color(0xFF0F1D2E)],
-                  ),
-                ),
-                child: Text(
-                  thread.customerLabel.characters.first.toUpperCase(),
-                  style: EcomsbdType.bodyStrong.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      thread.customerLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: EcomsbdType.bodyStrong,
-                    ),
-                    Text(
-                      thread.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: EcomsbdType.body.copyWith(
-                        color: EcomsbdColors.muted,
-                      ),
-                    ),
-                    Text(
-                      '${channelName(context, thread.channel)} · '
-                      '${formatRelative(thread.lastMessageAt)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: EcomsbdType.caption.copyWith(
-                        fontSize: 11,
-                        color: EcomsbdColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (unread > 0) ...<Widget>[
-                const SizedBox(width: 8),
-                Container(
-                  constraints: const BoxConstraints(minWidth: 21),
-                  height: 21,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: EcomsbdColors.orange,
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: Text(
-                    unread > 99 ? '99+' : '$unread',
-                    style: EcomsbdType.chip.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A customer's delivery record in one line, toned by returns.
 class CustomerContextLine extends StatelessWidget {
   const CustomerContextLine({required this.customer, super.key});
@@ -734,91 +755,6 @@ class CustomerContextLine extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// One conversation with the customer's record beside it.
-///
-/// Resolves to the message text when the seller asks to turn it into an
-/// order; the Inbox runs detection on it.
-class InboxThreadSheet extends ConsumerWidget {
-  const InboxThreadSheet({required this.thread, super.key});
-
-  final InboxThread thread;
-
-  static Future<String?> show(
-    BuildContext context,
-    InboxThread thread,
-  ) => GlassBottomSheet.show<String>(
-    context: context,
-    title: thread.customerLabel,
-    description:
-        '${channelName(context, thread.channel)} · ${formatRelative(thread.lastMessageAt)}',
-    child: InboxThreadSheet(thread: thread),
-  );
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final customerId = thread.customerId;
-    final customer = customerId == null
-        ? null
-        : ref.watch(customerProvider(customerId)).valueOrNull;
-    final orders = customerId == null
-        ? null
-        : ref.watch(customerOrdersProvider(customerId)).valueOrNull;
-    final orderId = thread.orderId;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        GlassCard(
-          padding: const EdgeInsets.all(EcomsbdSpacing.sm),
-          child: Text(thread.lastMessage, style: EcomsbdType.body),
-        ),
-        const SizedBox(height: EcomsbdSpacing.sm),
-        if (customer != null)
-          CustomerContextLine(customer: customer)
-        else
-          Text(
-            context.tr('inbox.unknownCustomer'),
-            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
-          ),
-        if (orders != null && orders.isNotEmpty) ...<Widget>[
-          SectionHeader(title: context.tr('rrv.recent')),
-          for (final order in orders.take(3))
-            GlassListRow(
-              title: order.orderNumber,
-              subtitle: order.statusLabel,
-              trailingTop: order.codAmount.format(),
-            ),
-        ],
-        const SizedBox(height: EcomsbdSpacing.sm),
-        if (orderId != null)
-          OutlinedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              unawaited(
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => OrderDetailScreen(orderId: orderId),
-                  ),
-                ),
-              );
-            },
-            child: Text(context.tr('inbox.openOrder')),
-          )
-        else
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(thread.lastMessage),
-            style: FilledButton.styleFrom(
-              backgroundColor: EcomsbdColors.orange,
-              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
-              shape: const StadiumBorder(),
-            ),
-            child: Text(context.tr('inbox.fromChat')),
-          ),
-      ],
     );
   }
 }
