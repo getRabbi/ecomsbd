@@ -256,6 +256,16 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                         style: const TextStyle(color: EcomsbdColors.red),
                       ),
                     ),
+                    if (authErrorDiagnostic(state.error!) case final code?) ...[
+                      const SizedBox(height: EcomsbdSpacing.xs),
+                      SelectableText(
+                        context.tr('autherr.diagnostic', {'code': code}),
+                        key: const Key('auth-error-diagnostic'),
+                        style: EcomsbdType.caption.copyWith(
+                          color: EcomsbdColors.muted,
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: EcomsbdSpacing.lg),
                   FilledButton(

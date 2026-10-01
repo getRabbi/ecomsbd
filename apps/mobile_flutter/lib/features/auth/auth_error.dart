@@ -31,3 +31,11 @@ String authErrorMessage(BuildContext context, ApiError error) =>
       ApiErrorCode.forbidden => context.tr('autherr.forbidden'),
       _ => context.tr('autherr.generic'),
     };
+
+/// The code shown under [error] so a tester can say where sign-in failed,
+/// such as `APPLE_SUPABASE_REJECTED 400 provider_disabled`.
+///
+/// Release builds keep no other trace of a provider failure. Null for other
+/// errors, and for a cancellation, which needs no explaining.
+String? authErrorDiagnostic(ApiError error) =>
+    error.code.endsWith('_CANCELLED') ? null : error.diagnostic;

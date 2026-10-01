@@ -94,7 +94,14 @@ class AuthRepository implements SessionProvider {
     );
   }
 
-  Future<T> _authCall<T>(Future<T> Function() action) async {
+  /// Runs a Supabase auth call, turning its failures into [ApiError]s.
+  ///
+  /// [diagnose] names a refusal for [ApiError.diagnostic]; the SDK's message
+  /// is not kept.
+  Future<T> _authCall<T>(
+    Future<T> Function() action, {
+    String Function(AuthException error)? diagnose,
+  }) async {
     try {
       return await action();
     } on AuthException catch (error) {
@@ -104,6 +111,8 @@ class AuthRepository implements SessionProvider {
         _client?.reachability?.reportUnreachable();
         throw ApiError.offline();
       }
+      final diagnostic = diagnose?.call(error);
+      if (diagnostic != null) recordAuthDiagnostic(diagnostic);
       throw ApiError(
         code: switch (error.code) {
           'email_not_confirmed' => 'EMAIL_NOT_VERIFIED',
@@ -115,6 +124,9 @@ class AuthRepository implements SessionProvider {
         messageBn: '',
         messageEn: 'Authentication could not be completed. Please try again.',
         retryable: true,
+        details: diagnostic == null
+            ? null
+            : <String, dynamic>{'diagnostic': diagnostic},
       );
     }
   }
@@ -159,6 +171,12 @@ class AuthRepository implements SessionProvider {
     return _envelope();
   }
 
+  /// Signs in to Supabase with a provider's identity token [token], then loads
+  /// the ecomsbd profile.
+  ///
+  /// A failure says which of the two steps failed in its
+  /// [ApiError.diagnostic]. A refusal from Supabase also names the token's
+  /// audience, the client id Supabase compared with its list.
   Future<SessionEnvelope> signInWithProvider(
     SignInProvider provider,
     String token, {
@@ -172,8 +190,22 @@ class AuthRepository implements SessionProvider {
         idToken: token,
         nonce: nonce,
       ),
+      diagnose: (error) => providerDiagnostic(
+        provider,
+        ProviderSignInFailure.supabaseRejected,
+        status: error.statusCode,
+        reasons: <Object?>[
+          supabaseRejectionReason(error),
+          if (identityTokenAudience(token) case final audience?)
+            'aud=$audience',
+        ],
+      ),
     );
-    return _envelope();
+    try {
+      return await _envelope();
+    } on ApiError catch (error) {
+      throw providerProfileError(provider, error);
+    }
   }
 
   Future<void> startAppleOAuth() => _authCall(() async {
@@ -182,7 +214,13 @@ class AuthRepository implements SessionProvider {
       redirectTo: Env.authRedirectUrl,
       authScreenLaunchMode: LaunchMode.externalApplication,
     );
-    if (!launched) throw providerSignInError(SignInProvider.apple);
+    if (!launched) {
+      throw providerSignInError(
+        SignInProvider.apple,
+        failure: ProviderSignInFailure.notAvailable,
+        reason: 'browser',
+      );
+    }
   });
 
   Future<void> resendVerification(String email) => _authCall(() async {

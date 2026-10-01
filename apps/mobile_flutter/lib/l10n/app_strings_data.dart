@@ -1405,6 +1405,7 @@ const Map<String, String> _authErrEn = <String, String>{
       'method.',
   'autherr.forbidden': 'This account cannot sign in. Contact support for help.',
   'autherr.generic': 'Sign-in could not be completed. Please try again.',
+  'autherr.diagnostic': 'Error code: {code}',
 };
 
 const Map<String, String> _authErrBn = <String, String>{
@@ -1442,6 +1443,7 @@ const Map<String, String> _authErrBn = <String, String>{
   'autherr.forbidden':
       'এই অ্যাকাউন্ট দিয়ে সাইন ইন করা যাবে না। সাপোর্টে যোগাযোগ করুন।',
   'autherr.generic': 'সাইন ইন সম্পূর্ণ করা যায়নি। আবার চেষ্টা করুন।',
+  'autherr.diagnostic': 'ত্রুটির কোড: {code}',
 };
 
 // --------------------------------------------------------------------------- //
