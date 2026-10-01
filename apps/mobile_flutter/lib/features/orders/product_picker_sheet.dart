@@ -25,22 +25,29 @@ class ProductPickerSheet extends ConsumerStatefulWidget {
     super.key,
     this.suggestions = const <({String id, String name})>[],
     this.initialQuery = '',
+    this.productId,
   });
 
   final List<({String id, String name})> suggestions;
   final String initialQuery;
+
+  /// A product already chosen whose size or colour is still open: the sheet
+  /// starts on its variants.
+  final String? productId;
 
   static Future<PickedProduct?> show(
     BuildContext context, {
     List<({String id, String name})> suggestions =
         const <({String id, String name})>[],
     String initialQuery = '',
+    String? productId,
   }) => GlassBottomSheet.show<PickedProduct>(
     context: context,
     title: context.tr('cho.pickProduct'),
     child: ProductPickerSheet(
       suggestions: suggestions,
       initialQuery: initialQuery,
+      productId: productId,
     ),
   );
 
@@ -61,7 +68,10 @@ class _ProductPickerState extends ConsumerState<ProductPickerSheet> {
   @override
   void initState() {
     super.initState();
-    if (widget.suggestions.isEmpty) {
+    final chosen = widget.productId;
+    if (chosen != null) {
+      Future<void>.microtask(() => _choose(chosen));
+    } else if (widget.suggestions.isEmpty) {
       Future<void>.microtask(_search);
     }
   }

@@ -103,6 +103,10 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
         if (_launched && _step == _Step.waiting) unawaited(_check());
       },
     );
+    if (widget.connectionId != null && widget.provider == 'MESSENGER') {
+      // An unfinished Facebook sign-in may already have its Pages listed.
+      Future<void>.microtask(() => _check(quiet: true));
+    }
   }
 
   @override
@@ -187,7 +191,7 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
   /// What the server says now. Called on return from the browser; [hint] is
   /// the return page's code, used only to word a failure the server's
   /// connection does not record.
-  Future<void> _check({String? hint}) => _run(() async {
+  Future<void> _check({String? hint, bool quiet = false}) => _run(() async {
     final id = _id;
     if (id == null) return;
     final api = ref.read(apiClientProvider);
@@ -203,7 +207,7 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
         return;
       }
     }
-    _show(connection, hint: hint);
+    _show(connection, hint: hint, quiet: quiet);
   });
 
   void _failedCheck(Map<String, dynamic> result) {
@@ -218,7 +222,11 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
     );
   }
 
-  void _show(Map<String, dynamic> connection, {String? hint}) {
+  void _show(
+    Map<String, dynamic> connection, {
+    String? hint,
+    bool quiet = false,
+  }) {
     final pages = (connection['pages'] as List<dynamic>? ?? const <dynamic>[])
         .whereType<Map<String, dynamic>>()
         .toList();
@@ -229,6 +237,8 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
       } else if (widget.provider == 'MESSENGER' && pages.isNotEmpty) {
         _pages = pages;
         _step = _Step.pages;
+      } else if (quiet) {
+        return;
       } else if (connection['last_error_code'] != null) {
         _error = codeLabel(context, '${connection['last_error_code']}');
       } else if (hint != null && englishStrings.containsKey('int.code.$hint')) {

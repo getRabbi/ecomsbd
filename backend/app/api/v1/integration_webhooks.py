@@ -76,13 +76,14 @@ async def _finish(db: DbSession, connection_id: object, result: str) -> Response
 def _return_page(connection_id: str, result: str) -> HTMLResponse:
     """Hand the seller back to the app after a provider's sign-in page.
 
-    Says nothing about the shop or the outcome beyond a code the app already
-    knows: the app asks the API what happened.
+    A redirect, not a script: Android Chrome opens an app from a redirect in
+    a chain the seller started (the provider's Approve button), but blocks a
+    page script from doing it. The body is the fallback a browser shows when
+    it does not follow. Says nothing about the shop or the outcome beyond a
+    code the app already knows: the app asks the API what happened.
     """
-    link = html.escape(
-        f"{APP_SCHEME}://integrations/return?connection={connection_id}&result={result}",
-        quote=True,
-    )
+    target = f"{APP_SCHEME}://integrations/return?connection={connection_id}&result={result}"
+    link = html.escape(target, quote=True)
     page = f"""<!doctype html>
 <html lang="bn"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -92,11 +93,15 @@ def _return_page(connection_id: str, result: str) -> HTMLResponse:
 a{{display:inline-block;margin-top:24px;padding:14px 28px;border-radius:14px;background:#f26b1d;color:#fff;
 text-decoration:none;font-weight:700}}p{{color:#5b6b7c}}</style></head>
 <body><h2>ecomsbd অ্যাপে ফিরে যান</h2><p>Return to the ecomsbd app to finish connecting.</p>
-<a href="{link}">ecomsbd খুলুন · Open ecomsbd</a>
-<script>window.location.replace("{link}");</script></body></html>"""
+<a href="{link}">ecomsbd খুলুন · Open ecomsbd</a></body></html>"""
     return HTMLResponse(
         page,
-        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        status_code=302,
+        headers={
+            "Location": target,
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+        },
     )
 
 

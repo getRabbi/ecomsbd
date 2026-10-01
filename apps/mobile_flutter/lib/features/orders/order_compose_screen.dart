@@ -313,6 +313,7 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
       suggestions:
           item.match?.candidates ?? const <({String id, String name})>[],
       initialQuery: item.productId == null ? item.name.text.trim() : '',
+      productId: item.needsVariant ? item.productId : null,
     );
     if (picked == null || !mounted) return;
     setState(() {

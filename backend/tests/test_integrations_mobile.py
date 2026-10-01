@@ -86,7 +86,10 @@ async def test_app_one_click_returns_to_the_app_without_a_web_dashboard(
         f"/v1/integration-callbacks/return?connection={conn['id']}&result=woocommerce"
         f"&success=1&user_id={query['user_id'][0]}"
     )
-    assert page.status_code == 200 and page.headers["cache-control"] == "no-store"
+    assert page.status_code == 302 and page.headers["cache-control"] == "no-store"
+    assert page.headers["location"] == (
+        f"com.ecomsbd.app://integrations/return?connection={conn['id']}&result=woocommerce"
+    )
     assert (
         f"com.ecomsbd.app://integrations/return?connection={conn['id']}&amp;result=woocommerce"
         in page.text
@@ -166,7 +169,8 @@ async def test_messenger_sign_in_from_the_app_returns_to_the_app(client, unique_
     )
     state = parse_qs(urlsplit(started.json()["authorize_url"]).query)["state"][0]
     back = await client.get(f"/v1/integration-callbacks/meta?state={state}&code=abc")
-    assert back.status_code == 200 and "text/html" in back.headers["content-type"]
+    assert back.status_code == 302 and "text/html" in back.headers["content-type"]
+    assert back.headers["location"].startswith("com.ecomsbd.app://integrations/return?")
     assert f"com.ecomsbd.app://integrations/return?connection={conn['id']}" in back.text
     async with system_session("test: conn") as db:
         row = await db.scalar(
