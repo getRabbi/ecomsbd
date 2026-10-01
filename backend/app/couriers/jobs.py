@@ -45,7 +45,7 @@ from app.couriers.models import CourierAccount, CourierAccountStatus
 from app.couriers.recovery import BookingRecoveryService
 from app.couriers.returns import CourierReturnService
 from app.couriers.status_sync import StatusSyncService
-from app.db.session import system_session
+from app.db.session import session_scope, system_session
 from app.db.tenancy import allow_cross_tenant
 from app.money.service import ReceivableService
 
@@ -103,38 +103,43 @@ async def _per_tenant(
     """
     totals: dict[str, int] = {"tenants": 0, "errors": 0}
 
-    async with system_session(f"worker: {job_name}") as session:
-        accounts = await _connected_accounts(session, provider)
+    # Only the account listing spans shops. Each shop's work then gets its own
+    # tenant-scoped session: the tenancy guards filter its reads to that shop
+    # and stamp its inserts with it, and it commits or rolls back on its own.
+    # A shared system session did neither: inserts reached the database with
+    # no tenant, a per-shop lookup could see another shop's account, and one
+    # shop's rollback undid the shops before it.
+    async with system_session(f"worker: {job_name}") as listing:
+        accounts = await _connected_accounts(listing, provider)
 
-        for tenant_id, _account_id in accounts:
-            token = set_context(
-                RequestContext(
-                    trace_id=uuid.uuid4().hex,
-                    tenant_id=tenant_id,
-                    actor_type=ActorType.SYSTEM,
-                    job_name=job_name,
-                )
+    for tenant_id, _account_id in accounts:
+        token = set_context(
+            RequestContext(
+                trace_id=uuid.uuid4().hex,
+                tenant_id=tenant_id,
+                actor_type=ActorType.SYSTEM,
+                job_name=job_name,
             )
-            try:
+        )
+        try:
+            async with session_scope() as session:
                 with log_duration(log, job_name, provider=provider):
                     result = await handler(session, tenant_id)
-                for key, value in result.items():
-                    totals[key] = totals.get(key, 0) + value
-                totals["tenants"] += 1
-                await session.flush()
-            except Exception as exc:
-                totals["errors"] += 1
-                log.error(
-                    "courier job failed for a shop",
-                    extra={
-                        "provider": provider,
-                        "job_name": job_name,
-                        "error": type(exc).__name__,
-                    },
-                )
-                await session.rollback()
-            finally:
-                clear_context(token)
+            for key, value in result.items():
+                totals[key] = totals.get(key, 0) + value
+            totals["tenants"] += 1
+        except Exception as exc:
+            totals["errors"] += 1
+            log.error(
+                "courier job failed for a shop",
+                extra={
+                    "provider": provider,
+                    "job_name": job_name,
+                    "error": type(exc).__name__,
+                },
+            )
+        finally:
+            clear_context(token)
 
     return totals
 
