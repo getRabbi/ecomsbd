@@ -20,6 +20,7 @@ from arq.connections import RedisSettings
 from app import __version__
 from app.analytics.network import build_network_benchmarks
 from app.automation.jobs import dispatch_automation, scan_segment_entries
+from app.chat_orders.jobs import chat_order_housekeeping, process_chat_messages
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -110,6 +111,8 @@ class WorkerSettings:
         run_integration_syncs,
         schedule_integrations,
         sync_inventories,
+        process_chat_messages,
+        chat_order_housekeeping,
         dispatch_outbox,
         snapshot_demand_forecasts,
         prune_external_risk_lookups,
@@ -147,6 +150,10 @@ class WorkerSettings:
         # Integrations: queued webhook events every 15s, sync pages twice a
         # minute within a time budget, catch-up syncs and health every 5 min.
         cron(process_integration_events, second={3, 18, 33, 48}),
+        # Chat-to-order: received Messenger/WhatsApp messages into drafts
+        # every 15s; expiry and raw-message retention hourly.
+        cron(process_chat_messages, second={8, 23, 38, 53}),
+        cron(chat_order_housekeeping, minute={41}),
         cron(run_integration_syncs, second={25, 55}),
         cron(schedule_integrations, minute=set(range(0, 60, 5))),
         # Two-way stock: compare mapped items every 5 minutes (V3.2).

@@ -622,9 +622,11 @@ class ParsedItem {
   final int? unitPricePaisa;
 
   String get displayName {
+    // The parser keeps a colour in the name ("কালো পাঞ্জাবি"); say it once.
+    final named = name.toLowerCase();
     final parts = <String>[
       name,
-      if (color != null) color!,
+      if (color != null && !named.contains(color!.toLowerCase())) color!,
       if (size != null) size!,
     ];
     return parts.join(' ');

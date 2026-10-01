@@ -18,6 +18,7 @@ import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/network_status.dart';
 import 'courier_accounts_screen.dart';
+import 'integration_setup_screens.dart';
 import 'integrations_screen.dart';
 
 /// Connections & Integrations: the one place a seller sees every store,
@@ -28,9 +29,9 @@ import 'integrations_screen.dart';
 /// state comes from the same functions the courier accounts screen uses, so
 /// the two screens cannot disagree. Nothing here invents a count.
 ///
-/// Stores and channels are connected on the web, where the provider sign-in,
-/// keys and copy-paste happen; this screen links to the real page for that.
-/// Couriers are connected right here.
+/// Stores, chat channels and couriers are all connected right here: a store's
+/// own approval page or keys, a Facebook sign-in, a WhatsApp number, or a
+/// website API key shown once. Nothing depends on the web dashboard.
 class ConnectionsScreen extends ConsumerStatefulWidget {
   const ConnectionsScreen({super.key});
 
@@ -386,11 +387,11 @@ class _IntegrationTile extends StatelessWidget {
 
     final name = <String, Object?>{'provider': providerName};
     final (String label, Tone tone, String note) = switch (row.state) {
-      IntegrationSetupState.setUpOnWeb => (
+      IntegrationSetupState.canConnect => (
         context.tr('chan.notConnected'),
         Tone.neutral,
         canManage
-            ? context.tr('conn.setUpOnWebNote', name)
+            ? context.tr('conn.connectNote.${row.provider}')
             : context.tr('conn.ownerConnects'),
       ),
       IntegrationSetupState.providerApprovalRequired => (
@@ -421,12 +422,17 @@ class _IntegrationTile extends StatelessWidget {
       subtitle: context.tr('conn.about.${row.provider}'),
       status: StatusChip(label: label, tone: tone, showIcon: false),
       note: note,
-      action: row.state == IntegrationSetupState.setUpOnWeb && canManage
-          ? OutlinedButton.icon(
+      action: row.state == IntegrationSetupState.canConnect && canManage
+          ? FilledButton(
               key: ValueKey('hub-setup-${row.provider}'),
-              onPressed: () => openWebDashboard(context, '/integrations'),
-              icon: const Icon(Icons.open_in_new_rounded, size: 16),
-              label: Text(context.tr('conn.setUpOnWeb')),
+              onPressed: () async {
+                final changed = await startIntegrationSetup(
+                  context,
+                  row.provider,
+                );
+                if (changed) onChanged();
+              },
+              child: Text(context.tr('common.connect')),
             )
           : null,
     );

@@ -42,10 +42,10 @@ enum IntegrationSetupState {
   /// A connection the seller disconnected or turned off.
   inactive,
 
-  /// Nothing connected yet, and the server is ready for one. Connecting a
-  /// store or channel takes a sign-in at the provider or copying keys, so it
-  /// is done in ecomsbd on the web.
-  setUpOnWeb,
+  /// Nothing connected yet, and the server is ready for one. Connected right
+  /// here: a provider sign-in in the browser that returns to the app, keys, or
+  /// a one-time API key — no web dashboard needed.
+  canConnect,
 
   /// The provider must approve ecomsbd's own app first (Shopify's app review,
   /// Meta's app review). Nothing the seller can do, and nothing wrong with
@@ -90,7 +90,7 @@ IntegrationSetupState connectionSetupState(Map<String, dynamic> connection) =>
 IntegrationSetupState providerSetupState(Map<String, dynamic>? availability) {
   if (availability == null) return IntegrationSetupState.notImplemented;
   if (availability['available'] == true) {
-    return IntegrationSetupState.setUpOnWeb;
+    return IntegrationSetupState.canConnect;
   }
   return _approvalBlockers.contains(availability['blocker'])
       ? IntegrationSetupState.providerApprovalRequired

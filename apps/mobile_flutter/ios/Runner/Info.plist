@@ -29,6 +29,10 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<!-- Links (Supabase sign-in, store and Facebook sign-in returns) are read by
+	     app_links, as on Android; the router never receives them. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<!-- Supabase email-confirmation and password-reset links

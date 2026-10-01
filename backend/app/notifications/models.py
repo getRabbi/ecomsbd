@@ -126,6 +126,10 @@ class NotificationKind(StrEnum):
     FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
     AUTOMATION = "AUTOMATION"
 
+    # --- Chat-to-order --------------------------------------------------
+    #: A Messenger or WhatsApp conversation became an order ready to review.
+    CHAT_ORDER_READY = "CHAT_ORDER_READY"
+
 
 class NotificationCategory(StrEnum):
     """What a seller switches on and off, and who in the team receives it."""
@@ -137,6 +141,8 @@ class NotificationCategory(StrEnum):
     INVENTORY = "INVENTORY"
     IMPORTS = "IMPORTS"
     CRM = "CRM"
+    #: New orders read from customer chats, waiting for the seller.
+    ORDERS = "ORDERS"
     #: The Friday summary and bundles.
     SUMMARY = "SUMMARY"
 

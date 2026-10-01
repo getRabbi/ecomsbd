@@ -224,8 +224,10 @@ void main() {
       findsOneWidget,
     );
     // An outbound push that failed reads as what was being sent, and retries.
-    await tester.ensureVisible(
+    await tester.scrollUntilVisible(
       find.text(englishStrings['int.op.PUSH_INVENTORY']!),
+      120,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text(englishStrings['int.op.PUSH_INVENTORY']!), findsOneWidget);
     await tester.scrollUntilVisible(

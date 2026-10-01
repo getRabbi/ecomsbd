@@ -14,6 +14,7 @@
 library;
 
 import 'automation_strings.dart';
+import 'chat_order_strings.dart';
 import 'crm_strings.dart';
 import 'integrations_strings.dart';
 import 'forecasting_strings.dart';
@@ -63,6 +64,8 @@ final Map<String, String> banglaStrings = <String, String>{
   ..._rtoBn,
   ..._inventoryBn,
   ..._insightsV2Bn,
+  // Last: rewords a few channel and Inbox strings from the maps above.
+  ...chatOrderBn,
 };
 
 final Map<String, String> englishStrings = <String, String>{
@@ -104,6 +107,8 @@ final Map<String, String> englishStrings = <String, String>{
   ..._rtoEn,
   ..._inventoryEn,
   ..._insightsV2En,
+  // Last: rewords a few channel and Inbox strings from the maps above.
+  ...chatOrderEn,
 };
 
 // --------------------------------------------------------------------------- //

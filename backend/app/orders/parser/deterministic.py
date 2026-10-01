@@ -37,7 +37,7 @@ from app.orders.parser.base import (
     ParsedOrder,
 )
 
-__all__ = ["DeterministicOrderParser"]
+__all__ = ["COLOR_EQUIVALENTS", "DeterministicOrderParser"]
 
 # --------------------------------------------------------------------------- #
 # Vocabulary
@@ -135,14 +135,196 @@ _COLORS = (
     "হলুদ",
     "গোলাপি",
     "খয়েরি",
+    # Banglish, as customers type colours in chat.
+    "kalo",
+    "sada",
+    "lal",
+    "nil",
+    "sobuj",
+    "holud",
+    "golapi",
 )
+
+#: The English name of each colour word, so a Bangla or Banglish colour can be
+#: compared with a catalogue that names its products in English.
+COLOR_EQUIVALENTS: dict[str, str] = {
+    "কালো": "black",
+    "kalo": "black",
+    "সাদা": "white",
+    "sada": "white",
+    "লাল": "red",
+    "lal": "red",
+    "নীল": "blue",
+    "nil": "blue",
+    "সবুজ": "green",
+    "sobuj": "green",
+    "হলুদ": "yellow",
+    "holud": "yellow",
+    "গোলাপি": "pink",
+    "golapi": "pink",
+    "খয়েরি": "brown",
+    "gray": "grey",
+}
+
+#: Counted quantities as customers write them in chat ("XL দুইটা").
+_QUANTITY_WORDS: dict[str, int] = {
+    "একটা": 1,
+    "একটি": 1,
+    "একখানা": 1,
+    "ekta": 1,
+    "akta": 1,
+    "দুইটা": 2,
+    "দুইটি": 2,
+    "দুটো": 2,
+    "দুটি": 2,
+    "দুইটো": 2,
+    "duita": 2,
+    "duto": 2,
+    "duiti": 2,
+    "তিনটা": 3,
+    "তিনটি": 3,
+    "tinta": 3,
+    "tinti": 3,
+    "চারটা": 4,
+    "চারটি": 4,
+    "charta": 4,
+    "পাঁচটা": 5,
+    "পাঁচটি": 5,
+    "pachta": 5,
+}
+
+#: Words that say what the customer wants rather than what the product is
+#: ("পাঞ্জাবিটা লাগবে", "order korte chai"). Dropped from product names, and a
+#: line made only of them carries no order detail.
+_FILLER_WORDS = frozenset(
+    {
+        "লাগবে",
+        "লাগবো",
+        "চাই",
+        "দিবেন",
+        "দিন",
+        "দেন",
+        "নিবো",
+        "নিব",
+        "নেব",
+        "নিতে",
+        "অর্ডার",
+        "করতে",
+        "করবো",
+        "করব",
+        "করুন",
+        "প্লিজ",
+        "আমার",
+        "আমি",
+        "আমাকে",
+        "এই",
+        "এটা",
+        "ওই",
+        "ওটা",
+        "ভাই",
+        "আপু",
+        "ভাইয়া",
+        "একটু",
+        "আছে",
+        "টা",
+        "টি",
+        "lagbe",
+        "chai",
+        "diben",
+        "den",
+        "nibo",
+        "nebo",
+        "order",
+        "korte",
+        "korbo",
+        "please",
+        "plz",
+        "pls",
+        "ami",
+        "amar",
+        "amake",
+        "ei",
+        "eta",
+        "oi",
+        "ota",
+        "bhai",
+        "vai",
+        "apu",
+        "ache",
+        "ase",
+        "need",
+        "want",
+        "buy",
+        "kinbo",
+        "kinte",
+        "ta",
+        "ti",
+    }
+)
+
+#: Words that mark a line as the customer asking for something, never a name.
+_INTENT_WORDS = frozenset(
+    {
+        "লাগবে",
+        "চাই",
+        "দিবেন",
+        "নিবো",
+        "নেব",
+        "অর্ডার",
+        "lagbe",
+        "chai",
+        "diben",
+        "nibo",
+        "nebo",
+        "order",
+        "need",
+        "want",
+    }
+)
+
+#: Whole lines that are conversation, not order detail.
+_NOISE_LINES = frozenset(
+    {
+        "hi",
+        "hello",
+        "hey",
+        "hlw",
+        "helo",
+        "salam",
+        "assalamualaikum",
+        "assalamu alaikum",
+        "আসসালামু আলাইকুম",
+        "আসসালামুয়ালাইকুম",
+        "সালাম",
+        "ok",
+        "okay",
+        "oke",
+        "ঠিক আছে",
+        "thanks",
+        "thank you",
+        "ধন্যবাদ",
+        "ji",
+        "জি",
+        "হ্যাঁ",
+        "yes",
+        "no",
+        "না",
+    }
+)
+
+_EDGE_PUNCTUATION = ",.!?।:;()\"'"
+
+#: The Bangla definite suffix on a noun ("পাঞ্জাবিটা" is "the panjabi").
+_DEFINITE_SUFFIXES = ("টা", "টি", "খানা")
 
 #: Currency markers. Their presence upgrades an amount from "a number" to
 #: "an amount", which is the difference between MEDIUM and HIGH confidence.
 _CURRENCY_TOKENS = ("৳", "tk", "taka", "bdt", "টাকা", "৳")
 
+# A Bangla vowel sign is not a regex word character, so "২টি" never ends on a
+# ``\b``: the counters end on a lookahead instead.
 _QUANTITY_RE = re.compile(
-    r"(?:^|\s)(?:(?P<qty1>\d{1,3})\s*(?:pcs?|piece|pieces|pc|টি|পিস)\b"
+    r"(?:^|\s)(?:(?P<qty1>\d{1,3})\s*(?:pcs?|pieces?|pc|টি|টা|খানা|পিস|ta|ti)(?=$|[\s,.!?।])"
     r"|(?:qty|quantity|পরিমাণ)\s*[:=-]?\s*(?P<qty2>\d{1,3})\b"
     r"|x\s*(?P<qty3>\d{1,3})\b)",
     re.IGNORECASE,
@@ -199,7 +381,11 @@ class DeterministicOrderParser:
             working = original
 
         normalized = normalize_digits(working)
-        lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+        lines = [
+            line.strip()
+            for line in normalized.splitlines()
+            if line.strip() and not self._is_noise(line)
+        ]
 
         labelled, unlabelled = self._split_labelled(lines)
 
@@ -214,6 +400,26 @@ class DeterministicOrderParser:
         if result.is_empty:
             result.warnings.append("Could not read this text. Please enter the order manually.")
         return result
+
+    # ----------------------------------------------------------------- noise --
+
+    def _is_noise(self, line: str) -> bool:
+        """A greeting, a thank-you or a question with no order detail in it.
+
+        Chat transcripts are full of these. Kept, they would be read as the
+        customer's name or as a product called "hello".
+        """
+        folded = " ".join(line.casefold().strip(_EDGE_PUNCTUATION + " ").split())
+        if folded in _NOISE_LINES:
+            return True
+        if any(char.isdigit() for char in line):
+            return False
+        if self._looks_like_product(line) or any(hint in folded for hint in _ADDRESS_HINTS):
+            return False
+        if "?" in line:
+            return True
+        tokens = [token.strip(_EDGE_PUNCTUATION) for token in folded.split()]
+        return bool(tokens) and all(not token or token in _FILLER_WORDS for token in tokens)
 
     # ------------------------------------------------------------ labelling --
 
@@ -403,6 +609,8 @@ class DeterministicOrderParser:
         if _SIZE_RE.search(line) or _QUANTITY_RE.search(line):
             return True
         lowered = line.lower()
+        if any(token.strip(_EDGE_PUNCTUATION) in _QUANTITY_WORDS for token in lowered.split()):
+            return True
         return any(re.search(rf"(?:^|\s){re.escape(color)}(?=$|\s)", lowered) for color in _COLORS)
 
     def _extract_name_and_items(
@@ -431,6 +639,9 @@ class DeterministicOrderParser:
 
         candidates: list[str] = []
         product_lines: list[str] = []
+        #: Every product or candidate line in the order it was written, so a
+        #: follow-up such as "XL দুইটা" attaches to the product before it.
+        ordered: list[str] = []
 
         for line in unlabelled:
             if line == result.address:
@@ -440,6 +651,7 @@ class DeterministicOrderParser:
             lowered = line.lower()
             if any(hint in lowered for hint in _ADDRESS_HINTS):
                 continue
+            ordered.append(line)
             if self._looks_like_product(line):
                 product_lines.append(line)
             else:
@@ -458,11 +670,17 @@ class DeterministicOrderParser:
         ):
             first = candidates[0]
             words = first.split()
-            if 1 <= len(words) <= 4 and not any(char.isdigit() for char in first):
+            asks = any(word.casefold().strip(_EDGE_PUNCTUATION) in _INTENT_WORDS for word in words)
+            if (
+                1 <= len(words) <= 4
+                and not any(char.isdigit() for char in first)
+                and not asks
+                and "?" not in first
+            ):
                 result.customer_name = first
                 # Positional heuristic: usually right, which is exactly MEDIUM.
                 result.confidence["name"] = FieldConfidence.MEDIUM
-                candidates = candidates[1:]
+                ordered.remove(first)
             else:
                 result.confidence["name"] = FieldConfidence.NONE
         else:
@@ -470,8 +688,7 @@ class DeterministicOrderParser:
 
         # --- items ---
         sources: list[tuple[str, bool]] = [(value, True) for value in labelled.get("product", [])]
-        sources.extend((line, False) for line in product_lines)
-        sources.extend((line, False) for line in candidates)
+        sources.extend((line, False) for line in ordered)
 
         shared_quantity: int | None = None
         if labelled.get("quantity"):
@@ -481,10 +698,24 @@ class DeterministicOrderParser:
 
         items: list[ParsedItem] = []
         saw_labelled = False
+        #: Size or quantity said before the product it belongs to.
+        pending: ParsedItem | None = None
         for raw_line, was_labelled in sources:
             item = self._parse_item_line(raw_line)
             if item is None:
                 continue
+            if not item.name:
+                # "XL দুইটা" on its own line describes the product before it.
+                if items:
+                    self._merge_attributes(items[-1], item)
+                elif pending is None:
+                    pending = item
+                else:
+                    self._merge_attributes(pending, item)
+                continue
+            if pending is not None:
+                self._merge_attributes(item, pending)
+                pending = None
             if item.quantity == 1 and shared_quantity:
                 item.quantity = shared_quantity
             items.append(item)
@@ -505,18 +736,39 @@ class DeterministicOrderParser:
                 FieldConfidence.MEDIUM if len(items) == 1 else FieldConfidence.LOW
             )
 
+    @staticmethod
+    def _merge_attributes(item: ParsedItem, extra: ParsedItem) -> None:
+        """Fold an attributes-only line into the product it describes."""
+        item.size = item.size or extra.size
+        item.color = item.color or extra.color
+        if extra.quantity != 1 and item.quantity == 1:
+            item.quantity = extra.quantity
+
     def _parse_item_line(self, line: str) -> ParsedItem | None:
         """Pull quantity, size and colour out of a product line.
 
         Each recognised attribute is removed from the working string as it is
         consumed, so the product name is what remains rather than the whole line
         with the price still glued to the end.
+
+        A line that carries only attributes ("XL দুইটা") comes back with an empty
+        name; the caller attaches it to the product it describes.
         """
         working = line.strip(" ,.-")
         if not working:
             return None
 
         quantity = 1
+        counted = False
+        words: list[str] = []
+        for word in working.split():
+            value = _QUANTITY_WORDS.get(word.casefold().strip(_EDGE_PUNCTUATION))
+            if value is not None and not counted:
+                quantity, counted = value, True
+            elif value is None:
+                words.append(word)
+        working = " ".join(words)
+
         quantity_match = _QUANTITY_RE.search(working)
         if quantity_match is not None:
             raw = (
@@ -527,7 +779,7 @@ class DeterministicOrderParser:
             if raw and raw.isdigit():
                 parsed = int(raw)
                 if 1 <= parsed <= 999:
-                    quantity = parsed
+                    quantity, counted = parsed, True
             working = _QUANTITY_RE.sub(" ", working)
 
         size: str | None = None
@@ -544,15 +796,31 @@ class DeterministicOrderParser:
 
         # Strip a trailing price so it does not become part of the name.
         working = _AMOUNT_RE.sub(" ", working)
-        name = " ".join(working.split()).strip(" ,.-")
+        name = " ".join(self._product_words(working)).strip(" ,.-?!।")
 
-        if not name or len(name) < 2:
-            return None
-        # A line that reduced to nothing but a size or a colour is not a product.
-        if name.lower() in _SIZES or name.lower() in _COLORS:
+        # A line that reduced to nothing but a size or a colour is not a
+        # product of its own, but it still says something about one.
+        if not name or len(name) < 2 or name.lower() in _SIZES or name.lower() in _COLORS:
+            if size or counted or (color and name.lower() in _COLORS):
+                return ParsedItem(name="", quantity=quantity, size=size, color=color)
             return None
 
         return ParsedItem(name=name, quantity=quantity, size=size, color=color)
+
+    @staticmethod
+    def _product_words(text: str) -> list[str]:
+        """The words of a product line without what the customer asked with it."""
+        kept: list[str] = []
+        for word in text.split():
+            folded = word.casefold().strip(_EDGE_PUNCTUATION)
+            if not folded or folded in _FILLER_WORDS:
+                continue
+            for suffix in _DEFINITE_SUFFIXES:
+                if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+                    word = word[: -len(suffix)]
+                    break
+            kept.append(word.strip(_EDGE_PUNCTUATION))
+        return [word for word in kept if word]
 
     # ---------------------------------------------------------------- notes --
 

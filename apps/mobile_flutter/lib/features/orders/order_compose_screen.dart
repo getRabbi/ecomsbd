@@ -15,7 +15,9 @@ import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import '../../data/chat_orders/chat_orders.dart';
 import 'duplicate_warning_sheet.dart';
+import 'product_picker_sheet.dart';
 
 /// A line the seller is composing.
 class _DraftItem {
@@ -31,6 +33,21 @@ class _DraftItem {
   final TextEditingController price;
 
   String? productId;
+
+  /// The catalogue product's name, when one is chosen.
+  String? productName;
+  String? variantId;
+  String? variantName;
+
+  /// The product has sizes or colours and none is chosen yet.
+  bool needsVariant = false;
+
+  /// What the chat parser found for this line, when it came from a chat.
+  ChatDraftMatch? match;
+
+  /// A chat line the parser could not pin to one product: the seller must
+  /// choose before saving.
+  bool get needsProduct => match?.status == 'AMBIGUOUS' && productId == null;
 
   static String _taka(int paisa) =>
       (paisa / 100).toStringAsFixed(paisa % 100 == 0 ? 0 : 2);
@@ -57,6 +74,7 @@ class OrderComposeScreen extends ConsumerStatefulWidget {
     super.key,
     this.startWithPaste = false,
     this.initialParsed,
+    this.chatDraft,
   });
 
   /// Open straight on the paste tab.
@@ -65,6 +83,10 @@ class OrderComposeScreen extends ConsumerStatefulWidget {
   /// A message already parsed elsewhere (the Inbox), opened straight on the
   /// review form so the seller checks every field before saving.
   final ParsedOrder? initialParsed;
+
+  /// A draft read from Messenger or WhatsApp. Saving confirms it on the
+  /// server, which creates the order exactly once however often it is sent.
+  final ChatDraft? chatDraft;
 
   @override
   ConsumerState<OrderComposeScreen> createState() => _OrderComposeScreenState();
@@ -102,6 +124,15 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
   @override
   void initState() {
     super.initState();
+    final draft = widget.chatDraft;
+    if (draft != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyChat(draft);
+        unawaited(_lookupCustomer());
+      });
+      return;
+    }
     final parsed = widget.initialParsed;
     if (parsed != null) {
       _paste.text = parsed.sourceText;
@@ -231,6 +262,74 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
     });
   }
 
+  /// Fill the form from a chat draft: the parser's fields and, per line, the
+  /// catalogue product it matched. Lines it could not match stay as written.
+  void _applyChat(ChatDraft draft) {
+    final parsed = draft.toParsed();
+    _applyParsed(parsed);
+    for (final item in _items) {
+      item.dispose();
+    }
+    setState(() {
+      _sourceText = null;
+      _items = draft.items.isEmpty
+          ? <_DraftItem>[_DraftItem()]
+          : <_DraftItem>[
+              for (final line in draft.items)
+                _DraftItem(
+                    name: line.match.isMatched
+                        ? (line.match.productName ?? line.name)
+                        : <String>[
+                            line.name,
+                            if (line.size != null) line.size!,
+                          ].join(' '),
+                    quantity: line.quantity,
+                    unitPricePaisa: line.match.unitPricePaisa ?? 0,
+                  )
+                  ..match = line.match
+                  ..productId = line.match.isMatched
+                      ? line.match.productId
+                      : null
+                  ..productName = line.match.productName
+                  ..variantId = line.match.variantId
+                  ..variantName = line.match.variantName
+                  ..needsVariant =
+                      line.match.isMatched &&
+                      line.match.variantStatus == 'AMBIGUOUS',
+            ];
+      _uncertain = <String>{
+        for (final field in <String>['name', 'phone', 'address', 'amount'])
+          if (draft.isUncertain(field) || draft.isMissing(field)) field,
+      };
+      if (draft.codAmountPaisa == null) {
+        _cod.text = '';
+      }
+    });
+  }
+
+  Future<void> _chooseProduct(_DraftItem item) async {
+    final picked = await ProductPickerSheet.show(
+      context,
+      suggestions:
+          item.match?.candidates ?? const <({String id, String name})>[],
+      initialQuery: item.productId == null ? item.name.text.trim() : '',
+      productId: item.needsVariant ? item.productId : null,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      item
+        ..productId = picked.product.id
+        ..productName = picked.product.name
+        ..variantId = picked.variant?.id
+        ..variantName = picked.variant?.name
+        ..needsVariant = false;
+      item.name.text = picked.product.name;
+      if ((_paisa(item.price.text) ?? 0) == 0) {
+        item.price.text = _DraftItem._taka(picked.product.sellingPrice.paisa);
+      }
+    });
+  }
+
   Future<void> _lookupCustomer() async {
     final phone = _phone.text.trim();
     if (phone.length < 6) {
@@ -255,11 +354,28 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
     if (!(_form.currentState?.validate() ?? false)) {
       return;
     }
+    final unresolved = _items.where(
+      (item) =>
+          item.name.text.trim().isNotEmpty &&
+          (item.needsProduct || item.needsVariant),
+    );
+    if (unresolved.isNotEmpty) {
+      setState(
+        () => _error = const ApiError(
+          code: ApiErrorCode.validation,
+          messageBn: 'কাস্টমার কোন পণ্যটি চেয়েছেন তা বেছে নিন।',
+          messageEn: 'Choose which product the customer meant.',
+          retryable: false,
+        ),
+      );
+      return;
+    }
     final items = <Map<String, dynamic>>[
       for (final item in _items)
         if (item.name.text.trim().isNotEmpty)
           <String, dynamic>{
             if (item.productId != null) 'product_id': item.productId,
+            if (item.variantId != null) 'variant_id': item.variantId,
             'name': item.name.text.trim(),
             'quantity':
                 int.tryParse(normalizeDigits(item.quantity.text).trim()) ?? 1,
@@ -309,19 +425,47 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
     }
 
     try {
-      final saved = await repository.create(
-        phone: _phone.text.trim(),
-        items: items,
-        customerName: _name.text.trim(),
-        address: _address.text.trim(),
-        district: _district.text.trim(),
-        area: _area.text.trim(),
-        codAmountPaisa: _codAmount,
-        deliveryFeePaisa: _paisa(_delivery.text) ?? 0,
-        note: _note.text.trim(),
-        sourceText: _sourceText,
-        channel: _parsed == null ? 'MANUAL' : 'PASTE',
-      );
+      final draft = widget.chatDraft;
+      final SavedOrder saved;
+      if (draft != null) {
+        // One request, one order: the server ties the order to the draft, so
+        // a retry or a double tap returns the order it already made.
+        final result = await ref
+            .read(chatOrdersRepositoryProvider)
+            .confirm(draft.id, <String, dynamic>{
+              'phone': _phone.text.trim(),
+              'items': items,
+              if (_name.text.trim().isNotEmpty)
+                'customer_name': _name.text.trim(),
+              if (_address.text.trim().isNotEmpty)
+                'address': _address.text.trim(),
+              if (_district.text.trim().isNotEmpty)
+                'district': _district.text.trim(),
+              if (_area.text.trim().isNotEmpty) 'area': _area.text.trim(),
+              'cod_amount_paisa': _codAmount,
+              'delivery_fee_paisa': _paisa(_delivery.text) ?? 0,
+              if (_note.text.trim().isNotEmpty) 'note': _note.text.trim(),
+            });
+        saved = SavedOrder(
+          order: result.order,
+          isQueued: false,
+          duplicateCheck: result.duplicateCheck,
+        );
+      } else {
+        saved = await repository.create(
+          phone: _phone.text.trim(),
+          items: items,
+          customerName: _name.text.trim(),
+          address: _address.text.trim(),
+          district: _district.text.trim(),
+          area: _area.text.trim(),
+          codAmountPaisa: _codAmount,
+          deliveryFeePaisa: _paisa(_delivery.text) ?? 0,
+          note: _note.text.trim(),
+          sourceText: _sourceText,
+          channel: _parsed == null ? 'MANUAL' : 'PASTE_PARSE',
+        );
+      }
       if (mounted) {
         Navigator.of(context).pop(saved);
       }
@@ -408,7 +552,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
     final parsed = _parsed;
 
     return <Widget>[
-      if (parsed != null) ...<Widget>[
+      if (widget.chatDraft != null) ...<Widget>[
+        _ChatSummary(draft: widget.chatDraft!),
+        const SizedBox(height: EcomsbdSpacing.sm),
+      ] else if (parsed != null) ...<Widget>[
         _ParseSummary(
           parsed: parsed,
           onEditText: () => setState(() => _pasting = true),
@@ -545,6 +692,8 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                         _items.removeAt(i).dispose();
                       }),
                       onChanged: () => setState(() {}),
+                      onChooseProduct: () =>
+                          unawaited(_chooseProduct(_items[i])),
                     ),
                   ],
                 ],
@@ -649,10 +798,12 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
               child: Text(
                 _saving
                     ? context.tr('common.saving')
+                    : widget.chatDraft != null
+                    ? context.tr('cho.confirmOrder')
                     : context.tr('oc.saveOrder'),
               ),
             ),
-            if (parsed == null) ...<Widget>[
+            if (parsed == null && widget.chatDraft == null) ...<Widget>[
               const SizedBox(height: EcomsbdSpacing.sm),
               TextButton.icon(
                 onPressed: () => setState(() => _pasting = true),
@@ -669,6 +820,57 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         ),
       ),
     ];
+  }
+}
+
+/// Where a chat draft came from, and that the seller confirms every field.
+class _ChatSummary extends StatelessWidget {
+  const _ChatSummary({required this.draft});
+
+  final ChatDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    final channel = context.tr('cho.provider.${draft.provider}');
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(
+                Icons.forum_outlined,
+                size: 18,
+                color: EcomsbdColors.blue,
+              ),
+              const SizedBox(width: EcomsbdSpacing.sm),
+              Expanded(
+                child: Text(
+                  context.tr('cho.reviewTitle', <String, Object?>{
+                    'channel': channel,
+                  }),
+                  style: EcomsbdType.bodyStrong,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            context.tr('cho.reviewNote'),
+            style: EcomsbdType.caption.copyWith(color: EcomsbdColors.muted),
+          ),
+          if (draft.attachmentCount > 0) ...<Widget>[
+            const SizedBox(height: EcomsbdSpacing.xs),
+            Text(
+              context.tr('cho.attachment', <String, Object?>{
+                'channel': channel,
+              }),
+              style: EcomsbdType.caption.copyWith(color: EcomsbdColors.amber),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -901,6 +1103,7 @@ class _ItemRow extends StatelessWidget {
     required this.canRemove,
     required this.onRemove,
     required this.onChanged,
+    required this.onChooseProduct,
   });
 
   final _DraftItem item;
@@ -908,6 +1111,7 @@ class _ItemRow extends StatelessWidget {
   final bool canRemove;
   final VoidCallback onRemove;
   final VoidCallback onChanged;
+  final VoidCallback onChooseProduct;
 
   @override
   Widget build(BuildContext context) {
@@ -965,6 +1169,67 @@ class _ItemRow extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: EcomsbdSpacing.xs),
+        _ProductLine(item: item, onChoose: onChooseProduct),
+      ],
+    );
+  }
+}
+
+/// Which catalogue product a line is, or that the seller still has to say.
+class _ProductLine extends StatelessWidget {
+  const _ProductLine({required this.item, required this.onChoose});
+
+  final _DraftItem item;
+  final VoidCallback onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    final String label;
+    final Tone tone;
+    if (item.needsProduct) {
+      label = context.tr('cho.productAmbiguous');
+      tone = Tone.warning;
+    } else if (item.needsVariant) {
+      label = context.tr('cho.variantNeeded', <String, Object?>{
+        'product': item.productName ?? '',
+      });
+      tone = Tone.warning;
+    } else if (item.productId != null) {
+      label = <String>[
+        item.productName ?? item.name.text,
+        if (item.variantName != null) item.variantName!,
+      ].join(' / ');
+      tone = Tone.good;
+    } else if (item.match?.status == 'NOT_FOUND') {
+      label = context.tr('cho.productNotFound');
+      tone = Tone.neutral;
+    } else {
+      label = context.tr('cho.customItem');
+      tone = Tone.neutral;
+    }
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: StatusChip(label: label, tone: tone, showIcon: false),
+          ),
+        ),
+        TextButton(
+          key: ValueKey('choose-product-${item.hashCode}'),
+          onPressed: onChoose,
+          style: TextButton.styleFrom(
+            foregroundColor: EcomsbdColors.orange,
+            minimumSize: const Size(0, EcomsbdTouch.minTarget),
+            textStyle: EcomsbdType.chip,
+          ),
+          child: Text(
+            item.productId == null
+                ? context.tr('cho.choose')
+                : context.tr('cho.change'),
+          ),
         ),
       ],
     );

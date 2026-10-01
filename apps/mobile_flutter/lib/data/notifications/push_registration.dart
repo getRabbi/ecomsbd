@@ -65,3 +65,27 @@ class PushRegistration {
 
   void dispose() => unawaited(_subscription?.cancel());
 }
+
+/// The data of each notification the seller tapped while the app was in the
+/// background. Empty where push is not set up (tests, the web).
+Stream<Map<String, dynamic>> pushTaps() {
+  try {
+    if (Firebase.apps.isEmpty) {
+      return const Stream<Map<String, dynamic>>.empty();
+    }
+    return FirebaseMessaging.onMessageOpenedApp.map((message) => message.data);
+  } on Object {
+    return const Stream<Map<String, dynamic>>.empty();
+  }
+}
+
+/// The data of the notification whose tap launched the app, if one did.
+Future<Map<String, dynamic>?> initialPushTap() async {
+  try {
+    if (Firebase.apps.isEmpty) return null;
+    final message = await FirebaseMessaging.instance.getInitialMessage();
+    return message?.data;
+  } on Object {
+    return null;
+  }
+}

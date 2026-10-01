@@ -22,7 +22,6 @@ from app.api.v1 import automation as automation_api
 from app.common.audit import AuditAction
 from app.common.operation_lock import lock_shop
 from app.core.clock import utc_now
-from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.integrations import custom_website, meta, recipes, service, shopify, woocommerce
 from app.integrations import sync as sync_engine
@@ -52,6 +51,10 @@ class CreateInput(Input):
 class ConnectInput(Input):
     shop: str | None = Field(default=None, max_length=255)
     store_url: str | None = Field(default=None, max_length=255)
+    #: Where the provider's sign-in should send the seller back: the web
+    #: dashboard (the default) or the mobile app, through the API's own
+    #: HTTPS return page.
+    return_to: Literal["web", "app"] = "web"
 
 
 class KeysInput(Input):
@@ -255,6 +258,7 @@ async def connect(
     status = service.availability(conn.provider)
     if not status["available"]:
         raise ConflictError("Official setup required", details={"blocker": status["blocker"]})
+    conn.config = {**conn.config, "return_to": body.return_to}
     if conn.provider == "SHOPIFY":
         shop = shopify.normalize_shop(body.shop or "")
         await service.ensure_unlinked(db, conn, shop)
@@ -269,12 +273,11 @@ async def connect(
         await service.ensure_unlinked(db, conn, store)
         conn.account_id = store
         conn.account_name = store.removeprefix("https://")[:200]
-        if not status.get("one_click"):
+        if not woocommerce.auth_endpoint_available(app=body.return_to == "app"):
             await db.flush()
             return {"authorize_url": None, "manual": True}
-        web = (get_settings().public_web_url or "").rstrip("/")
         url = woocommerce.authorize_url(
-            store, service.new_state(conn), f"{web}/integrations/{conn.id}?result=woocommerce"
+            store, service.new_state(conn), service.return_url(conn, "woocommerce")
         )
         await db.flush()
         return {"authorize_url": url, "manual": False}

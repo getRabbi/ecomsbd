@@ -77,6 +77,8 @@ CATEGORY_AUDIENCE: Final = MappingProxyType(
         # Addressed to the uploader; this is the fallback when nobody is known.
         NotificationCategory.IMPORTS: Permission.ORDER_WRITE,
         NotificationCategory.CRM: Permission.ORDER_WRITE,
+        # Whoever may create an order may confirm one read from a chat.
+        NotificationCategory.ORDERS: Permission.ORDER_WRITE,
         NotificationCategory.SUMMARY: Permission.MONEY_VIEW,
     }
 )
@@ -85,6 +87,14 @@ _DAY = timedelta(days=1)
 
 ALERT_RULES: Final = MappingProxyType(
     {
+        NotificationKind.CHAT_ORDER_READY: AlertRule(
+            category=NotificationCategory.ORDERS,
+            severity=Severity.ACTION,
+            # One draft is one event; it is never re-announced.
+            cooldown=timedelta(days=3650),
+            worsen_min_delta=10**9,
+            route="inbox",
+        ),
         NotificationKind.FOLLOW_UP_DUE: AlertRule(
             category=NotificationCategory.CRM,
             severity=Severity.ACTION,

@@ -1,19 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
-import '../../core/env.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/app_strings_data.dart';
+import 'integration_setup_screens.dart';
 
 /// One store or channel connection: its health, its sync, its problems, and
-/// the fixes that can be made from a phone. Listed from the Connections &
-/// Integrations hub (`ConnectionsScreen`); connecting a new one, and signing
-/// in to a provider again, happen on the web.
+/// every fix — signing in again, new keys, a website's API key and webhook,
+/// disconnecting — made right here on the phone. Listed from the Connections &
+/// Integrations hub (`ConnectionsScreen`).
 class IntegrationDetailScreen extends ConsumerStatefulWidget {
   const IntegrationDetailScreen({super.key, required this.id});
 
@@ -172,23 +174,52 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
                 c['provider'] == 'WOOCOMMERCE' &&
                 manage)
               ..._wooKeys(context),
-            if (state == 'AUTH_EXPIRED' && c['provider'] != 'WOOCOMMERCE') ...[
+            if (manage &&
+                c['provider'] != 'CUSTOM_WEBSITE' &&
+                const <String>{
+                  'AUTH_EXPIRED',
+                  'PENDING',
+                  'DISCONNECTED',
+                }.contains(state))
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(context.tr('int.reconnectWeb')),
-              ),
-              if (manage)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const Key('integration-reconnect-web'),
-                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                    label: Text(context.tr('conn.setUpOnWeb')),
-                    onPressed: () =>
-                        openWebDashboard(context, '/integrations/${widget.id}'),
+                child: FilledButton.tonal(
+                  key: const Key('integration-reconnect'),
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final changed = await startIntegrationSetup(
+                            context,
+                            '${c['provider']}',
+                            connectionId: widget.id,
+                            initialAddress: c['account_id'] as String?,
+                          );
+                          if (changed) await _run(_load);
+                        },
+                  child: Text(
+                    context.tr(
+                      state == 'PENDING' ? 'ics.continueSetup' : 'ca.reconnect',
+                    ),
                   ),
                 ),
-            ],
+              ),
+            if (detail?['custom'] is Map<String, dynamic>)
+              CustomWebsitePanel(
+                connectionId: widget.id,
+                connection: c,
+                custom: detail!['custom'] as Map<String, dynamic>,
+                busy: _busy,
+                run: _run,
+                reload: _load,
+              ),
+            if (c['provider'] == 'MESSENGER' || c['provider'] == 'WHATSAPP')
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  context.tr('ics.chatNote'),
+                  style: const TextStyle(color: EcomsbdColors.muted),
+                ),
+              ),
             if (_sync != null) ..._syncSection(context, _sync!),
             if (_conflicts.isNotEmpty) ..._conflictSection(context),
             const SizedBox(height: 16),
@@ -216,10 +247,50 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
                   await _load();
                 }),
               ),
+            if (manage && state != 'DISCONNECTED') ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                key: const Key('integration-disconnect'),
+                icon: const Icon(Icons.link_off_rounded, size: 18),
+                label: Text(context.tr('ics.disconnect')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: EcomsbdColors.red,
+                ),
+                onPressed: _busy ? null : _disconnect,
+              ),
+            ],
           ],
         ],
       ),
     );
+  }
+
+  Future<void> _disconnect() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('ics.disconnectTitle')),
+        content: Text(context.tr('ics.disconnectBody')),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.tr('common.cancel')),
+          ),
+          TextButton(
+            key: const Key('integration-disconnect-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.tr('ics.disconnect')),
+          ),
+        ],
+      ),
+    );
+    if (sure != true) return;
+    await _run(() async {
+      await ref
+          .read(apiClientProvider)
+          .post('/integrations/${widget.id}/disconnect');
+      await _load();
+    });
   }
 
   List<Widget> _syncSection(BuildContext context, Map<String, dynamic> view) {
@@ -533,33 +604,314 @@ String explain(BuildContext context, ApiError error) {
       : error.messageEn;
 }
 
-/// Opens [path] on the ecomsbd web dashboard in the browser.
-///
-/// Only real dashboard pages are linked. When no browser opens, the address is
-/// shown instead, so the seller can type it on any device.
-Future<void> openWebDashboard(BuildContext context, String path) async {
-  final uri = Uri.https(Env.webDashboardHost, path);
-  var opened = false;
-  try {
-    opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } on Object {
-    // Shown below.
-  }
-  if (!opened && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          context.tr('conn.webOpenError', <String, Object?>{'url': '$uri'}),
-        ),
-      ),
-    );
-  }
-}
-
 String when(BuildContext context, Object? value) {
   final parsed = value is String ? DateTime.tryParse(value)?.toLocal() : null;
   if (parsed == null) return context.tr('int.never');
   String two(int n) => n.toString().padLeft(2, '0');
   return '${parsed.year}-${two(parsed.month)}-${two(parsed.day)} '
       '${two(parsed.hour)}:${two(parsed.minute)}';
+}
+
+// ------------------------------------------------------- Custom website --
+
+/// Everything a developer needs to send orders from a website, and the
+/// checks that it works: the API address, the key's header, whether the first
+/// request and first order arrived, the outbound webhook, and the actions —
+/// test webhook, test order, new key, go live. All of it is the server's own
+/// state; the API key itself is never shown again after it was created.
+class CustomWebsitePanel extends ConsumerStatefulWidget {
+  const CustomWebsitePanel({
+    required this.connectionId,
+    required this.connection,
+    required this.custom,
+    required this.busy,
+    required this.run,
+    required this.reload,
+    super.key,
+  });
+
+  final String connectionId;
+  final Map<String, dynamic> connection;
+  final Map<String, dynamic> custom;
+  final bool busy;
+  final Future<void> Function(Future<void> Function()) run;
+  final Future<void> Function() reload;
+
+  @override
+  ConsumerState<CustomWebsitePanel> createState() => _CustomWebsitePanelState();
+}
+
+class _CustomWebsitePanelState extends ConsumerState<CustomWebsitePanel> {
+  late final TextEditingController _hook = TextEditingController(
+    text: widget.custom['webhook_url'] as String? ?? '',
+  );
+  String? _result;
+
+  @override
+  void dispose() {
+    _hook.dispose();
+    super.dispose();
+  }
+
+  String get _base => '/integrations/${widget.connectionId}';
+
+  Future<void> _secretOnce(String title, String secret) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => SecretOnceScreen(title: title, secret: secret),
+      ),
+    );
+  }
+
+  void _act(Future<void> Function() work) => unawaited(widget.run(work));
+
+  void _saveWebhook() => _act(() async {
+    final result = await ref
+        .read(apiClientProvider)
+        .post(
+          '$_base/webhook',
+          body: <String, dynamic>{'url': _hook.text.trim()},
+        );
+    if (mounted) {
+      await _secretOnce(
+        context.tr('ics.signingSecret'),
+        '${result['signing_secret']}',
+      );
+    }
+    await widget.reload();
+  });
+
+  void _testWebhook() => _act(() async {
+    await ref.read(apiClientProvider).post('$_base/webhook/test');
+    if (mounted) setState(() => _result = context.tr('ics.webhookSent'));
+    await widget.reload();
+  });
+
+  void _testOrder() => _act(() async {
+    final result = await ref
+        .read(apiClientProvider)
+        .post('$_base/test-order', body: <String, dynamic>{});
+    final problems = (result['problems'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((p) => '${p['code']}')
+        .join(', ');
+    if (mounted) {
+      setState(
+        () => _result = result['valid'] == true
+            ? context.tr('ics.testOrderOk')
+            : context.tr('ics.testOrderBad', <String, Object?>{
+                'problems': problems,
+              }),
+      );
+    }
+  });
+
+  void _rotate() => _act(() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('ics.rotateTitle')),
+        content: Text(context.tr('ics.rotateBody')),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.tr('common.cancel')),
+          ),
+          TextButton(
+            key: const Key('ics-rotate-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.tr('ics.rotate')),
+          ),
+        ],
+      ),
+    );
+    if (sure != true) return;
+    final result = await ref.read(apiClientProvider).post('$_base/api-key');
+    if (mounted) {
+      await _secretOnce(context.tr('ics.keyTitle'), '${result['api_key']}');
+    }
+    await widget.reload();
+  });
+
+  void _goLive() => _act(() async {
+    await ref.read(apiClientProvider).post('$_base/go-live');
+    await widget.reload();
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final custom = widget.custom;
+    final deliveries = custom['deliveries'] as Map<String, dynamic>? ?? {};
+    final topics =
+        ((custom['webhook_topics'] as List<dynamic>?)?.isNotEmpty ?? false)
+        ? custom['webhook_topics'] as List<dynamic>
+        : (custom['topics'] as List<dynamic>? ?? const <dynamic>[]);
+    final live = widget.connection['state'] == 'CONNECTED';
+    final busy = widget.busy;
+
+    Widget fact(String label, String value, {bool copy = false}) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: EcomsbdColors.muted,
+                    fontSize: 12,
+                  ),
+                ),
+                SelectableText(value),
+              ],
+            ),
+          ),
+          if (copy)
+            IconButton(
+              tooltip: context.tr('ics.copy'),
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              onPressed: () =>
+                  unawaited(Clipboard.setData(ClipboardData(text: value))),
+            ),
+        ],
+      ),
+    );
+
+    Widget check(String label, bool ok) => Row(
+      children: <Widget>[
+        Icon(
+          ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+          size: 18,
+          color: ok ? EcomsbdColors.green : EcomsbdColors.muted,
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: Text(label)),
+      ],
+    );
+
+    return Column(
+      key: const Key('custom-website-panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SizedBox(height: 16),
+        Text(
+          context.tr('ics.siteSetup'),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        fact(
+          context.tr('ics.apiBase'),
+          '${custom['api_base_url']}',
+          copy: true,
+        ),
+        fact(
+          context.tr('ics.ordersEndpoint'),
+          '${custom['orders_endpoint']}',
+          copy: true,
+        ),
+        fact(context.tr('ics.authHeader'), 'Authorization: Bearer <API key>'),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            context.tr('ics.authNote'),
+            style: const TextStyle(color: EcomsbdColors.muted, fontSize: 12),
+          ),
+        ),
+        fact(context.tr('ics.connectionId'), widget.connectionId, copy: true),
+        const SizedBox(height: 12),
+        Text(
+          context.tr('ics.checklist'),
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        check(context.tr('ics.check.key'), custom['key_active'] == true),
+        check(
+          context.tr('ics.check.firstRequest', <String, Object?>{
+            'when': when(context, custom['last_api_call_at']),
+          }),
+          custom['last_api_call_at'] != null,
+        ),
+        check(
+          context.tr('ics.check.firstOrder', <String, Object?>{
+            'when': when(context, custom['last_order_at']),
+          }),
+          custom['last_order_at'] != null,
+        ),
+        check(context.tr('ics.check.live'), live),
+        const SizedBox(height: 12),
+        Text(
+          context.tr('ics.webhook'),
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        TextField(
+          key: const Key('ics-webhook-url'),
+          controller: _hook,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(
+            labelText: context.tr('ics.webhookUrl'),
+            hintText: 'https://mystore.com/ecomsbd-webhook',
+          ),
+        ),
+        if (topics.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.tr('ics.topics', <String, Object?>{
+                'topics': topics.join(', '),
+              }),
+              style: const TextStyle(color: EcomsbdColors.muted, fontSize: 12),
+            ),
+          ),
+        if (deliveries['last_status'] != null)
+          Text(
+            context.tr('ics.lastDelivery', <String, Object?>{
+              'status': '${deliveries['last_status']}',
+              'when': when(context, deliveries['last_at']),
+            }),
+            style: const TextStyle(fontSize: 12),
+          ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: <Widget>[
+            FilledButton.tonal(
+              key: const Key('ics-webhook-save'),
+              onPressed: busy ? null : _saveWebhook,
+              child: Text(context.tr('ics.webhookSave')),
+            ),
+            OutlinedButton(
+              key: const Key('ics-webhook-test'),
+              onPressed: busy || custom['webhook_url'] == null
+                  ? null
+                  : _testWebhook,
+              child: Text(context.tr('ics.webhookTest')),
+            ),
+            OutlinedButton(
+              key: const Key('ics-test-order'),
+              onPressed: busy ? null : _testOrder,
+              child: Text(context.tr('ics.testOrder')),
+            ),
+            OutlinedButton(
+              key: const Key('ics-rotate'),
+              onPressed: busy ? null : _rotate,
+              child: Text(context.tr('ics.rotate')),
+            ),
+            if (!live && widget.connection['state'] != 'DISCONNECTED')
+              FilledButton(
+                key: const Key('ics-go-live'),
+                onPressed: busy ? null : _goLive,
+                child: Text(context.tr('ics.goLive')),
+              ),
+          ],
+        ),
+        if (_result != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_result!, key: const Key('ics-result')),
+          ),
+      ],
+    );
+  }
 }

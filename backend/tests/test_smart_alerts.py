@@ -745,6 +745,7 @@ class TestPushAndWording:
             },
             NotificationKind.SUPPLIER_PAYMENT_OVERDUE: {"count": 1, "amount_paisa": 250_000},
             NotificationKind.STOCKOUT_PREDICTED: {"count": 2, "names": ["Borka (L)", "Hijab"]},
+            NotificationKind.CHAT_ORDER_READY: {"provider": "MESSENGER"},
         }
         assert set(samples) == set(rules.ALERT_RULES)
         for kind, params in samples.items():

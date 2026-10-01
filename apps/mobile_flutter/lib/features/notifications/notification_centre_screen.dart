@@ -37,6 +37,7 @@ const List<String> notificationCategories = <String>[
   'INVENTORY',
   'IMPORTS',
   'CRM',
+  'ORDERS',
 ];
 
 IconData notificationCategoryIcon(String category) => switch (category) {
@@ -46,6 +47,7 @@ IconData notificationCategoryIcon(String category) => switch (category) {
   'RETURNS' => Icons.assignment_return_rounded,
   'INVENTORY' => Icons.inventory_2_rounded,
   'IMPORTS' => Icons.upload_file_rounded,
+  'ORDERS' => Icons.forum_rounded,
   _ => Icons.insights_rounded,
 };
 

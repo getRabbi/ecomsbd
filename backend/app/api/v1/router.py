@@ -19,6 +19,7 @@ from app.api.v1 import (
     automation,
     billing,
     campaigns,
+    chat_orders,
     consignments,
     courier_webhooks,
     couriers,
@@ -75,6 +76,8 @@ api_router.include_router(forecasting.router)
 api_router.include_router(crm.router)
 api_router.include_router(customers.router)
 api_router.include_router(orders.router)
+# Drafts read from Messenger and WhatsApp messages; confirmed into orders.
+api_router.include_router(chat_orders.router)
 api_router.include_router(imports.router)
 api_router.include_router(sync.router)
 api_router.include_router(consignments.router)

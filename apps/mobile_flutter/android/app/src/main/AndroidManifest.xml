@@ -40,6 +40,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="com.ecomsbd.app" android:host="auth" android:path="/callback" />
             </intent-filter>
+            <!-- Back from a store or Facebook sign-in started in the app: the
+                 API's return page opens com.ecomsbd.app://integrations/return. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.ecomsbd.app" android:host="integrations" android:path="/return" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
