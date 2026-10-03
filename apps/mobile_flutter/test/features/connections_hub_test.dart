@@ -224,8 +224,8 @@ void main() {
         'SHOPIFY': IntegrationSetupState.providerApprovalRequired,
         'WOOCOMMERCE': IntegrationSetupState.needsReconnect,
         'CUSTOM_WEBSITE': IntegrationSetupState.needsAttention,
-        'MESSENGER': IntegrationSetupState.providerApprovalRequired,
-        'WHATSAPP': IntegrationSetupState.providerApprovalRequired,
+        'MESSENGER': IntegrationSetupState.temporarilyUnavailable,
+        'WHATSAPP': IntegrationSetupState.temporarilyUnavailable,
         'INSTAGRAM': IntegrationSetupState.notImplemented,
       });
     });
@@ -263,10 +263,10 @@ void main() {
 
       expect(find.text(_en('conn.title')), findsOneWidget);
 
-      // Shopify, Messenger and WhatsApp wait on the provider's app approval.
-      expect(find.text(_en('conn.approvalPending')), findsNWidgets(3));
+      // Technical Meta setup is separate from provider approval.
+      expect(find.text(_en('conn.approvalPending')), findsOneWidget);
       expect(find.textContaining('waiting for Shopify'), findsOneWidget);
-      expect(find.textContaining('waiting for Meta'), findsNWidgets(2));
+      expect(find.textContaining('waiting for Meta'), findsNothing);
       // The old dead end is gone.
       expect(find.text('Official setup required'), findsNothing);
 
@@ -476,10 +476,7 @@ void main() {
       await settle(tester, frames: 10);
 
       expect(find.text(banglaStrings['conn.title']!), findsOneWidget);
-      expect(
-        find.text(banglaStrings['conn.approvalPending']!),
-        findsNWidgets(3),
-      );
+      expect(find.text(banglaStrings['conn.approvalPending']!), findsOneWidget);
       // Three couriers and the custom website (WooCommerce has a connection).
       expect(find.text(banglaStrings['common.connect']!), findsNWidgets(4));
       expectNoOverflow(tester);

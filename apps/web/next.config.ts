@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: '/ecomsbd/whatsapp-connect',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+        ],
+      },
     ];
   },
 };

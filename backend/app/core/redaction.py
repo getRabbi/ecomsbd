@@ -54,6 +54,10 @@ _SENSITIVE_KEY_PARTS: tuple[str, ...] = (
     "x-api-key",
     "purchase_token",
     "client_secret",
+    "authorization_code",
+    "signup_state",
+    "browser_session",
+    "registration_pin",
 )
 
 #: Keys holding a phone number: masked rather than removed, so support can still
@@ -68,7 +72,7 @@ _LONG_SECRET_RE = re.compile(r"\b(?:sk|pk|key|tok)_[A-Za-z0-9]{12,}\b")
 #: writes every request line with its query string. The value is removed and
 #: the name kept, so a reader still sees that one was present.
 _QUERY_SECRET_RE = re.compile(
-    r"(?i)([?&](?:token|access_token|secret|signature|api_key|apikey|key)=)[^&\s\"'#]+"
+    r"(?i)([?&](?:token|access_token|input_token|client_secret|code|state|secret|signature|api_key|apikey|key)=)[^&\s\"'#]+"
 )
 
 

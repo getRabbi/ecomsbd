@@ -21,7 +21,7 @@ from app import __version__
 from app.core.config import Settings
 from app.core.context import current_context
 from app.core.logging import get_logger
-from app.core.redaction import redact_value
+from app.core.redaction import REDACTED, redact_value
 
 __all__ = ["init_sentry"]
 
@@ -46,6 +46,13 @@ def _drop_frame_locals(event: dict[str, Any]) -> None:
 
 def _scrub(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
     """Redact an outgoing Sentry event and tag it with the trace context."""
+    request = event.get("request")
+    if isinstance(request, dict):
+        path = str(request.get("url") or "").split("?", 1)[0]
+        if "/whatsapp-signup/" in path or path.endswith("/whatsapp"):
+            # Some SDK integrations capture raw JSON text instead of a dict;
+            # key-based redaction alone cannot safely inspect those bodies.
+            request["data"] = REDACTED
     for section in ("request", "extra", "contexts", "breadcrumbs"):
         if section in event:
             event[section] = redact_value(event[section])

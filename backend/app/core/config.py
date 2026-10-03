@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import json
+import uuid
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any, Self
@@ -418,6 +419,12 @@ class Settings(BaseSettings):
     meta_app_secret: SecretStr | None = None
     meta_webhook_verify_token: SecretStr | None = None
     meta_graph_api_version: str = "v26.0"
+    meta_whatsapp_embedded_signup_config_id: str | None = None
+    # Operator attestation after Meta grants the required public access.
+    meta_whatsapp_public_signup_enabled: bool = False
+    meta_whatsapp_test_user_ids: list[uuid.UUID] = Field(default_factory=list)
+    # Local/test environments only. Production requires independent admin auth.
+    meta_whatsapp_manual_enabled: bool = False
 
     # ------------------------------------------------------------- admin ---
     # Platform admin is a separate identity from any seller account. Empty by
@@ -586,6 +593,7 @@ class Settings(BaseSettings):
         "meta_app_id",
         "meta_app_secret",
         "meta_webhook_verify_token",
+        "meta_whatsapp_embedded_signup_config_id",
         mode="before",
     )
     @classmethod

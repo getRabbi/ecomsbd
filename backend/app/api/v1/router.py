@@ -48,6 +48,7 @@ from app.api.v1 import (
     sync,
     team,
     tenants,
+    whatsapp_signup,
 )
 
 api_router = APIRouter()
@@ -65,6 +66,7 @@ api_router.include_router(integrations.router)
 # Unauthenticated: provider OAuth callbacks and signed webhooks. Each resolves
 # a connection by an unguessable token and verifies the provider's signature.
 api_router.include_router(integration_webhooks.callbacks)
+api_router.include_router(whatsapp_signup.router)
 api_router.include_router(integration_webhooks.webhooks)
 api_router.include_router(external_risk.router)
 api_router.include_router(network.router)

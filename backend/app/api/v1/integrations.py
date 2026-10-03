@@ -14,14 +14,17 @@ from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import DbSession, Principal, require_permission
+from app.admin.auth import authenticate_admin
+from app.admin.models import AdminPermission
+from app.api.deps import DbSession, Principal, get_hasher, require_permission
 from app.api.v1 import automation as automation_api
 from app.common.audit import AuditAction
 from app.common.operation_lock import lock_shop
 from app.core.clock import utc_now
+from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.integrations import custom_website, meta, recipes, service, shopify, woocommerce
 from app.integrations import sync as sync_engine
@@ -129,7 +132,7 @@ async def hub(db: DbSession, actor: Viewer) -> dict[str, Any]:
     )
     manage = actor.can(Permission.SETTINGS_MANAGE)
     return {
-        "providers": [service.availability(p) for p in service.PROVIDERS],
+        "providers": [service.availability(p, actor.user_id) for p in service.PROVIDERS],
         "items": await connection_views(db, rows, manage),
         "can_manage": manage,
         "can_retry": actor.can(Permission.ORDER_WRITE),
@@ -238,7 +241,7 @@ async def detail(connection_id: uuid.UUID, db: DbSession, actor: Viewer) -> dict
         "connection": await _one(db, conn, manage),
         "runs": [service.run_view(run) for run in runs],
         "events": [service.event_view(event) for event in events],
-        "availability": service.availability(conn.provider),
+        "availability": service.availability(conn.provider, actor.user_id),
         "can_manage": manage,
         "can_retry": actor.can(Permission.ORDER_WRITE),
     }
@@ -252,9 +255,14 @@ async def detail(connection_id: uuid.UUID, db: DbSession, actor: Viewer) -> dict
 
 @router.post("/{connection_id}/connect")
 async def connect(
-    connection_id: uuid.UUID, body: ConnectInput, db: DbSession, _: Owner
+    connection_id: uuid.UUID, body: ConnectInput, db: DbSession, actor: Owner, response: Response
 ) -> dict[str, Any]:
     conn = await service.get(db, connection_id, lock=True)
+    if conn.provider == "WHATSAPP":
+        from app.integrations.whatsapp_signup import start
+
+        _no_store(response)
+        return await start(db, conn, actor.user_id)
     status = service.availability(conn.provider)
     if not status["available"]:
         raise ConflictError("Official setup required", details={"blocker": status["blocker"]})
@@ -327,14 +335,26 @@ class WhatsAppInput(Input):
 
 @router.post("/{connection_id}/whatsapp")
 async def whatsapp_number(
-    connection_id: uuid.UUID, body: WhatsAppInput, db: DbSession, _: Owner, response: Response
+    connection_id: uuid.UUID,
+    body: WhatsAppInput,
+    db: DbSession,
+    _: Owner,
+    response: Response,
+    request: Request,
 ) -> dict[str, Any]:
+    settings = get_settings()
+    if not (settings.meta_whatsapp_manual_enabled and not settings.app_env.is_deployed):
+        admin = await authenticate_admin(
+            request.headers.get("x-admin-token"), session=db, settings=settings, hasher=get_hasher()
+        )
+        admin.require(AdminPermission.REPAIR_RUN)
     conn = await service.get(db, connection_id, lock=True)
     if conn.provider != "WHATSAPP":
         raise ValidationError("Not a WhatsApp connection")
-    status = service.availability(conn.provider)
-    if not status["available"]:
-        raise ConflictError("Official setup required", details={"blocker": status["blocker"]})
+    if not meta.configured():
+        raise ConflictError(
+            "Official setup required", details={"blocker": "META_APP_SETUP_REQUIRED"}
+        )
     _no_store(response)
     try:
         await service.connect_whatsapp(
@@ -344,6 +364,7 @@ async def whatsapp_number(
             waba_id=body.waba_id,
             access_token=body.access_token,
         )
+        conn.state_hash = conn.state_expires_at = None
     except ProviderError as exc:
         service.mark_error(conn, exc.code)
         raise ConflictError("Meta refused the WhatsApp number", details={"code": exc.code}) from exc
