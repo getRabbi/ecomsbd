@@ -198,7 +198,11 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
                         },
                   child: Text(
                     context.tr(
-                      state == 'PENDING' ? 'ics.continueSetup' : 'ca.reconnect',
+                      c['provider'] == 'WHATSAPP'
+                          ? 'ics.waReconnect'
+                          : state == 'PENDING'
+                          ? 'ics.continueSetup'
+                          : 'ca.reconnect',
                     ),
                   ),
                 ),
@@ -270,7 +274,13 @@ class _DetailState extends ConsumerState<IntegrationDetailScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(context.tr('ics.disconnectTitle')),
-        content: Text(context.tr('ics.disconnectBody')),
+        content: Text(
+          context.tr(
+            (_detail?['connection'] as Map?)?['provider'] == 'WHATSAPP'
+                ? 'ics.waDisconnectBody'
+                : 'ics.disconnectBody',
+          ),
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),

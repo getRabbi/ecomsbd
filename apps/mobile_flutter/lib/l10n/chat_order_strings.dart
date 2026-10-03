@@ -102,7 +102,7 @@ const chatOrderEn = <String, String>{
   'ics.sub.MESSENGER':
       'Customer messages to your Facebook Page become draft orders for you to confirm.',
   'ics.sub.WHATSAPP':
-      'Customer messages to your WhatsApp Business number become draft orders for you to confirm.',
+      'Connect your WhatsApp Business account. Customer messages arrive as draft orders in your ecomsbd Inbox.',
   'ics.sub.CUSTOM_WEBSITE':
       'Your website sends orders to ecomsbd with an API key.',
   'ics.storeUrl': 'Store address',
@@ -147,6 +147,17 @@ const chatOrderEn = <String, String>{
       'New orders and messages stop coming in. Orders already in ecomsbd stay.',
   'ics.waHelp':
       'From Meta for Developers → WhatsApp → API setup: the Phone number ID, the WhatsApp Business Account ID and an access token for your own number.',
+  'ics.waTitle': 'Connect WhatsApp',
+  'ics.waDisconnectBody':
+      'Disconnect WhatsApp from ecomsbd? Your WhatsApp Business account and phone number will remain with Meta.',
+  'ics.waConnect': 'Connect with WhatsApp',
+  'ics.waReconnect': 'Reconnect with WhatsApp',
+  'ics.waRestart': 'Start WhatsApp signup again',
+  'ics.waWaiting':
+      'Complete Meta signup in your browser, then return here. We will check your connection.',
+  'ics.waRefresh': 'Check connection',
+  'int.code.META_APPROVAL_REQUIRED':
+      'Meta approval is required before public WhatsApp signup is available.',
   'ics.waNumberId': 'Phone number ID',
   'ics.waWabaId': 'WhatsApp Business Account ID',
   'ics.waToken': 'Access token',
@@ -293,7 +304,7 @@ const chatOrderBn = <String, String>{
   'ics.sub.MESSENGER':
       'আপনার Facebook Page-এ কাস্টমারের মেসেজ খসড়া অর্ডার হয়ে আসবে, আপনি নিশ্চিত করবেন।',
   'ics.sub.WHATSAPP':
-      'আপনার WhatsApp Business নম্বরে কাস্টমারের মেসেজ খসড়া অর্ডার হয়ে আসবে, আপনি নিশ্চিত করবেন।',
+      'আপনার WhatsApp Business অ্যাকাউন্ট যুক্ত করুন। Customer message থেকে order information ecomsbd Inbox-এ draft হিসেবে আসবে।',
   'ics.sub.CUSTOM_WEBSITE':
       'আপনার ওয়েবসাইট একটি API কী দিয়ে ecomsbd-তে অর্ডার পাঠাবে।',
   'ics.storeUrl': 'স্টোরের ঠিকানা',
@@ -337,6 +348,17 @@ const chatOrderBn = <String, String>{
       'নতুন অর্ডার ও মেসেজ আসা বন্ধ হবে। আগের অর্ডার ecomsbd-তেই থাকবে।',
   'ics.waHelp':
       'Meta for Developers → WhatsApp → API setup থেকে: আপনার নম্বরের Phone number ID, WhatsApp Business Account ID ও একটি access token।',
+  'ics.waTitle': 'WhatsApp যুক্ত করুন',
+  'ics.waDisconnectBody':
+      'ecomsbd থেকে WhatsApp সংযোগ বিচ্ছিন্ন করবেন? আপনার WhatsApp Business অ্যাকাউন্ট ও ফোন নম্বর Meta-তে থাকবে।',
+  'ics.waConnect': 'WhatsApp দিয়ে যুক্ত করুন',
+  'ics.waReconnect': 'WhatsApp দিয়ে আবার যুক্ত করুন',
+  'ics.waRestart': 'WhatsApp সংযোগ আবার শুরু করুন',
+  'ics.waWaiting':
+      'ব্রাউজারে Meta-এর সংযোগ সম্পূর্ণ করে এখানে ফিরে আসুন। সংযোগ যাচাই করা হবে।',
+  'ics.waRefresh': 'সংযোগ যাচাই করুন',
+  'int.code.META_APPROVAL_REQUIRED':
+      'সবার জন্য WhatsApp সংযোগ চালু করতে Meta-এর অনুমোদন প্রয়োজন।',
   'ics.waNumberId': 'Phone number ID',
   'ics.waWabaId': 'WhatsApp Business Account ID',
   'ics.waToken': 'Access token',
