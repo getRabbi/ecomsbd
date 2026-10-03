@@ -497,45 +497,12 @@ function ConnectCard({ detail, busy, act }: { detail: Detail; busy: boolean; act
 
 function WhatsAppConnect({ connectionId, busy, act }: { connectionId: string; busy: boolean; act: Act }) {
   const { t } = useIntegrationLabels();
-  const [form, setForm] = useState({ phone_number_id: '', waba_id: '', access_token: '' });
-  const field = (name: keyof typeof form, label: StringKey, secret = false) => (
-    <label className="field">
-      <span className="field__label">{t(label)}</span>
-      <input
-        className="input"
-        required
-        autoComplete="off"
-        type={secret ? 'password' : 'text'}
-        inputMode={secret ? undefined : 'numeric'}
-        pattern={secret ? undefined : '[0-9]{5,30}'}
-        minLength={secret ? 20 : undefined}
-        value={form[name]}
-        onChange={(event) => setForm({ ...form, [name]: event.target.value.trim() })}
-      />
-    </label>
-  );
-  return (
-    <Card title={t('int.step.connect')} hint={t('int.about.WHATSAPP')}>
-      <form
-        className="wizard__body"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void act(async () => {
-            await api.post(`/integrations/${connectionId}/whatsapp`, form);
-            setForm({ phone_number_id: '', waba_id: '', access_token: '' });
-          });
-        }}
-      >
-        <p className="card__hint">{t('int.wa.hint')}</p>
-        {field('phone_number_id', 'int.wa.phoneId')}
-        {field('waba_id', 'int.wa.wabaId')}
-        {field('access_token', 'int.wa.token', true)}
-        <button type="submit" className="btn btn--primary" disabled={busy}>
-          {t('int.wa.link')}
-        </button>
-      </form>
-    </Card>
-  );
+  return <Card title={t('int.step.connect')} hint={t('int.about.WHATSAPP')}>
+    <button className="btn btn--primary" disabled={busy} onClick={() => void act(async () => {
+      const result = await api.post<{ authorize_url: string }>(`/integrations/${connectionId}/connect`, { return_to: 'app' });
+      window.location.assign(result.authorize_url);
+    })}>{t('int.wa.link')}</button>
+  </Card>;
 }
 
 function WhatsAppTemplatesCard({ connectionId, busy, act }: { connectionId: string; busy: boolean; act: Act }) {

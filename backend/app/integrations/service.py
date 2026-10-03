@@ -76,12 +76,16 @@ AUTO_RETRY_LIMIT = 5
 # --------------------------------------------------------------- basics ---
 
 
-def availability(provider: str) -> dict[str, Any]:
+def availability(provider: str, user_id: uuid.UUID | None = None) -> dict[str, Any]:
     blocker = None
     if provider == "SHOPIFY" and not shopify.configured():
         blocker = "SHOPIFY_APP_SETUP_REQUIRED"
     if provider in {"MESSENGER", "WHATSAPP"} and not meta.configured():
         blocker = "META_APP_SETUP_REQUIRED"
+    if provider == "WHATSAPP":
+        from app.integrations.whatsapp_signup import blocker as signup_blocker
+
+        blocker = signup_blocker(user_id)
     result: dict[str, Any] = {
         "provider": provider,
         "available": blocker is None,
@@ -771,7 +775,11 @@ async def create(
     db: AsyncSession, provider: str, name: str, actor_id: uuid.UUID
 ) -> IntegrationConnection:
     await lock_shop(db)
-    status = availability(provider)
+    status = availability(provider, actor_id)
+    # Creating a pending row also supports the independently authorized admin
+    # test-number endpoint. It does not grant permission to connect anything.
+    if provider == "WHATSAPP" and meta.configured():
+        status = {"available": True}
     if not status["available"]:
         raise ConflictError("Official setup required", details={"blocker": status["blocker"]})
     count = await db.scalar(
@@ -1080,10 +1088,13 @@ async def connect_whatsapp(
     phone_number_id: str,
     waba_id: str,
     access_token: str,
+    require_webhook: bool = False,
 ) -> None:
     """Link a WhatsApp Business number the shop owns, proving the token first."""
     info = await whatsapp.phone_number(phone_number_id, access_token)
     await ensure_unlinked(db, conn, phone_number_id)
+    if require_webhook:
+        await whatsapp.subscribe(waba_id, access_token)
     label = " · ".join(
         part for part in (info.get("verified_name"), info.get("display_phone_number")) if part
     )
@@ -1094,7 +1105,8 @@ async def connect_whatsapp(
     )
     conn.config = {**conn.config, "waba_id": waba_id}
     try:
-        await whatsapp.subscribe(waba_id, access_token)
+        if not require_webhook:
+            await whatsapp.subscribe(waba_id, access_token)
         conn.webhook_state = "ACTIVE"
     except ProviderError as exc:
         # Sending works without it; delivery receipts and STOP replies do not.

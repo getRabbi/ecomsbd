@@ -53,8 +53,8 @@ customer until the seller confirms. Two different customers → `AMBIGUOUS`.
 
 Production config needed on the API and worker (Northflank secret group):
 `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, and
-`PUBLIC_BASE_URL=https://api.scalemyprints.com`. Without them the app shows
-Messenger and WhatsApp as "Awaiting approval" and nothing can be connected.
+`PUBLIC_BASE_URL=https://api.scalemyprints.com`. Missing technical configuration
+is shown as temporarily unavailable, separately from Meta approval.
 
 ### Messenger (development mode)
 
@@ -78,7 +78,14 @@ Public sellers (outside the app's roles) need **App Review** for
 `pages_messaging` and `pages_manage_metadata` (and *Advanced Access*), plus
 **Business Verification**.
 
-### WhatsApp Cloud API (test number or own WABA)
+### WhatsApp Cloud API
+
+Normal sellers use **WhatsApp দিয়ে যুক্ত করুন** and Meta Embedded Signup v4.
+See [WhatsApp onboarding](WHATSAPP_EMBEDDED_SIGNUP.md) for the required
+configuration ID, approval gates, server flow and development allowlist.
+No seller pastes credentials in the app or web UI.
+
+For the operator's existing Meta test number:
 
 1. Same Meta app → add **WhatsApp**. API setup gives a test number, its
    **Phone number ID**, the **WhatsApp Business Account ID** and a temporary
@@ -87,14 +94,13 @@ Public sellers (outside the app's roles) need **App Review** for
    subscribe the `messages` field.
 3. Add the tester's phone as an allowed recipient (test numbers only talk to
    up to five verified numbers).
-4. In the app: Connections & Integrations → WhatsApp → Connect → paste the
-   three values. The server checks the number with Meta and subscribes the app
-   to the WABA.
+4. Use the existing manual `/integrations/{id}/whatsapp` API with a shop session
+   and independent platform-admin authorization (see the onboarding guide).
+   The server checks the number and encrypts the credentials in the same vault.
 5. From the allowed phone, send the same four messages → one draft → confirm.
 
-Production WhatsApp needs a verified business, a registered production number
-and a permanent System User token; outbound templates (existing V3.3 feature)
-need Meta template approval.
+Production seller onboarding uses the business token obtained server-side from
+Embedded Signup; outbound templates still need Meta template approval.
 
 ## API
 

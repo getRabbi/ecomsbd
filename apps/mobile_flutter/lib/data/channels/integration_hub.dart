@@ -71,7 +71,7 @@ const Set<String> _attentionHealth = <String>{
 /// Server blockers that mean a provider has not approved ecomsbd's app yet.
 const Set<String> _approvalBlockers = <String>{
   'SHOPIFY_APP_SETUP_REQUIRED',
-  'META_APP_SETUP_REQUIRED',
+  'META_APPROVAL_REQUIRED',
 };
 
 /// The state of one existing connection, from its server `health`.

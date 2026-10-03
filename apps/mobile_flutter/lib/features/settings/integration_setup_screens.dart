@@ -505,12 +505,9 @@ class _SignInState extends ConsumerState<ProviderSignInScreen> {
 
 // ------------------------------------------------------------ WhatsApp --
 
-/// Link a WhatsApp Business number the shop owns: its phone number id, its
-/// WhatsApp Business Account id and an access token, from Meta's dashboard.
-/// The server proves the token with Meta before saving it.
+/// Official Meta Embedded Signup. The app only receives connection status.
 class WhatsAppConnectScreen extends ConsumerStatefulWidget {
   const WhatsAppConnectScreen({super.key, this.connectionId});
-
   final String? connectionId;
 
   @override
@@ -518,19 +515,100 @@ class WhatsAppConnectScreen extends ConsumerStatefulWidget {
 }
 
 class _WhatsAppState extends ConsumerState<WhatsAppConnectScreen> {
-  final TextEditingController _number = TextEditingController();
-  final TextEditingController _waba = TextEditingController();
-  final TextEditingController _token = TextEditingController();
+  late String? _id = widget.connectionId;
+  StreamSubscription<IntegrationReturn>? _returns;
+  AppLifecycleListener? _lifecycle;
   bool _busy = false;
+  bool _waiting = false;
+  bool _refreshPending = false;
+  String? _pendingHint;
+  bool _connected = false;
+  bool _reconnect = false;
+  String? _blocker;
   String? _error;
-  String? _connected;
+  String? _account;
+
+  @override
+  void initState() {
+    super.initState();
+    _returns = ref.read(integrationReturnsProvider).listen((back) {
+      if (mounted && back.connectionId == _id) {
+        unawaited(_refresh(hint: back.result));
+      }
+    });
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (_waiting) unawaited(_refresh());
+      },
+    );
+    Future<void>.microtask(_refresh);
+  }
 
   @override
   void dispose() {
-    _number.dispose();
-    _waba.dispose();
-    _token.dispose();
+    unawaited(_returns?.cancel());
+    _lifecycle?.dispose();
     super.dispose();
+  }
+
+  Future<void> _refresh({String? hint}) async {
+    if (!mounted) return;
+    if (_busy) {
+      _refreshPending = true;
+      _pendingHint = hint ?? _pendingHint;
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final id = _id;
+      final data = await api.get(
+        id == null ? '/integrations' : '/integrations/$id',
+      );
+      if (!mounted) return;
+      final connection = data['connection'] as Map<String, dynamic>?;
+      final availability = id == null
+          ? (data['providers'] as List<dynamic>? ?? const <dynamic>[])
+                .whereType<Map<String, dynamic>>()
+                .where((row) => row['provider'] == 'WHATSAPP')
+                .firstOrNull
+          : data['availability'] as Map<String, dynamic>?;
+      setState(() {
+        _connected = connection?['state'] == 'CONNECTED';
+        _reconnect = connection?['state'] == 'AUTH_EXPIRED';
+        _account = connection?['account_name'] as String?;
+        _blocker = availability?['available'] == false
+            ? (availability?['blocker'] as String?)
+            : null;
+        if (_connected) {
+          _waiting = false;
+          _error = null;
+        } else if (hint != null &&
+            hint != 'UNKNOWN' &&
+            hint != 'CONNECTED' &&
+            hint != 'SIGNUP_IN_PROGRESS') {
+          _waiting = false;
+          _error = hint == 'ACCESS_DENIED'
+              ? context.tr('ics.declined')
+              : codeLabel(context, hint);
+        }
+      });
+    } on ApiError catch (error) {
+      if (mounted) setState(() => _error = explain(context, error));
+    } finally {
+      _finishBusy();
+    }
+  }
+
+  void _finishBusy() {
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (_refreshPending) {
+      final hint = _pendingHint;
+      _refreshPending = false;
+      _pendingHint = null;
+      unawaited(_refresh(hint: hint));
+    }
   }
 
   Future<void> _connect() async {
@@ -540,123 +618,97 @@ class _WhatsAppState extends ConsumerState<WhatsAppConnectScreen> {
     });
     final api = ref.read(apiClientProvider);
     try {
-      var id = widget.connectionId;
-      if (id == null) {
+      if (_id == null) {
         final created = await api.post(
           '/integrations',
           body: <String, dynamic>{'provider': 'WHATSAPP', 'name': 'WhatsApp'},
         );
-        id = '${(created['connection'] as Map)['id']}';
+        _id = '${(created['connection'] as Map)['id']}';
       }
       final result = await api.post(
-        '/integrations/$id/whatsapp',
-        body: <String, dynamic>{
-          'phone_number_id': _number.text.trim(),
-          'waba_id': _waba.text.trim(),
-          'access_token': _token.text.trim(),
-        },
+        '/integrations/$_id/connect',
+        body: <String, dynamic>{'return_to': 'app'},
       );
-      _token.clear();
-      final connection = result['connection'] as Map<String, dynamic>;
-      if (mounted) {
-        setState(() => _connected = '${connection['account_name'] ?? ''}');
+      final url = result['authorize_url'] as String?;
+      if (url == null) {
+        if (mounted) setState(() => _error = context.tr('ics.noSignIn'));
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _waiting = true);
+      final opened = await ref.read(externalOpenerProvider)(Uri.parse(url));
+      if (mounted && !opened) {
+        setState(() {
+          _waiting = false;
+          _error = context.tr('ics.browserError');
+        });
       }
     } on ApiError catch (error) {
       if (mounted) setState(() => _error = explain(context, error));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _finishBusy();
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final connected = _connected;
-    return DetailScaffold(
-      eyebrow: context.tr('conn.eyebrow'),
-      title: context.tr('ics.connectTitle', <String, Object?>{
-        'provider': 'WhatsApp',
-      }),
-      subtitle: context.tr('ics.sub.WHATSAPP'),
-      children: <Widget>[
-        if (_busy) const LinearProgressIndicator(),
-        if (_error != null) _Problem(text: _error!),
-        const SizedBox(height: EcomsbdSpacing.sm),
-        if (connected != null) ...<Widget>[
-          GlassCard(
-            child: Column(
-              children: <Widget>[
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: EcomsbdColors.green,
-                  size: 44,
-                ),
-                Text(
-                  context.tr('ics.connected'),
-                  key: const Key('ics-connected'),
-                  style: EcomsbdType.bodyStrong,
-                ),
-                Text(connected, style: EcomsbdType.caption),
-                const SizedBox(height: EcomsbdSpacing.xs),
-                Text(
-                  context.tr('ics.chatNote'),
-                  textAlign: TextAlign.center,
-                  style: EcomsbdType.caption.copyWith(
-                    color: EcomsbdColors.muted,
-                  ),
-                ),
-              ],
-            ),
+  Widget build(BuildContext context) => DetailScaffold(
+    eyebrow: context.tr('conn.eyebrow'),
+    title: context.tr('ics.waTitle'),
+    subtitle: context.tr('ics.sub.WHATSAPP'),
+    children: <Widget>[
+      if (_busy) const LinearProgressIndicator(),
+      if (_error != null) _Problem(text: _error!),
+      if (_connected) ...<Widget>[
+        GlassCard(
+          child: Column(
+            children: <Widget>[
+              const Icon(
+                Icons.check_circle_rounded,
+                color: EcomsbdColors.green,
+                size: 44,
+              ),
+              Text(
+                context.tr('ics.connected'),
+                key: const Key('ics-connected'),
+                style: EcomsbdType.bodyStrong,
+              ),
+              if (_account != null) Text(_account!),
+              Text(context.tr('ics.chatNote')),
+            ],
           ),
-          const SizedBox(height: EcomsbdSpacing.md),
-          _Primary(
-            label: context.tr('common.done'),
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ] else ...<Widget>[
-          GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Text(
-                  context.tr('ics.waHelp'),
-                  style: EcomsbdType.caption.copyWith(
-                    color: EcomsbdColors.muted,
-                  ),
-                ),
-                const SizedBox(height: EcomsbdSpacing.md),
-                LabelledField(
-                  key: const Key('ics-wa-number'),
-                  label: context.tr('ics.waNumberId'),
-                  controller: _number,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: EcomsbdSpacing.sm),
-                LabelledField(
-                  key: const Key('ics-wa-waba'),
-                  label: context.tr('ics.waWabaId'),
-                  controller: _waba,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: EcomsbdSpacing.sm),
-                LabelledField(
-                  key: const Key('ics-wa-token'),
-                  label: context.tr('ics.waToken'),
-                  controller: _token,
-                  obscureText: true,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: EcomsbdSpacing.md),
-          _Primary(
-            key: const Key('ics-wa-connect'),
-            label: context.tr('common.connect'),
-            onPressed: _busy ? null : _connect,
+        ),
+        _Primary(
+          label: context.tr('common.done'),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ] else if (_blocker != null) ...<Widget>[
+        Text(context.tr('conn.unavailableNow'), style: EcomsbdType.bodyStrong),
+        _Problem(text: codeLabel(context, _blocker!)),
+      ] else ...<Widget>[
+        if (_reconnect) Text(context.tr('conn.reconnectNote')),
+        if (_waiting) ...<Widget>[
+          Text(context.tr('ics.waitTitle'), style: EcomsbdType.bodyStrong),
+          Text(context.tr('ics.waWaiting')),
+          TextButton(
+            onPressed: _busy ? null : _refresh,
+            child: Text(context.tr('ics.waRefresh')),
           ),
         ],
+        const SizedBox(height: EcomsbdSpacing.md),
+        _Primary(
+          key: const Key('ics-wa-connect'),
+          label: context.tr(
+            _reconnect
+                ? 'ics.waReconnect'
+                : _waiting
+                ? 'ics.waRestart'
+                : 'ics.waConnect',
+          ),
+          onPressed: _busy ? null : _connect,
+        ),
       ],
-    );
-  }
+    ],
+  );
 }
 
 // ------------------------------------------------------- Custom website --

@@ -20,7 +20,7 @@ export const integrationsEn = {
   'int.about.WOOCOMMERCE': 'Orders from your WordPress + WooCommerce store arrive automatically.',
   'int.about.CUSTOM_WEBSITE': 'Your own website sends orders with a secure API key.',
   'int.about.MESSENGER': 'Link your Facebook Page and watch the connection health.',
-  'int.about.WHATSAPP': 'Link your own WhatsApp Business number to send approved templates.',
+  'int.about.WHATSAPP': 'Connect WhatsApp Business. Customer messages arrive as draft orders in your Inbox.',
   'int.health.CONNECTED': 'Connected',
   'int.health.DEGRADED': 'Needs attention',
   'int.health.WEBHOOK_FAILING': 'Webhook failing',
@@ -34,7 +34,9 @@ export const integrationsEn = {
   'int.blocker.SHOPIFY_APP_SETUP_REQUIRED':
     'The ecomsbd Shopify app is waiting for Shopify’s official approval. You can connect once it is live.',
   'int.blocker.META_APP_SETUP_REQUIRED':
-    'Messenger needs Meta’s official app review for ecomsbd. You can connect once it is approved.',
+    'Meta connection setup is temporarily unavailable. ecomsbd configuration is incomplete.',
+  'int.blocker.META_APPROVAL_REQUIRED':
+    'Public WhatsApp signup needs Meta approval for ecomsbd. Please try again after approval.',
   'int.blocker.CHANNEL_DISABLED': 'Turn on customer email in Messaging first.',
   'int.tile.connected': 'Connected',
   'int.tile.ordersToday': 'Orders received today',
@@ -142,7 +144,7 @@ export const integrationsEn = {
   'int.wa.wabaId': 'WhatsApp Business Account ID',
   'int.wa.token': 'Access token (system user)',
   'int.wa.hint': 'From Meta Business Manager → WhatsApp Manager → API setup. The token is stored encrypted and never shown again.',
-  'int.wa.link': 'Link number',
+  'int.wa.link': 'Connect with WhatsApp',
   'int.wa.syncTemplates': 'Check template approvals',
   'int.wa.synced': '{count} templates checked with Meta',
   'int.wa.note': 'Only templates Meta has approved are sent. Meta bills marketing templates to your WhatsApp Business Account.',
@@ -255,7 +257,7 @@ export const integrationsBn: Record<keyof typeof integrationsEn, string> = {
   'int.about.WOOCOMMERCE': 'WordPress + WooCommerce স্টোরের অর্ডার নিজে থেকেই চলে আসবে।',
   'int.about.CUSTOM_WEBSITE': 'আপনার নিজের ওয়েবসাইট নিরাপদ API কী দিয়ে অর্ডার পাঠাবে।',
   'int.about.MESSENGER': 'ফেসবুক পেজ যুক্ত করুন, সংযোগ ঠিক আছে কি না দেখুন।',
-  'int.about.WHATSAPP': 'অনুমোদিত টেমপ্লেট পাঠাতে নিজের WhatsApp Business নম্বর যুক্ত করুন।',
+  'int.about.WHATSAPP': 'আপনার WhatsApp Business অ্যাকাউন্ট যুক্ত করুন। Customer message থেকে order information ecomsbd Inbox-এ draft হিসেবে আসবে।',
   'int.health.CONNECTED': 'সংযুক্ত',
   'int.health.DEGRADED': 'মনোযোগ দরকার',
   'int.health.WEBHOOK_FAILING': 'ওয়েবহুক কাজ করছে না',
@@ -269,7 +271,9 @@ export const integrationsBn: Record<keyof typeof integrationsEn, string> = {
   'int.blocker.SHOPIFY_APP_SETUP_REQUIRED':
     'ecomsbd-এর Shopify অ্যাপ Shopify-এর অফিশিয়াল অনুমোদনের অপেক্ষায়। অনুমোদন পেলেই যুক্ত করতে পারবেন।',
   'int.blocker.META_APP_SETUP_REQUIRED':
-    'Messenger-এর জন্য ecomsbd-এর Meta অ্যাপ রিভিউ দরকার। অনুমোদন পেলেই যুক্ত করতে পারবেন।',
+    'Meta সংযোগ সাময়িকভাবে অনুপলব্ধ। ecomsbd-এর সেটআপ এখনো সম্পূর্ণ হয়নি।',
+  'int.blocker.META_APPROVAL_REQUIRED':
+    'সবার জন্য WhatsApp সংযোগ চালু করতে ecomsbd-এর Meta অনুমোদন প্রয়োজন।',
   'int.blocker.CHANNEL_DISABLED': 'আগে মেসেজিং থেকে গ্রাহকের ইমেইল চালু করুন।',
   'int.tile.connected': 'সংযুক্ত',
   'int.tile.ordersToday': 'আজ আসা অর্ডার',
@@ -377,7 +381,7 @@ export const integrationsBn: Record<keyof typeof integrationsEn, string> = {
   'int.wa.wabaId': 'WhatsApp Business Account ID',
   'int.wa.token': 'Access token (system user)',
   'int.wa.hint': 'Meta Business Manager → WhatsApp Manager → API setup থেকে নিন। টোকেন এনক্রিপ্ট করে রাখা হয়, আর দেখানো হয় না।',
-  'int.wa.link': 'নম্বর যুক্ত করুন',
+  'int.wa.link': 'WhatsApp দিয়ে যুক্ত করুন',
   'int.wa.syncTemplates': 'টেমপ্লেট অনুমোদন যাচাই',
   'int.wa.synced': 'Meta থেকে {count}টি টেমপ্লেট যাচাই হয়েছে',
   'int.wa.note': 'শুধু Meta-অনুমোদিত টেমপ্লেট পাঠানো হয়। মার্কেটিং টেমপ্লেটের খরচ Meta আপনার WhatsApp Business অ্যাকাউন্টে নেয়।',

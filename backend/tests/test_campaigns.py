@@ -552,6 +552,7 @@ def _meta_signed(payload: dict[str, Any]) -> tuple[bytes, dict[str, str]]:
 
 
 async def test_whatsapp_campaign_receipts_and_stop(client, unique_phone, email, monkeypatch):
+    monkeypatch.setattr(live_settings(), "meta_whatsapp_manual_enabled", True)
     settings = live_settings()
     monkeypatch.setattr(settings, "meta_app_id", "app")
     monkeypatch.setattr(settings, "meta_app_secret", SecretStr("meta-secret"))
