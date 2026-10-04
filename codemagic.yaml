@@ -51,6 +51,11 @@ workflows:
           if [ -z "$LATEST" ]; then BUILD_NUMBER=1; else BUILD_NUMBER=$((LATEST + 1)); fi
           # The marketing version comes from pubspec; its +build is Android's.
           BUILD_NAME=$(sed -n 's/^version: *\([0-9.]*\)+.*/\1/p' "$APP_DIR/pubspec.yaml")
+          # Optional release inputs for an explicitly requested version/build.
+          BUILD_NAME=${IOS_BUILD_NAME:-$BUILD_NAME}
+          BUILD_NUMBER=${IOS_BUILD_NUMBER:-$BUILD_NUMBER}
+          [[ "$BUILD_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || exit 1
           {
             echo "APP_STORE_APP_ID=$APP_ID"
             echo "BUILD_NUMBER=$BUILD_NUMBER"
