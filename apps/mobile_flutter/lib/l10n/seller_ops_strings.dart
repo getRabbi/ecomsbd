@@ -208,6 +208,7 @@ const sellerOpsEn = <String, String>{
   'conn.subtitle':
       'Your stores, sales channels and couriers, as they really are',
   'conn.channels': 'Stores & sales channels',
+  'conn.comingSoon': 'Coming soon',
   'conn.couriers': 'Couriers',
   'conn.manage': 'Manage',
   'conn.refresh': 'Refresh',
@@ -522,6 +523,7 @@ const sellerOpsBn = <String, String>{
   'conn.title': 'কানেকশন ও ইন্টিগ্রেশন',
   'conn.subtitle': 'আপনার স্টোর, বিক্রির চ্যানেল আর কুরিয়ার — আসল অবস্থাসহ',
   'conn.channels': 'স্টোর ও বিক্রির চ্যানেল',
+  'conn.comingSoon': 'শীঘ্রই আসছে',
   'conn.couriers': 'কুরিয়ার',
   'conn.manage': 'ম্যানেজ',
   'conn.refresh': 'রিফ্রেশ',

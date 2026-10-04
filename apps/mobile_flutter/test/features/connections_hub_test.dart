@@ -1,5 +1,6 @@
 import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/data/channels/integration_hub.dart';
+import 'package:ecomsbd/design/components/badges.dart';
 import 'package:ecomsbd/design/glass.dart';
 import 'package:ecomsbd/design/theme.dart';
 import 'package:ecomsbd/features/menu/more_screen.dart';
@@ -21,9 +22,8 @@ import 'commerce_harness.dart';
 ///
 /// The claims under test:
 ///
-/// * every store, channel and courier is listed with the state the server
-///   gave — a provider waiting on its own app approval says so and offers
-///   nothing, one ready to connect is connected right here (no web page);
+/// * the five launch integrations show Coming soon with no setup or detail
+///   actions, regardless of saved connections or server availability;
 /// * a courier the server switched on with nothing saved reads "Not
 ///   connected" with a Connect button — "Disabled" only when the server says
 ///   the courier is off for this shop;
@@ -32,6 +32,14 @@ import 'commerce_harness.dart';
 /// * More and Settings lead to this one screen.
 
 const Size _tall = Size(360, 2400);
+
+const _launchProviders = <String>[
+  'SHOPIFY',
+  'WOOCOMMERCE',
+  'CUSTOM_WEBSITE',
+  'MESSENGER',
+  'WHATSAPP',
+];
 
 Map<String, dynamic> _field(String name, String label, {bool secret = true}) =>
     <String, dynamic>{
@@ -251,32 +259,52 @@ void main() {
   });
 
   group('Connections & Integrations hub', () {
-    testWidgets('lists every store, channel and courier with its real state', (
+    testWidgets('gates five integrations and keeps courier actions active', (
       tester,
     ) async {
+      final harness = _server();
       await pumpCommerceScreen(
         tester,
         const ConnectionsScreen(),
-        harness: _server(),
+        harness: harness,
         size: _tall,
       );
 
       expect(find.text(_en('conn.title')), findsOneWidget);
 
-      // Technical Meta setup is separate from provider approval.
-      expect(find.text(_en('conn.approvalPending')), findsOneWidget);
-      expect(find.textContaining('waiting for Shopify'), findsOneWidget);
+      expect(find.text('Coming soon'), findsNWidgets(5));
+      expect(find.text(_en('conn.approvalPending')), findsNothing);
+      expect(find.text(_en('conn.unavailableNow')), findsNothing);
+      expect(find.text(_en('conn.unavailableNote')), findsNothing);
+      expect(find.textContaining('waiting for Shopify'), findsNothing);
       expect(find.textContaining('waiting for Meta'), findsNothing);
-      // The old dead end is gone.
       expect(find.text('Official setup required'), findsNothing);
 
-      // WooCommerce and a custom website connect natively; nothing sends the
-      // seller to a web dashboard.
       expect(find.text(_en('conn.setUpOnWeb')), findsNothing);
-      expect(find.byKey(const ValueKey('hub-setup-WOOCOMMERCE')), findsOne);
-      expect(find.byKey(const ValueKey('hub-setup-CUSTOM_WEBSITE')), findsOne);
-      expect(find.byKey(const ValueKey('hub-setup-SHOPIFY')), findsNothing);
-      expect(find.byKey(const ValueKey('hub-setup-MESSENGER')), findsNothing);
+      final requestsBeforeTaps = harness.adapter.requests.length;
+      for (final provider in _launchProviders) {
+        final row = find.byKey(ValueKey('hub-provider-$provider'));
+        expect(find.byKey(ValueKey('hub-setup-$provider')), findsNothing);
+        expect(
+          find.descendant(
+            of: row,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is ButtonStyleButton,
+            ),
+          ),
+          findsNothing,
+        );
+        final badge = tester.widget<StatusChip>(
+          find.descendant(of: row, matching: find.byType(StatusChip)),
+        );
+        expect(badge.tone, Tone.neutral);
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await settle(tester);
+        expect(find.byType(ConnectionsScreen), findsOneWidget);
+        expect(Navigator.of(tester.element(row)).canPop(), isFalse);
+      }
+      expect(harness.adapter.requests, hasLength(requestsBeforeTaps));
 
       // Instagram is honest about not existing yet.
       expect(find.byKey(const ValueKey('hub-provider-INSTAGRAM')), findsOne);
@@ -361,10 +389,11 @@ void main() {
         size: _tall,
       );
 
-      expect(find.text('Connected: 2'), findsOneWidget);
-      expect(find.text('Needs attention: 2'), findsOneWidget);
+      expect(find.text('Connected: 1'), findsOneWidget);
+      expect(find.text('Needs attention: 1'), findsOneWidget);
       expect(find.byKey(const Key('hub-attention')), findsOneWidget);
-      expect(find.text('My WOOCOMMERCE'), findsNWidgets(2));
+      expect(find.text('My WOOCOMMERCE'), findsNothing);
+      expect(find.text('Coming soon'), findsNWidgets(5));
       expect(find.byKey(const ValueKey('hub-reconnect-redx')), findsOneWidget);
       expect(find.byKey(const ValueKey('hub-manage-steadfast')), findsOne);
       expect(find.text('••••••••AB12'), findsOneWidget);
@@ -372,12 +401,25 @@ void main() {
       expect(find.byKey(const ValueKey('hub-setup-WOOCOMMERCE')), findsNothing);
     });
 
-    testWidgets('retry posts once and shows the queued state', (tester) async {
+    testWidgets('saved connections stay gated without changing their data', (
+      tester,
+    ) async {
+      final connections = <Map<String, dynamic>>[
+        _connection('s1', 'SHOPIFY', 'CONNECTED'),
+        _connection('w1', 'WOOCOMMERCE', 'AUTH_EXPIRED'),
+        _connection('c1', 'CUSTOM_WEBSITE', 'SYNC_FAILING'),
+        _connection('m1', 'MESSENGER', 'SETUP_INCOMPLETE'),
+        _connection('wa1', 'WHATSAPP', 'DISCONNECTED'),
+      ];
+      final originals = [
+        for (final connection in connections) {...connection},
+      ];
       final harness = _server(
+        items: connections,
         issues: <Map<String, dynamic>>[
           <String, dynamic>{
             'id': 'e1',
-            'connection_id': 's1',
+            'connection_id': 'c1',
             'provider': 'CUSTOM_WEBSITE',
             'status': 'FAILED',
             'code': 'MISSING_PHONE',
@@ -385,12 +427,14 @@ void main() {
             'retryable': true,
             'updated_at': '2026-09-24T08:00:00Z',
           },
+          <String, dynamic>{
+            'id': 'e2',
+            'connection_id': 'w1',
+            'status': 'FAILED',
+            'code': 'AUTH_EXPIRED',
+            'retryable': true,
+          },
         ],
-      );
-      harness.adapter.onJson(
-        'POST',
-        '/integrations/events/e1/retry',
-        <String, dynamic>{'id': 'e1', 'status': 'QUEUED'},
       );
       await pumpCommerceScreen(
         tester,
@@ -398,15 +442,34 @@ void main() {
         harness: harness,
         size: _tall,
       );
-      expect(find.text(_en('int.code.MISSING_PHONE')), findsOneWidget);
-      await tester.tap(find.text(_en('int.retry')));
-      await settle(tester);
-      expect(
-        harness.adapter.to('POST', '/integrations/events/e1/retry'),
-        hasLength(1),
-      );
-      expect(find.textContaining(_en('int.queued')), findsOneWidget);
+      expect(find.text('Coming soon'), findsNWidgets(5));
+      expect(find.text('Connected: 0'), findsOneWidget);
+      expect(find.text('Needs attention: 0'), findsOneWidget);
+      expect(find.byKey(const Key('hub-attention')), findsNothing);
+      expect(find.text(_en('int.code.MISSING_PHONE')), findsNothing);
+      expect(find.text(_en('int.health.AUTH_EXPIRED')), findsNothing);
       expect(find.text(_en('int.retry')), findsNothing);
+      final requestsBeforeTaps = harness.adapter.requests.length;
+      for (final connection in connections) {
+        final row = find.byKey(ValueKey('hub-connection-${connection['id']}'));
+        expect(
+          find.descendant(
+            of: row,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is ButtonStyleButton,
+            ),
+          ),
+          findsNothing,
+        );
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await settle(tester);
+        expect(find.byType(ConnectionsScreen), findsOneWidget);
+        expect(Navigator.of(tester.element(row)).canPop(), isFalse);
+      }
+      expect(harness.adapter.requests, hasLength(requestsBeforeTaps));
+      expect(harness.adapter.requests.every((r) => r.method == 'GET'), isTrue);
+      expect(connections, originals);
     });
 
     testWidgets('someone who is not the owner sees state but no buttons', (
@@ -418,7 +481,8 @@ void main() {
         harness: _server(owner: false, canRetry: false),
         size: _tall,
       );
-      expect(find.text(_en('conn.ownerConnects')), findsNWidgets(2));
+      expect(find.text('Coming soon'), findsNWidgets(5));
+      expect(find.text(_en('conn.ownerConnects')), findsNothing);
       expect(find.byKey(const ValueKey('hub-setup-WOOCOMMERCE')), findsNothing);
       for (final courier in <String>['steadfast', 'pathao', 'redx']) {
         expect(find.byKey(ValueKey('hub-connect-$courier')), findsNothing);
@@ -476,9 +540,12 @@ void main() {
       await settle(tester, frames: 10);
 
       expect(find.text(banglaStrings['conn.title']!), findsOneWidget);
-      expect(find.text(banglaStrings['conn.approvalPending']!), findsOneWidget);
-      // Three couriers and the custom website (WooCommerce has a connection).
-      expect(find.text(banglaStrings['common.connect']!), findsNWidgets(4));
+      expect(find.text('শীঘ্রই আসছে'), findsNWidgets(5));
+      expect(find.text(banglaStrings['conn.approvalPending']!), findsNothing);
+      expect(find.text(banglaStrings['conn.unavailableNow']!), findsNothing);
+      expect(find.text(banglaStrings['chan.unavailable']!), findsOneWidget);
+      // Only the three couriers retain Connect.
+      expect(find.text(banglaStrings['common.connect']!), findsNWidgets(3));
       expectNoOverflow(tester);
     });
 
