@@ -21,17 +21,21 @@ import 'courier_accounts_screen.dart';
 import 'integration_setup_screens.dart';
 import 'integrations_screen.dart';
 
+// Launch presentation only. Saved connections and provider capabilities stay
+// unchanged; courier availability continues to come from its own providers.
+const _comingSoonIntegrations = <String>{
+  'SHOPIFY',
+  'WOOCOMMERCE',
+  'CUSTOM_WEBSITE',
+  'MESSENGER',
+  'WHATSAPP',
+};
+
 /// Connections & Integrations: the one place a seller sees every store,
 /// sales channel and courier the shop is connected to, and what needs fixing.
 ///
-/// Everything shown is the server's own state. A store reads "Connected" only
-/// when the integrations hub has a healthy connection for it, and a courier's
-/// state comes from the same functions the courier accounts screen uses, so
-/// the two screens cannot disagree. Nothing here invents a count.
-///
-/// Stores, chat channels and couriers are all connected right here: a store's
-/// own approval page or keys, a Facebook sign-in, a WhatsApp number, or a
-/// website API key shown once. Nothing depends on the web dashboard.
+/// Store and chat integrations are shown as coming soon for launch. Couriers
+/// keep the same state and actions as the courier accounts screen.
 class ConnectionsScreen extends ConsumerStatefulWidget {
   const ConnectionsScreen({super.key});
 
@@ -92,6 +96,15 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     final issues = ref.watch(integrationIssuesProvider);
     final couriers = ref.watch(_courierRowsProvider);
     final rows = hub.whenData(integrationRowsFromHub);
+    final activeRows = rows.valueOrNull
+        ?.where((row) => !_comingSoonIntegrations.contains(row.provider))
+        .toList();
+    final comingSoonIds = <Object?>{
+      for (final row in rows.valueOrNull ?? const <IntegrationRow>[])
+        if (_comingSoonIntegrations.contains(row.provider) &&
+            row.connection != null)
+          row.connection!['id'],
+    };
 
     return DetailScaffold(
       eyebrow: context.tr('conn.eyebrow'),
@@ -106,11 +119,17 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       ],
       children: <Widget>[
         if (_busy) const LinearProgressIndicator(),
-        _Summary(rows: rows.valueOrNull, couriers: couriers.valueOrNull),
+        _Summary(rows: activeRows, couriers: couriers.valueOrNull),
         _Attention(
-          rows: rows.valueOrNull ?? const <IntegrationRow>[],
+          rows: activeRows ?? const <IntegrationRow>[],
           couriers: couriers.valueOrNull ?? const <_CourierRowState>[],
-          issues: issues.valueOrNull ?? const <Map<String, dynamic>>[],
+          issues: (issues.valueOrNull ?? const <Map<String, dynamic>>[])
+              .where(
+                (issue) =>
+                    !_comingSoonIntegrations.contains(issue['provider']) &&
+                    !comingSoonIds.contains(issue['connection_id']),
+              )
+              .toList(),
           canRetry: hub.valueOrNull?['can_retry'] == true,
           queued: _queued,
           busy: _busy,
@@ -365,6 +384,24 @@ class _IntegrationTile extends StatelessWidget {
     final connection = row.connection;
     final providerName = integrationProviderName(context, row.provider);
     final icon = _integrationIcon(row.provider);
+
+    if (_comingSoonIntegrations.contains(row.provider)) {
+      return _HubTile(
+        key: ValueKey(
+          connection == null
+              ? 'hub-provider-${row.provider}'
+              : 'hub-connection-${connection['id']}',
+        ),
+        leading: SoftIcon(icon: icon, tone: Tone.neutral),
+        title: providerName,
+        subtitle: context.tr('conn.about.${row.provider}'),
+        status: StatusChip(
+          label: context.tr('conn.comingSoon'),
+          tone: Tone.neutral,
+          showIcon: false,
+        ),
+      );
+    }
 
     if (connection != null) {
       final account = connection['account_name'];

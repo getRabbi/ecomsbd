@@ -79,7 +79,7 @@ CommerceHarness _harness(_Browser browser) => CommerceHarness(
 );
 
 void main() {
-  testWidgets('the hub offers Connect for WooCommerce, never a web page', (
+  testWidgets('the launch hub blocks setup even when providers are available', (
     tester,
   ) async {
     final browser = _Browser();
@@ -109,9 +109,15 @@ void main() {
       size: _tall,
     );
     expect(find.text('Set up on web'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('hub-setup-WOOCOMMERCE')));
-    await settle(tester, frames: 10);
-    expect(find.text('Connect WooCommerce'), findsOneWidget);
+    expect(find.text('Coming soon'), findsNWidgets(2));
+    for (final provider in ['WOOCOMMERCE', 'CUSTOM_WEBSITE']) {
+      expect(find.byKey(ValueKey('hub-setup-$provider')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('hub-provider-$provider')));
+      await settle(tester, frames: 10);
+    }
+    expect(find.text('Connect WooCommerce'), findsNothing);
+    expect(find.byType(ConnectionsScreen), findsOneWidget);
+    expect(harness.adapter.requests.every((r) => r.method == 'GET'), isTrue);
     expect(browser.opened, isEmpty);
   });
 
