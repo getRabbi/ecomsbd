@@ -2,11 +2,18 @@ import type { MetadataRoute } from 'next';
 
 import { homeUrl, SITE_URL } from './ecomsbd/content';
 
-/** The public homepage in both languages; the workspace is not for search. */
+/** The public pages in both languages; the workspace is not for search. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const languages = { en: SITE_URL, bn: homeUrl.bn };
+  const home = { en: SITE_URL, bn: homeUrl.bn };
+  const privacy = { en: `${SITE_URL}/privacy-policy`, bn: `${SITE_URL}/privacy-policy/bn` };
+  const deletion = { en: `${SITE_URL}/account-deletion`, bn: `${SITE_URL}/account-deletion/bn` };
   return [
-    { url: SITE_URL, alternates: { languages } },
-    { url: homeUrl.bn, alternates: { languages } },
+    { url: home.en, alternates: { languages: home } },
+    { url: home.bn, alternates: { languages: home } },
+    { url: `${SITE_URL}/ecomsbd-support` },
+    { url: privacy.en, alternates: { languages: privacy } },
+    { url: privacy.bn, alternates: { languages: privacy } },
+    { url: deletion.en, alternates: { languages: deletion } },
+    { url: deletion.bn, alternates: { languages: deletion } },
   ];
 }

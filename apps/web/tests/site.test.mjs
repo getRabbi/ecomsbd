@@ -62,3 +62,28 @@ test('every header anchor has a section to land on', async () => {
     assert.ok(page.includes(`id={sectionIds.${key}}`), `section ${key} is rendered`);
   }
 });
+
+test('the App Store is shown as coming soon and never linked', async () => {
+  for (const locale of ['en', 'bn']) {
+    assert.match(copy[locale].stores.appStoreTop, /Coming soon|শীঘ্রই আসছে/);
+  }
+  const component = await readFile(new URL('../app/ecomsbd/store-links.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(component, /apps\.apple\.com|itunes\.apple\.com/);
+  assert.match(component, /href=\{links\.play\}/);
+});
+
+test('support and legal pages name ecomsbd.com as canonical', async () => {
+  const pages = {
+    'ecomsbd-support/page.tsx': ['https://ecomsbd.com/ecomsbd-support'],
+    'privacy-policy/page.tsx': ['https://ecomsbd.com/privacy-policy', 'https://ecomsbd.com/privacy-policy/bn'],
+    'privacy-policy/bn/page.tsx': ['https://ecomsbd.com/privacy-policy/bn', 'https://ecomsbd.com/privacy-policy'],
+    'account-deletion/page.tsx': ['https://ecomsbd.com/account-deletion', 'https://ecomsbd.com/account-deletion/bn'],
+    'account-deletion/bn/page.tsx': ['https://ecomsbd.com/account-deletion/bn', 'https://ecomsbd.com/account-deletion'],
+  };
+  for (const [file, urls] of Object.entries(pages)) {
+    const source = await readFile(new URL(`../app/${file}`, import.meta.url), 'utf8');
+    assert.match(source, new RegExp(`canonical: '${urls[0]}'`), file);
+    for (const url of urls) assert.ok(source.includes(`'${url}'`), `${file} links ${url}`);
+    assert.doesNotMatch(source, /scalemyprints\.com/, file);
+  }
+});
