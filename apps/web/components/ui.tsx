@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import Image from 'next/image';
+import { useEffect, type ReactNode } from 'react';
 
 import { ApiError } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -156,6 +157,19 @@ export function Drawer({
   children: ReactNode;
 }) {
   const { t } = useSession();
+
+  // Escape closes, as every desktop panel does. Listening on the document
+  // rather than the panel means it works before focus has moved inside.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <>
       <div className="drawer__scrim" onClick={onClose} role="presentation" />
@@ -178,5 +192,45 @@ export function Row({ label, value }: { label: string; value: ReactNode }) {
       <span className="row__label">{label}</span>
       <span className="row__value">{value}</span>
     </div>
+  );
+}
+
+/** The ecomsbd bag mark, the same artwork as the app icon. */
+export function BrandMark({ size = 30 }: { size?: number }) {
+  return (
+    <Image
+      src="/brand/logo-mark.png"
+      alt=""
+      width={size}
+      height={size}
+      unoptimized
+      priority
+      className="brandmark"
+    />
+  );
+}
+
+/** English / বাংলা, as two buttons rather than a dropdown: one click, always visible. */
+export function LocaleToggle() {
+  const { locale, setLocale, t } = useSession();
+  return (
+    <span className="segmented" role="group" aria-label={t('common.language')}>
+      <button
+        type="button"
+        lang="en"
+        aria-pressed={locale === 'en'}
+        onClick={() => setLocale('en')}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        lang="bn"
+        aria-pressed={locale === 'bn'}
+        onClick={() => setLocale('bn')}
+      >
+        বাং
+      </button>
+    </span>
   );
 }

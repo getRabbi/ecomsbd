@@ -32,6 +32,19 @@ interface SessionState {
   setLocale: (locale: Locale) => void;
   t: (key: StringKey, vars?: Record<string, string | number>) => string;
   signOut: () => Promise<void>;
+  /**
+   * `true` after Supabase exchanged a password-reset link in this tab. Only
+   * then may the reset screen offer a new password: an ordinary session that
+   * happens to open that page has proved nothing about owning the inbox.
+   */
+  recovery: boolean;
+  endRecovery: () => void;
+  /**
+   * The last session ended because this person pressed Sign out — as opposed
+   * to expiring, being revoked, or ending in another tab. Only the latter
+   * earns a "your session ended" message and a way back to the same page.
+   */
+  endedByUser: boolean;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -71,6 +84,8 @@ function subscribeToLocale(onChange: () => void): () => void {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recovery, setRecovery] = useState(false);
+  const [endedByUser, setEndedByUser] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -86,9 +101,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Covers a token refresh, a sign-out in another tab, and an expiry while
     // the page sits open overnight — all of which must move the UI, not just
     // start failing requests.
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       setLoading(false);
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecovery(true);
+      } else if (event === 'SIGNED_IN') {
+        setEndedByUser(false);
+      } else if (event === 'SIGNED_OUT') {
+        setRecovery(false);
+      }
     });
 
     return () => {
@@ -121,9 +143,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    setEndedByUser(true);
     await getSupabase().auth.signOut();
     setSession(null);
   }, []);
+
+  const endRecovery = useCallback(() => setRecovery(false), []);
 
   const value = useMemo<SessionState>(
     () => ({
@@ -133,8 +158,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setLocale,
       t: (key, vars) => translate(locale, key, vars),
       signOut,
+      recovery,
+      endRecovery,
+      endedByUser,
     }),
-    [session, loading, locale, setLocale, signOut],
+    [session, loading, locale, setLocale, signOut, recovery, endRecovery, endedByUser],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

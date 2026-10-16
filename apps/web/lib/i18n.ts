@@ -10,6 +10,7 @@ import { forecastingEn, forecastingBn } from './forecasting-strings';
 import { automationEn, automationBn } from './automation-strings';
 import { riskEn, riskBn } from './risk-strings';
 import { developerEn, developerBn } from './developer-strings';
+import { shellEn, shellBn } from './shell-strings';
 
 /**
  * English and Bangla for the dashboard.
@@ -35,6 +36,7 @@ export const strings = {
     ...automationEn,
     ...riskEn,
     ...developerEn,
+    ...shellEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -76,7 +78,7 @@ export const strings = {
     'nav.shop': 'Shop',
 
     'auth.title': 'Sign in',
-    'auth.subtitle': 'Use Google, or the email and password for your ecomsbd account.',
+    'auth.subtitle': 'Use Google, Apple, or the email and password for your ecomsbd account.',
     'auth.continueWithGoogle': 'Continue with Google',
     'auth.or': 'or',
     'auth.email': 'Email',
@@ -121,7 +123,7 @@ export const strings = {
     'orders.actions': 'Actions',
     'orders.view': 'View',
     'orders.empty': 'No orders match this view.',
-    'orders.emptyHint': 'Clear the filters, or take your first order on the phone.',
+    'orders.emptyHint': 'Clear the filters, or import your existing orders.',
     'orders.bulkBook': 'Book with courier',
     'orders.bulkHint': 'Only orders that can be booked are sent.',
     'orders.detail': 'Order detail',
@@ -530,7 +532,6 @@ export const strings = {
     'set.currency': 'Currency',
     'set.pickup': 'Pickup address',
     'set.orderPrefix': 'Order number prefix',
-    'set.manageOnPhone': 'Change these in the mobile app.',
 
     'err.forbidden': 'Your role does not allow this.',
     'err.offline': 'Could not reach the server.',
@@ -668,6 +669,7 @@ export const strings = {
     ...automationBn,
     ...riskBn,
     ...developerBn,
+    ...shellBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',
@@ -709,7 +711,7 @@ export const strings = {
     'nav.shop': 'দোকান',
 
     'auth.title': 'সাইন ইন',
-    'auth.subtitle': 'Google দিয়ে, অথবা আপনার ecomsbd অ্যাকাউন্টের ইমেইল ও পাসওয়ার্ড দিয়ে সাইন ইন করুন।',
+    'auth.subtitle': 'Google বা Apple দিয়ে, অথবা আপনার ecomsbd অ্যাকাউন্টের ইমেইল ও পাসওয়ার্ড দিয়ে সাইন ইন করুন।',
     'auth.continueWithGoogle': 'Google দিয়ে চালিয়ে যান',
     'auth.or': 'অথবা',
     'auth.email': 'ইমেইল',
@@ -754,7 +756,7 @@ export const strings = {
     'orders.actions': 'কাজ',
     'orders.view': 'দেখুন',
     'orders.empty': 'এই ভিউতে কোনো অর্ডার নেই।',
-    'orders.emptyHint': 'ফিল্টার সরিয়ে দেখুন, অথবা ফোন থেকে প্রথম অর্ডার নিন।',
+    'orders.emptyHint': 'ফিল্টার সরিয়ে দেখুন, অথবা আগের অর্ডার ইমপোর্ট করুন।',
     'orders.bulkBook': 'কুরিয়ারে বুক করুন',
     'orders.bulkHint': 'যেগুলো বুক করা যাবে শুধু সেগুলোই পাঠানো হবে।',
     'orders.detail': 'অর্ডারের বিস্তারিত',
@@ -1162,7 +1164,6 @@ export const strings = {
     'set.currency': 'মুদ্রা',
     'set.pickup': 'পিকআপ ঠিকানা',
     'set.orderPrefix': 'অর্ডার নম্বরের প্রিফিক্স',
-    'set.manageOnPhone': 'এগুলো মোবাইল অ্যাপ থেকে বদলান।',
 
     'err.forbidden': 'আপনার দায়িত্বে এটি করা যায় না।',
     'err.offline': 'সার্ভারে পৌঁছানো যায়নি।',

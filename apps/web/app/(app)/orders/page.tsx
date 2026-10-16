@@ -17,6 +17,7 @@ import {
   looksBookable,
 } from '@/lib/states';
 import type { OrderDetail, OrderSummary } from '@/lib/types';
+import { useSearchParamState } from '@/lib/url-state';
 import { useApi, useDebounced } from '@/lib/useApi';
 
 const PAGE_SIZE = 50;
@@ -59,7 +60,8 @@ export default function OrdersPage() {
   const cursor = cursors.length > 0 ? cursors[cursors.length - 1] : undefined;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  // In the address bar, so search and notifications can open one order.
+  const [openOrderId, setOpenOrderId] = useSearchParamState('order');
   const [booking, setBooking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 

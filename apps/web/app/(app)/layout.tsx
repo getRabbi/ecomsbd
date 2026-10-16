@@ -1,11 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Shell } from '@/components/shell';
-import { useSession } from '@/lib/session';
+import { ShopGate } from '@/components/ShopSetup';
 import { AccessProvider } from '@/lib/access-context';
+import { useSession } from '@/lib/session';
+import { ShopProvider, useShop } from '@/lib/shop';
 
 /**
  * Every signed-in screen sits under this layout.
@@ -15,16 +17,37 @@ import { AccessProvider } from '@/lib/access-context';
  * That is the API, which verifies the Supabase JWT and checks the caller's
  * permission on every request — so a screen reached by editing the URL renders
  * its own error rather than somebody else's orders.
+ *
+ * When a session ends on its own (expiry, revocation, another tab), the sign-in
+ * page is told so and given the address to come back to. A deliberate sign-out
+ * is not an interruption and gets neither.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { session, loading, t } = useSession();
+  const { session, loading, t, endedByUser } = useSession();
+  const hadSession = useRef(false);
 
   useEffect(() => {
-    if (!loading && !session) {
-      router.replace('/sign-in');
+    if (session) {
+      hadSession.current = true;
+      return;
     }
-  }, [loading, session, router]);
+    if (loading) {
+      return;
+    }
+    const params = new URLSearchParams();
+    if (!endedByUser) {
+      const here = `${window.location.pathname}${window.location.search}`;
+      if (here !== '/dashboard') {
+        params.set('next', here);
+      }
+      if (hadSession.current) {
+        params.set('expired', '1');
+      }
+    }
+    const query = params.toString();
+    router.replace(query ? `/sign-in?${query}` : '/sign-in');
+  }, [loading, session, endedByUser, router]);
 
   if (loading) {
     return (
@@ -42,5 +65,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AccessProvider key={session.user.id}><Shell>{children}</Shell></AccessProvider>;
+  return (
+    <ShopProvider key={session.user.id} userId={session.user.id}>
+      <ShopGate>
+        <Workspace>{children}</Workspace>
+      </ShopGate>
+    </ShopProvider>
+  );
+}
+
+/**
+ * Keyed by shop, so switching shops remounts every screen: no table, drawer or
+ * cached response from one shop can survive into another.
+ */
+function Workspace({ children }: { children: ReactNode }) {
+  const { workspaceKey } = useShop();
+  return (
+    <AccessProvider key={workspaceKey ?? 'none'}>
+      <Shell>{children}</Shell>
+    </AccessProvider>
+  );
 }
