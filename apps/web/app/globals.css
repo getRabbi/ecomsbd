@@ -1926,3 +1926,125 @@ kbd {
   font-size: 11.5px;
   color: var(--muted);
 }
+
+/* ---------------------------------------------------------- dashboard --- */
+
+.hero {
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 70%, var(--navy-3) 100%);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hero__eyebrow {
+  color: var(--side-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 125, 82, 0.18);
+  color: var(--brand-on-dark);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.hero__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.hero__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hero__label {
+  color: var(--side-text);
+  font-size: 12.5px;
+}
+
+.hero__value {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero__note {
+  margin: 12px 0 0;
+  color: var(--side-muted);
+  font-size: 12px;
+}
+
+.quickrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.quick:hover {
+  border-color: var(--brand);
+  color: var(--brand-ink);
+}
+
+.minitiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.mini__value {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.drawer .formgrid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.drawer--wide {
+  width: min(780px, 96vw);
+}

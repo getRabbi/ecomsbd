@@ -54,7 +54,11 @@ export interface NotificationPreferences {
  */
 const WEB_ROUTES: Record<string, string> = {
   customers: '/customers?segment=FOLLOW_UP_DUE',
-  receivables: '/money',
+  receivables: '/money/receivables',
+  payouts: '/money/payouts',
+  payout: '/money/payouts',
+  expenses: '/expenses',
+  chat_orders: '/inbox',
   reconciliation: '/reconciliation',
   reconciliation_case: '/reconciliation',
   returns: '/returns',
@@ -73,8 +77,20 @@ const WEB_ROUTES: Record<string, string> = {
   forecasting: '/forecasting',
 };
 
+/** Targets whose id opens one record rather than the list. */
+const RECORD_ROUTES: Record<string, (id: string) => string> = {
+  order: (id) => `/orders?order=${encodeURIComponent(id)}`,
+  product: (id) => `/products?product=${encodeURIComponent(id)}`,
+  customer: (id) => `/customers/${encodeURIComponent(id)}`,
+  purchase_order: (id) => `/procurement/${encodeURIComponent(id)}`,
+};
+
 export function hrefFor(notification: Pick<AppNotification, 'payload'>): string | null {
   const route = notification.payload?.target?.route;
+  const id = notification.payload?.target?.id;
+  if (route && id && RECORD_ROUTES[route]) {
+    return RECORD_ROUTES[route](id);
+  }
   return route ? (WEB_ROUTES[route] ?? null) : null;
 }
 

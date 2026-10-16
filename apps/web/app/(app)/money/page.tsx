@@ -1,15 +1,28 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
-import { DataTable, useCursorStack, type Column } from '@/components/DataTable';
+import Link from 'next/link';
+
+import {
+  PayoutsTable,
+  ReceivablesTable,
+  bandKey,
+  bandLabel,
+  type AgingBand,
+  type ReceivableFilter,
+} from '@/components/MoneyLedger';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, Tile } from '@/components/ui';
-import type { Page } from '@/lib/api';
+import { courierName as baseCourierName } from '@/lib/couriers';
 import type { StringKey } from '@/lib/i18n';
 import { formatDate, formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
+
+function courierName(provider: string, t: Translate): string {
+  return baseCourierName(provider, t('rv.manualCourier'));
+}
 
 interface MoneySummary {
   outstanding_paisa: number;
@@ -22,14 +35,6 @@ interface MoneySummary {
   write_off_paisa: number;
   unexplained_payout_paisa: number;
   open_case_count: number;
-}
-
-interface AgingBand {
-  label: string;
-  min_days: number;
-  max_days: number | null;
-  parcel_count: number;
-  outstanding_paisa: number;
 }
 
 interface PayoutDelay {
@@ -70,40 +75,6 @@ interface Cashflow {
   };
   overall_delay: PayoutDelay | null;
 }
-
-interface Receivable {
-  id: string;
-  order_id: string;
-  order_number: string | null;
-  provider: string;
-  status: string;
-  collectible_paisa: number;
-  settled_paisa: number;
-  deduction_paisa: number;
-  outstanding_paisa: number;
-  age_days: number | null;
-}
-
-interface Payout {
-  id: string;
-  provider: string;
-  provider_reference: string | null;
-  status: string;
-  total_paisa: number;
-  applied_paisa: number;
-  unexplained_paisa: number;
-  paid_on: string | null;
-  received_at: string;
-}
-
-/** A receivables filter, set by clicking a courier or an aging band. */
-interface ReceivableFilter {
-  provider: string;
-  band: string;
-  unpaidOnly: boolean;
-}
-
-const COURIERS = ['steadfast', 'pathao', 'redx', 'manual'] as const;
 
 type Translate = (key: StringKey, vars?: Record<string, string | number>) => string;
 
@@ -186,6 +157,21 @@ export default function MoneyPage() {
             }
           />
         </div>
+
+        {summary.data && (summary.data.open_case_count > 0 || summary.data.unexplained_payout_paisa > 0) ? (
+          <div className="notice notice--warn">
+            <span>
+              <strong>{t('ml.discrepancies')}</strong>{' '}
+              {t('ml.discrepancySummary', {
+                cases: summary.data.open_case_count,
+                amount: formatPaisa(summary.data.unexplained_payout_paisa, { locale }),
+              })}
+            </span>
+            <Link className="btn btn--sm" href="/reconciliation">
+              {t('act.reconcile')}
+            </Link>
+          </div>
+        ) : null}
 
         {cashflow.data ? <CashflowSection flow={cashflow.data} /> : null}
 
@@ -381,232 +367,5 @@ function CashflowSection({ flow }: { flow: Cashflow }) {
         </Card>
       </div>
     </div>
-  );
-}
-
-function ReceivablesTable({
-  filter,
-  onFilter,
-  bands,
-}: {
-  filter: ReceivableFilter;
-  onFilter: (filter: ReceivableFilter) => void;
-  bands: AgingBand[];
-}) {
-  const { t, locale } = useSession();
-  const paging = useCursorStack();
-  const band = bands.find((candidate) => bandKey(candidate) === filter.band);
-
-  const query = useMemo(
-    () => ({
-      limit: 50,
-      cursor: paging.cursor,
-      provider: filter.provider || undefined,
-      min_age_days: band ? band.min_days : undefined,
-      max_age_days: band && band.max_days !== null ? band.max_days : undefined,
-      // "Delivered, unpaid" is the same status the summary counts.
-      status: filter.unpaidOnly ? 'ELIGIBLE' : undefined,
-      open_only: filter.provider || band ? true : undefined,
-    }),
-    [paging.cursor, filter.provider, filter.unpaidOnly, band],
-  );
-  const { data, loading, error, reload } = useApi<Page<Receivable>>('/money/receivables', query);
-
-  function change(next: Partial<ReceivableFilter>) {
-    onFilter({ ...filter, ...next });
-    paging.reset();
-  }
-
-  const columns: Column<Receivable>[] = [
-    {
-      key: 'parcel',
-      header: t('money.parcel'),
-      render: (row) => (
-        <>
-          <div className="table__primary">{row.order_number ?? row.order_id.slice(0, 8)}</div>
-          <div className="table__sub">{courierName(row.provider, t)}</div>
-        </>
-      ),
-    },
-    { key: 'status', header: t('recon.state'), render: (row) => <Chip label={row.status} /> },
-    {
-      key: 'collectible',
-      header: t('money.collectible'),
-      numeric: true,
-      render: (row) => formatPaisa(row.collectible_paisa, { locale }),
-    },
-    {
-      key: 'settled',
-      header: t('money.received'),
-      numeric: true,
-      render: (row) => formatPaisa(row.settled_paisa, { locale }),
-    },
-    {
-      key: 'outstanding',
-      header: t('money.balance'),
-      numeric: true,
-      // The API's own balance. Not collectible minus settled: deductions,
-      // adjustments and write-offs all move it, and re-deriving it here would
-      // disagree with the ledger for exactly the parcels that matter.
-      render: (row) => formatPaisa(row.outstanding_paisa, { locale }),
-    },
-    {
-      key: 'age',
-      header: t('money.age'),
-      numeric: true,
-      render: (row) => (row.age_days === null ? '—' : t('cf.days', { days: row.age_days })),
-    },
-  ];
-
-  return (
-    <DataTable
-      columns={columns}
-      rows={data?.items ?? []}
-      loading={loading}
-      error={error}
-      onRetry={reload}
-      emptyTitle={t('money.emptyReceivables')}
-      toolbar={
-        <>
-          <select
-            className="select"
-            value={filter.provider}
-            onChange={(event) => change({ provider: event.target.value })}
-            aria-label={t('cf.courier')}
-          >
-            <option value="">{t('rv.anyCourier')}</option>
-            {COURIERS.map((value) => (
-              <option key={value} value={value}>
-                {courierName(value, t)}
-              </option>
-            ))}
-          </select>
-          <select
-            className="select"
-            value={filter.band}
-            onChange={(event) => change({ band: event.target.value })}
-            aria-label={t('money.age')}
-          >
-            <option value="">{t('money.anyAge')}</option>
-            {bands.map((value) => (
-              <option key={value.label} value={bandKey(value)}>
-                {bandLabel(value, t)}
-              </option>
-            ))}
-          </select>
-          <label className="card__hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={filter.unpaidOnly}
-              onChange={(event) => change({ unpaidOnly: event.target.checked })}
-            />
-            {t('money.unpaidOnly')}
-          </label>
-        </>
-      }
-      pagination={{
-        canGoBack: paging.canGoBack,
-        canGoForward: Boolean(data?.has_more && data?.next_cursor),
-        onBack: paging.back,
-        onForward: () => paging.forward(data?.next_cursor ?? null),
-      }}
-    />
-  );
-}
-
-function bandKey(band: AgingBand): string {
-  return `${band.min_days}-${band.max_days ?? ''}`;
-}
-
-/** The band in the reader's language, from its bounds rather than the API's English label. */
-function bandLabel(band: AgingBand, t: Translate): string {
-  return band.max_days === null
-    ? t('money.bandOver', { days: band.min_days - 1 })
-    : t('money.bandRange', { min: band.min_days, max: band.max_days });
-}
-
-function courierName(provider: string, t: Translate): string {
-  switch (provider) {
-    case 'steadfast':
-      return 'Steadfast';
-    case 'pathao':
-      return 'Pathao';
-    case 'redx':
-      return 'RedX';
-    case 'manual':
-      return t('rv.manualCourier');
-    default:
-      return provider;
-  }
-}
-
-
-function PayoutsTable() {
-  const { t, locale } = useSession();
-  const paging = useCursorStack();
-  const query = useMemo(() => ({ limit: 50, cursor: paging.cursor }), [paging.cursor]);
-  const { data, loading, error, reload } = useApi<Page<Payout>>('/payouts', query);
-
-  const columns: Column<Payout>[] = [
-    {
-      key: 'provider',
-      header: t('cour.provider'),
-      render: (row) => (
-        <>
-          <div className="table__primary">{row.provider}</div>
-          {row.provider_reference ? (
-            <div className="table__sub">{row.provider_reference}</div>
-          ) : null}
-        </>
-      ),
-    },
-    {
-      key: 'paid_on',
-      header: t('money.paidOn'),
-      render: (row) => formatDate(row.paid_on ?? row.received_at, { locale }),
-    },
-    {
-      key: 'total',
-      header: t('money.total'),
-      numeric: true,
-      render: (row) => formatPaisa(row.total_paisa, { locale }),
-    },
-    {
-      key: 'applied',
-      header: t('money.applied'),
-      numeric: true,
-      render: (row) => formatPaisa(row.applied_paisa, { locale }),
-    },
-    {
-      key: 'unexplained',
-      header: t('money.unexplained'),
-      numeric: true,
-      render: (row) =>
-        row.unexplained_paisa > 0 ? (
-          // Money that arrived but could not be tied to a parcel. Kept visible
-          // rather than folded into the total, because it is the figure a
-          // seller has to act on.
-          <Chip label={formatPaisa(row.unexplained_paisa, { locale })} tone="warn" />
-        ) : (
-          formatPaisa(0, { locale })
-        ),
-    },
-  ];
-
-  return (
-    <DataTable
-      columns={columns}
-      rows={data?.items ?? []}
-      loading={loading}
-      error={error}
-      onRetry={reload}
-      emptyTitle={t('money.emptyPayouts')}
-      pagination={{
-        canGoBack: paging.canGoBack,
-        canGoForward: Boolean(data?.has_more && data?.next_cursor),
-        onBack: paging.back,
-        onForward: () => paging.forward(data?.next_cursor ?? null),
-      }}
-    />
   );
 }

@@ -38,6 +38,7 @@ export default function NotificationsPage() {
   const { t, locale } = useSession();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [category, setCategory] = useState<string>('');
+  const [severity, setSeverity] = useState<string>('');
   const [older, setOlder] = useState<{
     key: string;
     items: AppNotification[];
@@ -45,7 +46,7 @@ export default function NotificationsPage() {
   }>({ key: '', items: [], cursor: null });
   const [busy, setBusy] = useState(false);
 
-  const query = { limit: 30, unread_only: unreadOnly, category: category || null, lang: locale };
+  const query = { limit: 30, unread_only: unreadOnly, category: category || null, severity: severity || null, lang: locale };
   const queryKey = JSON.stringify(query);
   const list = useApi<Page<AppNotification>>('/notifications', query);
   const prefs = useApi<NotificationPreferences>('/account/notification-preferences');
@@ -138,6 +139,17 @@ export default function NotificationsPage() {
             </button>
           ))}
           <label className="field" style={{ margin: 0, marginLeft: 'auto' }}>
+            <span className="field__label">{t('notif.severity')}</span>
+            <select className="select" value={severity} onChange={(event) => setSeverity(event.target.value)}>
+              <option value="">{t('notif.cat.all')}</option>
+              {(['ACTION', 'WARNING', 'CRITICAL', 'INFO'] as const).map((value) => (
+                <option key={value} value={value}>
+                  {t(`notif.sev.${value}` as StringKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" style={{ margin: 0 }}>
             <span className="field__label">{t('notif.category')}</span>
             <select
               className="select"

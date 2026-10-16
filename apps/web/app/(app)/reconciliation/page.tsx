@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { DataTable, useCursorStack, type Column } from '@/components/DataTable';
@@ -9,6 +10,7 @@ import { api, ApiError, type Page } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
 import { formatDate, formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
 import { useApi, useDebounced } from '@/lib/useApi';
 
 /**
@@ -154,10 +156,43 @@ export default function ReconciliationPage() {
   const [openCaseId, setOpenCaseId] = useState<string | null>(null);
 
   const summary = useApi<Summary>('/reconciliation/summary');
+  const { can } = useShop();
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+
+  async function scan() {
+    setScanning(true);
+    setScanNote(null);
+    try {
+      await api.post('/reconciliation/scan');
+      setScanNote(t('rv.scanned'));
+      summary.reload();
+    } catch (caught) {
+      setScanNote(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setScanning(false);
+    }
+  }
 
   return (
     <>
-      <PageHeader title={t('recon.title')} subtitle={t('rv.subtitle')} />
+      <PageHeader
+        title={t('recon.title')}
+        subtitle={t('rv.subtitle')}
+        actions={
+          <>
+            {scanNote ? <span className="card__hint">{scanNote}</span> : null}
+            <Link className="btn" href="/money/payouts">
+              {t('nav.payouts')}
+            </Link>
+            {can('money.reconcile') ? (
+              <button type="button" className="btn btn--primary" disabled={scanning} onClick={() => void scan()}>
+                {t('rv.scan')}
+              </button>
+            ) : null}
+          </>
+        }
+      />
       <div className="content">
         {summary.data ? (
           <div className="tiles">

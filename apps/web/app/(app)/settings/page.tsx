@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { AccountSecurity, PrivacyData } from '@/components/AccountSettings';
 import { CurrentAccess } from '@/components/current-access';
 import { Icon, type IconName } from '@/components/icons';
 import { PageHeader } from '@/components/shell';
@@ -21,10 +22,10 @@ interface WorkspaceLink {
 }
 
 const WORKSPACE_LINKS: WorkspaceLink[] = [
-  { href: '/couriers', labelKey: 'nav.couriers', icon: 'couriers' },
+  { href: '/couriers', labelKey: 'set.courierAccounts', icon: 'couriers' },
   { href: '/integrations', labelKey: 'nav.connections', icon: 'connections', permission: 'order.view' },
   { href: '/team', labelKey: 'nav.team', icon: 'team' },
-  { href: '/notifications', labelKey: 'nav.notifications', icon: 'bell' },
+  { href: '/notifications', labelKey: 'set.notificationSettings', icon: 'bell' },
   { href: '/settings/risk-provider', labelKey: 'nav.riskProvider', icon: 'network' },
   { href: '/developers', labelKey: 'nav.developers', icon: 'developers', permission: 'settings.manage' },
 ];
@@ -73,6 +74,8 @@ export default function SettingsPage() {
                 <p className="card__hint">{t('common.loading')}</p>
               )}
             </Card>
+            <AccountSecurity />
+            <PrivacyData />
           </div>
 
           <div className="stack">

@@ -62,7 +62,7 @@ const ORDER_STATUS: Record<string, StateCopy> = {
   DRAFT: { en: 'Draft', bn: 'খসড়া', tone: 'neutral' },
   CONFIRMED: { en: 'Confirmed', bn: 'নিশ্চিত', tone: 'neutral' },
   PACKED: { en: 'Packed', bn: 'প্যাক হয়েছে', tone: 'neutral' },
-  DISPATCHED: { en: 'Dispatched', bn: 'পাঠানো হয়েছে', tone: 'neutral' },
+  FULFILLMENT_STARTED: { en: 'With courier', bn: 'কুরিয়ারে পাঠানো', tone: 'neutral' },
   COMPLETED: { en: 'Completed', bn: 'সম্পন্ন', tone: 'good' },
   CANCELLED: { en: 'Cancelled', bn: 'বাতিল', tone: 'neutral' },
 };
@@ -100,7 +100,7 @@ export const ORDER_STATUS_VALUES = [
   'DRAFT',
   'CONFIRMED',
   'PACKED',
-  'DISPATCHED',
+  'FULFILLMENT_STARTED',
   'COMPLETED',
   'CANCELLED',
 ] as const;

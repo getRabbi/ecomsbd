@@ -31,6 +31,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/dashboard', labelKey: 'nav.dashboard', icon: 'dashboard' },
       { href: '/orders', labelKey: 'nav.orders', icon: 'orders', permission: 'order.view' },
+      { href: '/inbox', labelKey: 'nav.inbox', icon: 'inbox', permission: 'order.write' },
       { href: '/customers', labelKey: 'nav.customers', icon: 'customers', permission: 'customer.view' },
       { href: '/products', labelKey: 'nav.products', icon: 'products', permission: 'product.view' },
       { href: '/couriers', labelKey: 'nav.couriers', icon: 'couriers' },
@@ -40,7 +41,10 @@ export const NAV: NavGroup[] = [
     labelKey: 'nav.moneyGroup',
     items: [
       { href: '/money', labelKey: 'nav.moneyOverview', icon: 'money', permission: 'money.view' },
+      { href: '/money/receivables', labelKey: 'nav.receivables', icon: 'document', permission: 'money.view' },
+      { href: '/money/payouts', labelKey: 'nav.payouts', icon: 'money', permission: 'money.view' },
       { href: '/reconciliation', labelKey: 'nav.reconciliation', icon: 'reconcile', permission: 'money.view' },
+      { href: '/expenses', labelKey: 'nav.expenses', icon: 'document', permission: 'money.view' },
     ],
   },
   {
@@ -73,8 +77,8 @@ export const NAV: NavGroup[] = [
 /**
  * Shortcuts offered by the command palette. Each lands on the screen where the
  * action already lives — the palette is a faster way in, not a second form.
- * New entries arrive with the phase that builds their destination (new order,
- * paste order, add expense), never before it exists.
+ * Each entry opens a destination that exists — the composer, the paste
+ * detector, the product and expense forms, the risk check.
  */
 export interface QuickAction {
   id: string;
@@ -85,8 +89,13 @@ export interface QuickAction {
 }
 
 export const QUICK_ACTIONS: QuickAction[] = [
-  { id: 'book', href: '/orders', labelKey: 'act.bookCourier', icon: 'couriers', permission: 'order.book' },
+  { id: 'new-order', href: '/orders?new=1', labelKey: 'act.newOrder', icon: 'plus', permission: 'order.write' },
+  { id: 'paste-order', href: '/orders?paste=1', labelKey: 'act.pasteOrder', icon: 'inbox', permission: 'order.write' },
+  { id: 'book', href: '/orders?status=CONFIRMED', labelKey: 'act.bookCourier', icon: 'couriers', permission: 'order.book' },
+  { id: 'add-product', href: '/products?new=1', labelKey: 'act.addProduct', icon: 'products', permission: 'product.write' },
   { id: 'stock', href: '/products', labelKey: 'act.stock', icon: 'products', permission: 'inventory.adjust' },
+  { id: 'expense', href: '/expenses?new=1', labelKey: 'act.addExpense', icon: 'money', permission: 'money.reconcile' },
+  { id: 'risk', href: '/network?check=1', labelKey: 'act.riskCheck', icon: 'network', permission: 'customer.risk_view' },
   { id: 'import', href: '/imports', labelKey: 'act.import', icon: 'imports', permission: 'order.view' },
   { id: 'reconcile', href: '/reconciliation', labelKey: 'act.reconcile', icon: 'reconcile', permission: 'money.reconcile' },
   { id: 'notifications', href: '/notifications', labelKey: 'act.notifications', icon: 'bell' },
@@ -122,6 +131,20 @@ export function visibleNav(
 
 export function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * The one destination to highlight: the longest href that contains the path,
+ * so `/money/payouts` lights Payouts and not Money overview as well.
+ */
+export function activeHref(pathname: string, hrefs: string[]): string | null {
+  let best: string | null = null;
+  for (const href of hrefs) {
+    if (isActive(pathname, href) && (best === null || href.length > best.length)) {
+      best = href;
+    }
+  }
+  return best;
 }
 
 /**

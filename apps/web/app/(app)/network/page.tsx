@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 
+import { useSearchParams } from 'next/navigation';
+
+import { RiskCheckCard } from '@/components/RiskCheck';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, ErrorState } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -9,6 +12,7 @@ import type { StringKey } from '@/lib/i18n';
 import { formatPaisa } from '@/lib/money';
 import { cellValue, when, type Cell, type CourierFacts, type Release } from '@/lib/risk';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
 import { useApi } from '@/lib/useApi';
 
 type Tab = 'overview' | 'cohorts' | 'couriers';
@@ -26,6 +30,8 @@ export default function NetworkPage() {
   const { t } = useSession();
   const [tab, setTab] = useState<Tab>('overview');
   const summary = useApi<Summary>('/network-intelligence');
+  const { can } = useShop();
+  const focusCheck = useSearchParams().get('check') !== null;
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +52,7 @@ export default function NetworkPage() {
     <>
       <PageHeader title={t('net.title')} subtitle={t('net.subtitle')} />
       <div className="content" style={{ display: 'grid', gap: 18 }}>
+        {can('customer.risk_view') ? <RiskCheckCard autoFocus={focusCheck} /> : null}
         <div role="tablist" style={{ display: 'flex', gap: 6 }}>
           {(['overview', 'cohorts', 'couriers'] as const).map((key) => (
             <button key={key} role="tab" aria-selected={tab === key} className={`btn btn--sm${tab === key ? ' btn--primary' : ''}`} onClick={() => setTab(key)}>
