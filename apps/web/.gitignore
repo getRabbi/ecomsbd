@@ -6,3 +6,6 @@ next-env.d.ts
 .env.local
 .env.*.local
 *.tsbuildinfo
+.open-next/
+.wrangler/
+.dev.vars*

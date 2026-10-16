@@ -1,0 +1,44 @@
+/**
+ * Cloudflare Workers deployment of the web dashboard, built with the OpenNext
+ * adapter (`npm run cf:deploy`). Vercel keeps building the same app from
+ * `main` as the fallback; nothing here changes that.
+ *
+ * One Worker serves every hostname. `next.config.ts` decides what each host
+ * shows: ecomsbd.com is the public site, app.ecomsbd.com the seller
+ * workspace, and www.ecomsbd.com redirects to the apex.
+ *
+ * Free plan on purpose: no R2, KV, D1, Queues or Durable Objects. Prerendered
+ * pages are read from static assets, and files under `.open-next/assets`
+ * (`/_next/static/*`, `/brand/*`) are served without invoking the Worker.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ecomsbd-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      // The adapter calls itself through this binding; it must name this Worker.
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "ecomsbd-web"
+    }
+  ],
+  "routes": [
+    { "pattern": "ecomsbd.com", "custom_domain": true },
+    { "pattern": "www.ecomsbd.com", "custom_domain": true },
+    { "pattern": "app.ecomsbd.com", "custom_domain": true }
+  ],
+  // Only the three hostnames above are origins that Supabase and the API's CORS
+  // list know about; a workers.dev URL would be a fourth that silently fails
+  // sign-in.
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  }
+}

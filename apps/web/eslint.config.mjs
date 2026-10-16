@@ -12,6 +12,8 @@ import nextConfig from 'eslint-config-next';
  */
 const config = [
   ...nextConfig,
+  // Generated Cloudflare build output (`npm run cf:build`).
+  { ignores: ['.open-next/**', '.wrangler/**'] },
   {
     files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}'],
     rules: {
