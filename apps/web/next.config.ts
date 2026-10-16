@@ -61,13 +61,18 @@ const nextConfig: NextConfig = {
 
   async rewrites() {
     return {
-      // The apex root is the public product page. Everywhere else `/` keeps
-      // sending visitors to the dashboard or sign-in.
+      // The apex root is the public product page, `/bn` its Bangla version.
+      // Everywhere else `/` keeps sending visitors to the dashboard or sign-in.
       beforeFiles: [
         {
           source: '/',
           has: [{ type: 'host', value: PUBLIC_HOST }],
           destination: '/ecomsbd',
+        },
+        {
+          source: '/bn',
+          has: [{ type: 'host', value: PUBLIC_HOST }],
+          destination: '/ecomsbd/bn',
         },
       ],
       afterFiles: [],
