@@ -8,7 +8,9 @@ import { Card, Chip, Drawer, ErrorState, Row, Tile, type Tone } from '@/componen
 import { api, ApiError, type Page } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
 import { formatPaisa } from '@/lib/money';
+import { errorMessage, paisaToTaka, takaToPaisa } from '@/lib/orders';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
 import { useSearchParamState } from '@/lib/url-state';
 import { useApi, useDebounced } from '@/lib/useApi';
 
@@ -16,6 +18,8 @@ interface Variant {
   id: string;
   name: string;
   sku: string | null;
+  price_paisa: number | null;
+  cost_paisa: number | null;
   stock_on_hand: number;
   low_stock_threshold: number | null;
   is_low_stock: boolean;
@@ -26,6 +30,7 @@ interface Product {
   id: string;
   name: string;
   sku: string | null;
+  description: string | null;
   cost_paisa: number;
   default_selling_price_paisa: number;
   stock_tracking_enabled: boolean;
@@ -91,8 +96,11 @@ export default function ProductsPage() {
   const { t, locale } = useSession();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StockFilter>('all');
-  // In the address bar, so search can open one product.
+  const [archived, setArchived] = useState(false);
+  const { can } = useShop();
+  // In the address bar, so search can open one product and quick actions can add one.
   const [openId, setOpenId] = useSearchParamState('product');
+  const [creating, setCreating] = useSearchParamState('new');
   const debounced = useDebounced(search);
   const paging = useCursorStack();
 
@@ -103,8 +111,9 @@ export default function ProductsPage() {
       search: debounced.trim() || undefined,
       low_stock_only: filter === 'low' || undefined,
       out_of_stock_only: filter === 'out' || undefined,
+      include_archived: archived || undefined,
     }),
-    [paging.cursor, debounced, filter],
+    [paging.cursor, debounced, filter, archived],
   );
 
   const { data, loading, error, reload } = useApi<Page<Product>>('/products', query);
@@ -155,6 +164,12 @@ export default function ProductsPage() {
       header: t('prod.price'),
       numeric: true,
       render: (row) => formatPaisa(row.default_selling_price_paisa, { locale }),
+    },
+    {
+      key: 'cost',
+      header: t('prod.cost'),
+      numeric: true,
+      render: (row) => formatPaisa(row.cost_paisa, { locale }),
     },
     {
       key: 'stock',
@@ -225,7 +240,17 @@ export default function ProductsPage() {
 
   return (
     <>
-      <PageHeader title={t('prod.title')} subtitle={t('prod.subtitle')} />
+      <PageHeader
+        title={t('prod.title')}
+        subtitle={t('prod.subtitle')}
+        actions={
+          can('product.write') ? (
+            <button type="button" className="btn btn--primary" onClick={() => setCreating('1')}>
+              {t('act.addProduct')}
+            </button>
+          ) : null
+        }
+      />
       <div className="content">
         {tiles ? (
           <div className="tiles">
@@ -270,6 +295,17 @@ export default function ProductsPage() {
                   <option value="low">{t('prod.lowStock')}</option>
                   <option value="out">{t('inv.outOfStock')}</option>
                 </select>
+                <label className="card__hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={archived}
+                    onChange={(event) => {
+                      setArchived(event.target.checked);
+                      paging.reset();
+                    }}
+                  />
+                  {t('pe.showArchived')}
+                </label>
               </>
             }
             pagination={{
@@ -281,6 +317,17 @@ export default function ProductsPage() {
           />
         </Card>
       </div>
+      {creating !== null ? (
+        <ProductForm
+          onClose={() => setCreating(null)}
+          onSaved={(id) => {
+            setCreating(null);
+            reload();
+            summary.reload();
+            setOpenId(id);
+          }}
+        />
+      ) : null}
       {openId ? (
         <ProductDrawer
           productId={openId}
@@ -314,7 +361,27 @@ function ProductDrawer({
   const product = useApi<Product>(`/products/${productId}`);
   const [action, setAction] = useState<Action>('adjust');
   const [historyNonce, setHistoryNonce] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [editVariant, setEditVariant] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const { can } = useShop();
   const data = product.data;
+
+  async function setArchived(archived: boolean) {
+    if (!data) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      await api.patch(`/products/${data.id}`, { archived });
+      product.reload();
+      onChanged();
+    } catch (caught) {
+      setFailure(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const changed = () => {
     product.reload();
@@ -327,27 +394,55 @@ function ProductDrawer({
       {product.error ? <ErrorState error={product.error} onRetry={product.reload} /> : null}
       {data ? (
         <>
+          {can('product.write') ? (
+            <div className="toolbar" style={{ padding: '0 0 10px', flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn--sm" onClick={() => setEditing((value) => !value)}>
+                {t('pe.edit')}
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void setArchived(!data.is_archived)}>
+                {data.is_archived ? t('pe.unarchive') : t('pe.archive')}
+              </button>
+            </div>
+          ) : null}
+          {failure ? <p className="formerror">{failure}</p> : null}
+          {editing ? (
+            <ProductForm
+              product={data}
+              onClose={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false);
+                product.reload();
+                onChanged();
+              }}
+            />
+          ) : null}
           <Row label={t('prod.sku')} value={data.sku ?? '—'} />
-          <Row label={t('prod.stock')} value={String(data.stock_on_hand)} />
+          <Row label={t('prod.price')} value={formatPaisa(data.default_selling_price_paisa, { locale })} />
           <Row label={t('prod.cost')} value={formatPaisa(data.cost_paisa, { locale })} />
+          <Row label={t('prod.stock')} value={data.stock_tracking_enabled ? String(data.stock_on_hand) : t('pe.notTracked')} />
+          <Row label={t('inv.threshold')} value={data.has_variants ? t('inv.perVariant') : (data.low_stock_threshold ?? '—')} />
+          {data.description ? <p className="card__hint">{data.description}</p> : null}
           {data.has_variants ? (
             <table className="table">
               <thead>
                 <tr>
                   <th>{t('inv.variant')}</th>
                   <th>{t('prod.sku')}</th>
+                  <th className="num">{t('prod.price')}</th>
                   <th className="num">{t('prod.stock')}</th>
                   <th className="num">{t('inv.threshold')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {data.variants.map((variant) => (
-                  <tr key={variant.id}>
+                  <tr key={variant.id} data-selected={editVariant === variant.id}>
                     <td>
                       {variant.name}
                       {!variant.is_active ? ` (${t('inv.inactive')})` : ''}
                     </td>
                     <td>{variant.sku ?? '—'}</td>
+                    <td className="num">{variant.price_paisa !== null ? formatPaisa(variant.price_paisa, { locale }) : '—'}</td>
                     <td className="num">
                       {variant.stock_on_hand}
                       {variant.is_low_stock ? (
@@ -358,10 +453,27 @@ function ProductDrawer({
                       ) : null}
                     </td>
                     <td className="num">{variant.low_stock_threshold ?? '—'}</td>
+                    <td>
+                      {can('product.write') ? (
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditVariant(editVariant === variant.id ? null : variant.id)}>
+                          {t('pe.edit')}
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          ) : null}
+          {editVariant && data.variants.some((variant) => variant.id === editVariant) ? (
+            <VariantEditor
+              productId={data.id}
+              variant={data.variants.find((variant) => variant.id === editVariant) as Variant}
+              onDone={() => {
+                setEditVariant(null);
+                changed();
+              }}
+            />
           ) : null}
 
           {data.stock_tracking_enabled ? (
@@ -856,5 +968,217 @@ function StockHistory({ product, nonce }: { product: Product; nonce: number }) {
         }}
       />
     </>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+// Product create / edit, variant edit
+// --------------------------------------------------------------------------- //
+
+/**
+ * Create a product, or edit one's catalogue fields.
+ *
+ * Opening stock is set only at creation — after that, stock moves only
+ * through the ledger (adjustments, restocks), never by typing a new total.
+ */
+function ProductForm({ product, onClose, onSaved }: { product?: Product; onClose: () => void; onSaved: (id: string) => void }) {
+  const { t } = useSession();
+  const [name, setName] = useState(product?.name ?? '');
+  const [sku, setSku] = useState(product?.sku ?? '');
+  const [description, setDescription] = useState(product?.description ?? '');
+  const [price, setPrice] = useState(paisaToTaka(product?.default_selling_price_paisa ?? null));
+  const [cost, setCost] = useState(paisaToTaka(product?.cost_paisa ?? null));
+  const [threshold, setThreshold] = useState(product?.low_stock_threshold?.toString() ?? '');
+  const [tracking, setTracking] = useState(product?.stock_tracking_enabled ?? true);
+  const [opening, setOpening] = useState('');
+  const [active, setActive] = useState(product?.is_active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const pricePaisa = price.trim() ? takaToPaisa(price) : 0;
+    const costPaisa = cost.trim() ? takaToPaisa(cost) : 0;
+    if (pricePaisa === null || costPaisa === null) {
+      setError(t('oc.badAmount'));
+      return;
+    }
+    const thresholdValue = threshold.trim() ? Number(threshold) : null;
+    setBusy(true);
+    setError(null);
+    try {
+      if (product) {
+        const saved = await api.patch<Product>(`/products/${product.id}`, {
+          name: name.trim(),
+          sku: sku.trim() || null,
+          description: description.trim() || null,
+          default_selling_price_paisa: pricePaisa,
+          cost_paisa: costPaisa,
+          low_stock_threshold: thresholdValue,
+          is_active: active,
+        });
+        onSaved(saved.id);
+      } else {
+        const saved = await api.post<Product>('/products', {
+          name: name.trim(),
+          sku: sku.trim() || undefined,
+          description: description.trim() || undefined,
+          default_selling_price_paisa: pricePaisa,
+          cost_paisa: costPaisa,
+          low_stock_threshold: thresholdValue ?? undefined,
+          stock_tracking_enabled: tracking,
+          opening_stock: tracking && opening.trim() ? Number(opening) : 0,
+        });
+        onSaved(saved.id);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const body = (
+    <form onSubmit={save} className={product ? 'card' : undefined} style={product ? { padding: 10, marginBottom: 12 } : undefined}>
+      <div className="formgrid">
+        <label className="field formgrid__full">
+          <span className="field__label">{t('prod.name')} *</span>
+          <input className="input" required maxLength={200} autoFocus={!product} value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('prod.sku')}</span>
+          <input className="input" maxLength={64} value={sku} onChange={(event) => setSku(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('inv.threshold')}</span>
+          <input className="input" type="number" min={0} value={threshold} onChange={(event) => setThreshold(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('prod.price')}</span>
+          <input className="input" inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('prod.cost')}</span>
+          <input className="input" inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} />
+          <span className="field__hint">{t('pe.costHint')}</span>
+        </label>
+        <label className="field formgrid__full">
+          <span className="field__label">{t('pe.description')}</span>
+          <textarea className="textarea" rows={2} maxLength={4000} value={description} onChange={(event) => setDescription(event.target.value)} />
+        </label>
+        {product ? (
+          <label className="card__hint" style={{ display: 'flex', gap: 6 }}>
+            <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
+            {t('inv.active')}
+          </label>
+        ) : (
+          <>
+            <label className="card__hint" style={{ display: 'flex', gap: 6 }}>
+              <input type="checkbox" checked={tracking} onChange={(event) => setTracking(event.target.checked)} />
+              {t('pe.trackStock')}
+            </label>
+            {tracking ? (
+              <label className="field">
+                <span className="field__label">{t('pe.openingStock')}</span>
+                <input className="input" type="number" min={0} value={opening} onChange={(event) => setOpening(event.target.value)} />
+              </label>
+            ) : null}
+          </>
+        )}
+      </div>
+      {!product ? <p className="card__hint">{t('pe.variantsLater')}</p> : null}
+      {error ? <p className="formerror">{error}</p> : null}
+      <div className="formactions">
+        <button type="button" className="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button type="submit" className="btn btn--primary" disabled={busy}>
+          {busy ? t('set.saving') : t('set.save')}
+        </button>
+      </div>
+    </form>
+  );
+
+  return product ? (
+    body
+  ) : (
+    <Drawer title={t('act.addProduct')} onClose={onClose}>
+      {body}
+    </Drawer>
+  );
+}
+
+function VariantEditor({ productId, variant, onDone }: { productId: string; variant: Variant; onDone: () => void }) {
+  const { t } = useSession();
+  const [name, setName] = useState(variant.name);
+  const [sku, setSku] = useState(variant.sku ?? '');
+  const [price, setPrice] = useState(paisaToTaka(variant.price_paisa));
+  const [cost, setCost] = useState(paisaToTaka(variant.cost_paisa));
+  const [threshold, setThreshold] = useState(variant.low_stock_threshold?.toString() ?? '');
+  const [active, setActive] = useState(variant.is_active);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const pricePaisa = price.trim() ? takaToPaisa(price) : null;
+    const costPaisa = cost.trim() ? takaToPaisa(cost) : null;
+    if ((price.trim() && pricePaisa === null) || (cost.trim() && costPaisa === null)) {
+      setError(t('oc.badAmount'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/products/${productId}/variants/${variant.id}`, {
+        name: name.trim(),
+        sku: sku.trim() || null,
+        price_paisa: pricePaisa,
+        cost_paisa: costPaisa,
+        low_stock_threshold: threshold.trim() ? Number(threshold) : null,
+        is_active: active,
+      });
+      onDone();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card" style={{ padding: 10, margin: '10px 0' }} onSubmit={save}>
+      <strong>{t('pe.editVariant')}</strong>
+      <div className="formgrid">
+        <label className="field">
+          <span className="field__label">{t('inv.variant')}</span>
+          <input className="input" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('prod.sku')}</span>
+          <input className="input" maxLength={64} value={sku} onChange={(event) => setSku(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('pe.priceOverride')}</span>
+          <input className="input" inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('prod.cost')}</span>
+          <input className="input" inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field__label">{t('inv.threshold')}</span>
+          <input className="input" type="number" min={0} value={threshold} onChange={(event) => setThreshold(event.target.value)} />
+        </label>
+        <label className="card__hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
+          {t('inv.active')}
+        </label>
+      </div>
+      {error ? <p className="formerror">{error}</p> : null}
+      <button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+        {t('set.save')}
+      </button>
+    </form>
   );
 }

@@ -1,13 +1,19 @@
 'use client';
 
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
+import { BookingOutcome, OrderPanel } from '@/components/OrderPanel';
+import { OrderComposer } from '@/components/OrderComposer';
+import { PasteDetect } from '@/components/PasteDetect';
 import { PageHeader } from '@/components/shell';
-import { Card, Chip, Drawer, EmptyState, ErrorState, LoadingRows, Row } from '@/components/ui';
+import { Card, Chip, Drawer, EmptyState, ErrorState, LoadingRows } from '@/components/ui';
 import { api, type Page } from '@/lib/api';
+import { courierName, type BookableCourier, type BookingReport } from '@/lib/couriers';
 import { formatDate, formatPaisa } from '@/lib/money';
-import type { StringKey } from '@/lib/i18n';
+import { STATUS_MOVES, errorMessage, type OrderPrefill } from '@/lib/orders';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
 import {
   ORDER_STATUS_VALUES,
   describeFulfillment,
@@ -16,54 +22,56 @@ import {
   describeRisk,
   looksBookable,
 } from '@/lib/states';
-import type { OrderDetail, OrderSummary } from '@/lib/types';
+import type { OrderSummary } from '@/lib/types';
 import { useSearchParamState } from '@/lib/url-state';
 import { useApi, useDebounced } from '@/lib/useApi';
 
 const PAGE_SIZE = 50;
 
 /**
- * Orders — the desktop table this dashboard exists for.
- *
- * Four things it does that the phone cannot, and one it refuses to do.
+ * Orders — the desktop table this workspace exists for.
  *
  * **It never holds the whole list.** The API pages by cursor, and this screen
- * keeps exactly one page plus the cursors it has walked. A shop with forty
- * thousand orders loads fifty rows, not forty thousand — searching and
+ * keeps exactly one page plus the cursors it has walked. Searching and
  * filtering go to the server, which is the only place that can see them all.
  *
- * **Filtering and search are server-side**, debounced, and a superseded
- * response is discarded rather than allowed to overwrite a newer one.
+ * **Bulk selection is per page, and says so.** A checkbox that silently meant
+ * "all forty thousand" is how a seller books a year of history by accident.
  *
- * **Bulk selection is per page, and states that plainly.** A checkbox that
- * silently meant "all forty thousand" is how a seller books a year of history
- * by accident.
- *
- * **A bulk action sends only what could plausibly be acted on.** The API still
- * decides and still refuses with reasons; this only avoids sending it a
- * selection it would reject wholesale.
+ * **Bulk actions use the canonical endpoints.** Booking goes to the courier
+ * service's own bulk endpoint. Confirm and pack have no bulk endpoint, so they
+ * are sent one order at a time, in sequence, through the same status move the
+ * order drawer uses — each one checked by the state machine, every refusal
+ * reported, nothing fired in parallel.
  *
  * What it refuses: computing anything about money. Every figure here is the
  * one the API sent.
  */
 export default function OrdersPage() {
   const { t, locale } = useSession();
+  const { can } = useShop();
+  const router = useRouter();
+  const params = useSearchParams();
 
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(params.get('status') ?? '');
+  const customerId = params.get('customer');
   const debouncedSearch = useDebounced(search);
 
-  // A stack, because the API pages by opaque cursor: there is no page number to
-  // jump to, and inventing one would mean guessing an offset the server never
-  // promised.
   const [cursors, setCursors] = useState<string[]>([]);
   const cursor = cursors.length > 0 ? cursors[cursors.length - 1] : undefined;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // In the address bar, so search and notifications can open one order.
+  // In the address bar, so search, notifications and quick actions can open things.
   const [openOrderId, setOpenOrderId] = useSearchParamState('order');
-  const [booking, setBooking] = useState(false);
+  const [composeParam, setComposeParam] = useSearchParamState('new');
+  const [pasteParam, setPasteParam] = useSearchParamState('paste');
+  const [prefill, setPrefill] = useState<OrderPrefill | null>(null);
+
+  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [report, setReport] = useState<BookingReport | null>(null);
+  const [bulkCourier, setBulkCourier] = useState('');
 
   const query = useMemo(
     () => ({
@@ -71,14 +79,15 @@ export default function OrdersPage() {
       cursor,
       status: status || undefined,
       search: debouncedSearch.trim() || undefined,
+      customer_id: customerId || undefined,
     }),
-    [cursor, status, debouncedSearch],
+    [cursor, status, debouncedSearch, customerId],
   );
 
-  const { data, loading, refreshing, error, reload } = useApi<Page<OrderSummary>>(
-    '/orders',
-    query,
-  );
+  const { data, loading, refreshing, error, reload } = useApi<Page<OrderSummary>>('/orders', query);
+  const couriers = useApi<BookableCourier[]>(selected.size > 0 && can('order.book') ? '/couriers/bookable' : null);
+  const bookableCouriers = (couriers.data ?? []).filter((row) => row.bookable);
+  const provider = bulkCourier || bookableCouriers[0]?.provider || '';
 
   const rows = data?.items ?? [];
 
@@ -90,47 +99,65 @@ export default function OrdersPage() {
   const toggle = useCallback((id: string) => {
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
   const pageIds = rows.map((row) => row.id);
-  const allOnPageSelected =
-    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
-
-  const bookableSelected = rows.filter(
-    (row) => selected.has(row.id) && looksBookable(row),
-  );
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const chosen = rows.filter((row) => selected.has(row.id));
+  const bookableSelected = chosen.filter((row) => looksBookable(row) && row.status !== 'DRAFT');
+  const confirmable = chosen.filter((row) => STATUS_MOVES[row.status]?.includes('CONFIRMED') && row.status === 'DRAFT');
+  const packable = chosen.filter((row) => STATUS_MOVES[row.status]?.includes('PACKED'));
 
   async function bookSelected() {
-    if (bookableSelected.length === 0) {
-      return;
-    }
-    setBooking(true);
+    if (bookableSelected.length === 0 || !provider) return;
+    setBusy(true);
     setNotice(null);
+    setReport(null);
     try {
-      const report = await api.post<{ booked: number; ambiguous: number; failed: number }>(
+      const result = await api.post<BookingReport>(
         '/couriers/orders/book-bulk',
         { order_ids: bookableSelected.map((row) => row.id) },
+        { provider },
       );
       // The provider's own counts, including the ambiguous ones, which are
       // neither successes nor failures and must not be reported as either.
-      setNotice(
-        `${report.booked} booked · ${report.ambiguous} unconfirmed · ${report.failed} refused`,
-      );
+      setReport(result);
       setSelected(new Set());
       reload();
     } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : String(caught));
+      setNotice(errorMessage(caught));
     } finally {
-      setBooking(false);
+      setBusy(false);
     }
   }
+
+  async function moveSelected(target: 'CONFIRMED' | 'PACKED', orders: OrderSummary[]) {
+    setBusy(true);
+    setNotice(null);
+    setReport(null);
+    let moved = 0;
+    const refused: string[] = [];
+    for (const order of orders) {
+      try {
+        await api.patch(`/orders/${order.id}`, { status: target });
+        moved += 1;
+      } catch (caught) {
+        refused.push(`${order.order_number}: ${errorMessage(caught)}`);
+      }
+    }
+    setNotice(
+      [t('orders.bulkMoved', { count: moved, status: describeOrderStatus(target, locale).label }), ...refused.slice(0, 5)].join(' · '),
+    );
+    setSelected(new Set());
+    setBusy(false);
+    reload();
+  }
+
+  const composing = composeParam !== null || prefill !== null;
 
   return (
     <>
@@ -138,7 +165,19 @@ export default function OrdersPage() {
         title={t('orders.title')}
         subtitle={t('orders.subtitle')}
         actions={
-          refreshing ? <span className="card__hint">{t('common.loading')}</span> : null
+          <>
+            {refreshing ? <span className="card__hint">{t('common.loading')}</span> : null}
+            {can('order.write') ? (
+              <>
+                <button type="button" className="btn" onClick={() => setPasteParam('1')}>
+                  {t('act.pasteOrder')}
+                </button>
+                <button type="button" className="btn btn--primary" onClick={() => setComposeParam('1')}>
+                  {t('act.newOrder')}
+                </button>
+              </>
+            ) : null}
+          </>
         }
       />
 
@@ -174,29 +213,65 @@ export default function OrdersPage() {
               ))}
             </select>
 
+            {customerId ? (
+              <button type="button" className="btn btn--sm" onClick={() => router.replace('/orders')}>
+                {t('orders.oneCustomer')} ×
+              </button>
+            ) : null}
+
             {notice ? <span className="card__hint">{notice}</span> : null}
           </div>
+
+          {report ? (
+            <div style={{ padding: '0 16px' }}>
+              <BookingOutcome report={report} />
+            </div>
+          ) : null}
 
           {selected.size > 0 ? (
             <div className="bulkbar">
               <span className="bulkbar__count">
                 {selected.size} {t('common.selected')}
               </span>
-              <button
-                type="button"
-                className="btn btn--primary btn--sm"
-                onClick={bookSelected}
-                disabled={booking || bookableSelected.length === 0}
-              >
-                {t('orders.bulkBook')}
-                {bookableSelected.length > 0 ? ` (${bookableSelected.length})` : ''}
-              </button>
+              {can('order.write') && confirmable.length > 0 ? (
+                <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void moveSelected('CONFIRMED', confirmable)}>
+                  {t('od.to.CONFIRMED')} ({confirmable.length})
+                </button>
+              ) : null}
+              {can('order.write') && packable.length > 0 ? (
+                <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void moveSelected('PACKED', packable)}>
+                  {t('od.to.PACKED')} ({packable.length})
+                </button>
+              ) : null}
+              {can('order.book') ? (
+                <>
+                  <select
+                    className="select"
+                    value={provider}
+                    onChange={(event) => setBulkCourier(event.target.value)}
+                    aria-label={t('orders.courier')}
+                    disabled={bookableCouriers.length === 0}
+                  >
+                    {bookableCouriers.length === 0 ? <option value="">{t('od.noCouriers')}</option> : null}
+                    {bookableCouriers.map((row) => (
+                      <option key={row.provider} value={row.provider}>
+                        {row.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    onClick={() => void bookSelected()}
+                    disabled={busy || bookableSelected.length === 0 || !provider}
+                  >
+                    {t('orders.bulkBook')}
+                    {bookableSelected.length > 0 ? ` (${bookableSelected.length})` : ''}
+                  </button>
+                </>
+              ) : null}
               <span className="bulkbar__hint">{t('orders.bulkHint')}</span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                onClick={() => setSelected(new Set())}
-              >
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setSelected(new Set())}>
                 {t('common.cancel')}
               </button>
             </div>
@@ -213,11 +288,7 @@ export default function OrdersPage() {
                       <input
                         type="checkbox"
                         checked={allOnPageSelected}
-                        onChange={(event) =>
-                          setSelected(
-                            event.target.checked ? new Set(pageIds) : new Set(),
-                          )
-                        }
+                        onChange={(event) => setSelected(event.target.checked ? new Set(pageIds) : new Set())}
                         // Says what it means: this page, not the whole shop.
                         aria-label={`${t('common.selected')} — ${rows.length}`}
                         disabled={rows.length === 0}
@@ -225,13 +296,13 @@ export default function OrdersPage() {
                     </th>
                     <th>{t('orders.order')}</th>
                     <th>{t('orders.customer')}</th>
+                    <th>{t('orders.status')}</th>
                     <th className="num">{t('orders.amount')}</th>
                     <th>{t('orders.courier')}</th>
                     <th>{t('orders.delivery')}</th>
                     <th className="num">{t('orders.cod')}</th>
                     <th>{t('orders.risk')}</th>
                     <th>{t('orders.profit')}</th>
-                    <th>{t('orders.actions')}</th>
                   </tr>
                 </thead>
 
@@ -240,48 +311,40 @@ export default function OrdersPage() {
                 ) : (
                   <tbody>
                     {rows.map((order) => {
-                      const fulfillment = describeFulfillment(
-                        order.fulfillment_state,
-                        locale,
-                      );
+                      const fulfillment = describeFulfillment(order.fulfillment_state, locale);
                       const risk = describeRisk(order.risk_state, locale);
                       const profit = describeProfit(order.profit_state, locale);
+                      const orderStatus = describeOrderStatus(order.status, locale);
                       const isSelected = selected.has(order.id);
 
                       return (
-                        <tr key={order.id} data-selected={isSelected}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggle(order.id)}
-                              aria-label={order.order_number}
-                            />
+                        <tr
+                          key={order.id}
+                          data-selected={isSelected}
+                          className="table__row--clickable"
+                          onClick={() => setOpenOrderId(order.id)}
+                        >
+                          <td onClick={(event) => event.stopPropagation()}>
+                            <input type="checkbox" checked={isSelected} onChange={() => toggle(order.id)} aria-label={order.order_number} />
                           </td>
                           <td>
                             <div className="table__primary">{order.order_number}</div>
-                            <div className="table__sub">
-                              {formatDate(order.created_at, { locale })}
-                            </div>
+                            <div className="table__sub">{formatDate(order.created_at, { locale })}</div>
                           </td>
                           <td>
                             <div>{order.customer_name ?? '—'}</div>
-                            {/* Masked, as everywhere else. A table is not a
-                                contact list. */}
-                            <div className="table__sub">
-                              {order.customer_phone_masked ?? ''}
-                            </div>
+                            {/* Masked, as everywhere else. A table is not a contact list. */}
+                            <div className="table__sub">{order.customer_phone_masked ?? ''}</div>
                           </td>
-                          <td className="num">
-                            {formatPaisa(order.subtotal_paisa, { locale })}
+                          <td>
+                            <Chip label={orderStatus.label} tone={orderStatus.tone} />
                           </td>
+                          <td className="num">{formatPaisa(order.subtotal_paisa, { locale })}</td>
                           <td>
                             {order.courier_provider ? (
                               <>
-                                <div>{courierName(order.courier_provider)}</div>
-                                {order.tracking_code ? (
-                                  <div className="table__sub">{order.tracking_code}</div>
-                                ) : null}
+                                <div>{courierName(order.courier_provider, t('rv.manualCourier'))}</div>
+                                {order.tracking_code ? <div className="table__sub">{order.tracking_code}</div> : null}
                               </>
                             ) : (
                               <span className="table__sub">{t('orders.noCourier')}</span>
@@ -290,23 +353,12 @@ export default function OrdersPage() {
                           <td>
                             <Chip label={fulfillment.label} tone={fulfillment.tone} />
                           </td>
-                          <td className="num">
-                            {formatPaisa(order.cod_amount_paisa, { locale })}
-                          </td>
+                          <td className="num">{formatPaisa(order.cod_amount_paisa, { locale })}</td>
                           <td>
                             <Chip label={risk.label} tone={risk.tone} />
                           </td>
                           <td>
                             <Chip label={profit.label} tone={profit.tone} />
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn btn--sm"
-                              onClick={() => setOpenOrderId(order.id)}
-                            >
-                              {t('orders.view')}
-                            </button>
                           </td>
                         </tr>
                       );
@@ -351,134 +403,35 @@ export default function OrdersPage() {
       </div>
 
       {openOrderId ? (
-        <OrderDrawer orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
+        <OrderPanel orderId={openOrderId} onClose={() => setOpenOrderId(null)} onChanged={reload} />
+      ) : null}
+
+      {pasteParam !== null && prefill === null ? (
+        <Drawer title={t('act.pasteOrder')} wide onClose={() => setPasteParam(null)}>
+          <PasteDetect
+            onReview={(next) => {
+              setPasteParam(null);
+              setPrefill(next);
+            }}
+          />
+        </Drawer>
+      ) : null}
+
+      {composing ? (
+        <OrderComposer
+          prefill={prefill ?? undefined}
+          onClose={() => {
+            setPrefill(null);
+            setComposeParam(null);
+          }}
+          onCreated={(id) => {
+            setPrefill(null);
+            setComposeParam(null);
+            reload();
+            setOpenOrderId(id);
+          }}
+        />
       ) : null}
     </>
-  );
-}
-
-function OrderDrawer({ orderId, onClose }: { orderId: string; onClose: () => void }) {
-  const { t, locale } = useSession();
-  const { data, loading, error, reload } = useApi<OrderDetail>(`/orders/${orderId}`);
-
-  return (
-    <Drawer title={t('orders.detail')} onClose={onClose}>
-      {loading ? <p className="card__hint">{t('common.loading')}</p> : null}
-      {error ? <ErrorState error={error} onRetry={reload} /> : null}
-      {data ? (
-        <>
-          {data.review_hold ? (
-            <ReviewHold orderId={data.id} reason={data.review_hold.reason} onReleased={reload} />
-          ) : null}
-          <Row label={t('orders.order')} value={data.order_number} />
-          <Row
-            label={t('orders.customer')}
-            value={data.customer_name ?? data.customer_phone_masked ?? '—'}
-          />
-          <Row
-            label={t('orders.courier')}
-            value={
-              data.courier_provider
-                ? `${courierName(data.courier_provider)}${
-                    data.tracking_code ? ` · ${data.tracking_code}` : ''
-                  }`
-                : t('orders.noCourier')
-            }
-          />
-          <Row
-            label={t('orders.delivery')}
-            value={
-              <Chip {...toChip(describeFulfillment(data.fulfillment_state, locale))} />
-            }
-          />
-          <Row
-            label={t('orders.risk')}
-            value={<Chip {...toChip(describeRisk(data.risk_state, locale))} />}
-          />
-          <Row
-            label={t('orders.amount')}
-            value={formatPaisa(data.subtotal_paisa, { locale })}
-          />
-          <Row
-            label={t('orders.cod')}
-            value={formatPaisa(data.cod_amount_paisa, { locale })}
-          />
-
-          <h3 className="card__title" style={{ marginTop: 18 }}>
-            {t('orders.items')}
-          </h3>
-          {data.items.map((item) => (
-            <Row
-              key={item.id}
-              label={`${item.name} × ${item.quantity}`}
-              value={formatPaisa(item.unit_price_paisa * item.quantity, { locale })}
-            />
-          ))}
-
-          {data.delivery_address_raw ? (
-            <p className="card__hint" style={{ marginTop: 14 }}>
-              {data.delivery_address_raw}
-            </p>
-          ) : null}
-        </>
-      ) : null}
-    </Drawer>
-  );
-}
-
-/**
- * The courier's name as a seller knows it.
- *
- * Courier names stay English in both languages, as they do on mobile. One this
- * build has not met falls through to its own identifier rather than being
- * hidden: an unknown courier on a parcel is something support needs to see.
- */
-function courierName(provider: string): string {
-  switch (provider) {
-    case 'steadfast':
-      return 'Steadfast';
-    case 'pathao':
-      return 'Pathao';
-    case 'redx':
-      return 'RedX';
-    case 'manual':
-      return 'Manual';
-    default:
-      return provider;
-  }
-}
-
-function toChip(state: { label: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }) {
-  return { label: state.label, tone: state.tone };
-}
-
-/** A workflow paused this order for a person to look at (V3.7). */
-function ReviewHold({ orderId, reason, onReleased }: { orderId: string; reason: string; onReleased: () => void }) {
-  const { t } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  async function release() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.delete(`/orders/${orderId}/review-hold`);
-      onReleased();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-      <p>
-        <Chip label={t('orders.reviewHold')} tone="warn" /> {t(`auto.cfg.reviewReason.${reason}` as StringKey)}
-      </p>
-      <p className="card__hint">{t('orders.reviewHoldHint')}</p>
-      {error ? <ErrorState error={error} /> : null}
-      <button className="btn" disabled={busy} onClick={() => void release()}>
-        {t('orders.reviewRelease')}
-      </button>
-    </div>
   );
 }

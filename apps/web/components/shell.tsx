@@ -15,7 +15,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { Icon } from '@/components/icons';
 import { initialOf, roleLabel } from '@/components/ShopSetup';
 import { BrandMark, LocaleToggle } from '@/components/ui';
-import { isActive, NAV, sectionOf, visibleNav } from '@/lib/nav';
+import { activeHref, NAV, sectionOf, visibleNav } from '@/lib/nav';
 import { useUnreadCount } from '@/lib/notifications';
 import { useMediaQuery, usePersistedFlag } from '@/lib/prefs';
 import { useSession } from '@/lib/session';
@@ -102,11 +102,11 @@ function Sidebar({
       </Link>
 
       <nav className="sidebar__nav" aria-label={t('nav.main')}>
-        {groups.map((group) => (
+        {groups.map((group, _index, all) => (
           <div className="sidebar__group" key={group.labelKey}>
             <div className="sidebar__grouplabel">{t(group.labelKey)}</div>
             {group.items.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = activeHref(pathname, all.flatMap((entry) => entry.items.map((link) => link.href))) === item.href;
               const label = t(item.labelKey);
               const badge = item.href === '/notifications' && unread > 0;
               return (

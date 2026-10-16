@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react';
 
+import { ReturnCosts } from '@/components/ReturnCosts';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, Row, Tile } from '@/components/ui';
 import type { StringKey } from '@/lib/i18n';
 import { formatDate, formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
 import { useApi, useDebounced } from '@/lib/useApi';
 
 /** The server's counts. RTO = returned + courier_cancelled; rate is over `completed`. */
@@ -189,6 +191,7 @@ function RateCell({ counts, t }: { counts: Counts; t: Translate }) {
 export default function ReturnsPage() {
   const { t, locale } = useSession();
   const [days, setDays] = useState(90);
+  const { can } = useShop();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('rto_rate');
@@ -213,6 +216,7 @@ export default function ReturnsPage() {
     <>
       <PageHeader title={t('rto.title')} subtitle={t('rto.subtitle')} />
       <div className="content">
+        {can('money.view') ? <ReturnCosts days={days} /> : null}
         {summary.error ? (
           <Card>
             <ErrorState error={summary.error} onRetry={summary.reload} />

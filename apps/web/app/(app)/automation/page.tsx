@@ -218,7 +218,7 @@ function Recipes({
               {recipe.needs.includes('channel') ? (
                 <select className="select" aria-label={t('auto.recipe.channel')} value={channel} onChange={(e) => setChannel(e.target.value)}>
                   <option value="EMAIL">Email</option>
-                  <option value="WHATSAPP">WhatsApp</option>
+                  <option value="WHATSAPP" disabled>WhatsApp — {t('int.comingSoon')}</option>
                 </select>
               ) : null}
               <button

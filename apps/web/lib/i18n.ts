@@ -11,6 +11,7 @@ import { automationEn, automationBn } from './automation-strings';
 import { riskEn, riskBn } from './risk-strings';
 import { developerEn, developerBn } from './developer-strings';
 import { shellEn, shellBn } from './shell-strings';
+import { opsEn, opsBn } from './ops-strings';
 
 /**
  * English and Bangla for the dashboard.
@@ -37,6 +38,7 @@ export const strings = {
     ...riskEn,
     ...developerEn,
     ...shellEn,
+    ...opsEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -64,7 +66,7 @@ export const strings = {
     'nav.messaging': 'Messaging',
     'nav.sources': 'Order sources',
     'nav.developers': 'Developers',
-    'nav.network': 'Network benchmarks',
+    'nav.network': 'Risk & network',
     'nav.automation': 'Automation',
     'nav.products': 'Products',
     'nav.couriers': 'Couriers',
@@ -228,7 +230,6 @@ export const strings = {
     'cour.connected': 'Connected',
     'cour.needsReconnect': 'Needs reconnecting',
     'cour.notConnected': 'Not connected',
-    'cour.manageOnPhone': 'Connect and disconnect couriers in the mobile app.',
     'cour.secretsNote':
       'Courier keys are stored encrypted on the server and are never sent to a browser.',
     'cour.unverified': 'Not available yet',
@@ -522,7 +523,6 @@ export const strings = {
     'team.invited': 'Invited',
     'team.expires': 'Expires',
     'team.empty': 'Just you so far.',
-    'team.manageOnPhone': 'Invite and remove people in the mobile app.',
 
     'set.title': 'Settings',
     'set.subtitle': 'Your shop.',
@@ -670,6 +670,7 @@ export const strings = {
     ...riskBn,
     ...developerBn,
     ...shellBn,
+    ...opsBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',
@@ -697,7 +698,7 @@ export const strings = {
     'nav.messaging': 'মেসেজ',
     'nav.sources': 'অর্ডারের উৎস',
     'nav.developers': 'ডেভেলপার',
-    'nav.network': 'নেটওয়ার্ক বেঞ্চমার্ক',
+    'nav.network': 'রিস্ক ও নেটওয়ার্ক',
     'nav.automation': 'অটোমেশন',
     'nav.products': 'পণ্য',
     'nav.couriers': 'কুরিয়ার',
@@ -861,7 +862,6 @@ export const strings = {
     'cour.connected': 'যুক্ত আছে',
     'cour.needsReconnect': 'আবার যুক্ত করতে হবে',
     'cour.notConnected': 'যুক্ত নেই',
-    'cour.manageOnPhone': 'কুরিয়ার যুক্ত বা বিচ্ছিন্ন করা মোবাইল অ্যাপ থেকে হয়।',
     'cour.secretsNote':
       'কুরিয়ারের key সার্ভারে এনক্রিপ্ট করে রাখা হয় এবং কখনও ব্রাউজারে পাঠানো হয় না।',
     'cour.unverified': 'এখনও পাওয়া যাচ্ছে না',
@@ -1154,7 +1154,6 @@ export const strings = {
     'team.invited': 'আমন্ত্রণ',
     'team.expires': 'মেয়াদ',
     'team.empty': 'এখনও শুধু আপনি।',
-    'team.manageOnPhone': 'কাউকে যুক্ত বা সরানো মোবাইল অ্যাপ থেকে হয়।',
 
     'set.title': 'সেটিংস',
     'set.subtitle': 'আপনার দোকান।',

@@ -163,7 +163,7 @@ export function CampaignBuilder({
               }}
             >
               <option value="EMAIL">{t('cmp.channel.EMAIL')}</option>
-              <option value="WHATSAPP">{t('cmp.channel.WHATSAPP')}</option>
+              <option value="WHATSAPP" disabled>{t('cmp.channel.WHATSAPP')} — {t('int.comingSoon')}</option>
             </select>
           </label>
           {kind === 'FLOW' ? (

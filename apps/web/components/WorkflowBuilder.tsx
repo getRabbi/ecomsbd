@@ -329,7 +329,7 @@ function ActionConfig({
           <Field label={t('auto.cfg.channel')}>
             <select className="select" value={channel} disabled={disabled} onChange={(e) => onChange({ ...step, config: { ...config, channel: e.target.value, template_key: catalog.templates.find((tp) => tp.channel === e.target.value)?.key ?? '' } })}>
               <option value="EMAIL">Email</option>
-              <option value="WHATSAPP">WhatsApp</option>
+              <option value="WHATSAPP" disabled>WhatsApp — {t('int.comingSoon')}</option>
             </select>
           </Field>
           <Field label={t('auto.cfg.template')}>

@@ -151,10 +151,13 @@ export function Drawer({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** For split work — booking comparison, statement mapping — that needs room. */
+  wide?: boolean;
 }) {
   const { t } = useSession();
 
@@ -173,7 +176,7 @@ export function Drawer({
   return (
     <>
       <div className="drawer__scrim" onClick={onClose} role="presentation" />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside className={wide ? 'drawer drawer--wide' : 'drawer'} role="dialog" aria-modal="true" aria-label={title}>
         <div className="drawer__header">
           <strong>{title}</strong>
           <button type="button" className="btn btn--sm" onClick={onClose}>
@@ -186,7 +189,7 @@ export function Drawer({
   );
 }
 
-export function Row({ label, value }: { label: string; value: ReactNode }) {
+export function Row({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="row">
       <span className="row__label">{label}</span>
