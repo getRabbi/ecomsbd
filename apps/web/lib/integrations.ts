@@ -5,6 +5,26 @@ export type Provider = 'SHOPIFY' | 'WOOCOMMERCE' | 'CUSTOM_WEBSITE' | 'MESSENGER
 
 export const PROVIDERS: Provider[] = ['SHOPIFY', 'WOOCOMMERCE', 'CUSTOM_WEBSITE', 'MESSENGER', 'WHATSAPP'];
 
+/**
+ * Launch gate, the same five the mobile Connections screen shows as Coming
+ * Soon. Presentation only: saved connections, credentials and every provider
+ * implementation stay in place for when the gate lifts. While a provider is in
+ * this set the web offers no connect, reconnect, setup, test or key screen for
+ * it, and its connections and issues stay out of every count. Couriers are not
+ * integrations here and are never gated by this.
+ */
+export const COMING_SOON_PROVIDERS: ReadonlySet<string> = new Set<Provider>([
+  'SHOPIFY',
+  'WOOCOMMERCE',
+  'CUSTOM_WEBSITE',
+  'MESSENGER',
+  'WHATSAPP',
+]);
+
+export function isComingSoon(provider: string): boolean {
+  return COMING_SOON_PROVIDERS.has(provider);
+}
+
 export interface Availability {
   provider: Provider;
   available: boolean;

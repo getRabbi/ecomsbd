@@ -1,93 +1,129 @@
 'use client';
 
 import Link from 'next/link';
-import { CurrentAccess } from '@/components/current-access';
 
+import { CurrentAccess } from '@/components/current-access';
+import { Icon, type IconName } from '@/components/icons';
 import { PageHeader } from '@/components/shell';
+import { ShopForm } from '@/components/ShopSetup';
 import { Card, ErrorState, Row } from '@/components/ui';
+import type { StringKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
+import { useShop } from '@/lib/shop';
+import type { ShopDetails } from '@/lib/shop-form';
 import { useApi } from '@/lib/useApi';
 
-interface Tenant {
-  id: string;
-  name: string;
-  business_category: string;
-  status: string;
-  timezone: string;
-  currency: string;
-  order_number_prefix: string;
-  pickup_contact_name: string | null;
-  pickup_address_raw: string | null;
-  pickup_district: string | null;
-  pickup_area: string | null;
-  onboarding_step: string;
+interface WorkspaceLink {
+  href: string;
+  labelKey: StringKey;
+  icon: IconName;
+  permission?: string;
 }
+
+const WORKSPACE_LINKS: WorkspaceLink[] = [
+  { href: '/couriers', labelKey: 'nav.couriers', icon: 'couriers' },
+  { href: '/integrations', labelKey: 'nav.connections', icon: 'connections', permission: 'order.view' },
+  { href: '/team', labelKey: 'nav.team', icon: 'team' },
+  { href: '/notifications', labelKey: 'nav.notifications', icon: 'bell' },
+  { href: '/settings/risk-provider', labelKey: 'nav.riskProvider', icon: 'network' },
+  { href: '/developers', labelKey: 'nav.developers', icon: 'developers', permission: 'settings.manage' },
+];
 
 /**
  * Settings.
  *
- * Read-only here. Shop details are edited during onboarding and on the phone,
- * and every field on this screen is one a seller changes roughly never —
- * duplicating the edit flow would mean two places for the same validation to
- * drift, for no capability the desktop adds.
+ * Shop details are edited here, against the same `PATCH /v1/tenant` the
+ * mobile app uses — the API validates and audits every change, and only a
+ * member with `settings.manage` may make one. Everyone else sees the same
+ * fields read-only, with the reason.
  *
- * It is worth showing, though: an operator looking at the wrong shop notices it
- * here, and support asking "what is your order prefix?" gets an answer the
- * seller can read off the screen they are already on.
+ * The order-number prefix, timezone and currency are shown but not offered for
+ * editing: the API does not accept changes to them, and a box that looks
+ * editable but is not would be worse than a plain value.
  */
 export default function SettingsPage() {
   const { t, locale } = useSession();
-  const { data, loading, error, reload } = useApi<Tenant>('/tenant');
+  const shop = useShop();
+  const tenant = useApi<ShopDetails>('/tenant');
+  const canEdit = shop.can('settings.manage');
+  const bn = locale === 'bn';
 
   return (
     <>
       <PageHeader title={t('set.title')} subtitle={t('set.subtitle')} />
 
       <div className="content">
-        <CurrentAccess />
-        <Card>
-          {loading ? (
-            <p className="card__hint">{t('common.loading')}</p>
-          ) : error ? (
-            <ErrorState error={error} onRetry={reload} />
-          ) : data ? (
-            <>
-              <Row label={t('set.shopName')} value={data.name} />
-              <Row
-                label={t('set.category')}
-                value={data.business_category.replaceAll('_', ' ').toLowerCase()}
-              />
-              <Row label={t('set.orderPrefix')} value={data.order_number_prefix} />
-              <Row label={t('set.timezone')} value={data.timezone} />
-              <Row label={t('set.currency')} value={data.currency} />
-              <Row
-                label={t('set.pickup')}
-                value={
-                  data.pickup_address_raw ?? (
-                    <span className="table__sub">{t('common.none')}</span>
-                  )
-                }
-              />
-            </>
-          ) : null}
-        </Card>
+        <div className="settings">
+          <div className="stack">
+            <Card title={t('set.shopSection')} hint={canEdit ? t('set.shopHint') : t('set.readOnly')}>
+              {tenant.error ? (
+                <ErrorState error={tenant.error} onRetry={tenant.reload} />
+              ) : tenant.data ? (
+                <ShopForm
+                  key={tenant.data.id}
+                  mode="edit"
+                  shop={tenant.data}
+                  readOnly={!canEdit}
+                  onDone={() => {
+                    tenant.reload();
+                    shop.reload();
+                  }}
+                />
+              ) : (
+                <p className="card__hint">{t('common.loading')}</p>
+              )}
+            </Card>
+          </div>
 
-        <div style={{ marginTop: 18 }}>
-          <Card>
-            <p className="card__hint">{t('set.manageOnPhone')}</p>
-          </Card>
-        </div>
+          <div className="stack">
+            <Card title={t('set.fixedTitle')}>
+              {tenant.data ? (
+                <>
+                  <Row label={t('set.orderPrefix')} value={tenant.data.order_number_prefix} />
+                  <Row label={t('set.timezone')} value={tenant.data.timezone} />
+                  <Row label={t('set.currency')} value={tenant.data.currency} />
+                  <Row label={t('set.status')} value={tenant.data.status.replaceAll('_', ' ').toLowerCase()} />
+                </>
+              ) : (
+                <p className="card__hint">{tenant.error ? '—' : t('common.loading')}</p>
+              )}
+            </Card>
 
-        <div style={{ marginTop: 18 }}>
-          <Card title={t('rp.title')} hint={t('rp.subtitle')}>
-            <Link className="btn" href="/settings/risk-provider">{t('nav.riskProvider')}</Link>
-          </Card>
-        </div>
-        <div style={{ marginTop: 18 }}>
-          <Card title={t('legal.title')}>
-            <Link className="btn" href={locale === 'bn' ? '/privacy-policy/bn' : '/privacy-policy'}>{t('legal.privacy')}</Link>
-            <Link className="btn" style={{ margin: '8px 0 0 8px' }} href={locale === 'bn' ? '/account-deletion/bn' : '/account-deletion'}>{t('legal.deletion')}</Link>
-          </Card>
+            <CurrentAccess />
+
+            <Card title={t('set.workspace')} hint={t('set.workspaceHint')} padded={false}>
+              <ul className="linklist">
+                {WORKSPACE_LINKS.filter((link) => !link.permission || shop.can(link.permission)).map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="linklist__item">
+                      <Icon name={link.icon} size={16} />
+                      <span>{t(link.labelKey)}</span>
+                      <Icon name="arrowRight" size={14} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
+            <Card title={t('legal.title')} padded={false}>
+              <ul className="linklist">
+                <li>
+                  <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'} className="linklist__item">
+                    <Icon name="document" size={16} />
+                    <span>{t('legal.privacy')}</span>
+                    <Icon name="arrowRight" size={14} />
+                  </Link>
+                </li>
+                <li>
+                  <Link href={bn ? '/account-deletion/bn' : '/account-deletion'} className="linklist__item">
+                    <Icon name="document" size={16} />
+                    <span>{t('legal.deletion')}</span>
+                    <Icon name="arrowRight" size={14} />
+                  </Link>
+                </li>
+              </ul>
+            </Card>
+          </div>
         </div>
       </div>
     </>

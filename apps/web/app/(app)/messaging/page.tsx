@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { PageHeader } from '@/components/shell';
-import { ErrorState } from '@/components/ui';
+import { Chip, ErrorState } from '@/components/ui';
 import { api } from '@/lib/api';
+import { isComingSoon } from '@/lib/integrations';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
 
@@ -21,7 +22,7 @@ type ChannelRow = { kind: string; available: boolean; enabled: boolean; blocker:
 type ConsentRow = { id: string; scope: string; consent: boolean; source: string; evidence: string; created_at: string };
 
 export default function MessagingPage() {
-  const { locale } = useSession();
+  const { locale, t: translate } = useSession();
   const bn = locale === 'bn';
   const tx = (en: string, bangla: string) => bn ? bangla : en;
   const channels = useApi<{ items: ChannelRow[] }>('/messaging/channels');
@@ -69,7 +70,10 @@ export default function MessagingPage() {
       {error || channels.error || contacts.error ? <ErrorState error={error || channels.error || contacts.error} /> : null}
       <section className="card" style={{ padding: 20 }}>
         <h2>{tx('Channels', 'মাধ্যম')}</h2>
-        {channels.data?.items.map(c => <p key={c.kind}>
+        {channels.data?.items.map(c => isComingSoon(c.kind) ? <p key={c.kind}>
+          {/* Launch gate: Messenger and WhatsApp stay Coming Soon, with no toggle and no setup prompt. */}
+          <strong>{c.kind}</strong> · <Chip label={translate('int.comingSoon')} />
+        </p> : <p key={c.kind}>
           <strong>{c.kind}</strong> · {c.available && !c.shop_blocker ? tx('Available', 'উপলভ্য') : blockerText(c.blocker ?? c.shop_blocker)}
           {c.available ? <> · {c.reports.length ? tx('Delivery receipts reported', 'ডেলিভারি জানা যায়') : tx('Delivery not reported', 'ডেলিভারি জানা যায় না')}</> : null}
           {' '}<button className="btn" disabled={busy || ((!c.available || !!c.shop_blocker) && !c.enabled)} onClick={() => void run(() => api.post(`/messaging/channels/${c.kind}`, { enabled: !c.enabled }))}>{c.enabled ? tx('Disable', 'বন্ধ করুন') : tx('Enable', 'চালু করুন')}</button>

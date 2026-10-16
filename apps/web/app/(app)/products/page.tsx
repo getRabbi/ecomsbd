@@ -9,6 +9,7 @@ import { api, ApiError, type Page } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
 import { formatPaisa } from '@/lib/money';
 import { useSession } from '@/lib/session';
+import { useSearchParamState } from '@/lib/url-state';
 import { useApi, useDebounced } from '@/lib/useApi';
 
 interface Variant {
@@ -90,7 +91,8 @@ export default function ProductsPage() {
   const { t, locale } = useSession();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StockFilter>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // In the address bar, so search can open one product.
+  const [openId, setOpenId] = useSearchParamState('product');
   const debounced = useDebounced(search);
   const paging = useCursorStack();
 

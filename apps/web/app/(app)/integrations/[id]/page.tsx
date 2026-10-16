@@ -18,6 +18,7 @@ import { Card, Chip, ErrorState, Row } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
 import {
+  isComingSoon,
   MAX_DAYS,
   SNIPPET_LANGS,
   snippet,
@@ -68,9 +69,11 @@ function IntegrationDetail({ id }: { id: string }) {
   const conn = data?.connection;
   const manage = !!data?.can_manage;
   const reload = detail.reload;
+  const gated = !!conn && isComingSoon(conn.provider);
   const working =
-    !!data?.runs.some((r) => r.status === 'QUEUED' || r.status === 'RUNNING') ||
-    !!data?.events.some((e) => e.status === 'QUEUED');
+    !gated &&
+    (!!data?.runs.some((r) => r.status === 'QUEUED' || r.status === 'RUNNING') ||
+    !!data?.events.some((e) => e.status === 'QUEUED'));
 
   // Imports and queued retries finish within seconds; keep the page current.
   useEffect(() => {
@@ -104,6 +107,24 @@ function IntegrationDetail({ id }: { id: string }) {
     !!conn &&
     conn.provider !== 'CUSTOM_WEBSITE' &&
     ['PENDING', 'AUTH_EXPIRED', 'DISCONNECTED'].includes(conn.state);
+
+  // Launch gate: the saved connection stays, but nothing here may set it up,
+  // test, sync, reconnect or disconnect it until the provider launches.
+  if (conn && gated) {
+    return (
+      <>
+        <PageHeader title={conn.name} subtitle={labels.provider(conn.provider)} />
+        <div className="content">
+          <Link href="/integrations">← {t('int.back')}</Link>
+          <Card
+            title={labels.provider(conn.provider)}
+            hint={t('int.comingSoonDetail')}
+            actions={<Chip label={t('int.comingSoon')} tone="neutral" />}
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

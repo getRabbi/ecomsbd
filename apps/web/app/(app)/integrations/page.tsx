@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, Tile } from '@/components/ui';
 import { api } from '@/lib/api';
 import {
+  isComingSoon,
   PROVIDERS,
   type Availability,
   type Connection,
@@ -30,6 +31,10 @@ import { useApi } from '@/lib/useApi';
  *
  * Everything shown is the API's own state: a provider without its official
  * app says so instead of offering a button that cannot work.
+ *
+ * Providers under the launch gate render as Coming Soon cards with no action,
+ * and their connections and issues are left out of every tile, table and
+ * count — exactly as on mobile.
  */
 export default function IntegrationsPage() {
   const labels = useIntegrationLabels();
@@ -38,8 +43,14 @@ export default function IntegrationsPage() {
   const issues = useApi<{ items: IntegrationEvent[] }>('/integrations/issues');
   const [adding, setAdding] = useState<Provider | null | 'choose'>(null);
 
-  const items = hub.data?.items ?? [];
+  const allItems = hub.data?.items ?? [];
+  const gatedIds = new Set(allItems.filter((c) => isComingSoon(c.provider)).map((c) => c.id));
+  const items = allItems.filter((c) => !gatedIds.has(c.id));
   const live = items.filter((c) => c.state !== 'DISCONNECTED');
+  const openProviders = PROVIDERS.filter((provider) => !isComingSoon(provider));
+  const issueItems = (issues.data?.items ?? []).filter(
+    (event) => !isComingSoon(event.provider) && !gatedIds.has(event.connection_id),
+  );
   const reload = () => {
     hub.reload();
     issues.reload();
@@ -51,7 +62,7 @@ export default function IntegrationsPage() {
         title={t('int.title')}
         subtitle={t('int.subtitle')}
         actions={
-          hub.data?.can_manage ? (
+          hub.data?.can_manage && openProviders.length > 0 ? (
             <button type="button" className="btn btn--primary" onClick={() => setAdding('choose')}>
               {t('int.add')}
             </button>
@@ -61,28 +72,42 @@ export default function IntegrationsPage() {
       <div className="content">
         {hub.error ? <ErrorState error={hub.error} onRetry={hub.reload} /> : null}
 
-        <div className="tiles">
-          <Tile
-            label={t('int.tile.connected')}
-            value={String(live.filter((c) => c.state === 'CONNECTED').length)}
-          />
-          <Tile
-            label={t('int.tile.ordersToday')}
-            value={String(live.reduce((sum, c) => sum + c.orders_today, 0))}
-          />
-          <Tile
-            label={t('int.tile.issues')}
-            value={String(live.reduce((sum, c) => sum + c.open_issues, 0))}
-          />
-          <Tile
-            label={t('int.tile.failedToday')}
-            value={String(live.reduce((sum, c) => sum + c.failed_today, 0))}
-          />
-          <Tile
-            label={t('int.tile.conflicts')}
-            value={String(live.reduce((sum, c) => sum + (c.open_conflicts ?? 0), 0))}
-          />
-        </div>
+        {openProviders.length < PROVIDERS.length ? (
+          <div className="notice">
+            <div>
+              <strong>{t('int.comingSoonTitle')}</strong>
+              <p className="card__hint">{t('int.comingSoonHint')}</p>
+            </div>
+            <Link href="/couriers" className="btn btn--sm">
+              {t('nav.couriers')}
+            </Link>
+          </div>
+        ) : null}
+
+        {openProviders.length > 0 ? (
+          <div className="tiles">
+            <Tile
+              label={t('int.tile.connected')}
+              value={String(live.filter((c) => c.state === 'CONNECTED').length)}
+            />
+            <Tile
+              label={t('int.tile.ordersToday')}
+              value={String(live.reduce((sum, c) => sum + c.orders_today, 0))}
+            />
+            <Tile
+              label={t('int.tile.issues')}
+              value={String(live.reduce((sum, c) => sum + c.open_issues, 0))}
+            />
+            <Tile
+              label={t('int.tile.failedToday')}
+              value={String(live.reduce((sum, c) => sum + c.failed_today, 0))}
+            />
+            <Tile
+              label={t('int.tile.conflicts')}
+              value={String(live.reduce((sum, c) => sum + (c.open_conflicts ?? 0), 0))}
+            />
+          </div>
+        ) : null}
 
         <div className="grid2">
           {PROVIDERS.map((provider) => (
@@ -97,67 +122,71 @@ export default function IntegrationsPage() {
           ))}
         </div>
 
-        <Card title={t('int.col.connection')} padded={false}>
-          {items.length === 0 && !hub.loading ? (
-            <EmptyState title={t('int.empty')} hint={t('int.emptyHint')} />
-          ) : (
-            <div className="tablewrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t('int.col.connection')}</th>
-                    <th>{t('int.col.status')}</th>
-                    <th className="num">{t('int.col.ordersToday')}</th>
-                    <th>{t('int.col.lastSync')}</th>
-                    <th>{t('int.col.lastWebhook')}</th>
-                    <th className="num">{t('int.col.issues')}</th>
-                    <th className="num">{t('int.col.conflicts')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((c) => (
-                    <tr key={c.id} className="table__row--clickable">
-                      <td>
-                        <Link href={`/integrations/${c.id}`} className="table__primary">
-                          {c.name}
-                        </Link>
-                        <span className="table__sub">
-                          {labels.provider(c.provider)}
-                          {c.account_name ? ` · ${c.account_name}` : ''}
-                        </span>
-                      </td>
-                      <td>
-                        <HealthChip connection={c} />
-                      </td>
-                      <td className="num">{c.orders_today}</td>
-                      <td>{labels.when(c.last_sync_at)}</td>
-                      <td>{labels.when(c.last_webhook_at)}</td>
-                      <td className="num">{c.open_issues}</td>
-                      <td className="num">{c.open_conflicts ?? 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+        {openProviders.length > 0 ? (
+          <>
+            <Card title={t('int.col.connection')} padded={false}>
+              {items.length === 0 && !hub.loading ? (
+                <EmptyState title={t('int.empty')} hint={t('int.emptyHint')} />
+              ) : (
+                <div className="tablewrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>{t('int.col.connection')}</th>
+                        <th>{t('int.col.status')}</th>
+                        <th className="num">{t('int.col.ordersToday')}</th>
+                        <th>{t('int.col.lastSync')}</th>
+                        <th>{t('int.col.lastWebhook')}</th>
+                        <th className="num">{t('int.col.issues')}</th>
+                        <th className="num">{t('int.col.conflicts')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((c) => (
+                        <tr key={c.id} className="table__row--clickable">
+                          <td>
+                            <Link href={`/integrations/${c.id}`} className="table__primary">
+                              {c.name}
+                            </Link>
+                            <span className="table__sub">
+                              {labels.provider(c.provider)}
+                              {c.account_name ? ` · ${c.account_name}` : ''}
+                            </span>
+                          </td>
+                          <td>
+                            <HealthChip connection={c} />
+                          </td>
+                          <td className="num">{c.orders_today}</td>
+                          <td>{labels.when(c.last_sync_at)}</td>
+                          <td>{labels.when(c.last_webhook_at)}</td>
+                          <td className="num">{c.open_issues}</td>
+                          <td className="num">{c.open_conflicts ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
 
-        <Card title={t('int.issues.title')} hint={t('int.issues.hint')} padded={false}>
-          {issues.error ? <ErrorState error={issues.error} onRetry={issues.reload} /> : null}
-          <EventsTable
-            events={issues.data?.items ?? []}
-            connections={items}
-            canRetry={!!hub.data?.can_retry}
-            onChanged={reload}
-            emptyTitle={t('int.issues.empty')}
-          />
-        </Card>
+            <Card title={t('int.issues.title')} hint={t('int.issues.hint')} padded={false}>
+              {issues.error ? <ErrorState error={issues.error} onRetry={issues.reload} /> : null}
+              <EventsTable
+                events={issueItems}
+                connections={items}
+                canRetry={!!hub.data?.can_retry}
+                onChanged={reload}
+                emptyTitle={t('int.issues.empty')}
+              />
+            </Card>
 
-        <ConflictsPanel
-          canManage={!!hub.data?.can_manage}
-          canRetry={!!hub.data?.can_retry}
-          onChanged={reload}
-        />
+            <ConflictsPanel
+              canManage={!!hub.data?.can_manage}
+              canRetry={!!hub.data?.can_retry}
+              onChanged={reload}
+            />
+          </>
+        ) : null}
       </div>
 
       {adding ? (
@@ -190,6 +219,19 @@ function ProviderCard({
   const labels = useIntegrationLabels();
   const { t } = labels;
   const blocked = availability && !availability.available;
+
+  if (isComingSoon(provider)) {
+    // No connection list, no blocker text, no button: nothing here can be
+    // acted on, and a provider error for a launch-gated provider is noise.
+    return (
+      <Card
+        title={labels.provider(provider)}
+        hint={t(`int.about.${provider}`)}
+        actions={<Chip label={t('int.comingSoon')} tone="neutral" />}
+      />
+    );
+  }
+
   return (
     <Card
       title={labels.provider(provider)}
@@ -295,7 +337,7 @@ function AddDrawer({
       <form onSubmit={submit} className="wizard__body">
         <fieldset className="wizard__choices" disabled={busy} style={{ gridTemplateColumns: '1fr' }}>
           <legend>{t('int.choose')}</legend>
-          {PROVIDERS.map((option) => {
+          {PROVIDERS.filter((option) => !isComingSoon(option)).map((option) => {
             const status = providers.find((p) => p.provider === option);
             const blocked = status ? !status.available : false;
             return (
