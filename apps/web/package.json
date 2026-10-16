@@ -7,14 +7,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "cf:build": "node scripts/check-cloudflare-env.mjs && opennextjs-cloudflare build",
+    "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
+    "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs tests/access.test.mjs tests/whatsapp-signup.test.mjs tests/shell.test.mjs tests/ops.test.mjs"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.12",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.116.0",
-    "next": "^16.3.5",
+    "next": "^16.4.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -23,7 +27,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "eslint": "^9.17.0",
-    "eslint-config-next": "^16.3.5",
-    "typescript": "^5.7.0"
+    "eslint-config-next": "^16.4.2",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.151.0"
   }
 }

@@ -1,4 +1,33 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { NextConfig } from 'next';
+
+/**
+ * Hostnames of the Cloudflare deployment (see `wrangler.jsonc`). The rules
+ * below match these hosts only, so the Vercel deployment and the
+ * scalemyprints.com pages behave exactly as before.
+ *
+ * The public site lives on the apex and the workspace on `app.`, because the
+ * Supabase session is stored per origin: signing in on the apex would leave
+ * the seller signed out on `app.`.
+ */
+const PUBLIC_HOST = 'ecomsbd.com';
+const WWW_HOST = 'www.ecomsbd.com';
+const APP_ORIGIN = 'https://app.ecomsbd.com';
+
+/**
+ * Every top-level workspace route, read from the `(app)` route group so a new
+ * screen is covered without editing this file, plus the auth pages whose
+ * callbacks have to land on the workspace origin.
+ */
+const WORKSPACE_ROUTES = [
+  ...readdirSync(join(process.cwd(), 'app', '(app)'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name),
+  'sign-in',
+  'reset-password',
+];
 
 /**
  * The web dashboard is a browser client for the existing FastAPI. It has no
@@ -12,6 +41,39 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: WWW_HOST }],
+        destination: `https://${PUBLIC_HOST}/:path*`,
+        permanent: true,
+      },
+      {
+        source: `/:route(${WORKSPACE_ROUTES.join('|')})/:rest*`,
+        has: [{ type: 'host', value: PUBLIC_HOST }],
+        destination: `${APP_ORIGIN}/:route/:rest*`,
+        permanent: false,
+      },
+    ];
+  },
+
+  async rewrites() {
+    return {
+      // The apex root is the public product page. Everywhere else `/` keeps
+      // sending visitors to the dashboard or sign-in.
+      beforeFiles: [
+        {
+          source: '/',
+          has: [{ type: 'host', value: PUBLIC_HOST }],
+          destination: '/ecomsbd',
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 
   async headers() {
     return [
