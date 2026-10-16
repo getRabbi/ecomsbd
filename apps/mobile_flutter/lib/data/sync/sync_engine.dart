@@ -97,7 +97,16 @@ class SyncEngine {
   // --- push -----------------------------------------------------------------
 
   Future<SyncReport> pushOutbox() async {
-    final entries = await db.dueOutboxEntries(limit: batchSize);
+    final tenant = tenantId;
+    if (tenant == null) {
+      // The server would apply the queue to whichever shop this session is
+      // bound to next. With none bound, there is no shop to send it for.
+      return const SyncReport();
+    }
+    final entries = await db.dueOutboxEntries(
+      limit: batchSize,
+      tenantId: tenant,
+    );
     if (entries.isEmpty) {
       return const SyncReport();
     }

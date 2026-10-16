@@ -245,6 +245,7 @@ class OrdersRepository extends CachingRepository {
         rethrow;
       }
       await outbox.enqueue(
+        tenantId: tenantId,
         entityType: SyncEntityType.order,
         entityId: id,
         operation: MutationOperation.update,
@@ -342,6 +343,7 @@ class OrdersRepository extends CachingRepository {
 
   Future<SellerOrder> _queueCreate(String id, Map<String, dynamic> body) async {
     await outbox.enqueue(
+      tenantId: tenantId,
       entityType: SyncEntityType.order,
       entityId: id,
       operation: MutationOperation.create,

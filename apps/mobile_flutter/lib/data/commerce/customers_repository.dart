@@ -172,6 +172,7 @@ class CustomersRepository extends CachingRepository {
         rethrow;
       }
       await outbox.enqueue(
+        tenantId: tenantId,
         entityType: SyncEntityType.customer,
         entityId: id,
         operation: MutationOperation.update,
@@ -282,6 +283,7 @@ class CustomersRepository extends CachingRepository {
     final tenant = tenantId;
     final id = outbox.newId();
     await outbox.enqueue(
+      tenantId: tenantId,
       entityType: SyncEntityType.customer,
       entityId: id,
       operation: MutationOperation.create,

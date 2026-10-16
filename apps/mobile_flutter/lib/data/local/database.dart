@@ -46,7 +46,7 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
       );
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Store timestamps as ISO-8601 text rather than unix seconds.
   ///
@@ -72,6 +72,11 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
         await m.createTable(cachedCustomers);
         await m.createTable(cachedOrders);
       }
+      if (from < 3) {
+        // v3 records each outbox entry's shop. Entries already queued keep a
+        // null shop and are sent as before.
+        await m.addColumn(outboxEntries, outboxEntries.tenantId);
+      }
     },
     beforeOpen: (details) async {
       // Foreign keys are off by default in SQLite.
@@ -82,7 +87,15 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
   // --- outbox ---------------------------------------------------------------
 
   /// Entries that are due to be sent, oldest first.
-  Future<List<OutboxEntry>> dueOutboxEntries({int limit = 20}) {
+  ///
+  /// With [tenantId], only work queued in that shop, plus entries from before
+  /// the outbox recorded a shop. The server applies a mutation to the shop the
+  /// sending session is bound to, so an order typed offline in one shop must
+  /// wait for that shop rather than land in whichever is open next.
+  Future<List<OutboxEntry>> dueOutboxEntries({
+    int limit = 20,
+    String? tenantId,
+  }) {
     final now = DateTime.now().toUtc();
     return (select(outboxEntries)
           ..where(
@@ -91,7 +104,10 @@ class EcomsbdDatabase extends _$EcomsbdDatabase {
                   LocalSyncState.localOnly.name,
                   LocalSyncState.syncing.name,
                 ]) &
-                t.availableAt.isSmallerOrEqualValue(now),
+                t.availableAt.isSmallerOrEqualValue(now) &
+                (tenantId == null
+                    ? const Constant(true)
+                    : t.tenantId.equals(tenantId) | t.tenantId.isNull()),
           )
           ..orderBy(<OrderClauseGenerator<$OutboxEntriesTable>>[
             (t) => OrderingTerm.asc(t.createdAt),

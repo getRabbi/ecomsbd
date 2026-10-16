@@ -25,7 +25,8 @@ export { workspaceReady, type Me, type ShopSummary } from './me';
  * The shop is bound to the *session* on the server (`POST /v1/auth/select-
  * tenant`), not chosen per request by the client, so the browser cannot ask
  * for another shop's data by sending a different id. Switching rebinds this
- * session only; the same account signed in on a phone keeps its own shop.
+ * session only; the same account signed in on a phone keeps its own shop. The
+ * browser's other tabs share the session, so they follow the switch.
  *
  * Every API call is slow from Bangladesh (the API and database are an ocean
  * apart), so the workspace does not wait on `/me` when this browser has already
@@ -72,6 +73,20 @@ export function ShopProvider({ userId, children }: { userId: string; children: R
       writePref(readyKey(userId), workspaceReady(data) ? data.tenant_id : null);
     }
   }, [data, userId]);
+
+  // Every tab in this browser shares one Supabase session, and the shop is
+  // bound to that session — so a switch made in another tab has already moved
+  // this tab's requests too. Re-read `/me` so the screen follows, instead of
+  // showing one shop's name over another shop's data and saving into it.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === LAST_SHOP_KEY) {
+        reload();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [reload]);
 
   const switchShop = useCallback(
     async (tenantId: string, landOn?: string) => {

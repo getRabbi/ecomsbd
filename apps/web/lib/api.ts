@@ -1,7 +1,7 @@
 'use client';
 
 import { config } from './config';
-import { getAccessToken, getSupabase } from './supabase';
+import { getAccessToken, signOutHere } from './supabase';
 
 /**
  * The only way this app reaches business data.
@@ -125,7 +125,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   if (response.status === 401) {
     // The session is gone or rejected. Clearing it locally stops every other
     // panel on the page from retrying with the same dead token.
-    await getSupabase().auth.signOut();
+    await signOutHere();
     throw new ApiError(401, 'NOT_AUTHENTICATED', 'Your session has ended. Please sign in again.');
   }
 
@@ -173,7 +173,7 @@ export async function upload<T>(path: string, form: FormData, signal?: AbortSign
   });
 
   if (response.status === 401) {
-    await getSupabase().auth.signOut();
+    await signOutHere();
     throw new ApiError(401, 'NOT_AUTHENTICATED', 'Your session has ended. Please sign in again.');
   }
   if (!response.ok) {

@@ -42,10 +42,11 @@ class OutboxWriter {
 
   String newId() => _uuid.v4();
 
-  /// Queue one mutation.
+  /// Queue one mutation for the shop [tenantId].
   ///
   /// Returns the entry id, which callers use as the local record's id.
   Future<String> enqueue({
+    required String? tenantId,
     required String entityType,
     required String entityId,
     required MutationOperation operation,
@@ -75,6 +76,7 @@ class OutboxWriter {
         availableAt: now,
         createdAt: now,
         status: const Value(LocalSyncState.localOnly),
+        tenantId: Value(tenantId),
       ),
     );
     return entryId;

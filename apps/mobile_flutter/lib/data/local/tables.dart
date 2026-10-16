@@ -67,6 +67,13 @@ class OutboxEntries extends Table {
 
   DateTimeColumn get createdAt => dateTime()();
 
+  /// The shop the seller was working in when they made the change.
+  ///
+  /// The server applies a mutation to whichever shop the *sending* session is
+  /// bound to, so work queued in one shop must only ever be sent from that
+  /// shop. Null on entries queued before schema v3, which recorded no shop.
+  TextColumn get tenantId => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
