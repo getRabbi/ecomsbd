@@ -28,9 +28,11 @@
 .article p:last-child { margin-bottom: 0; }
 .article a { color: var(--brand-ink); text-decoration: underline; text-underline-offset: 3px; }
 .footer { max-width: 1184px; margin: auto; padding: 26px 32px; display: flex; flex-wrap: wrap; gap: 16px 28px; border-top: 1px solid var(--stroke); color: var(--muted); font-size: 13px; }
-.footer span { margin-right: auto; }
+.footer > span { margin-right: auto; }
 .footer a { text-decoration: underline; text-underline-offset: 3px; }
 .deletionMain { max-width: 900px; }
+.footerApps { flex-basis: 100%; }
+.supportApps { margin-top: 4px; }
 .steps { color: #374351; font-size: 16px; line-height: 1.85; padding-left: 24px; }
 .steps li + li { margin-top: 12px; }
 .requestContact { display: flex; align-items: flex-start; flex-direction: column; gap: 16px; padding: 22px; margin: 20px 0; background: var(--brand-soft); border: 1px solid var(--stroke); border-radius: var(--radius); }

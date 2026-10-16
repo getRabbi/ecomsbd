@@ -23,6 +23,7 @@ import {
   type Tone,
 } from './content';
 import { MobileMenu } from './mobile-menu';
+import { StoreLinks } from './store-links';
 import s from './home.module.css';
 
 const toneClass: Record<Tone, string | undefined> = { good: s.good, warn: s.warn, bad: s.bad, neutral: s.neutral };
@@ -84,7 +85,6 @@ const GLYPHS = {
       <path d="M12 7.5V12l3 2" />
     </>
   ),
-  download: <path d="M12 3.5v12M7 10.5l5 5 5-5M4.5 20.5h15" />,
 };
 
 function Glyph({ name, size = 20 }: { name: keyof typeof GLYPHS; size?: number }) {
@@ -523,18 +523,6 @@ function InsightsPreview({ t, locale }: { t: SiteCopy; locale: Locale }) {
   );
 }
 
-function PlayButton({ t }: { t: SiteCopy }) {
-  return (
-    <a className={s.playButton} href={links.play}>
-      <Glyph name="download" size={22} />
-      <span>
-        <small>{t.cta.playTop}</small>
-        <strong>{t.cta.playBottom}</strong>
-      </span>
-    </a>
-  );
-}
-
 const STRIP_ICONS: IconName[] = ['orders', 'couriers', 'money', 'insights', 'products', 'dashboard'];
 const FEATURE_ICONS: IconName[] = ['orders', 'couriers', 'money', 'products', 'insights', 'team'];
 const DESKTOP_ICONS: IconName[] = ['dashboard', 'orders', 'check', 'products', 'reconcile', 'insights', 'procurement', 'team'];
@@ -789,13 +777,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                   </li>
                 ))}
               </ul>
-              <div className={s.storeRow}>
-                <PlayButton t={t} />
-                <p className={s.iosNote}>
-                  <Glyph name="clock" size={16} />
-                  {t.mobile.ios}
-                </p>
-              </div>
+              <StoreLinks locale={locale} className={s.storeRow} />
             </div>
           </div>
         </section>
@@ -1020,6 +1002,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                 <small>{t.footer.tagline}</small>
               </span>
             </span>
+            <StoreLinks locale={locale} compact />
             {languageLink(s.footerLang)}
           </div>
           <nav aria-label={t.footer.product}>
@@ -1034,6 +1017,7 @@ export function HomePage({ locale }: { locale: Locale }) {
               <li>
                 <a href={links.play}>{t.footer.android}</a>
               </li>
+              <li className={s.footerSoon}>{t.footer.ios}</li>
               <li>
                 <a href={`#${sectionIds.couriers}`}>{t.nav.couriers}</a>
               </li>

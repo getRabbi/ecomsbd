@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { deletionEmailLink, privacyEmail } from '@/lib/legal';
+import { StoreLinks } from '../ecomsbd/store-links';
 import { updated, type PolicyLocale } from '../privacy-policy/content';
 import styles from '../privacy-policy/privacy.module.css';
 import { deletionContent } from './content';
@@ -57,9 +58,10 @@ export function AccountDeletion({ locale }: { locale: PolicyLocale }) {
         </article>
       </main>
       <footer className={styles.footer}>
-        <span>ecomsbd · scalemyprints.com</span>
+        <span>ecomsbd · ecomsbd.com</span>
         <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'}>{bn ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}</Link>
         <Link href={bn ? '/account-deletion/bn' : '/account-deletion'}>{bn ? 'অ্যাকাউন্ট মুছে ফেলা' : 'Account deletion'}</Link>
+        <StoreLinks locale={locale} compact className={styles.footerApps} />
       </footer>
     </div>
   );

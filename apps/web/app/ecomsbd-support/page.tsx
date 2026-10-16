@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { privacyEmail } from '@/lib/legal';
+import { StoreLinks } from '../ecomsbd/store-links';
 import styles from '../privacy-policy/privacy.module.css';
 
 export const metadata: Metadata = {
   title: 'Support | ecomsbd',
   description: 'Get help with ecomsbd: account and login, orders, couriers, store integrations, Messenger and WhatsApp order automation, notifications and account deletion.',
-  alternates: { canonical: 'https://scalemyprints.com/ecomsbd-support' },
+  alternates: { canonical: 'https://ecomsbd.com/ecomsbd-support' },
   robots: { index: true, follow: true },
 };
 
@@ -52,6 +53,11 @@ export default function SupportPage() {
             <p>We can help with:</p>
             <ul className={styles.steps}>{topics.map(topic => <li key={topic}>{topic}</li>)}</ul>
           </section>
+          <section id="get-the-app">
+            <h2>Get the app</h2>
+            <p>The ecomsbd Android app is on Google Play. The iPhone app is coming soon. On a computer, use the full workspace at <a href="https://app.ecomsbd.com">app.ecomsbd.com</a>; the same account works on both.</p>
+            <StoreLinks locale="en" className={styles.supportApps} />
+          </section>
           <section id="privacy-and-deletion">
             <h2>Privacy and account deletion</h2>
             <p>Read how ecomsbd handles your information in our <Link href="/privacy-policy">Privacy Policy</Link>.</p>
@@ -60,7 +66,7 @@ export default function SupportPage() {
         </article>
       </main>
       <footer className={styles.footer}>
-        <span>ecomsbd · scalemyprints.com</span>
+        <span>ecomsbd · ecomsbd.com</span>
         <Link href="/ecomsbd">About ecomsbd</Link>
         <Link href="/privacy-policy">Privacy Policy</Link>
         <Link href="/account-deletion">Account deletion</Link>

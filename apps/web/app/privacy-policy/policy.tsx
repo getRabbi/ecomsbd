@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { privacyEmail } from '@/lib/legal';
 
+import { StoreLinks } from '../ecomsbd/store-links';
 import { policySections, updated, type PolicyLocale } from './content';
 import styles from './privacy.module.css';
 
@@ -48,10 +49,11 @@ export function PrivacyPolicy({ locale }: { locale: PolicyLocale }) {
         </div>
       </main>
       <footer className={styles.footer}>
-        <span>ecomsbd · scalemyprints.com</span>
+        <span>ecomsbd · ecomsbd.com</span>
         <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'}>{bn ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}</Link>
         <Link href={bn ? '/account-deletion/bn' : '/account-deletion'}>{bn ? 'অ্যাকাউন্ট মুছে ফেলা' : 'Account deletion'}</Link>
         <a href="#policy">{bn ? 'ওপরে ফিরে যান' : 'Back to top'} ↑</a>
+        <StoreLinks locale={locale} compact className={styles.footerApps} />
       </footer>
     </div>
   );

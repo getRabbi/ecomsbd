@@ -95,8 +95,10 @@ const en = {
     signIn: 'Sign in',
     openApp: 'Open web app',
     openDashboard: 'Open dashboard',
+  },
+  stores: {
     playTop: 'Download for Android',
-    playBottom: 'Google Play',
+    appStoreTop: 'iPhone · Coming soon',
   },
   hero: {
     eyebrow: 'For online & F-commerce sellers in Bangladesh',
@@ -284,7 +286,6 @@ const en = {
       'Create, confirm and book orders on the go',
       'Today’s sales and COD at a glance',
     ],
-    ios: 'iPhone app: coming soon.',
     ui: {
       alt: 'Preview of the ecomsbd Android app showing today’s figures and recent notifications.',
       greeting: 'Today',
@@ -480,6 +481,7 @@ const en = {
     account: 'Account',
     webApp: 'Web app',
     android: 'Android app',
+    ios: 'iPhone app · Coming soon',
     privacy: 'Privacy Policy',
     deletion: 'Account deletion',
     rights: 'All rights reserved.',
@@ -514,8 +516,10 @@ const bn: SiteCopy = {
     signIn: 'সাইন ইন',
     openApp: 'ওয়েব অ্যাপ খুলুন',
     openDashboard: 'ড্যাশবোর্ড খুলুন',
+  },
+  stores: {
     playTop: 'Android-এর জন্য ডাউনলোড',
-    playBottom: 'Google Play',
+    appStoreTop: 'iPhone · শীঘ্রই আসছে',
   },
   hero: {
     eyebrow: 'বাংলাদেশের অনলাইন ও এফ-কমার্স সেলারদের জন্য',
@@ -703,7 +707,6 @@ const bn: SiteCopy = {
       'চলার পথে অর্ডার তৈরি, নিশ্চিত ও বুক',
       'এক নজরে আজকের বিক্রি আর COD',
     ],
-    ios: 'iPhone অ্যাপ: শীঘ্রই আসছে।',
     ui: {
       alt: 'ecomsbd Android অ্যাপের নমুনা: আজকের সংখ্যা আর সাম্প্রতিক নোটিফিকেশন।',
       greeting: 'আজ',
@@ -899,6 +902,7 @@ const bn: SiteCopy = {
     account: 'অ্যাকাউন্ট',
     webApp: 'ওয়েব অ্যাপ',
     android: 'Android অ্যাপ',
+    ios: 'iPhone অ্যাপ · শীঘ্রই আসছে',
     privacy: 'গোপনীয়তা নীতি',
     deletion: 'অ্যাকাউন্ট মুছে ফেলা',
     rights: 'সর্বস্বত্ব সংরক্ষিত।',
