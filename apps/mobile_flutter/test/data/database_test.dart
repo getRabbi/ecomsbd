@@ -43,12 +43,14 @@ void main() {
       expect(db.schemaVersion, 3);
     });
 
-    test('upgrading from v2 keeps queued work and sends it as before', () async {
-      final upgraded = EcomsbdDatabase(
-        NativeDatabase.memory(
-          setup: (raw) {
-            // The v2 outbox as it exists on devices in the field: no shop.
-            raw.execute('''
+    test(
+      'upgrading from v2 keeps queued work and sends it as before',
+      () async {
+        final upgraded = EcomsbdDatabase(
+          NativeDatabase.memory(
+            setup: (raw) {
+              // The v2 outbox as it exists on devices in the field: no shop.
+              raw.execute('''
               CREATE TABLE outbox_entries (
                 id TEXT NOT NULL PRIMARY KEY,
                 entity_type TEXT NOT NULL,
@@ -70,15 +72,16 @@ void main() {
                 '2026-10-01T00:00:00.000Z');
               PRAGMA user_version = 2;
             ''');
-          },
-        ),
-      );
-      addTearDown(upgraded.close);
+            },
+          ),
+        );
+        addTearDown(upgraded.close);
 
-      final due = await upgraded.dueOutboxEntries(tenantId: 'shop-a');
-      expect(due.map((e) => e.id), <String>['old']);
-      expect(due.single.tenantId, isNull);
-    });
+        final due = await upgraded.dueOutboxEntries(tenantId: 'shop-a');
+        expect(due.map((e) => e.id), <String>['old']);
+        expect(due.single.tenantId, isNull);
+      },
+    );
   });
 
   group('outbox', () {

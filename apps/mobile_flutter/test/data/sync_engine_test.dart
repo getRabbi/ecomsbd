@@ -34,12 +34,8 @@ void main() {
 
   SyncEngine engine() => SyncEngine(api: api, db: db, tenantId: testTenantId);
 
-  OrdersRepository orders([String tenant = testTenantId]) => OrdersRepository(
-    api: api,
-    db: db,
-    outbox: outbox,
-    tenantId: tenant,
-  );
+  OrdersRepository orders([String tenant = testTenantId]) =>
+      OrdersRepository(api: api, db: db, outbox: outbox, tenantId: tenant);
 
   Future<String> queueAnOfflineOrder({String tenant = testTenantId}) async {
     adapter.offline = true;
