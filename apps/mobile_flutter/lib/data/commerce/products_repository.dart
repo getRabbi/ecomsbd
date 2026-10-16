@@ -188,6 +188,7 @@ class ProductsRepository extends CachingRepository {
         rethrow;
       }
       await outbox.enqueue(
+        tenantId: tenantId,
         entityType: SyncEntityType.product,
         entityId: id,
         operation: MutationOperation.update,
@@ -242,6 +243,7 @@ class ProductsRepository extends CachingRepository {
       }
       final mutationId = outbox.newId();
       await outbox.enqueue(
+        tenantId: tenantId,
         entityType: SyncEntityType.stockAdjustment,
         entityId: mutationId,
         operation: MutationOperation.create,
@@ -397,6 +399,7 @@ class ProductsRepository extends CachingRepository {
     final tenant = tenantId;
     final id = outbox.newId();
     await outbox.enqueue(
+      tenantId: tenantId,
       entityType: SyncEntityType.product,
       entityId: id,
       operation: MutationOperation.create,

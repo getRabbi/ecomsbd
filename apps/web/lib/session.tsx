@@ -13,7 +13,7 @@ import {
 } from 'react';
 
 import { type Locale, translate, type StringKey } from './i18n';
-import { getSupabase } from './supabase';
+import { getSupabase, signOutHere } from './supabase';
 
 /**
  * Who is signed in, and which language they read.
@@ -144,7 +144,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setEndedByUser(true);
-    await getSupabase().auth.signOut();
+    await signOutHere();
     setSession(null);
   }, []);
 

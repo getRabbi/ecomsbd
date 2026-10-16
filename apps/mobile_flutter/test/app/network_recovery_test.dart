@@ -1,5 +1,7 @@
 import 'package:ecomsbd/app/network_recovery.dart';
+import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/core/api/api_error.dart';
+import 'package:ecomsbd/data/commerce/commerce_providers.dart';
 import 'package:ecomsbd/data/commerce/models.dart';
 import 'package:ecomsbd/data/commerce/paged_list_controller.dart';
 import 'package:ecomsbd/data/commerce/repository_support.dart';
@@ -144,5 +146,129 @@ void main() {
     await pumpEventQueue();
 
     expect(observer.waitingCount, 0);
+  });
+
+  group('back in the foreground', () {
+    // The web or another phone may have changed the shop while the seller was
+    // away; every read of shop data is fetched again, and nothing else is.
+    late ProviderContainer shop;
+    late Map<String, int> calls;
+    late FutureProvider<Sourced<int>> summary;
+    late FutureProviderFamily<int, String> order;
+    late FutureProvider<int> quote;
+    late StateNotifierProvider<_Numbers, PagedListState<int>> orders;
+
+    ProviderContainer shopContainer({
+      String? tenant = 'shop-1',
+      bool offline = false,
+    }) {
+      final container = ProviderContainer(
+        observers: <ProviderObserver>[observer],
+        overrides: <Override>[
+          tenantIdProvider.overrideWithValue(tenant),
+          isOfflineProvider.overrideWithValue(offline),
+          pendingMutationCountProvider.overrideWith(
+            (ref) => Stream<int>.value(0),
+          ),
+        ],
+      );
+      container.listen(summary, (_, _) {});
+      container.listen(order('o1'), (_, _) {});
+      container.listen(quote, (_, _) {});
+      container.listen(orders, (_, _) {});
+      return container;
+    }
+
+    int count(String name) => calls[name] ?? 0;
+
+    setUp(() {
+      resetForegroundRefresh();
+      calls = <String, int>{};
+      void hit(String name) => calls[name] = count(name) + 1;
+      summary = FutureProvider<Sourced<int>>((ref) async {
+        hit('summary');
+        return Sourced<int>.live(1, DateTime.now().toUtc());
+      });
+      order = FutureProvider.family<int, String>((ref, id) async {
+        hit('order');
+        return 1;
+      });
+      // A metered read, such as a courier quote: never repeated on its own.
+      quote = FutureProvider<int>((ref) async {
+        hit('quote');
+        return 1;
+      });
+      orders = StateNotifierProvider<_Numbers, PagedListState<int>>(
+        (ref) => _Numbers((_) async {
+          hit('orders');
+          return <int>[1];
+        }),
+      );
+      observer = NetworkRecoveryObserver(shopReads: <Object>{order});
+    });
+
+    tearDown(() => shop.dispose());
+
+    Future<void> settled() async {
+      await shop.read(summary.future);
+      await shop.read(order('o1').future);
+      await shop.read(quote.future);
+      await pumpEventQueue();
+    }
+
+    test('refetches cached reads, lists and listed details only', () async {
+      shop = shopContainer();
+      await settled();
+      expect(observer.liveCount, 3);
+
+      await onForeground(shop, observer, now: DateTime.utc(2026, 10, 17));
+      await settled();
+
+      expect(count('summary'), 2);
+      expect(count('order'), 2);
+      expect(count('orders'), 2);
+      expect(count('quote'), 1);
+    });
+
+    test('a quick round trip refreshes once', () async {
+      shop = shopContainer();
+      await settled();
+      final first = DateTime.utc(2026, 10, 17, 9);
+
+      await onForeground(shop, observer, now: first);
+      await settled();
+      await onForeground(
+        shop,
+        observer,
+        now: first.add(minForegroundRefreshGap - const Duration(seconds: 1)),
+      );
+      await settled();
+      expect(count('summary'), 2);
+
+      await onForeground(
+        shop,
+        observer,
+        now: first.add(minForegroundRefreshGap),
+      );
+      await settled();
+      expect(count('summary'), 3);
+    });
+
+    test('nothing is fetched signed out, without a shop, or offline', () async {
+      for (final (tenant, offline) in <(String?, bool)>[
+        (null, false),
+        ('shop-1', true),
+      ]) {
+        shop = shopContainer(tenant: tenant, offline: offline);
+        await settled();
+        calls.clear();
+
+        await onForeground(shop, observer, now: DateTime.utc(2026, 10, 17));
+        await settled();
+
+        expect(calls, isEmpty);
+        if (tenant == null) shop.dispose();
+      }
+    });
   });
 }

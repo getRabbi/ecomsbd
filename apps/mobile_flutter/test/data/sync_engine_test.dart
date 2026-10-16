@@ -34,16 +34,12 @@ void main() {
 
   SyncEngine engine() => SyncEngine(api: api, db: db, tenantId: testTenantId);
 
-  OrdersRepository orders() => OrdersRepository(
-    api: api,
-    db: db,
-    outbox: outbox,
-    tenantId: testTenantId,
-  );
+  OrdersRepository orders([String tenant = testTenantId]) =>
+      OrdersRepository(api: api, db: db, outbox: outbox, tenantId: tenant);
 
-  Future<String> queueAnOfflineOrder() async {
+  Future<String> queueAnOfflineOrder({String tenant = testTenantId}) async {
     adapter.offline = true;
-    final saved = await orders().create(
+    final saved = await orders(tenant).create(
       phone: '01712345678',
       items: <Map<String, dynamic>>[
         <String, dynamic>{
@@ -353,6 +349,70 @@ void main() {
       final row = await db.localCustomer(testTenantId, 'c1');
       final payload = jsonDecode(row!.payload) as Map<String, dynamic>;
       expect(payload.containsKey('phone'), isFalse);
+    });
+  });
+
+  group('shop isolation', () {
+    // The server applies a pushed mutation to the shop the sending session is
+    // bound to. A queue must therefore only ever leave from its own shop.
+    late List<String> sent;
+
+    setUp(() {
+      sent = <String>[];
+      adapter.on('POST', '/sync/mutations', (request) {
+        final mutations = request.jsonBody['mutations'] as List<dynamic>;
+        for (final raw in mutations) {
+          sent.add((raw as Map<String, dynamic>)['mutation_id'] as String);
+        }
+        return FakeReply(<String, dynamic>{
+          'results': <dynamic>[
+            for (final raw in mutations)
+              <String, dynamic>{
+                'mutation_id': (raw as Map<String, dynamic>)['mutation_id'],
+                'status': 'APPLIED',
+                'entity_id': 'server-order',
+                'server_version': 1,
+              },
+          ],
+        });
+      });
+    });
+
+    test(
+      "an order queued in one shop is not sent from another shop's session",
+      () async {
+        await queueAnOfflineOrder(tenant: 'shop-a');
+
+        final report = await SyncEngine(
+          api: api,
+          db: db,
+          tenantId: 'shop-b',
+        ).pushOutbox();
+
+        // Sending it would have booked shop A's order into shop B.
+        expect(sent, isEmpty);
+        expect(report.pushed, 0);
+        expect(await db.dueOutboxEntries(), hasLength(1));
+      },
+    );
+
+    test('it is sent once its own shop is open again', () async {
+      final orderId = await queueAnOfflineOrder(tenant: 'shop-a');
+      await SyncEngine(api: api, db: db, tenantId: 'shop-b').pushOutbox();
+
+      await SyncEngine(api: api, db: db, tenantId: 'shop-a').pushOutbox();
+
+      expect(sent, <String>[orderId]);
+      expect(await db.dueOutboxEntries(), isEmpty);
+    });
+
+    test('nothing is sent while the session has no shop', () async {
+      await queueAnOfflineOrder();
+
+      await SyncEngine(api: api, db: db, tenantId: null).pushOutbox();
+
+      expect(sent, isEmpty);
+      expect(await db.dueOutboxEntries(), hasLength(1));
     });
   });
 

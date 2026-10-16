@@ -1,6 +1,7 @@
 // `show` is required: drift exports isNull/isNotNull as SQL helpers, which
 // collide with the matchers of the same name.
 import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
 import 'package:ecomsbd/data/local/database.dart';
 import 'package:ecomsbd/data/local/tables.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,7 @@ void main() {
     String id, {
     DateTime? availableAt,
     LocalSyncState status = LocalSyncState.localOnly,
+    String? tenantId,
   }) {
     final now = DateTime.now().toUtc();
     return OutboxEntriesCompanion.insert(
@@ -29,6 +31,7 @@ void main() {
       availableAt: availableAt ?? now.subtract(const Duration(seconds: 1)),
       createdAt: now,
       status: Value(status),
+      tenantId: Value(tenantId),
     );
   }
 
@@ -37,11 +40,61 @@ void main() {
       // Proves the generated Drift schema actually opens; a broken migration
       // would otherwise surface on a seller's device, not in CI.
       expect(await db.dueOutboxEntries(), isEmpty);
-      expect(db.schemaVersion, 2);
+      expect(db.schemaVersion, 3);
     });
+
+    test(
+      'upgrading from v2 keeps queued work and sends it as before',
+      () async {
+        final upgraded = EcomsbdDatabase(
+          NativeDatabase.memory(
+            setup: (raw) {
+              // The v2 outbox as it exists on devices in the field: no shop.
+              raw.execute('''
+              CREATE TABLE outbox_entries (
+                id TEXT NOT NULL PRIMARY KEY,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                client_timestamp TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'localOnly',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                available_at TEXT NOT NULL,
+                last_error TEXT,
+                last_error_code TEXT,
+                created_at TEXT NOT NULL
+              );
+              INSERT INTO outbox_entries (id, entity_type, entity_id, operation,
+                payload, client_timestamp, available_at, created_at)
+              VALUES ('old', 'ORDER', 'old', 'create', '{}',
+                '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z',
+                '2026-10-01T00:00:00.000Z');
+              PRAGMA user_version = 2;
+            ''');
+            },
+          ),
+        );
+        addTearDown(upgraded.close);
+
+        final due = await upgraded.dueOutboxEntries(tenantId: 'shop-a');
+        expect(due.map((e) => e.id), <String>['old']);
+        expect(due.single.tenantId, isNull);
+      },
+    );
   });
 
   group('outbox', () {
+    test("a shop's queue holds its own work and pre-v3 work only", () async {
+      await db.enqueueMutation(entry('a', tenantId: 'shop-a'));
+      await db.enqueueMutation(entry('b', tenantId: 'shop-b'));
+      await db.enqueueMutation(entry('legacy'));
+
+      final due = await db.dueOutboxEntries(tenantId: 'shop-a');
+
+      expect(due.map((e) => e.id).toSet(), <String>{'a', 'legacy'});
+    });
+
     test('queued mutations become due', () async {
       await db.enqueueMutation(entry('a'));
       final due = await db.dueOutboxEntries();

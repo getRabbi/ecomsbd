@@ -40,3 +40,16 @@ export async function getAccessToken(): Promise<string | null> {
   const { data } = await getSupabase().auth.getSession();
   return data.session?.access_token ?? null;
 }
+
+/**
+ * End this browser's session, and only this one.
+ *
+ * supabase-js defaults `signOut()` to `scope: 'global'`, which revokes every
+ * session the account has — the seller's phone included, which then drops to
+ * the sign-in screen at its next token refresh. Sign out on the web means this
+ * browser, as it does on the phone; the app's "every device" sign-out is a
+ * separate, explicit action.
+ */
+export async function signOutHere(): Promise<void> {
+  await getSupabase().auth.signOut({ scope: 'local' });
+}
