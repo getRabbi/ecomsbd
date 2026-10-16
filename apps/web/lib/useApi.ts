@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from './api';
-import { keepIfUnchanged, MIN_REVALIDATE_GAP_MS, subscribeToRevalidation } from './revalidate';
+import {
+  keepIfUnchanged,
+  MIN_REVALIDATE_GAP_MS,
+  queryShowsTopics,
+  subscribeToRevalidation,
+} from './revalidate';
 
 /**
  * Fetch from the API, with the behaviours a dense dashboard needs.
@@ -26,7 +31,10 @@ import { keepIfUnchanged, MIN_REVALIDATE_GAP_MS, subscribeToRevalidation } from 
  *
  * **What is on screen stays current.** Whatever is mounted is fetched again,
  * silently, when the tab comes back into view and every thirty seconds while
- * it stays there; `./revalidate` decides when.
+ * it stays there; `./revalidate` decides when. A realtime invalidation for a
+ * topic this query shows does the same at once, and is never skipped: if a
+ * request is already in flight, it may have been answered before the change,
+ * so one more follows it.
  */
 export interface AsyncState<T> {
   data: T | null;
@@ -52,6 +60,9 @@ export function useApi<T>(
   //: `sequence` exactly when nothing is in flight.
   const settledTicket = useRef(0);
   const settledAt = useRef(0);
+  //: Runs once a request in flight lands, when a change was announced while
+  //: it was out.
+  const followUp = useRef<(() => void) | null>(null);
   // Serialised so the effect compares by value: a fresh object literal on every
   // render would otherwise refetch forever.
   const queryKey = JSON.stringify(query ?? {});
@@ -75,6 +86,7 @@ export function useApi<T>(
           setData(result);
           setError(null);
           setSettledKey(key);
+          followUp.current?.();
         }
       })
       .catch((caught: unknown) => {
@@ -85,6 +97,7 @@ export function useApi<T>(
         settledAt.current = Date.now();
         setError(caught);
         setSettledKey(key);
+        followUp.current?.();
       });
 
     return () => controller.abort();
@@ -96,19 +109,14 @@ export function useApi<T>(
     }
 
     let controller: AbortController | null = null;
-    const unsubscribe = subscribeToRevalidation(() => {
-      // Only over a settled answer: a request already in flight is newer than
-      // anything this would fetch, and so is one that has just landed.
-      if (
-        controller !== null ||
-        settledTicket.current !== sequence.current ||
-        Date.now() - settledAt.current < MIN_REVALIDATE_GAP_MS
-      ) {
-        return;
-      }
+    let changedSince = false;
+    let disposed = false;
+
+    const refetch = () => {
       const ticket = sequence.current;
       const current = new AbortController();
       controller = current;
+      changedSince = false;
       api
         .get<T>(path, JSON.parse(queryKey), current.signal)
         .then((result) => {
@@ -126,12 +134,42 @@ export function useApi<T>(
         .finally(() => {
           if (controller === current) {
             controller = null;
+            if (changedSince && !disposed) {
+              refetch();
+            }
           }
         });
+    };
+
+    followUp.current = () => {
+      if (changedSince && controller === null) {
+        refetch();
+      }
+    };
+
+    const unsubscribe = subscribeToRevalidation((request) => {
+      if (!queryShowsTopics(path, request.topics)) {
+        return;
+      }
+      // Only over a settled answer: a request already in flight is newer than
+      // anything this would fetch, and so is one that has just landed —
+      // unless a change was committed since, which the request may predate.
+      if (controller !== null || settledTicket.current !== sequence.current) {
+        if (request.fresh) {
+          changedSince = true;
+        }
+        return;
+      }
+      if (!request.fresh && Date.now() - settledAt.current < MIN_REVALIDATE_GAP_MS) {
+        return;
+      }
+      refetch();
     });
 
     return () => {
+      disposed = true;
       unsubscribe();
+      followUp.current = null;
       controller?.abort();
     };
   }, [path, queryKey]);

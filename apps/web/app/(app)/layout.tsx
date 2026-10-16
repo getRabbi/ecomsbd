@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, type ReactNode } from 'react';
 
+import { RealtimeBridge } from '@/components/RealtimeBridge';
 import { Shell } from '@/components/shell';
 import { ShopGate } from '@/components/ShopSetup';
 import { AccessProvider } from '@/lib/access-context';
@@ -67,6 +68,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <ShopProvider key={session.user.id} userId={session.user.id}>
+      <RealtimeBridge />
       <ShopGate>
         <Workspace>{children}</Workspace>
       </ShopGate>
