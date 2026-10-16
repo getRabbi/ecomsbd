@@ -80,6 +80,11 @@ def create_engine(settings: Settings | None = None) -> AsyncEngine:
     """Build a fresh engine. Prefer :func:`get_engine` in application code."""
     settings = settings or get_settings()
     install_tenancy_guards()
+    # Imported here, not at module load: the hooks know the auth and tenant
+    # models, which themselves import this module's neighbours.
+    from app.realtime.publisher import install_realtime_hooks
+
+    install_realtime_hooks()
     return create_async_engine(settings.database_url, **_engine_kwargs(settings))
 
 
