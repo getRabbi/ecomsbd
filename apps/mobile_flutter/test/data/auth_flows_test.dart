@@ -302,6 +302,50 @@ void main() {
   );
 
   test(
+    'a sign-up is confirmed with the emailed code, typed in Bangla digits',
+    () async {
+      expect(
+        await controller.register('seller@example.com', 'strong password'),
+        isTrue,
+      );
+      expect(controller.state.verificationEmail, 'seller@example.com');
+
+      expect(await controller.verifyEmailCode('১২৩ ৪৫৬'), isTrue);
+
+      final verify = transport.requests.lastWhere(
+        (r) => r.url.path == '/auth/v1/verify',
+      );
+      final body = jsonDecode(verify.body) as Map<String, dynamic>;
+      expect(body['email'], 'seller@example.com');
+      expect(body['token'], '123456');
+      expect(body['type'], 'email');
+      // The code travels in the body only, never in an address.
+      expect(verify.url.toString(), isNot(contains('123456')));
+      expect(controller.state.verificationEmail, isNull);
+      expect(controller.state.stage, AuthStage.ready);
+      expect(auth.currentSession, isNotNull);
+    },
+  );
+
+  test('a wrong or expired code keeps the seller on the code step', () async {
+    await controller.register('seller@example.com', 'strong password');
+    transport.failCode = 'otp_expired';
+
+    expect(await controller.verifyEmailCode('000000'), isFalse);
+
+    expect(controller.state.error!.code, 'CODE_INVALID');
+    expect(controller.state.error!.messageEn, isNot(contains('private')));
+    expect(controller.state.verificationEmail, 'seller@example.com');
+    expect(auth.currentSession, isNull);
+  });
+
+  test('no pending sign-up means no code is sent anywhere', () async {
+    final before = transport.requests.length;
+    expect(await controller.verifyEmailCode('123456'), isFalse);
+    expect(transport.requests.length, before);
+  });
+
+  test(
     'unverified email state, safe errors and disabled phone login',
     () async {
       transport.failCode = 'email_not_confirmed';

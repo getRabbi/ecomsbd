@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../data/auth/email_code.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import 'auth_error.dart';
@@ -24,10 +26,23 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
   int _remaining = 0;
   Timer? _timer;
 
+  /// The emailed code. Lives in this field only: never stored or logged.
+  final _code = TextEditingController();
+
   @override
   void dispose() {
     _timer?.cancel();
+    _code.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyCode() async {
+    if (!EmailCode.isComplete(_code.text)) return;
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .verifyEmailCode(_code.text);
+    // On success the router moves on by itself, as after any sign-in.
+    if (mounted && !ok) _code.clear();
   }
 
   Future<void> _resend(String email) async {
@@ -37,7 +52,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
     if (!mounted || !ok) return;
     setState(() {
       _resent = true;
-      _remaining = 30;
+      _remaining = EmailCode.resendCooldownSeconds;
     });
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -80,6 +95,36 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
             }),
           ),
           if (email != null) ...[
+            const SizedBox(height: EcomsbdSpacing.md),
+            AutofillGroup(
+              child: TextField(
+                controller: _code,
+                keyboardType: TextInputType.number,
+                autofillHints: const <String>[AutofillHints.oneTimeCode],
+                inputFormatters: const <TextInputFormatter>[
+                  EmailCodeFormatter(),
+                ],
+                maxLength: EmailCode.maxLength,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 22, letterSpacing: 6),
+                enabled: !state.isBusy,
+                decoration: InputDecoration(
+                  labelText: context.tr('auth.codeLabel'),
+                  helperText: context.tr('auth.codeHelp'),
+                  helperMaxLines: 3,
+                  counterText: '',
+                ),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _verifyCode(),
+              ),
+            ),
+            const SizedBox(height: EcomsbdSpacing.md),
+            FilledButton(
+              onPressed: state.isBusy || !EmailCode.isComplete(_code.text)
+                  ? null
+                  : _verifyCode,
+              child: Text(context.tr('auth.verifyCodeButton')),
+            ),
             const SizedBox(height: EcomsbdSpacing.md),
             OutlinedButton(
               onPressed: state.isBusy || _remaining > 0

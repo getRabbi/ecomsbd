@@ -85,6 +85,8 @@ class SupabaseTransport extends http.BaseClient {
       body = session;
     } else if (r.url.path.endsWith('/signup')) {
       body = user;
+    } else if (r.url.path.endsWith('/verify')) {
+      body = session;
     } else if (r.url.path.endsWith('/user')) {
       body = user;
     }

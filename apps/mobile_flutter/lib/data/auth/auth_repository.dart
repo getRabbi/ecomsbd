@@ -12,6 +12,7 @@ import '../../core/api/api_error.dart';
 import '../../core/env.dart';
 import '../../core/storage/token_store.dart';
 import 'auth_models.dart';
+import 'email_code.dart';
 import 'provider_sign_in.dart';
 import 'supabase_bootstrap.dart';
 import '../notifications/push_registration.dart';
@@ -116,6 +117,8 @@ class AuthRepository implements SessionProvider {
       throw ApiError(
         code: switch (error.code) {
           'email_not_confirmed' => 'EMAIL_NOT_VERIFIED',
+          // A wrong code and an expired one read the same, as Supabase sends.
+          'otp_expired' || 'otp_disabled' => 'CODE_INVALID',
           'invalid_credentials' => 'INVALID_CREDENTIALS',
           'over_email_send_rate_limit' ||
           'over_request_rate_limit' => 'RATE_LIMITED',
@@ -230,6 +233,25 @@ class AuthRepository implements SessionProvider {
       emailRedirectTo: Env.authRedirectUrl,
     );
   });
+
+  /// Confirms a new account with the code from its confirmation email, and
+  /// signs in with the session Supabase returns for it.
+  ///
+  /// The code goes to Supabase and nowhere else: it is not stored, logged or
+  /// put in an address.
+  Future<SessionEnvelope> verifyEmailCode({
+    required String email,
+    required String code,
+  }) async {
+    await _authCall(
+      () => _auth.verifyOTP(
+        email: email.trim(),
+        token: EmailCode.normalize(code),
+        type: OtpType.email,
+      ),
+    );
+    return _envelope();
+  }
 
   Future<void> forgotPassword(String email) => _authCall(
     () => _auth.resetPasswordForEmail(

@@ -98,10 +98,29 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(h.controller.state.stage, AuthStage.signedOut);
-    expect(find.textContaining('Check seller@example.com'), findsOneWidget);
-    await tester.tap(find.text('Resend verification email'));
+    expect(
+      find.textContaining('verification code to seller@example.com'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Send a new code'));
     await tester.pump();
     expect(h.transport.requests.last.url.path, '/auth/v1/resend');
+
+    // Verify stays off until a whole code is typed, Bangla digits included.
+    final verify = find.widgetWithText(FilledButton, 'Verify and continue');
+    await tester.enterText(find.byType(TextField), '১২৩');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(verify).onPressed, isNull);
+    await tester.enterText(find.byType(TextField), '১২৩৪৫৬');
+    await tester.pump();
+    expect(find.text('123456'), findsOneWidget);
+    await tester.tap(verify);
+    await tester.pumpAndSettle();
+    expect(
+      h.transport.requests.map((r) => r.url.path),
+      contains('/auth/v1/verify'),
+    );
+    expect(h.controller.state.verificationEmail, isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
