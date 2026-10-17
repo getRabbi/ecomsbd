@@ -6,10 +6,10 @@ versioned with the code that depends on them.
 
 ## Confirm signup — `confirm-signup.html`
 
-Sign-up is confirmed with the one-time code (`{{ .Token }}`), typed into the
-web sign-in page or the app's verify-email screen. Both clients call Supabase
-`verifyOtp` with `type: 'email'`; the code is never put in a URL, stored or
-logged.
+Sign-up is confirmed with the one-time code (`{{ .Token }}`, 8 digits in this
+project), typed into the web sign-in page or the app's verify-email screen.
+Both clients call Supabase `verifyOtp` with `type: 'email'`; the code is never
+put in a URL, stored or logged.
 
 **Where:** Supabase dashboard → Authentication → Emails → Templates →
 **Confirm signup**.
@@ -22,12 +22,15 @@ logged.
 The code in the subject shows in the notification and lets iOS and Android
 offer it as autofill. Drop it from the subject if that is not wanted.
 
-### Transition: remove the link after app 3.0.6
+### No links
 
-The template still carries a small "verify here" link (the block between the
-`OLD-APP LINK` comments) for app versions older than 3.0.6, which have no code
-box. Once 3.0.6 is live in both the Play Store and the App Store, delete that
-block so the email has no link at all.
+The email carries the code and nothing to click: sellers distrust links in
+email, and Brevo rewrites every link to its own tracking domain
+(`*.sendibt3.com`), which looks like phishing. Keep it that way.
+
+App versions older than 3.0.6 have no code box. A seller on one of those can
+still confirm: sign in at `https://app.ecomsbd.com/sign-in` with the email and
+password, enter the code there, then sign in on the phone.
 
 ### Prerequisites
 
