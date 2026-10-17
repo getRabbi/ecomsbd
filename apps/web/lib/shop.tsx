@@ -14,6 +14,7 @@ import {
 import { api } from './api';
 import { workspaceReady, type Me, type ShopSummary } from './me';
 import { readPref, writePref } from './prefs';
+import { rebindRealtime } from './realtime';
 import { useApi } from './useApi';
 
 export { workspaceReady, type Me, type ShopSummary } from './me';
@@ -92,6 +93,8 @@ export function ShopProvider({ userId, children }: { userId: string; children: R
     async (tenantId: string, landOn?: string) => {
       await api.post('/auth/select-tenant', { tenant_id: tenantId });
       writePref(LAST_SHOP_KEY, tenantId);
+      // The old shop's live feed ends now rather than when the server notices.
+      rebindRealtime();
       setSwitchingTo(tenantId);
       if (landOn) {
         router.push(landOn);

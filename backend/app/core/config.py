@@ -217,6 +217,13 @@ class Settings(BaseSettings):
     # in-process implementation so the app boots with no Redis running.
     redis_url: str | None = None
 
+    # ----------------------------------------------------------- realtime ---
+    # Invalidation-only push to signed-in web and phone clients (app.realtime).
+    # A kill switch, not a feature gate: with it off, nothing is published and
+    # the socket refuses connections, and clients fall back to refreshing on
+    # focus and on their timer, which they do anyway.
+    realtime_enabled: bool = True
+
     # Supabase is the only deployed seller authentication authority.
     supabase_url: str | None = None
     supabase_anon_key: SecretStr | None = None

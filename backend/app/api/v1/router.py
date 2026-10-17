@@ -43,6 +43,7 @@ from app.api.v1 import (
     procurement,
     products,
     providers,
+    realtime,
     reconciliation,
     rto,
     sync,
@@ -82,6 +83,9 @@ api_router.include_router(orders.router)
 api_router.include_router(chat_orders.router)
 api_router.include_router(imports.router)
 api_router.include_router(sync.router)
+# Authenticated by the first message, not a header: browsers cannot set one
+# on a socket, and a token in the URL would land in access logs.
+api_router.include_router(realtime.router)
 api_router.include_router(consignments.router)
 api_router.include_router(money.router)
 api_router.include_router(payouts.router)

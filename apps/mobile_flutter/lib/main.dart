@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/app.dart';
 import 'app/network_recovery.dart';
+import 'app/realtime_wiring.dart';
 import 'l10n/app_locale.dart';
 import 'data/auth/supabase_bootstrap.dart';
 import 'data/notifications/push_registration.dart';
@@ -41,6 +42,7 @@ Future<void> main() async {
   );
   await _bootstrap(container);
   startNetworkRecovery(container, recovery);
+  startRealtime(container, recovery);
 
   runApp(
     UncontrolledProviderScope(container: container, child: const EcomsbdApp()),

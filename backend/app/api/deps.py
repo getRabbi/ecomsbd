@@ -74,6 +74,7 @@ __all__ = [
     "ProviderRegistryDep",
     "SettingsDep",
     "StatusSyncDep",
+    "authenticate_access_token",
     "get_auth_service",
     "get_db",
     "get_principal",
@@ -214,21 +215,14 @@ def _bearer_token(request: Request) -> str | None:
     return token.strip()
 
 
-async def get_optional_principal(
-    request: Request,
-    db: DbSession,
-    settings: SettingsDep,
-) -> AsyncIterator[Principal | None]:
-    """Resolve the caller if a valid token is present; otherwise ``None``.
+async def authenticate_access_token(db: AsyncSession, settings: Settings, token: str) -> Principal:
+    """Verify an access token and resolve its user, session, shop and role.
 
-    Yields rather than returns so the ambient context can be restored after the
-    response is produced.
+    The one implementation of "who is this": every HTTP request and the
+    realtime socket (``app.api.v1.realtime``) both come through here, so a
+    revoked session, a lapsed membership or a deactivated account is refused
+    the same way on both.
     """
-    token = _bearer_token(request)
-    if token is None:
-        yield None
-        return
-
     user: User | None
     session_row: AuthSession | None
     if settings.supabase_auth_active:
@@ -286,7 +280,27 @@ async def get_optional_principal(
                 raise ForbiddenError("Shop membership is no longer active")
             role = TenantRole(membership.role)
 
-    principal = Principal(user=user, session=session_row, tenant_id=tenant_id, role=role)
+    return Principal(user=user, session=session_row, tenant_id=tenant_id, role=role)
+
+
+async def get_optional_principal(
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+) -> AsyncIterator[Principal | None]:
+    """Resolve the caller if a valid token is present; otherwise ``None``.
+
+    Yields rather than returns so the ambient context can be restored after the
+    response is produced.
+    """
+    token = _bearer_token(request)
+    if token is None:
+        yield None
+        return
+
+    principal = await authenticate_access_token(db, settings, token)
+    user, session_row = principal.user, principal.session
+    tenant_id, role = principal.tenant_id, principal.role
 
     context_token = set_context(
         replace(

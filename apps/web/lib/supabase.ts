@@ -53,3 +53,16 @@ export async function getAccessToken(): Promise<string | null> {
 export async function signOutHere(): Promise<void> {
   await getSupabase().auth.signOut({ scope: 'local' });
 }
+
+/**
+ * Call `listener` whenever this tab's access token is replaced, so a
+ * long-lived connection can be handed the new one before the old expires.
+ */
+export function onAccessTokenRefreshed(listener: () => void): () => void {
+  const { data } = getSupabase().auth.onAuthStateChange((event) => {
+    if (event === 'TOKEN_REFRESHED') {
+      listener();
+    }
+  });
+  return () => data.subscription.unsubscribe();
+}

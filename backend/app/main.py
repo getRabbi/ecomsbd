@@ -88,7 +88,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         from app.common.cache import close_cache
+        from app.realtime.broker import close_broker
+        from app.realtime.hub import close_hub
+        from app.realtime.publisher import drain
 
+        await close_hub()
+        await drain()
+        await close_broker()
         await close_cache()
         await dispose_engine()
         log.info("ecomsbd backend stopped")
