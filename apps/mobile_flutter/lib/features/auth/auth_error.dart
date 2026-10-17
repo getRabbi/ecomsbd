@@ -17,6 +17,7 @@ String authErrorMessage(BuildContext context, ApiError error) =>
       'GOOGLE_UNAVAILABLE' => context.tr('autherr.googleUnavailable'),
       'APPLE_UNAVAILABLE' => context.tr('autherr.appleUnavailable'),
       'EMAIL_NOT_VERIFIED' => context.tr('autherr.emailNotVerified'),
+      'CODE_INVALID' => context.tr('autherr.codeInvalid'),
       'EMAIL_ALREADY_REGISTERED' => context.tr(
         'autherr.emailAlreadyRegistered',
       ),

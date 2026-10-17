@@ -6,6 +6,13 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react
 
 import { Icon } from '@/components/icons';
 import { BrandMark, LocaleToggle } from '@/components/ui';
+import {
+  codeFailure,
+  isCodeComplete,
+  MAX_CODE_LENGTH,
+  normalizeCode,
+  RESEND_COOLDOWN_SECONDS,
+} from '@/lib/email-code';
 import { safeNextPath } from '@/lib/nav';
 import { useSession } from '@/lib/session';
 import { getSupabase } from '@/lib/supabase';
@@ -71,8 +78,8 @@ function clearNext(): void {
   }
 }
 
-type Mode = 'signIn' | 'signUp' | 'reset';
-type Busy = null | 'password' | 'google' | 'apple' | 'signUp' | 'reset';
+type Mode = 'signIn' | 'signUp' | 'reset' | 'verify';
+type Busy = null | 'password' | 'google' | 'apple' | 'signUp' | 'reset' | 'verify' | 'resend';
 
 function GoogleMark() {
   return (
@@ -104,6 +111,11 @@ export default function SignInPage() {
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  //: The address a confirmation code was sent to. Held in memory only: the
+  //: code step is reached again by signing in, which needs no stored state.
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [cooldown, setCooldown] = useState(0);
   const oauthFailed = useSyncExternalStore(subscribeToNothing, returnedWithOAuthError, () => false);
   const expired = useSyncExternalStore(subscribeToNothing, arrivedExpired, () => false);
   const shownError = error ?? (oauthFailed && mode === 'signIn' ? t('auth.oauthIncomplete') : null);
@@ -117,10 +129,26 @@ export default function SignInPage() {
     }
   }, [loading, session, router]);
 
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => setCooldown((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
+
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
     setInfo(null);
+  }
+
+  function askForCode(address: string, notice: string, justSent: boolean) {
+    setPendingEmail(address);
+    setCode('');
+    setCooldown(justSent ? RESEND_COOLDOWN_SECONDS : 0);
+    switchMode('verify');
+    setInfo(notice);
   }
 
   async function onSignIn(event: FormEvent) {
@@ -133,7 +161,11 @@ export default function SignInPage() {
       password,
     });
 
-    if (signInError) {
+    if (signInError?.code === 'email_not_confirmed') {
+      // Supabase says this only after the password matched, so it tells the
+      // account's owner, not a stranger probing addresses, what is missing.
+      askForCode(email.trim(), t('auth.notVerifiedYet'), false);
+    } else if (signInError) {
       // Deliberately one message for a wrong password and an unknown email:
       // telling them apart is how an attacker enumerates who has an account.
       setError(t('auth.failed'));
@@ -159,7 +191,68 @@ export default function SignInPage() {
       // other refusal reads the same, existing account or not.
       setError(signUpError.code === 'weak_password' ? signUpError.message : t('auth.signUpFailed'));
     } else if (!data.session) {
-      setInfo(t('auth.confirmEmail'));
+      // The same step whether the address is new or already has an account:
+      // Supabase answers both alike, and so does this page.
+      askForCode(email.trim(), t('auth.codeSent'), true);
+    }
+    setBusy(null);
+  }
+
+  async function onVerifyCode(event: FormEvent) {
+    event.preventDefault();
+    const token = normalizeCode(code);
+    if (!isCodeComplete(token) || !pendingEmail) {
+      return;
+    }
+    setBusy('verify');
+    setError(null);
+    setInfo(null);
+
+    const { error: verifyError } = await getSupabase().auth.verifyOtp({
+      email: pendingEmail,
+      token,
+      type: 'email',
+    });
+
+    if (verifyError) {
+      const failure = codeFailure(verifyError);
+      setError(
+        failure === 'invalid'
+          ? t('auth.codeInvalid')
+          : failure === 'rateLimited'
+            ? t('auth.codeRateLimited')
+            : t('auth.codeFailed'),
+      );
+      setCode('');
+      setBusy(null);
+      return;
+    }
+    // Verified and signed in: the session listener above opens the workspace.
+    setPendingEmail('');
+    setCode('');
+    setBusy(null);
+  }
+
+  async function onResendCode() {
+    if (!pendingEmail || cooldown > 0) {
+      return;
+    }
+    setBusy('resend');
+    setError(null);
+    setInfo(null);
+
+    const { error: resendError } = await getSupabase().auth.resend({
+      type: 'signup',
+      email: pendingEmail,
+      options: { emailRedirectTo: `${window.location.origin}/sign-in` },
+    });
+
+    if (resendError && codeFailure(resendError) === 'rateLimited') {
+      setError(t('auth.codeRateLimited'));
+    } else {
+      // The same answer whether or not a code was due: no account is revealed.
+      setInfo(t('auth.codeResent'));
+      setCooldown(RESEND_COOLDOWN_SECONDS);
     }
     setBusy(null);
   }
@@ -251,7 +344,60 @@ export default function SignInPage() {
         </div>
 
         <div className="auth__form">
-          {mode === 'reset' ? (
+          {mode === 'verify' ? (
+            <>
+              <h1 className="auth__title">{t('auth.codeTitle')}</h1>
+              <p className="auth__subtitle">{t('auth.codeHint', { email: pendingEmail })}</p>
+              <form onSubmit={onVerifyCode}>
+                <label className="field">
+                  <span className="field__label">{t('auth.codeLabel')}</span>
+                  <input
+                    className="input input--code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    required
+                    maxLength={MAX_CODE_LENGTH + 4}
+                    value={code}
+                    onChange={(event) => setCode(normalizeCode(event.target.value))}
+                    aria-describedby="code-help"
+                  />
+                  <span className="field__hint" id="code-help">
+                    {t('auth.codeHelp')}
+                  </span>
+                </label>
+                {shownError ? <p className="formerror" role="alert">{shownError}</p> : null}
+                {info ? <div className="notice notice--good" role="status">{info}</div> : null}
+                <button
+                  type="submit"
+                  className="btn btn--primary btn--block"
+                  disabled={busy !== null || !isCodeComplete(code)}
+                >
+                  {busy === 'verify' ? t('auth.verifying') : t('auth.verifyCode')}
+                </button>
+              </form>
+              <button
+                type="button"
+                className="linkbtn auth__back"
+                onClick={() => void onResendCode()}
+                disabled={busy !== null || cooldown > 0}
+              >
+                {cooldown > 0 ? t('auth.resendCodeIn', { count: cooldown }) : t('auth.resendCode')}
+              </button>
+              <button
+                type="button"
+                className="linkbtn auth__back"
+                onClick={() => {
+                  setPendingEmail('');
+                  setCode('');
+                  switchMode('signUp');
+                }}
+              >
+                ← {t('auth.useAnotherEmail')}
+              </button>
+            </>
+          ) : mode === 'reset' ? (
             <>
               <h1 className="auth__title">{t('auth.resetTitle')}</h1>
               <p className="auth__subtitle">{t('auth.resetHint')}</p>

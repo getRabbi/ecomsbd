@@ -934,6 +934,14 @@ kbd {
   outline-offset: 1px;
 }
 
+/* A one-time code: large, spaced and centred so it is easy to check against the email. */
+.input--code {
+  font-size: 1.375rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
 .input--search {
   min-width: 280px;
 }

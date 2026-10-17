@@ -372,13 +372,19 @@ const Map<String, String> _authEn = <String, String>{
       'Your email address is verified. You can continue to ecomsbd.',
   'auth.verifyButton': 'Verify email',
   'auth.verifyCheckBody':
-      'Check {email} for the confirmation link. Check your spam folder too. '
-      'If it does not arrive, try resending.',
+      'We sent a verification code to {email}. Enter it below to finish '
+      'creating your account. Check your spam folder too.',
+  'auth.codeLabel': 'Verification code',
+  'auth.codeHelp':
+      'It is in the email from ecomsbd (no-reply@ecomsbd.com). Never share '
+      'this code with anyone.',
+  'auth.verifyCodeButton': 'Verify and continue',
   'auth.yourEmailAddress': 'your email address',
-  'auth.resendVerification': 'Resend verification email',
-  'auth.resendIn': 'Resend in {count} seconds',
+  'auth.resendVerification': 'Send a new code',
+  'auth.resendIn': 'Send a new code in {count} seconds',
   'auth.resentNote':
-      'If verification is still pending, a new link will arrive in your inbox.',
+      'If verification is still pending, a new code is on its way to your '
+      'inbox.',
   'auth.continueSetupNote':
       'You can continue setting up your shop while you verify your email.',
   'auth.continueToShop': 'Continue to shop',
@@ -436,13 +442,18 @@ const Map<String, String> _authBn = <String, String>{
       'আপনার ইমেইল ভেরিফাই হয়েছে। এখন ecomsbd-তে চালিয়ে যেতে পারেন।',
   'auth.verifyButton': 'ইমেইল ভেরিফাই করুন',
   'auth.verifyCheckBody':
-      '{email}-এ পাঠানো কনফার্মেশন লিংকটি দেখুন। স্প্যাম ফোল্ডারও দেখে নিন। '
-      'না এলে আবার পাঠাতে পারেন।',
+      '{email}-এ একটি ভেরিফিকেশন কোড পাঠানো হয়েছে। অ্যাকাউন্ট তৈরি শেষ '
+      'করতে কোডটি নিচে দিন। স্প্যাম ফোল্ডারও দেখে নিন।',
+  'auth.codeLabel': 'ভেরিফিকেশন কোড',
+  'auth.codeHelp':
+      'কোডটি ecomsbd-এর ইমেইলে আছে (no-reply@ecomsbd.com)। এই কোড কাউকে '
+      'বলবেন না।',
+  'auth.verifyCodeButton': 'ভেরিফাই করে এগিয়ে যান',
   'auth.yourEmailAddress': 'আপনার ইমেইল',
-  'auth.resendVerification': 'আবার ভেরিফিকেশন ইমেইল পাঠান',
-  'auth.resendIn': '{count} সেকেন্ড পরে আবার পাঠান',
+  'auth.resendVerification': 'নতুন কোড পাঠান',
+  'auth.resendIn': '{count} সেকেন্ড পরে নতুন কোড পাঠান',
   'auth.resentNote':
-      'ভেরিফিকেশন এখনও বাকি থাকলে নতুন একটি লিংক আপনার ইনবক্সে যাবে।',
+      'ভেরিফিকেশন এখনও বাকি থাকলে নতুন কোড আপনার ইনবক্সে যাচ্ছে।',
   'auth.continueSetupNote':
       'ইমেইল ভেরিফাই করার ফাঁকেই শপ সেটআপ চালিয়ে যেতে পারেন।',
   'auth.continueToShop': 'শপে চলুন',
@@ -1391,6 +1402,8 @@ const Map<String, String> _authErrEn = <String, String>{
       'Google sign-in is unavailable right now. Use email or try again later.',
   'autherr.appleUnavailable':
       'Apple sign-in is unavailable on this device. Use Google or email.',
+  'autherr.codeInvalid':
+      'That code is wrong or has expired. Check the latest email, or send a new code.',
   'autherr.emailNotVerified':
       'Verify your email using the link in your inbox, then sign in.',
   'autherr.emailAlreadyRegistered':
@@ -1429,6 +1442,8 @@ const Map<String, String> _authErrBn = <String, String>{
       'Google সাইন ইন এখন কাজ করছে না। ইমেইল দিয়ে করুন বা পরে চেষ্টা করুন।',
   'autherr.appleUnavailable':
       'এই ফোনে Apple সাইন ইন কাজ করবে না। Google বা ইমেইল ব্যবহার করুন।',
+  'autherr.codeInvalid':
+      'কোডটি ভুল বা মেয়াদ শেষ। সর্বশেষ ইমেইলটি দেখুন, অথবা নতুন কোড পাঠান।',
   'autherr.emailNotVerified':
       'ইনবক্সের লিংক দিয়ে ইমেইল ভেরিফাই করে তারপর সাইন ইন করুন।',
   'autherr.emailAlreadyRegistered':

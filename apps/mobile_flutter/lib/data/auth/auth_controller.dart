@@ -446,6 +446,18 @@ class AuthController extends StateNotifier<AuthState> {
   Future<bool> resendVerification(String email) =>
       _authAction(() => _repository.resendVerification(email));
 
+  /// Confirms the pending sign-up with the emailed code. On success the
+  /// seller is signed in and moves on, as after any sign-in.
+  Future<bool> verifyEmailCode(String code) {
+    final email = state.verificationEmail;
+    if (email == null) return Future<bool>.value(false);
+    return _authAction(() async {
+      await _adoptSession(
+        await _repository.verifyEmailCode(email: email, code: code),
+      );
+    });
+  }
+
   Future<bool> verifyEmail(String token) => _authAction(() async {
     await _repository.verifyEmail(token);
     state = state.copyWith(clearVerification: true);
