@@ -80,11 +80,14 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
 
-            // Shrinking is off until a release keystore and a crash-reporting
-            // symbol upload exist; obfuscated stack traces with no mapping file
-            // would make production crashes unreadable.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 shrinks, optimizes and obfuscates the Java/Kotlin layer; Dart is
+            // AOT-compiled separately and is not obfuscated. The Flutter Gradle
+            // plugin adds proguard-android-optimize.txt, its own rules and
+            // proguard-rules.pro (when present); libraries add consumer rules.
+            // The AAB carries the mapping file Play Console uses to deobfuscate
+            // crashes; keep build/app/outputs/mapping/release/ with each release.
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }

@@ -588,7 +588,8 @@ environment secrets; no passwords or aliases are hardcoded in Gradle.
 
 Follow [the exact key generation, local/CI configuration and SHA-1/SHA-256 commands](../apps/mobile_flutter/android/RELEASE_SIGNING.md).
 `key.properties`, `*.jks` and `*.keystore` are ignored globally. No key or password
-has been generated. Minification/resource-shrinking settings remain unchanged.
+has been generated. Release builds are minified with R8 and resource-shrunk;
+see the mapping-file note in RELEASE_SIGNING.md.
 
 ### Apple bundle identifier
 

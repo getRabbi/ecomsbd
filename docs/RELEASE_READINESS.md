@@ -51,7 +51,7 @@ or backup/restore drills.
 | **Why it is required** | Play requires a properly signed upload. Protect and back up the private key; Play App Signing distinguishes the upload key from the app signing key. |
 | **Where it is configured** | Ignored `apps/mobile_flutter/android/key.properties` or `ECOMSBD_RELEASE_*` environment values. See [release signing and both SHA fingerprints](../apps/mobile_flutter/android/RELEASE_SIGNING.md). |
 | **Validation** | `flutter build appbundle --release` produces an artifact whose signer is not `androiddebugkey`. |
-| **Also unblocks** | Minification and resource shrinking, both off today because obfuscated stack traces with no mapping upload are unreadable in production. |
+| **Also unblocks** | Minification and resource shrinking: on since 3.0.6+310. The AAB carries the R8 mapping file, which Play Console uses to deobfuscate stack traces. |
 
 ## 3. `PLAY_SERVICE_ACCOUNT_REQUIRED`
 

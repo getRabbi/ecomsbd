@@ -52,7 +52,9 @@ ignored repository-wide; only the empty example is committed.
 Debug signing is unchanged and needs none of these values. Release APK/AAB tasks
 use only the `release` signing config. Missing configuration/files or the standard
 Android debug key fail the release guard rather than producing an unsigned or
-debug-signed release. Minification/resource-shrinking settings are unchanged.
+debug-signed release. Release builds are minified with R8 and resource-shrunk;
+keep each release's `build/app/outputs/mapping/release/mapping.txt` with its
+artifacts (the AAB also carries it for Play Console).
 
 Cheap configuration checks from `apps/mobile_flutter/android`:
 
