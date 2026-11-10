@@ -48,6 +48,7 @@ from app.api.v1 import (
     rto,
     sync,
     team,
+    telemetry,
     tenants,
     whatsapp_signup,
 )
@@ -101,6 +102,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(rto.router)
 api_router.include_router(insights.router)
 api_router.include_router(team.router)
+api_router.include_router(telemetry.router)
 api_router.include_router(account.account_router)
 api_router.include_router(account.export_router)
 # Platform administration. Authenticated by X-Admin-Token, never by a

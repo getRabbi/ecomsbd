@@ -501,6 +501,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.7.1"
+  futuregrow_telemetry:
+    dependency: "direct main"
+    description:
+      path: "packages/futuregrow_telemetry"
+      relative: true
+    source: path
+    version: "0.1.0"
   glob:
     dependency: transitive
     description:
@@ -598,7 +605,7 @@ packages:
     source: hosted
     version: "2.0.2"
   http:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       name: http
       sha256: "87721a4a50b19c7f1d49001e51409bddc46303966ce89a65af4f4e6004896412"

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'data/telemetry/futuregrow.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -45,7 +46,7 @@ Future<void> main() async {
   startRealtime(container, recovery);
 
   runApp(
-    UncontrolledProviderScope(container: container, child: const EcomsbdApp()),
+    UncontrolledProviderScope(container: container, child: const UsageTelemetryHost(child: EcomsbdApp())),
   );
 }
 

@@ -9,6 +9,9 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  futuregrow_telemetry:
+    path: packages/futuregrow_telemetry
+  http: ^1.6.0
   app_links: ^7.2.1
   url_launcher: ^6.3.2
   flutter:
@@ -90,7 +93,6 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   build_runner: ^2.4.13
   drift_dev: ^2.21.0
-  http: ^1.6.0
 
   # Generates the launcher icons from the sources in assets/icon (configured
   # at the end of this file). Build-time only; nothing from it ships in the app.

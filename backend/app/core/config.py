@@ -216,6 +216,9 @@ class Settings(BaseSettings):
     # Optional in local/test: the rate limiter and cache fall back to an
     # in-process implementation so the app boots with no Redis running.
     redis_url: str | None = None
+    # Disabled until owner-provisioned. Server ingestion credentials never enter mobile builds.
+    futuregrow_base_url: str | None = None
+    futuregrow_server_key: SecretStr | None = None
 
     # ----------------------------------------------------------- realtime ---
     # Invalidation-only push to signed-in web and phone clients (app.realtime).
