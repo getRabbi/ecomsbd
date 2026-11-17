@@ -117,7 +117,7 @@ Still pending, all in the owner's consoles:
   (Google-generated key). Nothing is on Play yet.
 - **Play App Signing fingerprints.** After the upload they are under Setup → App integrity →
   App signing → "App signing key certificate". This key is not the upload key above.
-- **Android Google Sign-In.** Create Android OAuth clients for `com.smply.app` in Google Cloud
+- **Android Google Sign-In.** Create Android OAuth clients for `com.ecomsbd.app` in Google Cloud
   project **939255107253**, the project of web client `939255107253-vu8012mb…`: one with the
   Play app-signing SHA-1 and one with the upload SHA-1.
   - It is the right project: Supabase's `/auth/v1/authorize?provider=google` redirects with

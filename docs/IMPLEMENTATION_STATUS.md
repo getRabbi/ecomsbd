@@ -1,5 +1,38 @@
 # Implementation status
 
+**Current state — updated 2026-11-17.** V3.1–V3.8, chat-to-order, the web
+workspace and Free Launch Mode are merged on `main`. V4 is being built from
+[`docs/V4_MASTER_BUILD_SPEC.md`](V4_MASTER_BUILD_SPEC.md); per-work-package
+progress is in [`docs/build/PROGRESS.md`](build/PROGRESS.md).
+
+| | |
+|---|---|
+| **Phases A–F** | COMPLETE. Phase C (Steadfast) is code complete; the live credential test is still pending. History below. |
+| **V3.1 Integrations Hub** | Merged (PR #1) |
+| **V3.2 Advanced two-way sync** | Merged (PR #2) |
+| **V3.3 Messaging & Campaigns** | Merged (PR #4, `a33001`) — `docs/V3_3_MESSAGING_CAMPAIGNS.md` |
+| **V3.4 Automation Pro** | Merged (PR #6, `a34001`) — `docs/V3_4_AUTOMATION_PRO.md` |
+| **V3.5 Inventory + Procurement** | Merged (PR #7, `a35001`) — `docs/V3_5_INVENTORY_PROCUREMENT.md` |
+| **V3.6 Forecasting & Advanced Intelligence** | Merged (PR #9, `a36001`) — `docs/V3_6_FORECASTING.md` |
+| **V3.7 External Risk + Network Intelligence** | Merged (PR #11, `a37001`) — `docs/V3_7_RISK_NETWORK.md` |
+| **V3.8 Developer Platform** | Merged (PR #12, `a38001`) — `docs/PUBLIC_API.md`, `sdk/` |
+| **Chat-to-order (Messenger + WhatsApp) V1** | Merged (PR #28, `a39001`); WhatsApp Embedded Signup (PR #30) — `docs/CHAT_TO_ORDER.md`, `docs/WHATSAPP_EMBEDDED_SIGNUP.md` |
+| **Web workspace (`apps/web`, Next.js)** | W1 desktop shell + launch gate (PR #32), W2–W5 operations/money/admin parity (PR #33), Cloudflare Workers build (PR #34), public site and store pages (PRs #29, #35, #36), cross-client parity (PR #37) — `docs/ECOMSBD_WEB_DESKTOP_MASTER_SPEC.md` |
+| **Realtime v1, email code verification** | Merged (PRs #38, #39) |
+| **Free Launch Mode** | Merged (PR #20). Source defaults are off; production opts in with `FREE_LAUNCH_MODE=true`, `BILLING_ENABLED=false` — `docs/FREE_LAUNCH_MODE.md` |
+| **Mobile** | `3.0.6+310`, Android package `com.ecomsbd.app`, R8 + resource shrinking on (PR #41); Coming Soon release gating (PR #31) |
+| **Alembic head (repository)** | `a39001`, single head |
+| **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
+| **Branch** | `main` |
+| **Tests (measured 2026-11-17, `v4/phase-0` = `main` + docs)** | Backend (SQLite) 1805 passed / 5 skipped; ruff, ruff format and mypy strict clean (316 files). Flutter 541 tests: 540 passed in the full run; the timing-based `commerce_performance_test.dart` paging test failed under parallel CPU load and passed when rerun alone. Web unit tests 66 passed. |
+
+The PostgreSQL suite was not re-run for this count; PostgreSQL evidence comes from
+`main` CI and the phase-end runs recorded in `docs/build/PROGRESS.md`.
+
+---
+
+## History — Phases A–F (as of 2026-09-11)
+
 **Phase C (Steadfast courier integration) — CODE COMPLETE; external
 verification pending.** Last updated 2026-09-11.
 
@@ -408,7 +441,7 @@ inventing any of it.
 
 | Item | Blocked on | Consequence today |
 |---|---|---|
-| **Android `applicationId`** | **Resolved:** owner permanently selected `com.smply.app`. | Gradle, activity package/path and production `PLAY_PACKAGE_NAME` example match. Google/Firebase/Play account configuration remains external; backend placeholder-rejection tests stay intact. |
+| **Android `applicationId`** | **Resolved:** production package `com.ecomsbd.app` (history: `com.smply.app` before `3.0.3+303`, see `docs/ANDROID_PACKAGE_MIGRATION.md`). | Gradle, activity package/path and production `PLAY_PACKAGE_NAME` example match. Google/Firebase/Play account configuration remains external; backend placeholder-rejection tests stay intact. |
 | Release signing keystore | Operator supplies the private ecomsbd key/config | Release signing is wired and fails closed without the key; debug builds remain unchanged. See [signing instructions](../apps/mobile_flutter/android/RELEASE_SIGNING.md). |
 | **Steadfast API** | A merchant account. The documentation blocker is **resolved** — V1 was supplied 2026-09-11 and implemented. | Everything is built and tested against contract fixtures. `STEADFAST_LIVE_CREDENTIAL_TEST_REQUIRED`: no real key has authenticated, no real parcel has been created, and four endpoints' response schemas are inferred rather than observed. |
 | **Steadfast webhook** | A webhook contract from Steadfast — the V1 document has no webhook section at all | `STEADFAST_WEBHOOK_CONTRACT_REQUIRED`. The receiver, replay protection, verifier/parser ports and queue are built and tested; the verifier refuses everything, and polling is the complete V1 sync path. |

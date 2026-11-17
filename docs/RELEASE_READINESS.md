@@ -11,7 +11,7 @@ and Facebook is absent.
 Supabase's live settings confirm Email and Google enabled. Google authorization
 redirects to Google with the configured client and the correct Supabase callback.
 Android shows Email and Google; the prepared Apple implementation is retained for
-later work. The package remains `com.smply.app`.
+later work. The package remains `com.ecomsbd.app`.
 
 The production secret group already supplies both Northflank services with the
 database, Redis, Supabase, R2 and backend-only FCM values. Credentials and Android
@@ -35,8 +35,8 @@ or backup/restore drills.
 
 | | |
 |---|---|
-| **Status** | **RESOLVED — permanent owner decision: `com.smply.app`.** |
-| **Implemented** | Gradle `applicationId` and namespace plus the `MainActivity` package/path all use `com.smply.app`. The production example's `PLAY_PACKAGE_NAME` matches; no provider account has been configured. |
+| **Status** | **RESOLVED — production package: `com.ecomsbd.app`.** History: builds before `3.0.3+303` used `com.smply.app` (see `docs/ANDROID_PACKAGE_MIGRATION.md`). |
+| **Implemented** | Gradle `applicationId` and namespace plus the `MainActivity` package/path all use `com.ecomsbd.app`. The production example's `PLAY_PACKAGE_NAME` matches; no provider account has been configured. |
 | **Why it is required** | Play rejects any id under `com.example`. More importantly the id is **permanent once published**: changing it later means shipping a different app and losing every install, review and subscription. Play Billing verification is bound to the package name (section 90), so it must be settled *before* billing is configured, not after. |
 | **Where it is configured** | `apps/mobile_flutter/android/app/build.gradle.kts` — `namespace` and `defaultConfig.applicationId`; the `MainActivity` package path; `PLAY_PACKAGE_NAME` in the backend environment. |
 | **Validation** | No scaffold package references remain in Android source/config. Future Play/Google/Firebase registrations must use the final ID; live backend provider health still depends on its deployed environment. |
@@ -172,7 +172,7 @@ secrets. Verify Redis free coverage and API/worker connectivity with the current
 
 Configured: service-account parsing and scoped OAuth authentication passed.
 The FCM HTTP v1 transport handles permanent token errors and retryable provider
-failures. Android Firebase matches `com.smply.app`; initialization, permissions,
+failures. Android Firebase matches `com.ecomsbd.app`; initialization, permissions,
 and authenticated token registration are wired. No live notification was sent.
 
 ## 8. Cloudflare R2

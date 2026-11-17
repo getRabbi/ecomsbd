@@ -455,9 +455,12 @@ Do not run this against real seller data until Phase F hardening is complete.
 
 ## Open decisions
 
-**Android package ID resolved:** `com.smply.app` is the permanent owner-selected
+**Android package ID resolved:** `com.ecomsbd.app` is the production
 `applicationId`, namespace and activity package. Future Android provider/Play
 registrations must use that ID.
+
+> History: builds before `3.0.3+303` used `com.smply.app`. See
+> [the package migration](docs/ANDROID_PACKAGE_MIGRATION.md).
 
 **`RELEASE_SIGNING_REQUIRED`** — release signing is wired to ignored local config
 or environment secrets and fails closed until the private keystore is supplied.
