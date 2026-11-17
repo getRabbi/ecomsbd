@@ -53,6 +53,8 @@ class FlagKey(StrEnum):
     COURIER_RECOMMENDATION_ENABLED = "courier_recommendation_enabled"
     RECONCILIATION_AUTO_MATCH = "reconciliation_auto_match"
     RECONCILIATION_SHADOW_MODE = "reconciliation_shadow_mode"
+    #: V4 WP0.2: server-side funnel events (``product_events``).
+    PRODUCT_EVENTS_ENABLED = "product_events_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -81,6 +83,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.COURIER_RECOMMENDATION_ENABLED: False,
     FlagKey.RECONCILIATION_AUTO_MATCH: False,
     FlagKey.RECONCILIATION_SHADOW_MODE: True,
+    FlagKey.PRODUCT_EVENTS_ENABLED: False,
 }
 
 

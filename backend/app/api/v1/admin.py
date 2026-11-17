@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Query, status
@@ -37,6 +38,8 @@ from app.admin.service import AdminService
 from app.api.deps import ProviderRegistryDep, SettingsDep, get_hasher, get_vault
 from app.api.v1.admin_schemas import (
     AdminIdentityResponse,
+    FunnelResponse,
+    FunnelStepResponse,
     OpsCountsResponse,
     ProviderHealthResponse,
     RepairActionResponse,
@@ -52,7 +55,9 @@ from app.api.v1.admin_schemas import (
 from app.billing.providers.registry import PROVIDER_FLAGS
 from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.provider_health import ProviderHealthService
+from app.core.errors import ValidationError
 from app.db.session import system_session
+from app.product_events.service import ProductEventService
 
 router = APIRouter(prefix="/admin", tags=["admin"], include_in_schema=False)
 
@@ -194,6 +199,33 @@ async def reveal_phone(
 async def ops_counts(service: AdminServiceDep) -> OpsCountsResponse:
     counts = await service.ops_counts()
     return OpsCountsResponse(**counts.as_dict())
+
+
+_FUNNEL_MAX_DAYS = 366
+
+
+@router.get(
+    "/ops/funnel",
+    response_model=FunnelResponse,
+    response_model_by_alias=True,
+    summary="Product funnel",
+)
+async def product_funnel(
+    admin: CurrentAdmin,
+    db: AdminDb,
+    from_date: Annotated[date, Query(alias="from")],
+    to_date: Annotated[date, Query(alias="to")],
+) -> FunnelResponse:
+    """Distinct shops that reached each funnel step, Asia/Dhaka days ``[from, to]``."""
+    admin.require(AdminPermission.OPS_READ)
+    if to_date < from_date or (to_date - from_date).days >= _FUNNEL_MAX_DAYS:
+        raise ValidationError("from must be on or before to, at most 366 days apart")
+    steps = await ProductEventService(db).funnel(start=from_date, end=to_date)
+    return FunnelResponse(
+        from_date=from_date,
+        to_date=to_date,
+        steps=[FunnelStepResponse(name=step.name, shops=step.shops) for step in steps],
+    )
 
 
 @router.get("/ops/webhooks", response_model=list[dict], summary="Failed billing webhooks")

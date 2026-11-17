@@ -9,7 +9,7 @@ Every response here is operator-facing. Two rules:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,6 +48,17 @@ class TenantSummaryResponse(BaseModel):
     #: ``*******78``. The console never lists a dialable number.
     owner_masked_phone: str | None
     order_count: int
+
+
+class FunnelStepResponse(BaseModel):
+    name: str
+    shops: int
+
+
+class FunnelResponse(BaseModel):
+    from_date: date = Field(serialization_alias="from")
+    to_date: date = Field(serialization_alias="to")
+    steps: list[FunnelStepResponse]
 
 
 class OpsCountsResponse(BaseModel):
