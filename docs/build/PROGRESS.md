@@ -2,18 +2,16 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.5 — Invoice + shipping label   Step: verification only — code complete. Re-run the full backend suite and `flutter test --exclude-tags perf` (the combined run was stopped by the machine for low memory on 2026-11-18), then mark DONE and start WP0.6.
-Next-session notes: WP0.6 (fraud ratio) — `docs/providers/` has no bdcourier contract → provider-independent parts (normalised `courier_history`, chips on order card / customer page, < 3 parcels = "kom data", automation condition `external_success_bps`) then `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED`. Existing port: `app/risk_providers/contract.py`; conditions: `app/automation/schemas.py` + `facts.py` (`external_data_state` pattern).
+WP: WP0.6 — Fraud ratio adapter (external risk)   Step: slice 1 (plan items 1–6).
+Next-session notes: operator rule (2026-11-18): never re-run the full suites; run only the tests the change touches (see Decisions). `docs/providers/` has no BD Courier contract → provider-independent parts, then `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED`.
 Plan:
-1. Flag `order_documents_enabled` (default off) gates the three endpoints (`FEATURE_DISABLED`).
-2. `app/documents/code128.py`: pure Code128-B → SVG; tests: table invariants (107 symbols, 11 modules, even bar sum, unique), hand-derived vectors from the ISO/IEC 15417 value table, checksum, refusal of non-printable ASCII.
-3. Fonts: copy NotoSansBengali 400/700 (OFL) from the Flutter assets into `app/documents/fonts/` + OFL notice; package-data; one `@font-face` data URI per HTML.
-4. `app/documents/render.py`: escape every field; invoice (A4: lines, delivery charge, discount, total, COD badge) and labels (`4x6`, `3x4`, `a4-8up`: shop name + phone, customer, phone full unless `mask_phone`, address, large COD, courier, tracking/order-number barcode, item summary, order number, date); page break per document.
-5. `app/documents/service.py`: tenant-scoped load (items, latest consignment, customer phone via vault, shop pickup phone); one audit `documents.printed` per request (kind, size, count, masked — no phones).
-6. `app/api/v1/documents.py`: `GET /v1/orders/{id}/documents/invoice`, `GET .../label?size=&mask_phone=`, `POST /v1/orders/documents/bulk` (≤ 100 ids); `order.view`; `text/html; charset=utf-8`, `Cache-Control: no-store`; other shop's order → 404.
-7. Web: order detail "Print invoice" / "Print label"; orders table selection → bulk print (fetch HTML with the session token, open, print).
-8. Mobile: `printing` package; order detail print actions → `Printing.layoutPdf` + `Printing.convertHtml`; widget test at 360×800 with the printer stubbed.
-9. Tests; IMPLEMENTATION_STATUS; full backend + Flutter + web checks; push.
+1. `app/risk_providers/contract.py`: `CourierHistory` (`provider_counts[{courier, delivered, cancelled, total}]`, `aggregate`, `as_of`) on `ProviderResult`; `normalize_courier_history` (known couriers only, bounded ints, delivered + cancelled ≤ total, aggregate recomputed from rows when absent).
+2. `external_risk_lookups.courier_history` JSON column (a40001 add_column, portable) written by the service; exposed in the existing external-risk read API.
+3. Sample floor: < 3 parcels → state `INSUFFICIENT_DATA` ("kom data"), never a ratio; `success_bps` = delivered × 10000 / total otherwise.
+4. Automation condition `external_success_bps` (customer, int, gte/lte) from the latest valid lookup; `None` under the floor.
+5. Chip text helper ("Steadfast 15/17 · Pathao 8/9"): web `lib/risk.ts` + Flutter, shown on the order card and customer page; quick-order sheet waits for WP1.5.
+6. Tests (contract normalisation, floor, condition, API shape, chips EN + BN); targeted runs only.
+7. Ledger `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED` + operator action (supply BD Courier API docs → `docs/providers/bdcourier/CONTRACT.md`).
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -22,7 +20,7 @@ Plan:
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
 | WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
 | WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
-| WP0.5 | PARTIAL: full backend + Flutter suites not re-run (stopped for low memory) | see log | backend: tests/test_documents.py 22 passed, ruff + mypy clean; Flutter: analyze clean on changed files, format clean, delivery_rules (9) + order_print_sheet (7) tests green; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 added |
+| WP0.5 | DONE | 495a35c | targeted: backend test_documents + test_orders + test_delivery_rules + test_platform_primitives 143 passed, ruff + mypy clean; Flutter order_print_sheet + commerce_screens + delivery_rules + chat_orders_inbox 41 passed, analyze clean on changed files; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 |
 | WP0.6 | TODO | | | |
 | WP0.7 | TODO | | | |
 | WP1.1 | TODO | | | |
@@ -66,6 +64,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 operator: do not re-run the full backend / Flutter suites (credit cost); run only the tests the change touches, plus ruff/format/mypy, `flutter analyze` on changed files and the web checks. Overrides §1.5 item 2 / §1.6 loop step 4 "full suite once per WP end".
 - 2026-11-18 WP0.5: web prints through a hidden iframe (`srcdoc`, sandbox `allow-modals allow-same-origin`, no scripts) instead of a new window, so no pop-up blocker is involved; `fetchHtml` goes through the existing `request` (new `responseType: 'html'`) so every API call still uses the one authenticated `fetch(buildUrl(...))` path the parity test guards.
 - 2026-11-18 WP0.5: mobile wraps `printing` behind `DocumentPrinter` (`documentPrinterProvider`), so widget tests stub the OS print sheet; `ApiClient.getText/postText` fetch HTML as plain text and still translate JSON error bodies. The print action is hidden for an order that exists only on the phone (not synced, no server id to render).
 - 2026-11-18 WP0.5: "mask on label" is a per-print choice (`mask_phone` query/body flag, default false = full phone), not a stored setting; clients may remember it locally.
@@ -110,6 +109,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.5 DONE (targeted tests per operator rule) 495a35c
 - 2026-11-18 WP0.5 web + mobile printing committed; full suites stopped by the machine for low memory — re-run pending
 - 2026-11-18 WP0.5 slice 1 (backend documents) d99556b; stopped at usage limit — web/mobile print next
 - 2026-11-18 WP0.4 delivery rules + zones + COD (backend, mobile, web) aaa77bd
