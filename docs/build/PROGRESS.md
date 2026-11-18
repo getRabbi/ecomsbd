@@ -2,7 +2,7 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.5 — Invoice + shipping label   Step: slice 1 (backend, plan items 1–6).
+WP: WP0.5 — Invoice + shipping label   Step: slice 2 — plan items 7–9 (web print buttons + bulk, mobile `printing`, final checks). Slice 1 (backend, items 1–6) done d99556b; full backend suite not yet re-run after slice 1 (targeted tests green).
 Next-session notes: operator asked (2026-11-18) to keep going WP by WP; ledger updated after every WP. Jinja2 is not a dependency → string templates with `html.escape`.
 Plan:
 1. Flag `order_documents_enabled` (default off) gates the three endpoints (`FEATURE_DISABLED`).
@@ -22,7 +22,7 @@ Plan:
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
 | WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
 | WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
-| WP0.5 | TODO | | | |
+| WP0.5 | IN_PROGRESS | d99556b | slice 1: tests/test_documents.py 22 passed, ruff + mypy clean | web + mobile print next; flag `order_documents_enabled` default off |
 | WP0.6 | TODO | | | |
 | WP0.7 | TODO | | | |
 | WP1.1 | TODO | | | |
@@ -66,6 +66,10 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.5: "mask on label" is a per-print choice (`mask_phone` query/body flag, default false = full phone), not a stored setting; clients may remember it locally.
+- 2026-11-18 WP0.5: Jinja2 is not a dependency, so documents are string templates with `html.escape` on every field. Noto Sans Bengali 400/700 copied from the Flutter assets into `app/documents/fonts/` with an OFL.txt (copyright read from the font's name table); embedded once per HTML.
+- 2026-11-18 WP0.5: Code128-B test vectors are hand-derived from the ISO/IEC 15417 value table and backed by table invariants (107 unique symbols, 11 modules, even bar sums, stop 13), not an external sample file.
+- 2026-11-18 WP0.5: a print writes one audit row `privacy.documents_printed` (kind, size, count, full/masked) per request instead of one phone reveal per customer; no phone in the row.
 - 2026-11-18 WP0.4: the zone resolver reuses the parser's 64-district gazetteer (`app/orders/parser/districts.py`, EN + BN) and adds `app/orders/data/zones.yaml` (Dhaka city areas, Dhaka suburb areas; package-data). Dhaka, Gazipur and Narayanganj hold both city and suburbs, so without a listed area they resolve to `null`; any other district is `OUTSIDE_DHAKA` and beats a Dhaka area name ("Mirpur, Kushtia"). A listed city area alone ("Uttara") is `INSIDE_DHAKA`.
 - 2026-11-18 WP0.4: zone charges default to 0 = not set, so nothing is added to a COD until the seller enters charges; GET returns the defaults with `configured: false` and never writes a row. Flag `delivery_rules_enabled` (default off) gates both the API (`FEATURE_DISABLED`, 403) and the chat-draft COD step.
 - 2026-11-18 WP0.4: chat drafts mark a mismatch with the existing uncertain key `amount` (the clients already highlight it) rather than a new `cod_amount` key, plus warning `COD_MISMATCH`; an address whose zone is unknown adds no charge and warns `ZONE_UNKNOWN`. A stated amount is never replaced. Drafts carry no discount, so the draft calculation uses 0; `calculate_cod` takes a discount for order-side callers.
@@ -104,6 +108,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.5 slice 1 (backend documents) d99556b; stopped at usage limit — web/mobile print next
 - 2026-11-18 WP0.4 delivery rules + zones + COD (backend, mobile, web) aaa77bd
 - 2026-11-18 operator correction to WP0.3 recorded ef3dc03; WP0.3 slice 2 (LLM path, holdout, eval) c97712c — WP0.3 DONE, G0.3 waiting on operator; checkpoint (context)
 - 2026-11-18 operator decisions 4f5b82e; WP0.3 slice 1 deterministic + corpus 85463f8; checkpoint (context)
