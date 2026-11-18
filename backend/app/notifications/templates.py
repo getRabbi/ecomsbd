@@ -397,6 +397,52 @@ def _device_needs_attention(p: Params, locale: str) -> tuple[str, str]:
     )
 
 
+#: (en, bn) per reason. No customer name, phone or amount: a push is shown on
+#: a lock screen.
+_CONFIRMATION_REASONS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
+    "REVIEW_NEEDED": (
+        (
+            "An order needs your confirmation",
+            "We could not confirm this order with the customer. Call them, then mark it "
+            "confirmed or cancelled.",
+        ),
+        (
+            "একটি অর্ডার আপনার নিশ্চিত করা দরকার",
+            "কাস্টমারের সাথে অর্ডারটি নিশ্চিত করা যায়নি। কাস্টমারকে কল করে অর্ডারটি নিশ্চিত বা বাতিল করুন।",
+        ),
+    ),
+    "ORDER_CHANGED": (
+        (
+            "Customer answered, but the order changed",
+            "The order was edited after we asked the customer, so their answer was not "
+            "applied. Check the order and confirm it yourself.",
+        ),
+        (
+            "কাস্টমার উত্তর দিয়েছেন, কিন্তু অর্ডার বদলেছে",
+            "কাস্টমারকে জিজ্ঞেস করার পর অর্ডারটি এডিট হয়েছে, তাই উত্তরটি প্রয়োগ করা হয়নি। "
+            "অর্ডারটি দেখে নিজে নিশ্চিত করুন।",
+        ),
+    ),
+    "ORDER_NOT_DRAFT": (
+        (
+            "Customer answered after the order moved on",
+            "The order was already confirmed or cancelled when the customer answered, so "
+            "their answer was not applied. Check the order.",
+        ),
+        (
+            "অর্ডার এগিয়ে যাওয়ার পর কাস্টমার উত্তর দিয়েছেন",
+            "কাস্টমার উত্তর দেওয়ার আগেই অর্ডারটি নিশ্চিত বা বাতিল হয়ে গিয়েছিল, তাই "
+            "উত্তরটি প্রয়োগ করা হয়নি। অর্ডারটি দেখে নিন।",
+        ),
+    ),
+}
+
+
+def _confirmation_needs_attention(p: Params, locale: str) -> tuple[str, str]:
+    en, bn = _CONFIRMATION_REASONS.get(str(p.get("reason")), _CONFIRMATION_REASONS["REVIEW_NEEDED"])
+    return bn if locale == "bn" else en
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
@@ -405,6 +451,7 @@ _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.AUTOMATION: _automation,
     NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
     NotificationKind.DEVICE_NEEDS_ATTENTION: _device_needs_attention,
+    NotificationKind.CONFIRMATION_NEEDS_ATTENTION: _confirmation_needs_attention,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

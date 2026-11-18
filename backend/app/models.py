@@ -14,6 +14,7 @@ import app.ai_usage.models
 import app.analytics.network_models
 import app.automation.models
 import app.chat_orders.models
+import app.confirmations.models
 import app.delivery_rules.models
 import app.device_links.models
 import app.forecasting.models

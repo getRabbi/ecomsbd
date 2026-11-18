@@ -124,6 +124,14 @@ class OutboxTopic(StrEnum):
     # draft. Handled in app.intake.jobs; Phase 4 (Autopilot) builds on it.
     INTAKE_DRAFT_READY = "intake.draft_ready"
 
+    # V4 customer confirmation (WP2.1). Handled in app.confirmations.jobs;
+    # WP2.4 makes them automation triggers.
+    CONFIRMATION_CONFIRMED = "confirmation.confirmed"
+    CONFIRMATION_CANCELLED = "confirmation.cancelled"
+    CONFIRMATION_NO_ANSWER = "confirmation.no_answer"
+    CONFIRMATION_CALLBACK_REQUESTED = "confirmation.callback_requested"
+    CONFIRMATION_REVIEW_NEEDED = "confirmation.review_needed"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

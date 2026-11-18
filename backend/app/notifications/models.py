@@ -131,6 +131,9 @@ class NotificationKind(StrEnum):
     CHAT_ORDER_READY = "CHAT_ORDER_READY"
     #: A linked phone or extension sent no heartbeat for a day (V4 WP1.3).
     DEVICE_NEEDS_ATTENTION = "DEVICE_NEEDS_ATTENTION"
+    #: A customer confirmation needs the seller: review it, or the customer's
+    #: answer could not move the order because it changed (V4 WP2.1).
+    CONFIRMATION_NEEDS_ATTENTION = "CONFIRMATION_NEEDS_ATTENTION"
 
 
 class NotificationCategory(StrEnum):

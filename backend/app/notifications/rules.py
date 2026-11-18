@@ -105,6 +105,14 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=10**9,
             route="integrations",
         ),
+        NotificationKind.CONFIRMATION_NEEDS_ATTENTION: AlertRule(
+            category=NotificationCategory.ORDERS,
+            severity=Severity.ACTION,
+            # One per confirmation and reason (app.confirmations.jobs).
+            cooldown=timedelta(days=3650),
+            worsen_min_delta=10**9,
+            route="orders",
+        ),
         NotificationKind.FOLLOW_UP_DUE: AlertRule(
             category=NotificationCategory.CRM,
             severity=Severity.ACTION,

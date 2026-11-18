@@ -48,6 +48,8 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "order_items": T.ORDERS,
     "external_orders": T.ORDERS,
     "chat_order_drafts": T.ORDERS,
+    "order_confirmations": T.ORDERS,
+    "confirmation_attempts": T.ORDERS,
     # customers
     "customers": T.CUSTOMERS,
     "customer_addresses": T.CUSTOMERS,
@@ -190,6 +192,8 @@ SILENT_TABLES: frozenset[str] = frozenset(
         "chat_messages",
         "chat_identities",
         "chat_attention_items",
+        # V4 SMS confirm-link tokens (hashed); the confirmation row is mapped
+        "confirmation_links",
         # messaging and campaigns
         "messaging_channels",
         "messaging_templates",

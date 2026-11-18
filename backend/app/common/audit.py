@@ -201,6 +201,10 @@ class AuditAction(StrEnum):
     CHAT_ORDER_CONFIRMED = "chat_order.confirmed"
     CHAT_ORDER_IGNORED = "chat_order.ignored"
 
+    # V4 customer confirmation (WP2.1)
+    CONFIRMATION_REQUESTED = "confirmation.requested"
+    CONFIRMATION_STATE_CHANGED = "confirmation.state_changed"
+
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"
     PURCHASE_ORDER_SAVED = "procurement.po_saved"

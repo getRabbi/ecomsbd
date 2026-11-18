@@ -61,6 +61,8 @@ class FlagKey(StrEnum):
     ORDER_DOCUMENTS_ENABLED = "order_documents_enabled"
     #: V4 WP1.1+: linked phones capture orders (DEVICE connections, ingest keys).
     INTAKE_DEVICE_ENABLED = "intake_device_enabled"
+    #: V4 WP2.1+: customer confirmation of orders (``order_confirmations``).
+    CONFIRMATION_ENGINE_ENABLED = "confirmation_engine_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -93,6 +95,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.DELIVERY_RULES_ENABLED: False,
     FlagKey.ORDER_DOCUMENTS_ENABLED: False,
     FlagKey.INTAKE_DEVICE_ENABLED: False,
+    FlagKey.CONFIRMATION_ENGINE_ENABLED: False,
 }
 
 
