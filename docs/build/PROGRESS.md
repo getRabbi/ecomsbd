@@ -2,7 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.3 — LLM order parser (`EnhancedOrderParser`)   Step: slice 1 (deterministic fixes + corpus)
+WP: WP0.3 — LLM order parser (`EnhancedOrderParser`)   Step: slice 2 — plan items 3–9 (AiParseClient, schema, merge, ai_usage, service, API, config, eval --live, docs). Slice 1 (items 1–2) done.
+Next-session notes: `tests/test_parser.py::...test_the_enhanced_parser_refuses_rather_than_pretending` asserts the old stub raises — replace it with the new boundary test (no client → deterministic + `AI_PARSE_UNAVAILABLE`); `eval.py` `--live` currently exits 2 until `enhanced.py`/`ai_client.py` exist; add the recorded-LLM G0.3 test to `tests/test_parse_corpus.py` (FakeAiParseClient.for_case, `llm_error`).
 Plan:
 1. Deterministic: `label-`/`label ` separators (`name-`, `address-`, `number`), district gazetteer (64, EN+BN) so a lone district line is an address (MEDIUM), one-line messages split into segments; `district`/`thana` on `ParsedOrder` + `ParseResponse` (optional).
 2. Corpus `tests/fixtures/parse_corpus/*.yaml`: 5 seed + 45 cases, each with expected fields and a recorded LLM response; deterministic run always, LLM path with a fake client; G0.3 ≥ 90% on phone/address/items.
@@ -19,7 +20,7 @@ Plan:
 |---|---|---|---|---|
 | WP0.1 | DONE | 90edda4 | backend 1805 passed/5 skipped, ruff+format+mypy clean; Flutter 541 (perf test flaky under load, green alone); web 66 | docs only: no flag/env/migration needed |
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
-| WP0.3 | IN_PROGRESS | | | |
+| WP0.3 | IN_PROGRESS | 85463f8 | slice 1: corpus 50 cases, deterministic 95.8% gated (phones 50/50, address 47/50, items 41/44); parser+chat-order+order tests green | slice 2 (LLM path) next |
 | WP0.4 | TODO | | | |
 | WP0.5 | TODO | | | |
 | WP0.6 | TODO | | | |
@@ -65,6 +66,11 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 
 ## Decisions made during build (spec was silent)
 - 2026-11-18 operator: `test/performance/*` tagged `@Tags(['perf'])` (declared in `apps/mobile_flutter/dart_test.yaml`); CI runs `flutter test --exclude-tags perf` then `flutter test --tags perf --concurrency=1`. Budgets unchanged. `codemagic.yaml` runs no `flutter test`, so unchanged.
+- 2026-11-18 WP0.3: required fields for "call the LLM" = phone, address, items (what a booking needs); name is optional, so a missing name alone never costs a model call.
+- 2026-11-18 WP0.3: a lone district line is an address at LOW (0.25) with a warning, so the seller completes it and an LLM answer may replace it; district + area is MEDIUM. Districts match on word boundaries (NFC, nukta variants).
+- 2026-11-18 WP0.3: a price on a product line becomes `unit_price_paisa` only when the quantity is 1 (case 4); with quantity > 1 it is ambiguous and left empty.
+- 2026-11-18 WP0.3: corpus `llm` blocks are authored fixtures in the exact tool schema, not live captures — said in the corpus header; live accuracy is the operator's `--live` run.
+- 2026-11-18 WP0.3: short address hints (`rd`, `po`, ≤ 3 chars) now match whole words only — "order" and "Polash" were read as addresses (pre-existing bug found by the corpus).
 - 2026-11-18 operator: `test_tenant_isolation` alone-run failure fixed at the root: the model registry `app/models.py` (imported by conftest) was missing `app.forecasting.models` and `app.procurement.models`; both added. No test changed.
 - 2026-11-17 setup: local `main` was 44 commits behind `origin/main`; fast-forwarded it (no local commits lost) before adding the spec, so phase branches start from current code.
 - 2026-11-17 setup: the ledger is committed on `v4/phase-0`, not `main`, so `main` only carries the setup commit.
@@ -80,6 +86,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 operator decisions 4f5b82e; WP0.3 slice 1 deterministic + corpus 85463f8; checkpoint (context)
 - 2026-11-18 WP0.2 done: emits 0279a22, Flutter Sentry b64ab8d, realtime silent table 58144bd; checkpoint (context)
 - 2026-11-17 WP0.2 slice 1: product_events + a40001 + funnel endpoint 390b18b; checkpoint (context)
 - 2026-11-17 WP0.1 package id + IMPLEMENTATION_STATUS top + ledger 90edda4
