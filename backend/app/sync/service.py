@@ -34,6 +34,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.confirmations.service import start_for_new_order
 from app.core.clock import ensure_utc
 from app.core.context import current_context
 from app.core.errors import AppError, ErrorCode, ValidationError
@@ -326,6 +327,15 @@ class SyncService:
                 await chat_orders.adopt_offline_order(
                     self._db, draft, order, current_context().user_id
                 )
+            # The quick-order sheet queued "Confirm & call" / "Already confirmed
+            # in chat" with the create (V4 WP2.1): one mutation, one transaction.
+            await start_for_new_order(
+                self._db,
+                self._orders,
+                order,
+                body.get("confirmation"),
+                actor_id=current_context().user_id,
+            )
             return MutationOutcome(
                 mutation_id=entity_id,
                 status=MutationStatus.APPLIED,

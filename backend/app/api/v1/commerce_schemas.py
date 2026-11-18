@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -325,6 +325,10 @@ class OrderCreatePayload(BaseModel):
     channel: OrderChannel = OrderChannel.MANUAL
     #: Device-minted id. Makes an offline create replay-safe.
     client_id: uuid.UUID | None = None
+    #: V4 WP2.1: start a customer confirmation with the order (``REQUEST``), or
+    #: record that the customer already confirmed in the chat (``SELLER_CHAT``).
+    #: Ignored while ``confirmation_engine_enabled`` is off.
+    confirmation: Literal["REQUEST", "SELLER_CHAT"] | None = None
 
     @field_validator("channel", mode="before")
     @classmethod

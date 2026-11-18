@@ -39,6 +39,7 @@ from app.api.v1.commerce_schemas import (
 )
 from app.common.audit import AuditAction, record_audit
 from app.common.pagination import Page, decode_cursor
+from app.confirmations.service import start_for_new_order
 from app.consignments.models import Consignment
 from app.customers.service import CustomerService
 from app.orders.duplicates import DuplicateCheck
@@ -218,6 +219,7 @@ async def create_order(
     payload: OrderCreatePayload,
     principal: TenantPrincipal,
     orders: OrderServiceDep,
+    db: DbSession,
 ) -> OrderCreateResponse:
     """Create an order in ``DRAFT``.
 
@@ -244,6 +246,7 @@ async def create_order(
             client_id=payload.client_id,
         )
     )
+    await start_for_new_order(db, orders, order, payload.confirmation, actor_id=principal.user_id)
     return OrderCreateResponse(
         order=_to_detail(order),
         duplicate_check=_to_duplicate_response(duplicates) if duplicates else None,

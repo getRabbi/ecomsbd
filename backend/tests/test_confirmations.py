@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import itertools
 import uuid
+from collections.abc import AsyncIterator
 from datetime import timedelta
 from typing import Any
 
@@ -57,7 +58,11 @@ from app.notifications.templates import render
 from app.orders.models import Order, OrderChannel, OrderItem, OrderStatus
 from app.orders.service import OrderItemDraft, OrderService
 from app.tenants.models import Tenant
-from tests.conftest_commerce import signed_in_shop
+from tests.conftest_commerce import create_order, signed_in_shop
+from tests.test_auth_flow import auth_header
+from tests.test_intake_capture import intake_on
+
+__all__ = ["intake_on"]  # fixture used by name below
 
 S = ConfirmationState
 C = Cause
@@ -514,3 +519,225 @@ async def test_the_seller_is_alerted_once_when_review_is_needed_or_an_answer_is_
         assert {alert.entity_id for alert in alerts} == {review.order_id, changed_order.id}
     finally:
         clear_context(token)
+
+
+# ------------------------------------------------------------------ API ---
+
+
+@pytest.fixture
+async def confirmation_on(settings: Any) -> AsyncIterator[None]:
+    async for _ in _flag(settings):
+        yield
+
+
+async def _new_order(client: AsyncClient, shop: dict[str, Any], phone: str) -> dict[str, Any]:
+    return (await create_order(client, shop, phone=phone))["order"]
+
+
+def _url(order: dict[str, Any]) -> str:
+    return f"/v1/orders/{order['id']}/confirmation"
+
+
+async def test_the_api_is_off_until_the_flag_is_on(client: AsyncClient, unique_phone: str):
+    shop = await signed_in_shop(client, unique_phone)
+    order = await _new_order(client, shop, "01700000021")
+
+    refused = await client.post(_url(order), json={"mode": "REQUEST"}, headers=auth_header(shop))
+    assert refused.status_code == 403 and refused.json()["code"] == "FEATURE_DISABLED"
+    shown = await client.get(_url(order), headers=auth_header(shop))
+    assert shown.status_code == 200
+    assert shown.json() == {"enabled": False, "confirmation": None}
+
+
+async def test_request_and_already_confirmed_in_chat_through_the_api(
+    client: AsyncClient, unique_phone: str, confirmation_on: None
+):
+    shop = await signed_in_shop(client, unique_phone)
+    headers = auth_header(shop)
+    order = await _new_order(client, shop, "01700000022")
+
+    first = await client.post(_url(order), json={"mode": "REQUEST"}, headers=headers)
+    again = await client.post(_url(order), json={"mode": "REQUEST"}, headers=headers)
+    assert first.status_code == again.status_code == 200, first.text
+    assert first.json()["created"] and not again.json()["created"]
+    row = first.json()["confirmation"]
+    assert again.json()["confirmation"]["id"] == row["id"]
+    assert (row["state"], row["order_id"]) == ("PENDING", order["id"])
+    shown = (await client.get(_url(order), headers=headers)).json()
+    assert shown["enabled"] and shown["confirmation"]["id"] == row["id"]
+
+    chat = await _new_order(client, shop, "01700000023")
+    done = await client.post(_url(chat), json={"mode": "SELLER_CHAT"}, headers=headers)
+    assert done.status_code == 200, done.text
+    body = done.json()["confirmation"]
+    assert (body["state"], body["method"], body["order_outcome"]) == (
+        "CONFIRMED",
+        "SELLER_CHAT",
+        "APPLIED",
+    )
+    detail = await client.get(f"/v1/orders/{chat['id']}", headers=headers)
+    assert detail.json()["status"] == "CONFIRMED"
+
+    busy = await client.post(_url(order), json={"mode": "SELLER_CHAT"}, headers=headers)
+    assert busy.status_code == 409 and busy.json()["details"]["code"] == "CONFIRMATION_IN_PROGRESS"
+    bad = await client.post(_url(order), json={"mode": "CALL"}, headers=headers)
+    assert bad.status_code == 422
+
+
+async def test_another_shops_order_is_not_found(
+    client: AsyncClient, unique_phone: str, confirmation_on: None
+):
+    owner = await signed_in_shop(client, unique_phone)
+    order = await _new_order(client, owner, "01700000024")
+    other = await signed_in_shop(client, "018" + unique_phone[3:], shop_name="Other")
+
+    for response in (
+        await client.post(_url(order), json={"mode": "REQUEST"}, headers=auth_header(other)),
+        await client.get(_url(order), headers=auth_header(other)),
+    ):
+        assert response.status_code == 404
+
+
+async def test_the_quick_order_reply_says_whether_confirmation_is_on(
+    client: AsyncClient, unique_phone: str, intake_on: None, settings: Any
+):
+    from tests.test_intake_capture import CHAT, MANUAL
+
+    shop = await signed_in_shop(client, unique_phone)
+
+    async def paste() -> dict[str, Any]:
+        response = await client.post(
+            MANUAL,
+            json={"source": "SHARE", "messages": [{"text": "\n".join(CHAT)}]},
+            headers=auth_header(shop),
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    assert (await paste())["confirmation_enabled"] is False
+    async for _ in _flag(settings):
+        assert (await paste())["confirmation_enabled"] is True
+
+
+async def _flag(settings: Any) -> AsyncIterator[None]:
+    from app.common.feature_flags import FlagKey
+    from tests.conftest import _global_flag_on
+
+    async for _ in _global_flag_on(settings, str(FlagKey.CONFIRMATION_ENGINE_ENABLED)):
+        yield
+
+
+# --------------------------------------------- the quick-order sheet's buttons ---
+
+
+async def _draft(client: AsyncClient, shop: dict[str, Any]) -> dict[str, Any]:
+    from tests.test_intake_capture import CHAT, MANUAL
+
+    response = await client.post(
+        MANUAL,
+        json={"source": "SHARE", "messages": [{"text": "\n".join(CHAT)}]},
+        headers=auth_header(shop),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["draft"]
+
+
+_SHEET_ORDER = {"phone": "01700000011", "items": [{"name": "Panjabi", "quantity": 2}]}
+
+
+@pytest.mark.parametrize(
+    ("mode", "state", "order_status"),
+    [("REQUEST", "PENDING", "DRAFT"), ("SELLER_CHAT", "CONFIRMED", "CONFIRMED")],
+)
+async def test_the_sheet_creates_the_order_and_its_confirmation_in_one_call(
+    client: AsyncClient,
+    unique_phone: str,
+    intake_on: None,
+    confirmation_on: None,
+    mode: str,
+    state: str,
+    order_status: str,
+):
+    shop = await signed_in_shop(client, unique_phone)
+    draft = await _draft(client, shop)
+    url = f"/v1/chat-orders/{draft['id']}/confirm"
+
+    first = await client.post(
+        url, json={**_SHEET_ORDER, "confirmation": mode}, headers=auth_header(shop)
+    )
+    again = await client.post(
+        url, json={**_SHEET_ORDER, "confirmation": mode}, headers=auth_header(shop)
+    )
+
+    assert first.status_code == again.status_code == 200, first.text
+    body = first.json()
+    assert body["confirmation"]["state"] == state and body["order"]["status"] == order_status
+    assert (
+        again.json()["replayed"]
+        and again.json()["confirmation"]["id"] == body["confirmation"]["id"]
+    )
+
+
+async def test_without_the_flag_the_sheet_makes_a_plain_order(
+    client: AsyncClient, unique_phone: str, intake_on: None
+):
+    shop = await signed_in_shop(client, unique_phone)
+    draft = await _draft(client, shop)
+    response = await client.post(
+        f"/v1/chat-orders/{draft['id']}/confirm",
+        json={**_SHEET_ORDER, "confirmation": "REQUEST"},
+        headers=auth_header(shop),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["confirmation"] is None
+    assert response.json()["order"]["status"] == "DRAFT"
+
+
+async def test_a_queued_create_carries_its_confirmation_request(
+    client: AsyncClient, unique_phone: str, intake_on: None, confirmation_on: None
+):
+    shop = await signed_in_shop(client, unique_phone)
+    draft = await _draft(client, shop)
+    response = await client.post(
+        "/v1/sync/mutations",
+        json={
+            "mutations": [
+                {
+                    "mutation_id": str(uuid.uuid4()),
+                    "entity_type": "ORDER",
+                    "entity_id": draft["id"],
+                    "operation": "CREATE",
+                    "payload": {**_SHEET_ORDER, "confirmation": "REQUEST"},
+                }
+            ]
+        },
+        headers=auth_header(shop),
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    assert result["status"] == "APPLIED"
+    shown = await client.get(
+        f"/v1/orders/{result['entity_id']}/confirmation", headers=auth_header(shop)
+    )
+    assert shown.json()["confirmation"]["state"] == "PENDING"
+
+
+async def test_a_plain_order_create_can_ask_for_a_confirmation(
+    client: AsyncClient, unique_phone: str, confirmation_on: None
+):
+    shop = await signed_in_shop(client, unique_phone)
+    order = (await create_order(client, shop, phone="01700000025", confirmation="REQUEST"))["order"]
+    shown = await client.get(_url(order), headers=auth_header(shop))
+    assert shown.json()["confirmation"]["state"] == "PENDING"
+
+
+def test_an_order_source_cannot_claim_a_confirmation():
+    from pydantic import ValidationError as SchemaError
+
+    from app.order_sources.service import NativeOrder
+
+    order = {"phone": "01700000026", "items": [{"name": "Panjabi", "quantity": 1}]}
+    assert NativeOrder.model_validate(order).confirmation is None
+    for mode in ("REQUEST", "SELLER_CHAT"):
+        with pytest.raises(SchemaError):
+            NativeOrder.model_validate({**order, "confirmation": mode})

@@ -370,6 +370,12 @@ async def _manual_result(db: DbSession, message_id: uuid.UUID | None) -> dict[st
         "attention_id": str(row.linked_attention_id)
         if row is not None and row.linked_attention_id is not None
         else None,
+        # The sheet shows "Confirm & call customer" / "Already confirmed in
+        # chat" only while the confirmation engine is on (V4 WP2.1).
+        "confirmation_enabled": draft is not None
+        and await FeatureFlagService(db).is_enabled(
+            FlagKey.CONFIRMATION_ENGINE_ENABLED, tenant_id=draft.tenant_id
+        ),
     }
 
 

@@ -131,6 +131,40 @@ async def latest_for_order(db: AsyncSession, order_id: uuid.UUID) -> OrderConfir
     )
 
 
+#: What a new order may ask for as it is created (the quick-order sheet's
+#: "Confirm & call customer" and "Already confirmed in chat").
+CONFIRMATION_MODES = frozenset({"REQUEST", "SELLER_CHAT"})
+
+
+async def start_for_new_order(
+    db: AsyncSession,
+    orders: OrderService,
+    order: Order,
+    mode: str | None,
+    *,
+    actor_id: uuid.UUID | None,
+) -> OrderConfirmation | None:
+    """Start the confirmation a new order asked for, if the engine is on.
+
+    With ``confirmation_engine_enabled`` off, or no mode, nothing happens and
+    the order stands as a plain order: an offline create replayed after the
+    flag changed must still land. Idempotent, like the service calls.
+    """
+    from app.common.feature_flags import FeatureFlagService, FlagKey
+
+    if mode not in CONFIRMATION_MODES or not await FeatureFlagService(db).is_enabled(
+        FlagKey.CONFIRMATION_ENGINE_ENABLED, tenant_id=order.tenant_id
+    ):
+        return None
+    service = ConfirmationService(db, orders=orders)
+    if mode == "SELLER_CHAT" and actor_id is not None:
+        current = await open_for_order(db, order.id)
+        if current is not None:  # asked to call first, then said "already confirmed"
+            return current
+        return (await service.resolve_in_chat(order.id, actor_id=actor_id)).confirmation
+    return (await service.request(order.id, requested_by=actor_id)).confirmation
+
+
 @dataclass(frozen=True, slots=True)
 class Requested:
     confirmation: OrderConfirmation

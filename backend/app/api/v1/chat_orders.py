@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import DbSession, Principal, require_permission
 from app.api.v1.commerce_schemas import OrderItemPayload
+from app.api.v1.confirmations import confirmation_view
 from app.api.v1.orders import OrderServiceDep, _to_detail, _to_duplicate_response
 from app.chat_orders import service
 from app.chat_orders.models import (
@@ -32,6 +33,7 @@ from app.chat_orders.models import (
     ChatIdentity,
     ChatOrderDraft,
 )
+from app.confirmations.service import start_for_new_order
 from app.customers.models import Customer
 from app.integrations.models import IntegrationConnection
 from app.tenants.roles import Permission
@@ -63,6 +65,9 @@ class ConfirmPayload(BaseModel):
     discount_paisa: int = Field(default=0, ge=0)
     delivery_fee_paisa: int = Field(default=0, ge=0)
     note: str | None = Field(default=None, max_length=4000)
+    #: V4 WP2.1: "Confirm & call customer" (``REQUEST``) or "Already confirmed in
+    #: chat" (``SELLER_CHAT``). Ignored while ``confirmation_engine_enabled`` is off.
+    confirmation: Literal["REQUEST", "SELLER_CHAT"] | None = None
 
 
 async def _views(db: DbSession, drafts: list[ChatOrderDraft]) -> list[dict[str, Any]]:
@@ -235,6 +240,10 @@ async def confirm(
 ) -> dict[str, Any]:
     draft = await service.get_draft(db, draft_id, lock=True)
     result = await service.confirm(db, draft, payload, orders, actor.user_id)
+    confirmation = await start_for_new_order(
+        db, orders, result.order, payload.confirmation, actor_id=actor.user_id
+    )
+    await db.flush()
     await db.refresh(result.order, attribute_names=["items"])
     return {
         "order": _to_detail(result.order).model_dump(mode="json"),
@@ -243,4 +252,5 @@ async def confirm(
         else None,
         "replayed": result.replayed,
         "draft": (await _views(db, [draft]))[0],
+        "confirmation": confirmation_view(confirmation) if confirmation is not None else None,
     }
