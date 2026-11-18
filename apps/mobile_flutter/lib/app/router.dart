@@ -12,6 +12,7 @@ import '../features/onboarding/shop_setup_screen.dart';
 import '../features/shell/main_shell.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/billing/plans_screen.dart';
+import '../features/intake/quick_order_screen.dart';
 import 'providers.dart';
 
 /// Route paths. Named constants so a typo is a compile error.
@@ -30,6 +31,9 @@ class Routes {
   static const String verify = '/login/verify';
   static const String onboarding = '/onboarding';
   static const String home = '/home';
+
+  /// V4 WP1.4: Create on an order heads-up while the app is open.
+  static const String quickOrder = '/quick-order';
   static const Set<String> plans = {
     '/plans',
     '/upgrade',
@@ -76,7 +80,9 @@ String? authRedirect(
     AuthStage.needsOnboarding =>
       location == Routes.onboarding ? null : Routes.onboarding,
     AuthStage.ready =>
-      location == Routes.home || Routes.plans.contains(location)
+      location == Routes.home ||
+              location == Routes.quickOrder ||
+              Routes.plans.contains(location)
           ? null
           : Routes.home,
   };
@@ -245,6 +251,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.home,
         builder: (context, state) => const MainShell(),
+      ),
+      GoRoute(
+        path: Routes.quickOrder,
+        builder: (context, state) => const QuickOrderScreen(),
       ),
       for (final path in Routes.plans)
         GoRoute(path: path, builder: (context, state) => const PlansScreen()),

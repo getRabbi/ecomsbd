@@ -90,3 +90,39 @@ Payload: draft id, connection id, provider, capture source. No text, phone or na
 - Verify after a change: link a test phone, upload a batch with
   `017000000xx` numbers, see one draft in `GET /v1/chat-orders`, then
   `POST /v1/intake/heartbeat` and check the hub health.
+
+## The phone side (V4 WP1.4)
+
+The Android app reads chat notifications only after the seller turns on
+Notification Access for "ecomsbd order detect" (Settings → Auto order detect).
+Everything below runs on the phone; the server sees only heartbeats, rules
+requests and the captures the seller sends.
+
+- **Detection:** the hub shows the phone `NEEDS_ATTENTION` after 24 h without a
+  heartbeat (`DEVICE_NEEDS_ATTENTION` notification). On the phone, Settings →
+  Auto order detect shows Notification Access, "Listening", the last check-in and,
+  when stale, the auto-start guide for the phone's maker (Xiaomi, Oppo, Vivo,
+  Realme, Samsung). Logcat tag `EcomsbdIntake` logs exception class names only.
+- **Heartbeat:** WorkManager every 6 h (network required, exponential backoff
+  from 30 s) and on listener connect/disconnect; it reports `listener_state`
+  `ON` / `OFF` / `NO_PERMISSION`. The same worker refreshes the rules when
+  `refresh_after_seconds` has passed (`If-None-Match`; a 304 costs nothing).
+- **What stays on the phone:** an Android-Keystore AES-GCM file in
+  `noBackupFilesDir/intake/` holds the ingest key, the rules cache, at most 200
+  buffered messages (a chat closes 25 minutes after its last message), the
+  Autopilot upload queue and the "Ei sender ke ar na" list (HMACs, no names).
+  Nothing of it is in a cloud backup. Unlink deletes the key, buffer and queue.
+- **What leaves the phone:** a tap on **Create** sends that chat through
+  `POST /v1/intake/captures/manual` (the seller's session). `POST /v1/intake/captures`
+  (ingest key) is used only when the server reports `autopilot_on` (Phase 4);
+  until then nothing is uploaded without a tap. `403 PACKAGE_NOT_ENABLED` drops
+  that app's buffer and refreshes the rules; `401` marks the phone unlinked.
+- **Containment:** the seller unlinks the phone (Settings → Auto order detect)
+  or turns off Notification Access; the hub revoke (or member removal) makes
+  every later call `401`, and the phone stops. Turning an app off in the
+  settings drops its buffered chats at the next rules refresh.
+- **Verify after a change:** on a test phone signed in to a test shop with
+  `intake_device_enabled` on: link, turn on Notification Access, send the phone
+  a WhatsApp Business message "2ta nibo 017000000xx Mirpur, Dhaka" from another
+  phone, see the heads-up "<sender> — order mone hocche" with the masked number,
+  tap Create, and see the draft in Chat orders.

@@ -27,6 +27,7 @@ import 'connections_screen.dart';
 import 'order_sources_screen.dart';
 import 'network_screen.dart';
 import 'delivery_rules_screen.dart';
+import '../intake/auto_detect_screen.dart';
 import 'automation_screen.dart';
 
 /// Settings.
@@ -128,6 +129,17 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const DeliveryRulesScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  key: const ValueKey('settings.autoDetect'),
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: Text(context.tr('intake.title')),
+                  subtitle: Text(context.tr('intake.subtitle')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AutoDetectScreen(),
                     ),
                   ),
                 ),

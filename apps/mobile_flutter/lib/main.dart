@@ -10,6 +10,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'app/app.dart';
 import 'app/network_recovery.dart';
 import 'app/realtime_wiring.dart';
+import 'app/router.dart';
+import 'features/intake/intake_native.dart';
+import 'features/intake/quick_order_screen.dart';
 import 'core/crash_reporting.dart';
 import 'l10n/app_locale.dart';
 import 'data/auth/supabase_bootstrap.dart';
@@ -44,6 +47,7 @@ Future<void> main() async {
   await _bootstrap(container);
   startNetworkRecovery(container, recovery);
   startRealtime(container, recovery);
+  _startIntakeBridge(container);
 
   // Sentry only when ECOMSBD_SENTRY_DSN was supplied; otherwise a plain runApp.
   await runWithCrashReporting(
@@ -54,6 +58,48 @@ Future<void> main() async {
       ),
     ),
   );
+}
+
+/// V4 WP1.4: the quick-order sheet's own engine (Create on an order heads-up
+/// while the app is not open). Native starts it with the route `/quick-order`.
+///
+/// Only one engine holds the seller's session at a time: native releases this
+/// engine when the app opens, and sends Create into the app while it is open.
+@pragma('vm:entry-point')
+Future<void> quickOrderMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeSupabaseAuth();
+  final savedLocale = await loadSavedLocale();
+  final container = ProviderContainer(
+    overrides: <Override>[
+      localeProvider.overrideWith((ref) => LocaleController(savedLocale)),
+    ],
+  );
+  await _readAppVersion(container);
+  container.read(authControllerProvider);
+  unawaited(container.read(authControllerProvider.notifier).restore());
+  await runWithCrashReporting(
+    () => runApp(
+      UncontrolledProviderScope(
+        container: container,
+        child: const QuickOrderApp(),
+      ),
+    ),
+  );
+}
+
+/// Create on an order heads-up while the app is open: show the quick order.
+void _startIntakeBridge(ProviderContainer container) {
+  container.read(intakeNativeProvider).events.listen((event) {
+    if (event != IntakeEvent.openQuickOrder) return;
+    final router = container.read(routerProvider);
+    final shown = router.routerDelegate.currentConfiguration;
+    // Already open: the screen reloads itself on the same event.
+    if (shown.isNotEmpty && shown.last.matchedLocation == Routes.quickOrder) {
+      return;
+    }
+    unawaited(router.push(Routes.quickOrder));
+  });
 }
 
 /// Startup work that must finish before the first frame.

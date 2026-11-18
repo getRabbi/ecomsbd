@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intake_listener_label">ecomsbd অর্ডার শনাক্ত</string>
+    <string name="intake_channel_name">অর্ডার শনাক্ত</string>
+    <string name="intake_channel_description">যে চ্যাট অর্ডারের মতো দেখায়, Create আর Ignore সহ।</string>
+</resources>
