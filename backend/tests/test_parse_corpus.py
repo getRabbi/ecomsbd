@@ -13,10 +13,12 @@ from app.common.phone import try_normalize_bd_phone
 from app.orders.parser import DeterministicOrderParser
 from app.orders.parser.eval import (
     GATED_FIELDS,
+    HOLDOUT_DIR,
     CorpusCase,
     gated_accuracy,
     grade,
     load_corpus,
+    merged_with_recorded,
     score,
 )
 
@@ -57,3 +59,30 @@ def test_deterministic_accuracy_does_not_regress() -> None:
         name: f"{totals[name].correct}/{totals[name].total}" for name in GATED_FIELDS
     }
     assert totals["phones"].accuracy == 1.0
+
+
+def test_gate_g03_regression_with_recorded_answers() -> None:
+    # The CI regression for the merged path. The recorded answers are authored
+    # (see the corpus header), so this is not the gate: G0.3 is measured on the
+    # held-out set with the live model (operator correction 2026-11-18).
+    parser = DeterministicOrderParser()
+    totals = score(
+        grade(case, merged_with_recorded(case, parser.parse(case.text))) for case in CORPUS
+    )
+    assert gated_accuracy(totals) >= 0.90, {
+        name: f"{totals[name].correct}/{totals[name].total}" for name in GATED_FIELDS
+    }
+    assert totals["phones"].accuracy == 1.0
+
+
+def test_the_holdout_set_is_held_out() -> None:
+    # Shape only — the holdout is never a pass/fail accuracy test and never
+    # tunes the parser. No recorded answers may creep in.
+    holdout = load_corpus(HOLDOUT_DIR)
+    assert len(holdout) >= 8
+    assert not {case.id for case in holdout} & {case.id for case in CORPUS}
+    for case in holdout:
+        assert case.llm is None and case.llm_error is None, case.id
+        assert "phones" in case.expect, case.id
+        for phone in case.expect["phones"]:
+            assert phone.startswith("+88017000000"), "holdout phones are masked to the test range"

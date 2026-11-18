@@ -1,0 +1,86 @@
+# Held-out order messages (V4 WP0.3, operator correction 2026-11-18).
+#
+# NEVER used to tune the parser, and NOT a pass/fail test. It measures how the
+# parser does on messages its author did not write. Report:
+#   python -m app.orders.parser.eval --live --set holdout
+# (deterministic-only and merged accuracy, printed separately; needs
+# AI_PARSE_API_KEY and AI_PARSE_MODEL). Gate G0.3 is measured here.
+#
+# Cases h-01..h-08 are the operator's, verbatim except that phone numbers are
+# masked to the 017000000xx test range with their original separators and
+# digit script kept. Add 30-50 real seller messages the same way (mask phones;
+# keep everything else as typed). No `llm` blocks belong in this file.
+
+- id: h-01
+  text: "vaiya amake 1 ta black hoodie XXL pathan. ami sakib, chandpur sadar, phone 01700000021"
+  expect:
+    customer_name: sakib
+    phones: ["+8801700000021"]
+    address: chandpur sadar
+    items: [{name: black hoodie, quantity: 1, size: XXL}]
+    cod_amount_paisa: null
+
+- id: h-02
+  text: "অর্ডার কনফার্ম করছি\nমোঃ জাকির হোসেন\n০১৭০০-০০০০২২\nগ্রাম: চরপাড়া, ডাকঘর: বেলকুচি, জেলা: সিরাজগঞ্জ\nশাড়ি নীল ১ পিস"
+  expect:
+    customer_name: মোঃ জাকির হোসেন
+    phones: ["+8801700000022"]
+    address: "গ্রাম: চরপাড়া, ডাকঘর: বেলকুচি, জেলা: সিরাজগঞ্জ"
+    items: [{name: শাড়ি, color: নীল, quantity: 1}]
+    cod_amount_paisa: null
+
+- id: h-03
+  text: "Hi, I want the leather wallet (brown) x1 and belt x1. Deliver to Flat 3B, House 22, Road 11, Banani, Dhaka. Contact: +8801700000023. Name: Nadia"
+  expect:
+    customer_name: Nadia
+    phones: ["+8801700000023"]
+    address: "Flat 3B, House 22, Road 11, Banani, Dhaka"
+    items: [{name: leather wallet, color: brown, quantity: 1}, {name: belt, quantity: 1}]
+    cod_amount_paisa: null
+
+# Notes: the customer asks the price; the product is not named.
+- id: h-04
+  text: "dam koto? 2ta nibo. 01700000024 khulna sonadanga"
+  expect:
+    customer_name: null
+    phones: ["+8801700000024"]
+    address: khulna sonadanga
+    items: [{name: null, quantity: 2}]
+    cod_amount_paisa: null
+
+- id: h-05
+  text: "নামঃ রুমানা আক্তার, মোবাইলঃ ০১৭০০০০০০২৫, ঠিকানাঃ উত্তরা সেক্টর ৭, রোড ১৫, বাসা ৩২। প্রোডাক্টঃ বেবি ড্রেস (৬-১২ মাস) ২ সেট, মোট ১৮৫০ টাকা"
+  expect:
+    customer_name: রুমানা আক্তার
+    phones: ["+8801700000025"]
+    address: "উত্তরা সেক্টর 7, রোড 15, বাসা 32"
+    items: [{name: "বেবি ড্রেস (6-12 মাস)", quantity: 2}]
+    cod_amount_paisa: 185000
+
+# Address null in the text; the app prefills it from a known customer.
+- id: h-06
+  text: "same address as before, 3 kg chinigura chal. 01700000026"
+  expect:
+    customer_name: null
+    phones: ["+8801700000026"]
+    address: null
+    items: [{name: chinigura chal 3 kg, quantity: 1}]
+    cod_amount_paisa: null
+
+- id: h-07
+  text: "ami Rafiq\nnumber: 017-0000-0027\nbogura, sherpur upozila, dhunot road er pase\nkids shoe size 30 1 jora 950tk"
+  expect:
+    customer_name: Rafiq
+    phones: ["+8801700000027"]
+    address: "bogura, sherpur upozila, dhunot road er pase"
+    items: [{name: kids shoe size 30, quantity: 1}]
+    cod_amount_paisa: 95000
+
+- id: h-08
+  text: "Please send 2 x face wash (oily skin). Mirpur DOHS, House 410, Road 7. Mob 01700000028 - Tania"
+  expect:
+    customer_name: Tania
+    phones: ["+8801700000028"]
+    address: "Mirpur DOHS, House 410, Road 7"
+    items: [{name: face wash (oily skin), quantity: 2}]
+    cod_amount_paisa: null

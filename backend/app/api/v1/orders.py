@@ -43,13 +43,15 @@ from app.consignments.models import Consignment
 from app.customers.service import CustomerService
 from app.orders.duplicates import DuplicateCheck
 from app.orders.models import Order, OrderStatus
-from app.orders.parser import DeterministicOrderParser
+from app.orders.parser.enhanced import (
+    EnhancedOrderParser,
+    build_ai_parse_client,
+    last_address_lookup,
+)
 from app.orders.service import OrderDraft, OrderItemDraft, OrderService
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/orders", tags=["orders"])
-
-_parser = DeterministicOrderParser()
 
 
 async def _orders(db: DbSession, settings: SettingsDep) -> OrderService:
@@ -257,16 +259,32 @@ async def create_order(
 async def parse_order_text(
     payload: ParseRequest,
     principal: TenantPrincipal,
+    db: DbSession,
+    settings: SettingsDep,
 ) -> ParseResponse:
     """Extract order fields from pasted Messenger or WhatsApp text.
 
-    Deterministic and offline — no model, no network. Nothing is created or
-    booked; the seller confirms and edits every field before saving
-    (master spec section 7.1). A field the parser is unsure about comes back
-    empty rather than guessed, and the original text is always echoed so a
-    failed parse loses nothing.
+    Deterministic first. With ``ai_parse_enabled`` on for the shop, fields
+    that did not come from an explicit label are completed by a model (V4
+    WP0.3), within the plan's monthly quota; if the model is unavailable the
+    deterministic result comes back with the warning ``AI_PARSE_UNAVAILABLE``.
+    Nothing is created or booked; the seller confirms and edits every field
+    before saving (master spec section 7.1), and the original text is always
+    echoed so a failed parse loses nothing.
     """
-    parsed = _parser.parse(payload.text)
+    customers = CustomerService(db, hasher=get_hasher(settings), vault=get_vault(settings))
+
+    async def customer_id_for(phone: str) -> uuid.UUID | None:
+        customer = await customers.find_by_phone(phone)
+        return customer.id if customer is not None else None
+
+    parser = EnhancedOrderParser(
+        db,
+        settings,
+        client=build_ai_parse_client(settings),
+        last_address=last_address_lookup(db, customer_id_for),
+    )
+    parsed = await parser.parse(payload.text, tenant_id=principal.require_tenant())
     return ParseResponse(
         customer_name=parsed.customer_name,
         phones=parsed.phones,
@@ -289,6 +307,7 @@ async def parse_order_text(
         confidence=parsed.confidence,
         parser=parsed.parser,
         warnings=parsed.warnings,
+        uncertain_fields=parsed.uncertain_fields,
         needs_phone_selection=parsed.needs_phone_selection,
         is_low_confidence=parsed.is_low_confidence,
         source_text=parsed.source_text,

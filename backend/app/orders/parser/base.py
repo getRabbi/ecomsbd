@@ -24,7 +24,6 @@ from typing import Any, Protocol, runtime_checkable
 __all__ = [
     "CONFIDENCE_CONFIRM_THRESHOLD",
     "MAX_PARSE_INPUT_LENGTH",
-    "EnhancedOrderParser",
     "FieldConfidence",
     "OrderTextParser",
     "ParsedItem",
@@ -117,6 +116,10 @@ class ParsedOrder:
     parser: str = "deterministic"
     #: Human-readable notes about what the parser could not resolve.
     warnings: list[str] = field(default_factory=list)
+    #: Confidence keys (``name``, ``address``, ...) the seller must check:
+    #: a labelled value the model read differently, or an address prefilled
+    #: from the customer's last order. Set by the enhanced parser only.
+    uncertain_fields: list[str] = field(default_factory=list)
 
     @property
     def needs_phone_selection(self) -> bool:
@@ -151,6 +154,7 @@ class ParsedOrder:
             "confidence": dict(self.confidence),
             "parser": self.parser,
             "warnings": list(self.warnings),
+            "uncertain_fields": list(self.uncertain_fields),
             "needs_phone_selection": self.needs_phone_selection,
             "is_low_confidence": self.is_low_confidence,
         }
@@ -163,33 +167,3 @@ class OrderTextParser(Protocol):
     name: str
 
     def parse(self, text: str) -> ParsedOrder: ...
-
-
-class EnhancedOrderParser:
-    """UNIMPLEMENTED. The Layer 2 LLM fallback from master spec section 96.
-
-    Deliberately not implemented in Phase B, and deliberately not a silent
-    pass-through to the deterministic parser either. Section 97 requires:
-
-    *   a configured model and provider;
-    *   per-tenant monthly quota enforced by entitlement (``ai_parse_monthly``);
-    *   recorded cost per parse in ``ai_usage``;
-    *   strict schema validation of the model's JSON;
-    *   pasted text treated as **data, never instruction** — these inputs are
-        attacker-controlled by construction, since anyone can send a seller a
-        Messenger message.
-
-    None of that exists yet. Raising here keeps the boundary honest: order entry
-    works fully without AI (section 97: "AI outage must not block business
-    operations"), and this class documents exactly what enabling it requires.
-    """
-
-    name = "enhanced"
-
-    def parse(self, text: str) -> ParsedOrder:
-        raise NotImplementedError(
-            "The enhanced (LLM) parser is not implemented. Order entry works "
-            "without it; see master spec sections 96 and 97 for the model, "
-            "quota, cost-tracking and prompt-injection requirements that must "
-            "be satisfied first."
-        )

@@ -486,6 +486,10 @@ class ParseResponse(BaseModel):
     confidence: dict[str, float] = Field(default_factory=dict)
     parser: str = "deterministic"
     warnings: list[str] = Field(default_factory=list)
+    #: Confidence keys the seller must check before saving (V4 WP0.3): a
+    #: labelled field the model read differently, or an address prefilled
+    #: from the customer's last order.
+    uncertain_fields: list[str] = Field(default_factory=list)
     needs_phone_selection: bool = False
     is_low_confidence: bool = False
     #: Echoed back so a failed parse never loses what the seller pasted.

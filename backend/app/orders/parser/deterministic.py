@@ -678,7 +678,9 @@ class DeterministicOrderParser:
         with_currency = [value for value, marked in candidates if marked]
         if with_currency:
             result.cod_amount_paisa = max(with_currency)
-            result.confidence["amount"] = FieldConfidence.HIGH
+            # Unlabelled, so below HIGH: confidence >= HIGH means "came from a
+            # label", which is what the enhanced parser trusts over a model.
+            result.confidence["amount"] = FieldConfidence.MEDIUM
             return
 
         # No currency marker: the largest plausible number is the usual answer,
@@ -748,9 +750,9 @@ class DeterministicOrderParser:
             scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
             result.address = scored[0][2]
             result.district = find_district(result.address)
-            result.confidence["address"] = (
-                FieldConfidence.HIGH if scored[0][0] >= 2 else FieldConfidence.MEDIUM
-            )
+            # Picked by place-name hits, not a label: a guess however many hits
+            # it has (HIGH and above is reserved for labelled fields).
+            result.confidence["address"] = FieldConfidence.MEDIUM
             return
 
         if len(district_only) == 1:

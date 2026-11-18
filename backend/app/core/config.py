@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any, Self
@@ -332,6 +333,19 @@ class Settings(BaseSettings):
     #: has always been there. Conventionally ``ecomsbd-backend@<version>`` or the
     #: deployed commit sha.
     sentry_release: str | None = None
+
+    # ---------------------------------------------------- ai order parse ---
+    # V4 WP0.3. Off unless the ``ai_parse_enabled`` flag is on *and* a key and
+    # model are set; without them order parsing is deterministic only.
+    ai_parse_provider: str = "anthropic"
+    ai_parse_api_key: SecretStr | None = None
+    ai_parse_model: str | None = None
+    ai_parse_timeout_seconds: float = Field(default=8.0, gt=0, le=60)
+    ai_parse_max_input_chars: int = Field(default=6000, ge=100, le=8000)
+    #: USD per million tokens, used for the ``ai_usage.cost_micro_usd``
+    #: estimate. Unset means the cost is recorded as unknown, never as zero.
+    ai_parse_price_input_per_mtok_usd: Decimal | None = Field(default=None, ge=0)
+    ai_parse_price_output_per_mtok_usd: Decimal | None = Field(default=None, ge=0)
 
     # --------------------------------------------------------------- api ---
     cors_allow_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.orders.parser import DeterministicOrderParser, EnhancedOrderParser
+from app.orders.parser import DeterministicOrderParser
 from app.orders.parser.base import FieldConfidence, OrderTextParser
 
 
@@ -191,12 +191,38 @@ class TestParserContract:
         for field in ("phone", "address", "items", "amount"):
             assert field in payload["confidence"], field
 
-    def test_the_enhanced_parser_refuses_rather_than_pretending(self) -> None:
-        # It must not quietly fall through to the deterministic parser: that
-        # would report an LLM parse that never happened, and would hide the
-        # quota and prompt-injection work section 97 requires.
-        with pytest.raises(NotImplementedError, match="not implemented"):
-            EnhancedOrderParser().parse("anything")
+    async def test_the_enhanced_parser_never_pretends_a_model_ran(
+        self, system_db, settings
+    ) -> None:  # type: ignore[no-untyped-def]
+        # V4 WP0.3 replaced the "not implemented" stub. The rule it guarded
+        # stands: with no provider configured the result must not report an
+        # LLM parse that never happened. It is labelled deterministic and
+        # carries AI_PARSE_UNAVAILABLE, and order entry still gets the fields.
+        from app.common.cache import InMemoryBackend
+        from app.common.feature_flags import FeatureFlag, FlagKey, FlagScope
+        from app.orders.parser.enhanced import AI_PARSE_UNAVAILABLE, EnhancedOrderParser
+        from app.tenants.models import Tenant
+
+        tenant = Tenant(name="Boundary Shop", business_category="CLOTHING")
+        system_db.add(tenant)
+        await system_db.flush()
+        system_db.add(
+            FeatureFlag(
+                key=str(FlagKey.AI_PARSE_ENABLED),
+                scope=FlagScope.TENANT,
+                tenant_id=tenant.id,
+                enabled=True,
+                rollout_percentage=100,
+            )
+        )
+        await system_db.flush()
+
+        result = await EnhancedOrderParser(
+            system_db, settings, client=None, cache=InMemoryBackend()
+        ).parse("anything 01712345678", tenant_id=tenant.id)
+        assert result.parser == "deterministic"
+        assert AI_PARSE_UNAVAILABLE in result.warnings
+        assert result.phones == ["+8801712345678"]
 
     def test_the_parser_needs_no_network_or_model(self, parser: DeterministicOrderParser) -> None:
         # Section 97: "AI outage must not block business operations." This test

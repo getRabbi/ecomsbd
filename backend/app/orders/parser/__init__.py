@@ -1,13 +1,13 @@
 """Order text parsing.
 
-Layer 1 is deterministic and ships here. Layer 2 (an LLM fallback) is an
-interface only — master spec section 96 permits it below a confidence threshold,
-and section 97 requires it to be optional, quota-limited and never a dependency
-of normal order entry.
+Layer 1 is deterministic and ships here. Layer 2 — model-assisted extraction —
+is :class:`app.orders.parser.enhanced.EnhancedOrderParser` (V4 WP0.3): behind a
+flag and a monthly quota, and never a dependency of order entry (master spec
+section 97). It is imported from its module, not here, because it needs the
+database layer and this package must stay importable without it.
 """
 
 from app.orders.parser.base import (
-    EnhancedOrderParser,
     FieldConfidence,
     OrderTextParser,
     ParsedItem,
@@ -17,7 +17,6 @@ from app.orders.parser.deterministic import DeterministicOrderParser
 
 __all__ = [
     "DeterministicOrderParser",
-    "EnhancedOrderParser",
     "FieldConfidence",
     "OrderTextParser",
     "ParsedItem",

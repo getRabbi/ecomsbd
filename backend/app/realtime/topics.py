@@ -153,6 +153,8 @@ SILENT_TABLES: frozenset[str] = frozenset(
         "export_jobs",
         # V4 funnel events: admin-only, no seller screen shows them
         "product_events",
+        # V4 model-call accounting: admin/ops only, no seller screen
+        "ai_usage",
         # imports: committed rows arrive as orders, products or customers
         "imports",
         "import_rows",

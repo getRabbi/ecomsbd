@@ -1,11 +1,18 @@
-"""Field accuracy of the order parser over the parse corpus.
+"""Field accuracy of the order parser.
 
-``python -m app.orders.parser.eval`` grades the deterministic parser and the
-enhanced path with the corpus' recorded model answers (no network).
-``python -m app.orders.parser.eval --live`` sends every case to the configured
-provider instead — operator-run only, never in CI: it costs money and needs
-``AI_PARSE_API_KEY``. It prints accuracy per field and never prints message
-text, phones or the model's answers.
+Two case sets:
+
+*   ``--set corpus`` (default): ``tests/fixtures/parse_corpus``, written with
+    the parser, so its score is optimistic. Without ``--live`` the merged path
+    uses each case's recorded model answer (no network) - the CI regression.
+*   ``--set holdout``: ``tests/fixtures/parse_holdout``, messages the parser
+    was never tuned on. It has no recorded answers; gate G0.3 is measured on it
+    with ``--live`` (operator correction 2026-11-18).
+
+``--live`` sends every case that needs the model to the configured provider -
+operator-run only, never in CI: it costs money and needs ``AI_PARSE_API_KEY``
+and ``AI_PARSE_MODEL``. Deterministic-only and merged accuracy are printed
+separately. Nothing prints message text, phones or the model's answers.
 """
 
 from __future__ import annotations
@@ -24,18 +31,25 @@ import yaml
 
 from app.common.phone import normalize_digits
 from app.orders.parser.base import ParsedOrder
+from app.orders.parser.llm_schema import validate_llm_output
+from app.orders.parser.merge import merge, needs_model
 
 __all__ = [
     "DEFAULT_CORPUS_DIR",
     "GATED_FIELDS",
+    "HOLDOUT_DIR",
     "CorpusCase",
     "FieldScore",
     "grade",
     "load_corpus",
+    "merged_with_recorded",
     "score",
 ]
 
-DEFAULT_CORPUS_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "parse_corpus"
+_FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+DEFAULT_CORPUS_DIR = _FIXTURES / "parse_corpus"
+HOLDOUT_DIR = _FIXTURES / "parse_holdout"
+SETS = {"corpus": DEFAULT_CORPUS_DIR, "holdout": HOLDOUT_DIR}
 
 #: Gate G0.3 is measured on these; the others are reported for information.
 GATED_FIELDS = ("phones", "address", "items")
@@ -87,17 +101,27 @@ def _norm_text(value: str | None) -> str:
     return " ".join(text.split())
 
 
-def _norm_items(items: Iterable[Any]) -> list[tuple[str, int, str]]:
+#: Words that only announce a size; "size 30" and size "30" are the same item.
+_SIZE_WORDS = frozenset({"size", "সাইজ"})
+
+
+def _norm_items(items: Iterable[Any]) -> list[tuple[tuple[str, ...], int]]:
+    """Each item as (its words, quantity), however name/colour/size are split.
+
+    "black hoodie" with size XXL and "black hoodie XXL" describe the same item,
+    and so do a product with colour "blue" and "product blue"; a grader that
+    cared how a parser split them would measure the split, not the reading.
+    """
     normalized = []
     for item in items:
         get = item.get if isinstance(item, dict) else lambda k, i=item: getattr(i, k)
-        normalized.append(
-            (
-                _norm_text(get("name")),
-                int(get("quantity") or 1),
-                str(get("size") or "").upper(),
-            )
-        )
+        words = {
+            word
+            for part in (get("name"), get("color"), get("size"))
+            for word in _norm_text(str(part) if part is not None else None).split()
+            if word not in _SIZE_WORDS
+        }
+        normalized.append((tuple(sorted(words)), int(get("quantity") or 1)))
     return sorted(normalized)
 
 
@@ -152,26 +176,76 @@ def _report(label: str, totals: dict[str, FieldScore]) -> None:
         print(f"  {name:<18} {entry.correct:>3}/{entry.total:<3} {entry.accuracy:.1%}")
 
 
-async def _run(live: bool, corpus: Sequence[CorpusCase]) -> int:
+def merged_with_recorded(case: CorpusCase, parsed: ParsedOrder) -> ParsedOrder:
+    """The enhanced result using the case's recorded answer (no network)."""
+    if not needs_model(parsed) or case.llm_error is not None:
+        return parsed
+    answer = validate_llm_output(case.llm)
+    return merge(parsed, answer) if answer is not None else parsed
+
+
+async def _merged_live(cases: Sequence[CorpusCase], parsed: list[ParsedOrder]) -> list[ParsedOrder]:
+    from app.core.config import get_settings
+    from app.orders.parser.ai_client import AiParseUnavailableError
+    from app.orders.parser.enhanced import build_ai_parse_client
+
+    client = build_ai_parse_client(get_settings())
+    if client is None:
+        raise SystemExit("AI_PARSE_API_KEY and AI_PARSE_MODEL must be set for --live")
+    merged: list[ParsedOrder] = []
+    asked = failed = invalid = 0
+    for case, result in zip(cases, parsed, strict=True):
+        if not needs_model(result):
+            merged.append(result)
+            continue
+        asked += 1
+        try:
+            answer = validate_llm_output((await client.extract(case.text)).output)
+        except AiParseUnavailableError as exc:
+            failed += 1
+            print(f"  {case.id}: unavailable ({exc.code})")
+            merged.append(result)
+            continue
+        if answer is None:
+            invalid += 1
+            print(f"  {case.id}: answer broke the schema")
+            merged.append(result)
+            continue
+        merged.append(merge(result, answer))
+    print(f"model asked for {asked}/{len(cases)} cases ({failed} unavailable, {invalid} invalid)")
+    return merged
+
+
+def _scores(cases: Sequence[CorpusCase], results: Sequence[ParsedOrder]) -> dict[str, FieldScore]:
+    return score(grade(case, result) for case, result in zip(cases, results, strict=True))
+
+
+async def _run(live: bool, set_name: str, cases: Sequence[CorpusCase]) -> int:
     from app.orders.parser.deterministic import DeterministicOrderParser
 
     deterministic = DeterministicOrderParser()
-    det_scores = score(grade(case, deterministic.parse(case.text)) for case in corpus)
-    _report("deterministic", det_scores)
+    parsed = [deterministic.parse(case.text) for case in cases]
+    print(f"set {set_name}: {len(cases)} cases")
+    _report("deterministic only", _scores(cases, parsed))
 
     if live:
-        # The enhanced path (AiParseClient + merge) is the next WP0.3 slice.
-        print("Live evaluation needs the enhanced parser, which is not built yet.")
-        return 2
+        _report("merged (live model)", _scores(cases, await _merged_live(cases, parsed)))
+    elif any(case.llm is not None or case.llm_error is not None for case in cases):
+        merged = [merged_with_recorded(c, p) for c, p in zip(cases, parsed, strict=True)]
+        _report("merged (recorded answers)", _scores(cases, merged))
+    else:
+        print("merged: this set has no recorded answers; run with --live")
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--live", action="store_true", help="call the configured provider")
-    parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_DIR)
+    parser.add_argument("--set", dest="set_name", choices=sorted(SETS), default="corpus")
+    parser.add_argument("--corpus", type=Path, default=None, help="override the set's directory")
     args = parser.parse_args(argv)
-    return asyncio.run(_run(args.live, load_corpus(args.corpus)))
+    directory = args.corpus or SETS[args.set_name]
+    return asyncio.run(_run(args.live, args.set_name, load_corpus(directory)))
 
 
 if __name__ == "__main__":
