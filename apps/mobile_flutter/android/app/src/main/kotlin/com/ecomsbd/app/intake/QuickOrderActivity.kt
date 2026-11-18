@@ -14,11 +14,43 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
 import java.lang.ref.WeakReference
+import java.util.UUID
 
 /** The conversation the last Create tap was for; read once by `takeQuickOrder`. */
 object QuickOrderState {
     @Volatile
     var pendingConversationId: String? = null
+
+    /** The last text shared to ecomsbd (V4 WP1.5); memory only, never stored. */
+    @Volatile
+    var pendingShare: SharedText? = null
+}
+
+/** Text another app shared to ecomsbd, for the quick-order sheet. */
+data class SharedText(val id: String, val text: String, val sharedAt: Long) {
+    companion object {
+        /** The server keeps at most this much of one message. */
+        const val MAX_CHARS = 4_000
+        private const val ACTION_SEND = "android.intent.action.SEND"
+
+        /** The shared text of an `ACTION_SEND` intent with a text MIME type, or null. */
+        fun read(action: String?, type: String?, text: CharSequence?): String? {
+            if (action != ACTION_SEND || type?.startsWith("text/") != true) return null
+            val value = text?.toString()?.trim().orEmpty()
+            return value.take(MAX_CHARS).ifEmpty { null }
+        }
+    }
+}
+
+/** Open the quick order for [id]: inside the app when it is open, else the sheet. */
+private fun Activity.openQuickOrder(id: String?) {
+    QuickOrderState.pendingConversationId = id
+    val target = if (MainActivity.isAlive) MainActivity::class.java else QuickOrderActivity::class.java
+    startActivity(
+        Intent(this, target)
+            .putExtra(OrderDetectNotifier.EXTRA_CONVERSATION, id)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    )
 }
 
 /**
@@ -33,14 +65,35 @@ object QuickOrderState {
 class QuickOrderLauncherActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val id = intent?.getStringExtra(OrderDetectNotifier.EXTRA_CONVERSATION)
-        QuickOrderState.pendingConversationId = id
-        val target = if (MainActivity.isAlive) MainActivity::class.java else QuickOrderActivity::class.java
-        startActivity(
-            Intent(this, target)
-                .putExtra(OrderDetectNotifier.EXTRA_CONVERSATION, id)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-        )
+        openQuickOrder(intent?.getStringExtra(OrderDetectNotifier.EXTRA_CONVERSATION))
+        finish()
+    }
+}
+
+/**
+ * The Android share target (V4 WP1.5): "Share → ecomsbd" on chat text opens the
+ * same quick order as Create. The text is held in memory for the sheet and
+ * goes to the server only through it, after the seller's share (rule L4);
+ * only a random id travels in the intent.
+ */
+class QuickOrderShareActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            val text = SharedText.read(
+                intent?.action,
+                intent?.type,
+                intent?.getCharSequenceExtra(Intent.EXTRA_TEXT),
+            )
+            if (text != null) {
+                val share = SharedText(UUID.randomUUID().toString(), text, System.currentTimeMillis())
+                QuickOrderState.pendingShare = share
+                openQuickOrder(share.id)
+            }
+        } catch (error: Exception) {
+            // Another app's intent: never crash on it, never log its text.
+            android.util.Log.w("EcomsbdIntake", "share failed: ${error.javaClass.simpleName}")
+        }
         finish()
     }
 }

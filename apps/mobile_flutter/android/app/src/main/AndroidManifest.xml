@@ -88,6 +88,23 @@
             android:excludeFromRecents="true"
             android:taskAffinity="com.ecomsbd.app.quickorder"
             android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Share target (V4 WP1.5): text shared from a chat app opens the
+             same quick order. The text stays in memory, never in an intent
+             onward. -->
+        <activity
+            android:name=".intake.QuickOrderShareActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_target_label"
+            android:taskAffinity="com.ecomsbd.app.quickorder"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
         <!-- The translucent quick-order sheet (its own Flutter engine). -->
         <activity
             android:name=".intake.QuickOrderActivity"

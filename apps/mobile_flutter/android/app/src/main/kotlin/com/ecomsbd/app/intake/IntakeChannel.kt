@@ -64,7 +64,9 @@ class IntakeChannel private constructor(
                 "takeQuickOrder" -> result.success(quickOrder())
                 "finishQuickOrder" -> {
                     val id = call.argument<String>("conversationId")
-                    if (id != null && call.argument<Boolean>("created") == true) {
+                    if (id != null && QuickOrderState.pendingShare?.id == id) {
+                        QuickOrderState.pendingShare = null
+                    } else if (id != null && call.argument<Boolean>("created") == true) {
                         intake.finish(id)?.let { OrderDetectNotifier.cancel(context, it.notificationId) }
                     }
                     QuickOrderState.pendingConversationId = null
@@ -106,6 +108,14 @@ class IntakeChannel private constructor(
 
     private fun quickOrder(): Map<String, Any?>? {
         val id = QuickOrderState.pendingConversationId ?: return null
+        QuickOrderState.pendingShare?.takeIf { it.id == id }?.let { share ->
+            return mapOf(
+                "conversationId" to share.id,
+                "expired" to false,
+                "source" to "SHARE",
+                "messages" to listOf(mapOf("text" to share.text, "sentAt" to share.sharedAt)),
+            )
+        }
         val conversation = intake.conversation(id) ?: return mapOf("conversationId" to id, "expired" to true)
         val result = intake.classify(conversation)
         return mapOf(
