@@ -5,6 +5,8 @@ Brief sections 42 and 43::
     python -m app.provider_smoke steadfast --account-id <uuid>
     python -m app.provider_smoke steadfast --tenant-id <uuid> --invoice CP-20260911-0042
     python -m app.provider_smoke steadfast --env-credentials --json
+    python -m app.provider_smoke pathao --account-id <uuid> --probe-undocumented
+    python -m app.provider_smoke redx --env-credentials --sandbox
 
 This is the one place in the codebase that talks to a *live* provider on
 purpose. Everything about it is arranged so that running it cannot surprise
@@ -188,7 +190,13 @@ def _credentials_from_env() -> tuple[SteadfastCredentials, str]:
 
 async def run_smoke(args: argparse.Namespace) -> SmokeReport:
     """Run the requested checks against a live provider."""
-    report = SmokeReport(provider="steadfast", started_at=utc_now().isoformat())
+    report = SmokeReport(provider=args.provider, started_at=utc_now().isoformat())
+    if args.provider != "steadfast":
+        # V4 WP0.7: Pathao and RedX, same three levels (app/provider_smoke_generic.py).
+        from app.provider_smoke_generic import run_generic_smoke
+
+        result: SmokeReport = await run_generic_smoke(args, report, SmokeResult)
+        return result
 
     manifest = load_manifest("steadfast")
     report.add(
@@ -465,7 +473,7 @@ def _confirm_create(args: argparse.Namespace) -> str | None:
     prompt = "\n".join(
         [
             "",
-            "This will create a REAL parcel at Steadfast.",
+            f"This will create a REAL parcel at {args.provider.capitalize()}.",
             f"  invoice:   {invoice}",
             f"  recipient: {args.recipient_name}",
             f"  cod:       {args.cod_amount} BDT",
@@ -483,7 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Read-only unless --allow-create is given."
         ),
     )
-    parser.add_argument("provider", choices=["steadfast"])
+    parser.add_argument("provider", choices=["steadfast", "pathao", "redx"])
 
     source = parser.add_argument_group("credential source (never on the command line)")
     source.add_argument("--account-id", help="Courier account UUID to read credentials from")
@@ -491,7 +499,16 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--env-credentials",
         action="store_true",
-        help=f"Use {ENV_API_KEY} and {ENV_SECRET_KEY} instead of a stored account",
+        help=(
+            f"Use {ENV_API_KEY} and {ENV_SECRET_KEY} (Steadfast), PATHAO_SMOKE_CLIENT_ID and "
+            "PATHAO_SMOKE_CLIENT_SECRET (Pathao) or REDX_SMOKE_API_TOKEN (RedX) instead of a "
+            "stored account"
+        ),
+    )
+    source.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="With --env-credentials: Pathao/RedX sandbox hosts (sandbox keys only work there)",
     )
 
     lookups = parser.add_argument_group("optional read checks")
@@ -517,6 +534,9 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--recipient-phone", help="11-digit Bangladeshi number")
     create.add_argument("--recipient-address")
     create.add_argument("--cod-amount", type=int, default=0, help="Taka, default 0")
+    create.add_argument("--store-id", help="Pathao/RedX pickup store (default: the first listed)")
+    create.add_argument("--delivery-area-id", help="RedX: area id from the areas list")
+    create.add_argument("--delivery-area-name", help="RedX: that area's name, as listed")
     create.add_argument(
         "--yes", action="store_true", help="Skip the typed confirmation (unattended runs)"
     )
