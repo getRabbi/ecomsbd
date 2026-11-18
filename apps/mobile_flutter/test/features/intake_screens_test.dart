@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/core/api/api_client.dart';
 import 'package:ecomsbd/data/auth/auth_controller.dart';
@@ -541,6 +543,7 @@ void main() {
     Map<String, Object?> reply(
       Map<String, Object?> draft, {
       Map<String, Object?>? courier,
+      bool confirmation = false,
     }) => {
       'accepted': 1,
       'duplicates': 0,
@@ -548,6 +551,7 @@ void main() {
       'draft': draft,
       'courier_suggestion': courier,
       'attention_id': null,
+      'confirmation_enabled': confirmation,
     };
 
     Future<({_FakeNative native, _Fake fake, EcomsbdDatabase db})> open(
@@ -711,6 +715,85 @@ void main() {
       // The draft id is the client id: the server closes the draft when the
       // queued create lands, and a later confirm replays the same order.
       expect(entry.entityId, 'd1');
+    });
+
+    // V4 WP2.1: the confirmation buttons, behind confirmation_engine_enabled.
+    for (final language in ['en', 'bn']) {
+      testWidgets('with confirmation on, the sheet offers both buttons in '
+          '$language', (tester) async {
+        await open(tester, language, reply(draft(), confirmation: true));
+        await _reveal(tester, 'qo.confirmedInChat');
+        expect(find.text(_t(language, 'qo.confirmCall')), findsOneWidget);
+        expect(find.text(_t(language, 'qo.confirmedInChat')), findsOneWidget);
+        expect(find.text(_t(language, 'qo.confirmNote')), findsOneWidget);
+        expect(find.byKey(const ValueKey('qo.create')), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('with confirmation off, only Create order is shown', (
+      tester,
+    ) async {
+      await open(tester, 'en', reply(draft()));
+      await _reveal(tester, 'qo.create');
+      expect(find.byKey(const ValueKey('qo.confirmCall')), findsNothing);
+      expect(find.byKey(const ValueKey('qo.confirmedInChat')), findsNothing);
+    });
+
+    for (final (key, mode, note) in [
+      ('qo.confirmCall', 'REQUEST', 'qo.confirming'),
+      ('qo.confirmedInChat', 'SELLER_CHAT', 'qo.confirmedNow'),
+    ]) {
+      testWidgets('$key creates the order with confirmation $mode', (
+        tester,
+      ) async {
+        final setup = await open(
+          tester,
+          'en',
+          reply(draft(), confirmation: true),
+        );
+        setup.fake.adapter.onJson('POST', '/chat-orders/d1/confirm', {
+          'order': orderJson(id: 'o1', number: 'CP-20261119-0002'),
+          'duplicate_check': null,
+          'replayed': false,
+          'confirmation': null,
+        });
+        await _reveal(tester, key);
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+
+        final body = setup.fake.adapter
+            .to('POST', '/chat-orders/d1/confirm')
+            .single
+            .jsonBody;
+        expect(body['confirmation'], mode);
+        expect(find.text('Order CP-20261119-0002 created.'), findsOneWidget);
+        expect(find.text(_t('en', note)), findsOneWidget);
+      });
+    }
+
+    testWidgets('offline, Confirm & call queues the request with the create', (
+      tester,
+    ) async {
+      final setup = await open(
+        tester,
+        'en',
+        reply(draft(), confirmation: true),
+      );
+      setup.fake.adapter.offline = true;
+      await _reveal(tester, 'qo.confirmCall');
+      await tester.tap(find.byKey(const ValueKey('qo.confirmCall')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_t('en', 'qo.queued')), findsOneWidget);
+      expect(find.text(_t('en', 'qo.confirming')), findsOneWidget);
+      final entry =
+          (await setup.db.select(setup.db.outboxEntries).get()).single;
+      expect(entry.entityId, 'd1');
+      // One queued create carries the request: the server starts the
+      // confirmation in the same transaction when it lands.
+      final payload = jsonDecode(entry.payload) as Map<String, dynamic>;
+      expect(payload['confirmation'], 'REQUEST');
     });
 
     testWidgets('Aro message lagbe adds a pasted message to the same chat', (

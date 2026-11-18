@@ -22,12 +22,20 @@ import '../shared/inputs.dart';
 /// What became of **Create order** on the quick-order sheet.
 @immutable
 class QuickOrderOutcome {
-  const QuickOrderOutcome({required this.order, required this.queued});
+  const QuickOrderOutcome({
+    required this.order,
+    required this.queued,
+    this.confirmation,
+  });
 
   final SellerOrder order;
 
   /// Offline: the order waits in the outbox and is sent on reconnect.
   final bool queued;
+
+  /// What the seller asked for with the order (V4 WP2.1): `REQUEST` (confirm
+  /// with the customer) or `SELLER_CHAT` (already confirmed in chat).
+  final String? confirmation;
 }
 
 /// One line on the sheet.
@@ -104,9 +112,9 @@ int? _paisa(String raw) {
 /// where it came from. **Create order** confirms the draft (one order,
 /// however often it is sent); offline it goes through the outbox with the
 /// draft id as its client id, so the server closes the draft when it lands.
-/// Until Phase 2 this one button stands for "Confirm & call customer" and
-/// "Already confirmed in chat" (WP2.1 splits it behind
-/// `confirmation_engine_enabled`).
+/// With the shop's `confirmation_engine_enabled` on (V4 WP2.1) the one button
+/// becomes **Confirm & call customer** and **Already confirmed in chat**; the
+/// order and its confirmation are one request, and one queued create offline.
 class QuickOrderForm extends ConsumerStatefulWidget {
   const QuickOrderForm({
     required this.draft,
@@ -114,11 +122,15 @@ class QuickOrderForm extends ConsumerStatefulWidget {
     required this.onSaveDraft,
     required this.onMoreMessages,
     this.suggestion,
+    this.confirmationEnabled = false,
     super.key,
   });
 
   final ChatDraft draft;
   final CourierSuggestion? suggestion;
+
+  /// The server said the shop confirms orders with the customer.
+  final bool confirmationEnabled;
   final ValueChanged<QuickOrderOutcome> onDone;
   final VoidCallback onSaveDraft;
   final VoidCallback onMoreMessages;
@@ -135,6 +147,9 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
   late final TextEditingController _cod;
   late List<_Line> _lines;
   bool _saving = false;
+
+  /// The confirmation mode of the button being sent, for its label.
+  String? _sending;
   ApiError? _error;
 
   ChatDraft get _draft => widget.draft;
@@ -220,7 +235,8 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
     retryable: false,
   );
 
-  Future<void> _create() async {
+  /// [confirmation] is `REQUEST`, `SELLER_CHAT` or null (plain create).
+  Future<void> _create([String? confirmation]) async {
     if (!(_form.currentState?.validate() ?? false)) return;
     final named = _lines.where((line) => line.name.text.trim().isNotEmpty);
     if (named.any((line) => line.needsProduct || line.needsVariant)) {
@@ -245,6 +261,7 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
     }
     setState(() {
       _saving = true;
+      _sending = confirmation;
       _error = null;
     });
     final phone = _phone.text.trim();
@@ -271,12 +288,19 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
       if (_name.text.trim().isNotEmpty) 'customer_name': _name.text.trim(),
       if (_address.text.trim().isNotEmpty) 'address': _address.text.trim(),
       'cod_amount_paisa': _codAmount,
+      'confirmation': ?confirmation,
     };
     final chats = ref.read(chatOrdersRepositoryProvider);
     try {
       final result = await chats.confirm(_draft.id, body);
       if (mounted) {
-        widget.onDone(QuickOrderOutcome(order: result.order, queued: false));
+        widget.onDone(
+          QuickOrderOutcome(
+            order: result.order,
+            queued: false,
+            confirmation: confirmation,
+          ),
+        );
       }
     } on ApiError catch (error) {
       if (!error.isOffline) {
@@ -310,6 +334,7 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
             codAmountPaisa: body['cod_amount_paisa'] as int,
             channel: 'PASTE_PARSE',
             clientId: _draft.id,
+            confirmation: body['confirmation'] as String?,
           );
       var order = saved.order;
       if (!saved.isQueued) {
@@ -326,7 +351,13 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
         }
       }
       if (mounted) {
-        widget.onDone(QuickOrderOutcome(order: order, queued: saved.isQueued));
+        widget.onDone(
+          QuickOrderOutcome(
+            order: order,
+            queued: saved.isQueued,
+            confirmation: body['confirmation'] as String?,
+          ),
+        );
       }
     } on ApiError catch (error) {
       if (mounted) {
@@ -336,6 +367,42 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
         });
       }
     }
+  }
+
+  Widget _createButton(
+    BuildContext context, {
+    required String key,
+    String? confirmation,
+    bool tonal = false,
+  }) {
+    final busy = _saving && _sending == confirmation;
+    final label = Text(
+      busy ? context.tr('qo.creating') : context.tr(key),
+      textAlign: TextAlign.center,
+    );
+    final onPressed = _saving ? null : () => unawaited(_create(confirmation));
+    const size = Size.fromHeight(EcomsbdTouch.minTarget);
+    if (tonal) {
+      return FilledButton.tonal(
+        key: ValueKey(key),
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: size,
+          shape: const StadiumBorder(),
+        ),
+        child: label,
+      );
+    }
+    return FilledButton(
+      key: ValueKey(key),
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: EcomsbdColors.orange,
+        minimumSize: size,
+        shape: const StadiumBorder(),
+      ),
+      child: label,
+    );
   }
 
   @override
@@ -496,18 +563,22 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
               ),
             ),
           const SizedBox(height: EcomsbdSpacing.md),
-          FilledButton(
-            key: const ValueKey('qo.create'),
-            onPressed: _saving ? null : () => unawaited(_create()),
-            style: FilledButton.styleFrom(
-              backgroundColor: EcomsbdColors.orange,
-              minimumSize: const Size.fromHeight(EcomsbdTouch.minTarget),
-              shape: const StadiumBorder(),
+          if (widget.confirmationEnabled) ...<Widget>[
+            _createButton(
+              context,
+              key: 'qo.confirmCall',
+              confirmation: 'REQUEST',
             ),
-            child: Text(
-              _saving ? context.tr('qo.creating') : context.tr('qo.create'),
+            const SizedBox(height: EcomsbdSpacing.xs),
+            _createButton(
+              context,
+              key: 'qo.confirmedInChat',
+              confirmation: 'SELLER_CHAT',
+              tonal: true,
             ),
-          ),
+            _Caption(text: context.tr('qo.confirmNote')),
+          ] else
+            _createButton(context, key: 'qo.create'),
           const SizedBox(height: EcomsbdSpacing.xs),
           OutlinedButton(
             key: const ValueKey('qo.saveDraft'),

@@ -390,6 +390,18 @@ class _SheetBody extends StatelessWidget {
           key: const ValueKey('qo.ordered'),
           style: theme.textTheme.titleSmall,
         ),
+        if (outcome.confirmation != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.tr(
+                outcome.confirmation == 'SELLER_CHAT'
+                    ? 'qo.confirmedNow'
+                    : 'qo.confirming',
+              ),
+              key: const ValueKey('qo.confirmationNote'),
+            ),
+          ),
         if (outcome.queued)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -434,6 +446,7 @@ class _SheetBody extends StatelessWidget {
         key: ValueKey('qo.form.${draft.id}.${draft.messageCount}'),
         draft: draft,
         suggestion: CourierSuggestion.fromJson(reply?['courier_suggestion']),
+        confirmationEnabled: reply?['confirmation_enabled'] == true,
         onDone: onOrdered,
         onSaveDraft: onClose,
         onMoreMessages: onMoreMessages,

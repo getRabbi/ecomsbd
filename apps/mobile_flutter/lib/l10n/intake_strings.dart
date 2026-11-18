@@ -128,6 +128,11 @@ const intakeEn = <String, String>{
       'Booking stays separate: saving sends nothing to a courier.',
   'qo.create': 'Create order',
   'qo.creating': 'Creating…',
+  'qo.confirmCall': 'Confirm & call customer',
+  'qo.confirmedInChat': 'Already confirmed in chat',
+  'qo.confirmNote':
+      'Confirm & call: we check with the customer before the order goes '
+      'ahead. Already confirmed: the order is confirmed now.',
   'qo.saveDraft': 'Save draft',
   'qo.saveDraftNote':
       'The draft stays in Chat orders. Changes made here are not kept.',
@@ -143,6 +148,8 @@ const intakeEn = <String, String>{
   'qo.amountError': 'Enter an amount like 1250',
   'qo.ordered': 'Order {number} created.',
   'qo.orderedNoNumber': 'Order created.',
+  'qo.confirming': 'We will confirm it with the customer.',
+  'qo.confirmedNow': 'Marked as confirmed by the customer in chat.',
   'qo.queued':
       'No internet: the order is saved on this phone and is sent when you '
       'are back online.',
@@ -265,6 +272,11 @@ const intakeBn = <String, String>{
   'qo.courierNote': 'বুকিং আলাদা: সেভ করলে কুরিয়ারে কিছু যায় না।',
   'qo.create': 'অর্ডার বানান',
   'qo.creating': 'বানানো হচ্ছে…',
+  'qo.confirmCall': 'কনফার্ম করতে কাস্টমারকে কল করুন',
+  'qo.confirmedInChat': 'চ্যাটেই কনফার্ম হয়েছে',
+  'qo.confirmNote':
+      'কল করে কনফার্ম: অর্ডার এগোনোর আগে কাস্টমারের কাছে যাচাই করা হবে। '
+      'চ্যাটেই কনফার্ম: অর্ডারটা এখনই কনফার্ম হবে।',
   'qo.saveDraft': 'ড্রাফট সেভ করুন',
   'qo.saveDraftNote':
       'ড্রাফটটা Chat orders-এ থাকবে। এখানে করা বদলগুলো রাখা হয় না।',
@@ -280,6 +292,8 @@ const intakeBn = <String, String>{
   'qo.amountError': '১২৫০-এর মতো করে টাকা লিখুন',
   'qo.ordered': 'অর্ডার {number} বানানো হয়েছে।',
   'qo.orderedNoNumber': 'অর্ডার বানানো হয়েছে।',
+  'qo.confirming': 'কাস্টমারের সাথে অর্ডারটা কনফার্ম করা হবে।',
+  'qo.confirmedNow': 'চ্যাটে কাস্টমার কনফার্ম করেছেন বলে চিহ্নিত হয়েছে।',
   'qo.queued':
       'ইন্টারনেট নেই: অর্ডারটা এই ফোনে সেভ হয়েছে, অনলাইনে ফিরলে পাঠানো হবে।',
   'qo.closed': 'এই চ্যাট অর্ডারটা Chat orders-এ আগেই বন্ধ হয়েছে।',
