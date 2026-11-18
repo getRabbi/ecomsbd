@@ -121,7 +121,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
-- 2026-11-18 WP1.2 intake rules config (backend) on v4/phase-1
+- 2026-11-18 WP1.2 intake rules config (backend) 1ffb66d on v4/phase-1
 - 2026-11-18 WP1.1 device links + ingest keys (backend) on v4/phase-1
 - 2026-11-18 WP0.7 smoke 0b37662 + Pathao resolver + statement profiles; Phase 0 code complete, G0 waiting on operator
 - 2026-11-18 WP0.6 provider-independent courier history 0ce0cfa + clients; BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED
