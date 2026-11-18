@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -263,15 +264,46 @@ async def process_message(db: AsyncSession, message_id: uuid.UUID) -> str:
     phone_before = draft.selected_phone
     await rebuild(db, draft, owner)
     message.processing_status = "PROCESSED"
+    draft = await _settle(db, draft, phone_before)
+    message.linked_draft_id = draft.id
+    return draft.status
+
+
+async def _settle(
+    db: AsyncSession, draft: ChatOrderDraft, phone_before: str | None
+) -> ChatOrderDraft:
+    """After a rebuild: duplicate merge when the phone changed, then announce."""
     if (
         draft.capture_source != META_WEBHOOK
         and draft.selected_phone
         and draft.selected_phone != phone_before
     ):
         draft = await _attach_duplicate(db, draft)
-        message.linked_draft_id = draft.id
     await _announce_if_ready(db, draft)
-    return draft.status
+    return draft
+
+
+async def reparse(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    read: Callable[[str], Awaitable[ParsedOrder]],
+) -> ChatOrderDraft:
+    """Read an open phone, share or paste draft once more with ``read`` (V4 WP1.5).
+
+    The quick-order sheet's route passes the enhanced parser (the LLM path,
+    ``ai_parse_enabled``), which only fills fields into the strict schema
+    (rule L12). Meta drafts keep the deterministic parser. Returns the draft
+    the messages now belong to (a duplicate merge may move them).
+    """
+    if draft.capture_source == META_WEBHOOK or draft.status not in OPEN_STATES:
+        return draft
+    owner = await db.get(ChatIdentity, draft.identity_id)
+    if owner is None:
+        return draft
+    parsed = await read(await transcript(db, draft))
+    phone_before = draft.selected_phone
+    await rebuild(db, draft, owner, parsed=parsed)
+    return await _settle(db, draft, phone_before)
 
 
 async def _link_whatsapp_sender(db: AsyncSession, identity: ChatIdentity) -> None:
@@ -375,10 +407,19 @@ async def transcript(db: AsyncSession, draft: ChatOrderDraft) -> str:
     return joined[:MAX_TRANSCRIPT_CHARS]
 
 
-async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentity) -> None:
-    """Re-read the whole session and refresh every machine-filled field."""
-    text = await transcript(db, draft)
-    parsed = _parser.parse(text)
+async def rebuild(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    identity: ChatIdentity,
+    *,
+    parsed: ParsedOrder | None = None,
+) -> None:
+    """Re-read the whole session and refresh every machine-filled field.
+
+    ``parsed`` is the session already read by another parser (:func:`reparse`).
+    """
+    if parsed is None:
+        parsed = _parser.parse(await transcript(db, draft))
     warnings: set[str] = set()
 
     sender_phone: str | None = None
@@ -419,6 +460,13 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
         if parsed.confidence.get(key, 0.0) < CONFIDENCE_CONFIRM_THRESHOLD
         and _present(parsed, field)
     }
+    # The enhanced parser's own flags: a label the model read differently, an
+    # address filled from the customer's last order.
+    uncertain.update(
+        field
+        for field in parsed.uncertain_fields
+        if field in ("name", "phone", "address", "items", "amount")
+    )
     if parsed.needs_phone_selection:
         uncertain.add("phone")
         warnings.add("MULTIPLE_PHONES")

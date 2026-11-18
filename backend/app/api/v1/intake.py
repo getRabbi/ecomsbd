@@ -23,11 +23,20 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Header, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.api.deps import DbSession, Principal, TenantPrincipal, require_permission
+from app.api.deps import (
+    DbSession,
+    Principal,
+    SettingsDep,
+    TenantPrincipal,
+    get_hasher,
+    get_vault,
+    require_permission,
+)
 from app.chat_orders import service as chat_orders
 from app.chat_orders.models import (
     DEVICE,
     DEVICE_NOTIFICATION,
+    OPEN_STATES,
     ChatMessage,
     ChatOrderDraft,
 )
@@ -36,13 +45,22 @@ from app.common.cache import RateLimiter
 from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.idempotency import begin_idempotent, complete_idempotent
 from app.core.clock import utc_now
+from app.core.config import Settings
 from app.core.errors import AppError, ErrorCode, ForbiddenError, NotFoundError, RateLimitedError
+from app.customers.service import CustomerService
+from app.delivery_rules.suggestion import suggest_courier
 from app.device_links.auth import IngestPrincipal, require_ingest_key
 from app.device_links.models import INTAKE_CAPTURE
 from app.intake import rules
 from app.intake import service as intake
 from app.intake.models import IntakeRuleSet, ShopIntakeSettings
 from app.integrations.models import IntegrationConnection
+from app.orders.parser import ParsedOrder
+from app.orders.parser.enhanced import (
+    EnhancedOrderParser,
+    build_ai_parse_client,
+    last_address_lookup,
+)
 from app.tenants.roles import Permission
 
 router = APIRouter(prefix="/intake", tags=["intake"])
@@ -339,8 +357,15 @@ async def _manual_result(db: DbSession, message_id: uuid.UUID | None) -> dict[st
         if row is not None and row.linked_draft_id is not None
         else None
     )
+    suggestion = (
+        await suggest_courier(db, draft.tenant_id, address=draft.address)
+        if draft is not None and draft.status in OPEN_STATES
+        else None
+    )
     return {
         "draft": (await _views(db, [draft]))[0] if draft is not None else None,
+        # Display only: saving the order never contacts a courier.
+        "courier_suggestion": suggestion.as_dict() if suggestion is not None else None,
         # A known customer writing about an order they already placed.
         "attention_id": str(row.linked_attention_id)
         if row is not None and row.linked_attention_id is not None
@@ -348,11 +373,43 @@ async def _manual_result(db: DbSession, message_id: uuid.UUID | None) -> dict[st
     }
 
 
+async def _read_with_model(db: DbSession, settings: Settings, message_id: uuid.UUID | None) -> None:
+    """The LLM path (V4 WP1.5): with ``ai_parse_enabled`` on, the sheet's draft
+    is read once more by the enhanced parser (fields only, rule L12)."""
+    row = await db.get(ChatMessage, message_id) if message_id is not None else None
+    if row is None or row.linked_draft_id is None:
+        return
+    draft = await db.get(ChatOrderDraft, row.linked_draft_id)
+    if draft is None or not await FeatureFlagService(db).is_enabled(
+        FlagKey.AI_PARSE_ENABLED, tenant_id=draft.tenant_id
+    ):
+        return
+    customers = CustomerService(db, hasher=get_hasher(settings), vault=get_vault(settings))
+
+    async def customer_id_for(phone: str) -> uuid.UUID | None:
+        customer = await customers.find_by_phone(phone)
+        return customer.id if customer is not None else None
+
+    parser = EnhancedOrderParser(
+        db,
+        settings,
+        client=build_ai_parse_client(settings),
+        last_address=last_address_lookup(db, customer_id_for),
+    )
+    tenant_id = draft.tenant_id
+
+    async def read(text: str) -> ParsedOrder:
+        return await parser.parse(text, tenant_id=tenant_id)
+
+    await chat_orders.reparse(db, draft, read)
+
+
 @router.post("/captures/manual", summary="Read a shared or pasted message into a draft")
 async def capture_manual(
     payload: ManualCapture,
     db: DbSession,
     principal: OrderWriter,
+    settings: SettingsDep,
     idempotency_key: OptionalKey = None,
 ) -> dict[str, Any]:
     await _require_flag(db, principal)
@@ -393,6 +450,7 @@ async def capture_manual(
         await chat_orders.process_message(db, message_id)
     ids = result.stored or result.existing
     last = ids[-1] if ids else None
+    await _read_with_model(db, settings, last)
     # The request commits after its tenant scope ends: write everything now.
     await db.flush()
     if claim is not None:

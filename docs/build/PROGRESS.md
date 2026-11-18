@@ -2,7 +2,18 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP1.5 — Quick-order sheet + share target   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 WP1.5.
+WP: WP1.5 — Quick-order sheet + share target   Step: 2 (slice A backend). Read only spec §3 WP1.5.
+Plan WP1.5:
+1. Backend LLM path: `rebuild(..., parsed=)` + `chat_orders.reparse(db, draft, parser)`; `captures/manual` re-reads a non-Meta open draft once with `EnhancedOrderParser` (flag `ai_parse_enabled`; cached; deterministic result → no-op), then the same duplicate/announce tail as `process_message`.
+2. Backend courier suggestion in the `captures/manual` reply: shop `default_courier` (only with `delivery_rules_enabled`), else best delivered rate in the draft's zone from the shop's own terminal consignments (last 180 d, non-manual, ≥ 3 parcels per courier = WP0.6 sample floor). Display only (order save never contacts a courier).
+3. Tests: `test_intake_capture` style — reparse with a fake AI client, flag off no-op, suggestion default / history / thin data / no zone.
+4. Flutter data: `QuickOrderCapture.source` (`DEVICE_NOTIFICATION` | `SHARE`), reply model (`ChatDraft` + suggestion).
+5. Flutter sheet: editable name/phone (picker when > 1)/address/items (product picker for AMBIGUOUS + variant)/COD (CATALOG hint, `COD_MISMATCH` + `ZONE_UNKNOWN` warnings), uncertain highlight, `CourierHistoryChip` when a customer matched, courier suggestion line, duplicate warning (draft `DUPLICATE_ORDER` + check-duplicates sheet before create).
+6. Buttons: **Create order** (`/chat-orders/{id}/confirm`; offline → `OrdersRepository.create(clientId: draft.id)` through the outbox, same client id so a later confirm replays), **Save draft** (keeps the server draft for the Inbox, chat leaves the phone), **Aro message lagbe** (clipboard on tap only → same conversation through `captures/manual`).
+7. Android share target: exported `QuickOrderShareActivity` (`ACTION_SEND text/plain`, NoDisplay) → in-memory shared text (≤ 4,000 chars) → same launcher routing → `source: SHARE`.
+8. iOS Share Extension: needs an Xcode target (no Mac here) → PARTIAL + operator action.
+9. EN + BN strings, 360×800 overflow test, quick-order widget tests (fake native + fake API), Kotlin share-intent parsing unit test.
+10. Targeted verification only (operator rule), IMPLEMENTATION_STATUS row, ledger.
 Next-session notes: operator rule: targeted tests only. WP1.4 left a minimal `lib/features/intake/quick_order_screen.dart` (`QuickOrderScreen`: takes the buffered chat from `IntakeNative.takeQuickOrder()`, sends `POST /v1/intake/captures/manual` on open, shows created / duplicate / failed); WP1.5 grows it into the full sheet (parsed fields, phone picker, product match, COD from WP0.4, fraud chip WP0.6, courier suggestion, Create order / Save draft). It runs in two places: the app route `/quick-order` (`Routes.quickOrder`, pushed by `_startIntakeBridge` in `main.dart`) and the translucent `QuickOrderActivity` engine (`quickOrderMain` → `QuickOrderApp`). Keep the one-session-holder rule (decision 2026-11-19 WP1.4). Share target: an `ACTION_SEND text/plain` filter can land on the same `QuickOrderLauncherActivity` routing and post `source: SHARE`. Kotlin JVM tests: `cd apps/mobile_flutter/android; JAVA_HOME=E:/Android/jbr ./gradlew :app:testDebugUnitTest --tests 'com.ecomsbd.app.intake.*' "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=768m" -Pkotlin.compiler.execution.strategy=in-process` (needs the local key.properties workaround, see env decision).
 
 ## Status
