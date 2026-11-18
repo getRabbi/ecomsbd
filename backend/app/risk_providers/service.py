@@ -33,6 +33,8 @@ from app.risk_providers.contract import (
     ProviderError,
     ProviderResult,
     RiskProviderAdapter,
+    history_state,
+    normalize_courier_history,
     normalize_facts,
 )
 from app.risk_providers.models import ExternalRiskLookup, RiskProviderConnection
@@ -126,6 +128,7 @@ def lookup_view(row: ExternalRiskLookup, now: datetime) -> dict[str, Any]:
         "freshness": "FRESH" if fresh else "STALE",
         "sample_size": row.sample_size,
         "confidence": row.confidence,
+        "courier_history": row.courier_history,
     }
 
 
@@ -561,6 +564,9 @@ class ExternalRiskService:
             facts, dropped = normalize_facts(result.facts)
             lookup.status = "FOUND" if result.found else "NOT_FOUND"
             lookup.facts = facts if result.found else []
+            lookup.courier_history = (
+                normalize_courier_history(result.courier_history) if result.found else None
+            )
             lookup.dropped_facts = dropped
             lookup.provider_observed_at = result.observed_at
             lookup.sample_size = (
@@ -619,6 +625,30 @@ class ExternalRiskService:
             "outcome": "FETCHED" if lookup.status != "FAILED" else "FAILED",
             "error_code": lookup.error_code,
         }
+
+
+async def external_success_bps(db: AsyncSession, customer_id: uuid.UUID) -> int | None:
+    """Delivered share (basis points) from the newest answered lookup with courier history.
+
+    ``None`` when no provider has itemised history for the customer, or when it
+    covers fewer than ``SAMPLE_FLOOR`` parcels ("kom data"): too little to judge.
+    """
+    rows = (
+        await db.scalars(
+            sa.select(ExternalRiskLookup.courier_history)
+            .where(
+                ExternalRiskLookup.customer_id == customer_id,
+                ExternalRiskLookup.status == "FOUND",
+                ExternalRiskLookup.courier_history.is_not(None),
+            )
+            .order_by(ExternalRiskLookup.checked_at.desc())
+            .limit(1)
+        )
+    ).all()
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    _, success_bps = history_state(rows[0].get("aggregate"))
+    return success_bps
 
 
 async def external_data_state(db: AsyncSession, customer_id: uuid.UUID) -> str:

@@ -52,6 +52,8 @@ class ExternalRiskLookup(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(sa.String(16))
     error_code: Mapped[str | None] = mapped_column(sa.String(40))
     facts: Mapped[list] = mapped_column(JSONColumn, default=list)
+    #: V4 WP0.6: normalised per-courier counts (``normalize_courier_history``).
+    courier_history: Mapped[dict | None] = mapped_column(JSONColumn, nullable=True)
     dropped_facts: Mapped[int] = mapped_column(default=0)
     provider_observed_at: Mapped[datetime | None] = mapped_column(TZDateTime)
     sample_size: Mapped[int | None] = mapped_column()

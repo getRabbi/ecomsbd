@@ -265,6 +265,9 @@ FIELDS: dict[str, tuple[str | None, str, frozenset[str]]] = {
     "risk_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "external_data_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "external_found": ("customer", "bool", frozenset({"is_true", "is_false"})),
+    #: V4 WP0.6: delivered share across couriers, in basis points; unset under
+    #: the 3-parcel floor, so a condition on it never matches thin data.
+    "external_success_bps": ("customer", "int", frozenset({"gte", "lte"})),
     #: The latest published anonymous network RTO rate (rounded percent).
     "network_rto_percent": (None, "int", frozenset({"gte", "lte"})),
     #: Facts of the event itself.

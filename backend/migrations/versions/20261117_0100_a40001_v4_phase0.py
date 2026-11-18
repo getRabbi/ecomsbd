@@ -1,6 +1,7 @@
 """V4 phase 0: product_events (funnel), ai_usage (model-call cost), shop_delivery_rules.
 
-Also widens chat_order_drafts.cod_source to 16 characters for CHAT_MISMATCH.
+Also widens chat_order_drafts.cod_source to 16 characters for CHAT_MISMATCH and adds
+external_risk_lookups.courier_history (per-courier counts, WP0.6).
 """
 
 from alembic import op
@@ -107,6 +108,9 @@ def upgrade():
             "cod_source", existing_type=sa.String(12), type_=sa.String(16), existing_nullable=True
         )
 
+    with op.batch_alter_table("external_risk_lookups") as batch_op:
+        batch_op.add_column(sa.Column("courier_history", JSONColumn, nullable=True))
+
     db = op.get_bind()
     if db.dialect.name == "postgresql":
         roles = (
@@ -123,6 +127,8 @@ def upgrade():
 
 
 def downgrade():
+    with op.batch_alter_table("external_risk_lookups") as batch_op:
+        batch_op.drop_column("courier_history")
     with op.batch_alter_table("chat_order_drafts") as batch_op:
         batch_op.alter_column(
             "cod_source", existing_type=sa.String(16), type_=sa.String(12), existing_nullable=True
