@@ -2,8 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.4 — Shop delivery rules + COD auto-calc   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.4.
-Next-session notes: WP0.3 is code-complete; its gate G0.3 waits on the operator's live holdout run (see Operator actions). Do not tune the deterministic parser (operator rule). `POST /v1/orders/parse` now needs `db`/`settings` and returns `uncertain_fields`.
+WP: WP0.5 — Invoice + shipping label   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.5.
+Next-session notes: operator asked (2026-11-18) to keep going WP by WP; ledger updated after every WP. WP0.4 left `delivery_rules_enabled` off; `DeliveryRulesService.get()` gives effective rules (defaults when no row) for WP2.2/WP4.
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -11,7 +11,7 @@ Next-session notes: WP0.3 is code-complete; its gate G0.3 waits on the operator'
 | WP0.1 | DONE | 90edda4 | backend 1805 passed/5 skipped, ruff+format+mypy clean; Flutter 541 (perf test flaky under load, green alone); web 66 | docs only: no flag/env/migration needed |
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
 | WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
-| WP0.4 | TODO | | | |
+| WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
 | WP0.5 | TODO | | | |
 | WP0.6 | TODO | | | |
 | WP0.7 | TODO | | | |
@@ -56,6 +56,12 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.4: the zone resolver reuses the parser's 64-district gazetteer (`app/orders/parser/districts.py`, EN + BN) and adds `app/orders/data/zones.yaml` (Dhaka city areas, Dhaka suburb areas; package-data). Dhaka, Gazipur and Narayanganj hold both city and suburbs, so without a listed area they resolve to `null`; any other district is `OUTSIDE_DHAKA` and beats a Dhaka area name ("Mirpur, Kushtia"). A listed city area alone ("Uttara") is `INSIDE_DHAKA`.
+- 2026-11-18 WP0.4: zone charges default to 0 = not set, so nothing is added to a COD until the seller enters charges; GET returns the defaults with `configured: false` and never writes a row. Flag `delivery_rules_enabled` (default off) gates both the API (`FEATURE_DISABLED`, 403) and the chat-draft COD step.
+- 2026-11-18 WP0.4: chat drafts mark a mismatch with the existing uncertain key `amount` (the clients already highlight it) rather than a new `cod_amount` key, plus warning `COD_MISMATCH`; an address whose zone is unknown adds no charge and warns `ZONE_UNKNOWN`. A stated amount is never replaced. Drafts carry no discount, so the draft calculation uses 0; `calculate_cod` takes a discount for order-side callers.
+- 2026-11-18 WP0.4: `chat_order_drafts.cod_source` widened 12 → 16 in a40001 for `CHAT_MISMATCH` (batch_alter_table; downgrade narrows back).
+- 2026-11-18 WP0.4: `shop_delivery_rules` is announced on the realtime `shop` topic (like `network_preferences`); PATCH writes audit action `delivery_rules.updated` with only the changed field names. `default_courier` must be a known courier provider key (`steadfast`, `pathao`, `redx`).
+- 2026-11-18 WP0.4: the web form helpers (`lib/delivery-rules.ts`) are self-contained because `npm test` runs files with Node's type stripping, which cannot follow extensionless value imports; `tests/delivery.test.mjs` checks their taka↔paisa conversion matches `lib/orders.ts` exactly.
 - 2026-11-18 WP0.3: the Anthropic client uses JSON-schema structured output (`output_config.format`) with **no tools** instead of a forced tool call — same schema guarantee, nothing the model can act with, and current models (Opus 5.5, Sonnet 5.5) return 400 on forced `tool_choice`. `anthropic-version: 2026-10-21`, no `temperature`, `effort: low`. Example model `claude-haiku-5-5` ($0.10 / $0.50 per MTok, estimate in env examples).
 - 2026-11-18 WP0.3: text longer than `AI_PARSE_MAX_INPUT_CHARS` is not sent (deterministic + `AI_PARSE_UNAVAILABLE`) rather than truncated — a cut paste can lose the order.
 - 2026-11-18 WP0.3: one `ai_parse_monthly` unit is spent before the call (bounds cost under concurrency); a failed call still spends it and is recorded as `ai_usage` outcome `error`. Cache hits spend nothing.
@@ -88,6 +94,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.4 delivery rules + zones + COD (backend, mobile, web) aaa77bd
 - 2026-11-18 operator correction to WP0.3 recorded ef3dc03; WP0.3 slice 2 (LLM path, holdout, eval) c97712c — WP0.3 DONE, G0.3 waiting on operator; checkpoint (context)
 - 2026-11-18 operator decisions 4f5b82e; WP0.3 slice 1 deterministic + corpus 85463f8; checkpoint (context)
 - 2026-11-18 WP0.2 done: emits 0279a22, Flutter Sentry b64ab8d, realtime silent table 58144bd; checkpoint (context)
