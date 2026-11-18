@@ -2,8 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.7 — Courier live-readiness   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.7.
-Next-session notes: operator rule: targeted tests only (no full suites). WP0.6 provider-independent parts are done; the BD Courier adapter waits for its contract (operator action). The quick-order sheet chip lands with WP1.5 (reuse `courierHistoryText` / `courierHistoryChip`).
+WP: WP1.1 — DEVICE connections + ingest keys   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 intro + WP1.1. Phase 1 code goes on branch `v4/phase-1` from `v4/phase-0`; migration id `a41001`.
+Next-session notes: operator rule: targeted tests only. Phase 0 code is complete; gate G0 waits on operator steps (see Gates / Operator actions). Phase-end PostgreSQL suite + a40001 round trip could not run here (no PostgreSQL on this machine) — operator action.
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -14,7 +14,7 @@ Next-session notes: operator rule: targeted tests only (no full suites). WP0.6 p
 | WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
 | WP0.5 | DONE | 495a35c | targeted: backend test_documents + test_orders + test_delivery_rules + test_platform_primitives 143 passed, ruff + mypy clean; Flutter order_print_sheet + commerce_screens + delivery_rules + chat_orders_inbox 41 passed, analyze clean on changed files; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 |
 | WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
-| WP0.7 | TODO | | | |
+| WP0.7 | BLOCKED: STATEMENT_SAMPLE_REQUIRED | see log | smoke (pathao/redx) 9 + Pathao resolver + statement profiles + payouts 52 + reconciliation 66 passed, ruff + mypy clean | statement profiles wait for real samples; smoke and resolver done; live calls are operator steps |
 | WP1.1 | TODO | | | |
 | WP1.2 | TODO | | | |
 | WP1.3 | TODO | | | |
@@ -42,7 +42,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 ## Gates
 | Gate | Met? | Evidence |
 |---|---|---|
-| G0 | waiting on operator | G0.3: `python -m app.orders.parser.eval --live --set holdout` (merged gated ≥ 90%); offline holdout deterministic-only 50.0% |
+| G0 | waiting on operator | code complete (WP0.1–0.7). Needs: G0.3 live holdout run ≥ 90%; invoice/label printed on web and an Android phone; a Sentry test event with the phone masked; one courier marked live below. PostgreSQL suite + a40001 round trip not run (no PostgreSQL here). |
 | G1 | | |
 | G2 | | |
 | G3 | | |
@@ -50,6 +50,11 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 | G5 | | |
 
 ## Operator actions waiting (things only Rabbi can do)
+- [ ] G0 courier live (WP0.7) — Steadfast first: (1) connect the shop's Steadfast account in the app with the live API key + secret; (2) `cd backend && python -m app.provider_smoke steadfast --account-id <id>` (read-only); (3) add `--probe-undocumented` and paste the field names into `docs/providers/steadfast/IMPLEMENTATION.md`; (4) optionally `--allow-create --recipient-name … --recipient-phone <your own> --recipient-address …` (typed confirmation) and cancel the parcel in the Steadfast panel; (5) turn `steadfast_enabled` on for the shop; (6) write "Steadfast live <date>" here. Pathao / RedX the same way with `pathao` / `redx` (sandbox keys: `--env-credentials --sandbox` with PATHAO_SMOKE_CLIENT_ID/SECRET or REDX_SMOKE_API_TOKEN).
+- [ ] WP0.7: place one real (masked) payout statement per courier in `backend/tests/fixtures/statements/<provider>/`; a profile is then written from it.
+- [ ] G0 print: turn `order_documents_enabled` on for a test shop; print an invoice and a 4×6 label from the web order panel and from an Android phone (order → print); check Bangla renders and the barcode scans.
+- [ ] G0 Sentry: with the WP0.2 DSN build, trigger a test event and confirm the phone appears masked.
+- [ ] Phase 0 end: on a machine with PostgreSQL run `TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_test python -m pytest -q` and `alembic upgrade head && alembic downgrade -1 && alembic upgrade head` (a40001 now holds product_events, ai_usage, shop_delivery_rules, cod_source widen, courier_history).
 - [ ] WP0.6: supply the BD Courier (bdcourier.com) API documentation (or name another licensed provider and its docs). It is transcribed into `docs/providers/bdcourier/CONTRACT.md`; then the adapter is built on `app/risk_providers/contract.py` (fills `CourierHistory`). Never the seller's courier-panel password.
 - [ ] WP0.2 (in progress — DSN being created): create the Sentry project, put its DSN in `apps/mobile_flutter/env/production.json` as `ECOMSBD_SENTRY_DSN`, build, and confirm one test event arrives with phones masked.
 - [ ] WP0.2 (in progress — operator turning it on): turn `product_events_enabled` on (admin console, global) when ready to collect the funnel; check `GET /v1/admin/ops/funnel`.
@@ -57,6 +62,9 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.7: Pathao/RedX smoke uses only existing adapter/client calls — `validate_credentials`, `list_stores`, `get_status`, the list endpoints, `login` for the token lifetime — and books through the adapter's own `create_consignment`; probes record field names and counts only, never values.
+- 2026-11-18 WP0.7: the Pathao resolver is a separate cached service (7-day TTL, per shop and live/sandbox) and is not yet wired into booking: Pathao's create keeps sending the free-text address and omits location ids, as today. A place must appear as whole words; a name inside a longer matched name is dropped ("Mirpur" inside "Mirpur 10"); unrelated matches tie → `None`; one-word names ≥ 5 letters tolerate one typo. City matching also accepts the gazetteer's old/new spellings (Chittagong/Chattogram).
+- 2026-11-18 WP0.7: statement profiles are YAML beside `app/payouts/profiles/` (package-data) with exact header row + mapping + cited sample; `parse_statement` uses a matching profile before generic column detection. With no sample, none ships.
 - 2026-11-18 WP0.6: courier history is a new optional `CourierHistory` on the existing `ProviderResult` (port unchanged for current adapters); courier keys are normalised slugs (any provider-reported courier, max 12 rows) rather than a fixed list, since the provider's courier set is unknown until its contract exists. A row with delivered + cancelled > total or out-of-range counts is dropped, not repaired. The provider's own aggregate is used when valid, else rows are summed.
 - 2026-11-18 WP0.6: under 3 parcels the history state is `INSUFFICIENT_DATA` and `success_bps` is null; the chip then says "too little data" ("কম ডেটা") instead of any count, and `external_success_bps` stays unset so no workflow condition matches thin data.
 - 2026-11-18 operator: do not re-run the full backend / Flutter suites (credit cost); run only the tests the change touches, plus ruff/format/mypy, `flutter analyze` on changed files and the web checks. Overrides §1.5 item 2 / §1.6 loop step 4 "full suite once per WP end".
@@ -104,6 +112,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.7 smoke 0b37662 + Pathao resolver + statement profiles; Phase 0 code complete, G0 waiting on operator
 - 2026-11-18 WP0.6 provider-independent courier history 0ce0cfa + clients; BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED
 - 2026-11-18 WP0.5 DONE (targeted tests per operator rule) 495a35c
 - 2026-11-18 WP0.5 web + mobile printing committed; full suites stopped by the machine for low memory — re-run pending

@@ -59,6 +59,7 @@ include = ["app*"]
 "app.couriers" = ["manifests/*.yaml"]
 "app.orders" = ["data/*.yaml"]
 "app.documents" = ["fonts/*.ttf", "fonts/OFL.txt"]
+"app.payouts" = ["profiles/*.yaml"]
 
 [tool.ruff]
 line-length = 100
