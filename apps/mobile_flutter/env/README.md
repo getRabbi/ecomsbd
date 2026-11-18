@@ -39,5 +39,11 @@ startup; authenticated sessions register refreshed FCM tokens through FastAPI.
 Logout clears device tokens. The service account belongs only in backend cloud
 secrets and must never be copied into Flutter.
 
+Crash reporting is off unless `ECOMSBD_SENTRY_DSN` is set in the define file.
+The DSN is a public client key, not a secret, but it belongs only to the
+production project. Reports never carry default PII, screenshots or the view
+tree, and phone numbers are masked before sending (see
+[the runbook](../../../docs/runbooks/PRODUCT_EVENTS.md)).
+
 See [Android package migration](../../../docs/ANDROID_PACKAGE_MIGRATION.md)
 for provider setup, signing fingerprints, and release validation gates.

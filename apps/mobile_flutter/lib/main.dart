@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'app/app.dart';
 import 'app/network_recovery.dart';
 import 'app/realtime_wiring.dart';
+import 'core/crash_reporting.dart';
 import 'l10n/app_locale.dart';
 import 'data/auth/supabase_bootstrap.dart';
 import 'data/notifications/push_registration.dart';
@@ -44,8 +45,14 @@ Future<void> main() async {
   startNetworkRecovery(container, recovery);
   startRealtime(container, recovery);
 
-  runApp(
-    UncontrolledProviderScope(container: container, child: const EcomsbdApp()),
+  // Sentry only when ECOMSBD_SENTRY_DSN was supplied; otherwise a plain runApp.
+  await runWithCrashReporting(
+    () => runApp(
+      UncontrolledProviderScope(
+        container: container,
+        child: const EcomsbdApp(),
+      ),
+    ),
   );
 }
 

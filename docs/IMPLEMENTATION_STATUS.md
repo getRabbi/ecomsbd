@@ -21,7 +21,8 @@ progress is in [`docs/build/PROGRESS.md`](build/PROGRESS.md).
 | **Realtime v1, email code verification** | Merged (PRs #38, #39) |
 | **Free Launch Mode** | Merged (PR #20). Source defaults are off; production opts in with `FREE_LAUNCH_MODE=true`, `BILLING_ENABLED=false` — `docs/FREE_LAUNCH_MODE.md` |
 | **Mobile** | `3.0.6+310`, Android package `com.ecomsbd.app`, R8 + resource shrinking on (PR #41); Coming Soon release gating (PR #31) |
-| **Alembic head (repository)** | `a39001`, single head |
+| **V4 phase 0 (in progress, `v4/phase-0`)** | WP0.1 docs truth. WP0.2 server-side funnel events (`product_events`, flag `product_events_enabled` default off, `GET /v1/admin/ops/funnel`) and Flutter Sentry gated by `ECOMSBD_SENTRY_DSN` with phone masking — runbook `docs/runbooks/PRODUCT_EVENTS.md`. Ledger: `docs/build/PROGRESS.md` |
+| **Alembic head (repository)** | `a39001` on `main`; `a40001` on `v4/phase-0` |
 | **Canonical repository** | <https://github.com/getRabbi/ecomsbd.git> |
 | **Branch** | `main` |
 | **Tests (measured 2026-11-17, `v4/phase-0` = `main` + docs)** | Backend (SQLite) 1805 passed / 5 skipped; ruff, ruff format and mypy strict clean (316 files). Flutter 541 tests: 540 passed in the full run; the timing-based `commerce_performance_test.dart` paging test failed under parallel CPU load and passed when rerun alone. Web unit tests 66 passed. |
