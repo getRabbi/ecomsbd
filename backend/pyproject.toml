@@ -58,6 +58,7 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.couriers" = ["manifests/*.yaml"]
 "app.orders" = ["data/*.yaml"]
+"app.documents" = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.ruff]
 line-length = 100

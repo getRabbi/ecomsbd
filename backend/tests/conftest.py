@@ -252,6 +252,15 @@ async def delivery_rules_on(settings) -> AsyncIterator[None]:
 
 
 @pytest_asyncio.fixture
+async def order_documents_on(settings) -> AsyncIterator[None]:
+    """V4 WP0.5 ``order_documents_enabled`` on, globally, for one test."""
+    from app.common.feature_flags import FlagKey
+
+    async for _ in _global_flag_on(settings, str(FlagKey.ORDER_DOCUMENTS_ENABLED)):
+        yield
+
+
+@pytest_asyncio.fixture
 async def product_events_on(settings) -> AsyncIterator[None]:
     """Turn the V4 funnel-event flag on, globally, for one test.
 

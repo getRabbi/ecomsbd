@@ -2,8 +2,18 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.5 — Invoice + shipping label   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.5.
-Next-session notes: operator asked (2026-11-18) to keep going WP by WP; ledger updated after every WP. WP0.4 left `delivery_rules_enabled` off; `DeliveryRulesService.get()` gives effective rules (defaults when no row) for WP2.2/WP4.
+WP: WP0.5 — Invoice + shipping label   Step: slice 1 (backend, plan items 1–6).
+Next-session notes: operator asked (2026-11-18) to keep going WP by WP; ledger updated after every WP. Jinja2 is not a dependency → string templates with `html.escape`.
+Plan:
+1. Flag `order_documents_enabled` (default off) gates the three endpoints (`FEATURE_DISABLED`).
+2. `app/documents/code128.py`: pure Code128-B → SVG; tests: table invariants (107 symbols, 11 modules, even bar sum, unique), hand-derived vectors from the ISO/IEC 15417 value table, checksum, refusal of non-printable ASCII.
+3. Fonts: copy NotoSansBengali 400/700 (OFL) from the Flutter assets into `app/documents/fonts/` + OFL notice; package-data; one `@font-face` data URI per HTML.
+4. `app/documents/render.py`: escape every field; invoice (A4: lines, delivery charge, discount, total, COD badge) and labels (`4x6`, `3x4`, `a4-8up`: shop name + phone, customer, phone full unless `mask_phone`, address, large COD, courier, tracking/order-number barcode, item summary, order number, date); page break per document.
+5. `app/documents/service.py`: tenant-scoped load (items, latest consignment, customer phone via vault, shop pickup phone); one audit `documents.printed` per request (kind, size, count, masked — no phones).
+6. `app/api/v1/documents.py`: `GET /v1/orders/{id}/documents/invoice`, `GET .../label?size=&mask_phone=`, `POST /v1/orders/documents/bulk` (≤ 100 ids); `order.view`; `text/html; charset=utf-8`, `Cache-Control: no-store`; other shop's order → 404.
+7. Web: order detail "Print invoice" / "Print label"; orders table selection → bulk print (fetch HTML with the session token, open, print).
+8. Mobile: `printing` package; order detail print actions → `Printing.layoutPdf` + `Printing.convertHtml`; widget test at 360×800 with the printer stubbed.
+9. Tests; IMPLEMENTATION_STATUS; full backend + Flutter + web checks; push.
 
 ## Status
 | WP | Status | Commit | Verified | Notes |

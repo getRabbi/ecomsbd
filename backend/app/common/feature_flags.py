@@ -57,6 +57,8 @@ class FlagKey(StrEnum):
     PRODUCT_EVENTS_ENABLED = "product_events_enabled"
     #: V4 WP0.4: shop delivery rules API and zone-aware COD on chat drafts.
     DELIVERY_RULES_ENABLED = "delivery_rules_enabled"
+    #: V4 WP0.5: invoice and shipping-label HTML.
+    ORDER_DOCUMENTS_ENABLED = "order_documents_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -87,6 +89,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.RECONCILIATION_SHADOW_MODE: True,
     FlagKey.PRODUCT_EVENTS_ENABLED: False,
     FlagKey.DELIVERY_RULES_ENABLED: False,
+    FlagKey.ORDER_DOCUMENTS_ENABLED: False,
 }
 
 

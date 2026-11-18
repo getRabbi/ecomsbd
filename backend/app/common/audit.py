@@ -176,6 +176,8 @@ class AuditAction(StrEnum):
     RECONCILIATION_CASE_REOPENED = "money.case_reopened"
     DATA_EXPORTED = "data.exported"
     PHONE_REVEALED = "privacy.phone_revealed"
+    #: V4 WP0.5: invoices/labels printed (kind, size, count, masked; no phones).
+    DOCUMENTS_PRINTED = "privacy.documents_printed"
     ADMIN_REPAIR_ACTION = "admin.repair_action"
 
     # Integrations Hub (V3.1)
