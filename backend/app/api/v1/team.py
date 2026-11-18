@@ -379,6 +379,10 @@ async def remove_member(
         session_row.revoked_at = utc_now()
         session_row.revoked_reason = str(RevocationReason.ADMIN_ACTION)
 
+    # V4 WP1.1: devices this member linked stop capturing for the shop.
+    from app.device_links.service import revoke_member_devices
+
+    await revoke_member_devices(db, tenant_id=tenant_id, user_id=user_id)
     await db.flush()  # see change_role: flush while the tenant is in scope
     await record_audit(
         db,

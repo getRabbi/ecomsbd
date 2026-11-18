@@ -185,6 +185,8 @@ class AuditAction(StrEnum):
     INTEGRATION_CONNECTED = "integration.connected"
     INTEGRATION_RECONNECTED = "integration.reconnected"
     INTEGRATION_DISCONNECTED = "integration.disconnected"
+    #: V4 WP1.1: a phone or extension linked (key last 4 only).
+    DEVICE_LINKED = "integration.device_linked"
     INTEGRATION_CONFIGURED = "integration.configured"
     INTEGRATION_KEY_ROTATED = "integration.key_rotated"
     INTEGRATION_SYNC_STARTED = "integration.sync_started"

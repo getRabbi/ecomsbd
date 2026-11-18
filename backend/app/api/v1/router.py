@@ -27,6 +27,7 @@ from app.api.v1 import (
     customers,
     delivery_rules,
     developers,
+    devices,
     documents,
     external_risk,
     forecasting,
@@ -57,6 +58,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(delivery_rules.router)
+api_router.include_router(devices.router)
 api_router.include_router(documents.router)
 api_router.include_router(messaging.router)
 # Unauthenticated: one-click unsubscribe links and signed provider receipts.

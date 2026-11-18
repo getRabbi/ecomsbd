@@ -59,6 +59,8 @@ class FlagKey(StrEnum):
     DELIVERY_RULES_ENABLED = "delivery_rules_enabled"
     #: V4 WP0.5: invoice and shipping-label HTML.
     ORDER_DOCUMENTS_ENABLED = "order_documents_enabled"
+    #: V4 WP1.1+: linked phones capture orders (DEVICE connections, ingest keys).
+    INTAKE_DEVICE_ENABLED = "intake_device_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -90,6 +92,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.PRODUCT_EVENTS_ENABLED: False,
     FlagKey.DELIVERY_RULES_ENABLED: False,
     FlagKey.ORDER_DOCUMENTS_ENABLED: False,
+    FlagKey.INTAKE_DEVICE_ENABLED: False,
 }
 
 

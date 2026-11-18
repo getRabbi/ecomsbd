@@ -15,6 +15,7 @@ import app.analytics.network_models
 import app.automation.models
 import app.chat_orders.models
 import app.delivery_rules.models
+import app.device_links.models
 import app.forecasting.models
 import app.integrations.models
 import app.integrations.sync_models

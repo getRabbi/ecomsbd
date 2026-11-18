@@ -999,6 +999,11 @@ async def disconnect(db: AsyncSession, conn: IntegrationConnection, *, remote: b
     conn.config = {k: v for k, v in conn.config.items() if k not in {"webhook_ids", "pages"}}
     await set_source_enabled(db, conn, False)
     await cancel_runs(db, conn)
+    if conn.provider == "DEVICE":
+        # V4 WP1.1: an unlinked phone's ingest key stops working at once.
+        from app.device_links.service import revoke_connection_keys
+
+        await revoke_connection_keys(db, conn.id)
     await audit(db, AuditAction.INTEGRATION_DISCONNECTED, conn)
 
 

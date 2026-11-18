@@ -2,8 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP1.1 — DEVICE connections + ingest keys   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 intro + WP1.1. Phase 1 code goes on branch `v4/phase-1` from `v4/phase-0`; migration id `a41001`.
-Next-session notes: operator rule: targeted tests only. Phase 0 code is complete; gate G0 waits on operator steps (see Gates / Operator actions). Phase-end PostgreSQL suite + a40001 round trip could not run here (no PostgreSQL on this machine) — operator action.
+WP: WP1.2 — Intake rules config   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 WP1.2.
+Next-session notes: operator rule: targeted tests only. WP1.1 is backend-only: the phone's link/pair screens come with WP1.4 and the web "show pairing code" card with WP1.4/WP5 (spec lists only the endpoints in WP1.1).
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -15,7 +15,7 @@ Next-session notes: operator rule: targeted tests only. Phase 0 code is complete
 | WP0.5 | DONE | 495a35c | targeted: backend test_documents + test_orders + test_delivery_rules + test_platform_primitives 143 passed, ruff + mypy clean; Flutter order_print_sheet + commerce_screens + delivery_rules + chat_orders_inbox 41 passed, analyze clean on changed files; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 |
 | WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
 | WP0.7 | BLOCKED: STATEMENT_SAMPLE_REQUIRED | see log | smoke (pathao/redx) 9 + Pathao resolver + statement profiles + payouts 52 + reconciliation 66 passed, ruff + mypy clean | statement profiles wait for real samples; smoke and resolver done; live calls are operator steps |
-| WP1.1 | TODO | | | |
+| WP1.1 | DONE | see log | test_device_links 12 (incl. route sweep: no non-intake route accepts an ingest key) + auth/integrations/team/migrations/realtime 93 + deletion paths 15 passed; ruff + mypy clean | migration a41001; flag `intake_device_enabled` default off |
 | WP1.2 | TODO | | | |
 | WP1.3 | TODO | | | |
 | WP1.4 | TODO | | | |
@@ -62,6 +62,9 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP1.1: linking and pairing need `settings.manage` (owner/manager): a linked phone is a new data source for the shop. A DEVICE connection's `account_key` is `install:` + SHA-256(install id), so the existing global unique (provider, account_key) makes one install belong to one shop; linking an install live in another shop is 409 `LINKED_ELSEWHERE`.
+- 2026-11-18 WP1.1: one live key per connection — re-linking rotates it (the old key is revoked). Pairing codes live in `device_pairing_codes` (hash, 10 min, conditional UPDATE so a code is claimed once even under a race); claims are limited to 10 per IP hash per 10 minutes. Session auth refuses any `edk_` bearer with "Device keys only work on intake routes".
+- 2026-11-18 WP1.1: the first intake route is `POST /v1/intake/heartbeat` (records `listener_state`, `app_version`, `covered_packages`, `last_heartbeat_at` on the connection); WP1.3 adds capture. Ingest-key requests run as actor PROVIDER with the shop's tenant, like the public API.
 - 2026-11-18 WP0.7: Pathao/RedX smoke uses only existing adapter/client calls — `validate_credentials`, `list_stores`, `get_status`, the list endpoints, `login` for the token lifetime — and books through the adapter's own `create_consignment`; probes record field names and counts only, never values.
 - 2026-11-18 WP0.7: the Pathao resolver is a separate cached service (7-day TTL, per shop and live/sandbox) and is not yet wired into booking: Pathao's create keeps sending the free-text address and omits location ids, as today. A place must appear as whole words; a name inside a longer matched name is dropped ("Mirpur" inside "Mirpur 10"); unrelated matches tie → `None`; one-word names ≥ 5 letters tolerate one typo. City matching also accepts the gazetteer's old/new spellings (Chittagong/Chattogram).
 - 2026-11-18 WP0.7: statement profiles are YAML beside `app/payouts/profiles/` (package-data) with exact header row + mapping + cited sample; `parse_statement` uses a matching profile before generic column detection. With no sample, none ships.
@@ -112,6 +115,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP1.1 device links + ingest keys (backend) on v4/phase-1
 - 2026-11-18 WP0.7 smoke 0b37662 + Pathao resolver + statement profiles; Phase 0 code complete, G0 waiting on operator
 - 2026-11-18 WP0.6 provider-independent courier history 0ce0cfa + clients; BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED
 - 2026-11-18 WP0.5 DONE (targeted tests per operator rule) 495a35c

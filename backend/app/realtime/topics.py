@@ -156,6 +156,9 @@ SILENT_TABLES: frozenset[str] = frozenset(
         "product_events",
         # V4 model-call accounting: admin/ops only, no seller screen
         "ai_usage",
+        # V4 linked-device credentials: never shown in a seller list
+        "device_ingest_keys",
+        "device_pairing_codes",
         # imports: committed rows arrive as orders, products or customers
         "imports",
         "import_rows",
