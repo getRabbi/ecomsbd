@@ -208,6 +208,49 @@ async def courier_flags_on(settings) -> AsyncIterator[None]:
         await _remove()
 
 
+async def _global_flag_on(settings, key: str) -> AsyncIterator[None]:
+    """Commit a global flag row for one test and remove it afterwards."""
+    import sqlalchemy as sa
+
+    from app.common.feature_flags import FeatureFlag
+    from app.db.session import get_sessionmaker
+    from app.db.tenancy import install_tenancy_guards, mark_session_system
+
+    install_tenancy_guards()
+    import app.models  # noqa: F401
+
+    factory = get_sessionmaker(settings)
+
+    async def _remove() -> None:
+        async with factory() as session:
+            mark_session_system(session.sync_session, "test fixture")
+            await session.execute(
+                sa.delete(FeatureFlag).where(
+                    FeatureFlag.key == key, FeatureFlag.tenant_id.is_(None)
+                )
+            )
+            await session.commit()
+
+    await _remove()
+    async with factory() as session:
+        mark_session_system(session.sync_session, "test fixture")
+        session.add(FeatureFlag(key=key, enabled=True, rollout_percentage=100))
+        await session.commit()
+    try:
+        yield
+    finally:
+        await _remove()
+
+
+@pytest_asyncio.fixture
+async def delivery_rules_on(settings) -> AsyncIterator[None]:
+    """V4 WP0.4 ``delivery_rules_enabled`` on, globally, for one test."""
+    from app.common.feature_flags import FlagKey
+
+    async for _ in _global_flag_on(settings, str(FlagKey.DELIVERY_RULES_ENABLED)):
+        yield
+
+
 @pytest_asyncio.fixture
 async def product_events_on(settings) -> AsyncIterator[None]:
     """Turn the V4 funnel-event flag on, globally, for one test.

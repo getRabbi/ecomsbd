@@ -25,6 +25,7 @@ from app.api.v1 import (
     couriers,
     crm,
     customers,
+    delivery_rules,
     developers,
     external_risk,
     forecasting,
@@ -54,6 +55,7 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(delivery_rules.router)
 api_router.include_router(messaging.router)
 # Unauthenticated: one-click unsubscribe links and signed provider receipts.
 api_router.include_router(messaging_public.public)

@@ -143,7 +143,7 @@ class ChatOrderDraft(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     items: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
     cod_amount_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
     #: PARSED (the customer wrote it) or CATALOG (price x quantity).
-    cod_source: Mapped[str | None] = mapped_column(sa.String(12), nullable=True)
+    cod_source: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
     warnings: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
     uncertain_fields: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)

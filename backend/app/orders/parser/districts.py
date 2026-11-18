@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-__all__ = ["DISTRICTS", "find_district", "is_district_only"]
+__all__ = ["DISTRICTS", "find_district", "fold_place_text", "is_district_only", "place_pattern"]
 
 #: Canonical English name -> every spelling that means it.
 DISTRICTS: dict[str, tuple[str, ...]] = {
@@ -110,6 +110,16 @@ def _pattern(spelling: str) -> str:
     if spelling.isascii():
         return rf"(?<![a-z]){escaped}(?![a-z])"
     return rf"(?<![ঀ-৿]){escaped}{_BANGLA_SUFFIX}(?![ঀ-৿])"
+
+
+def place_pattern(spelling: str) -> re.Pattern[str]:
+    """A whole-word matcher for one place spelling, for :func:`fold_place_text` text."""
+    return re.compile(_pattern(" ".join(spelling.casefold().split())))
+
+
+def fold_place_text(text: str) -> str:
+    """NFC, case-folded and with whitespace collapsed — what place patterns match."""
+    return " ".join(_nfc(text).casefold().split())
 
 
 _LOOKUP: tuple[tuple[str, re.Pattern[str]], ...] = tuple(

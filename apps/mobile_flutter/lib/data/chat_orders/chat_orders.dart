@@ -219,7 +219,9 @@ class ChatDraft {
   final List<ChatDraftItem> items;
   final int? codAmountPaisa;
 
-  /// PARSED (the customer wrote it) or CATALOG (price x quantity).
+  /// PARSED (the customer wrote it), CATALOG (price x quantity, plus the zone
+  /// charge when delivery rules are on) or CHAT_MISMATCH (written, but far from
+  /// the calculation).
   final String? codSource;
   final String? notes;
   final List<String> warnings;

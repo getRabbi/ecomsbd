@@ -56,6 +56,10 @@ class ChatDraftCard extends ConsumerWidget {
         ? context.tr('cho.codEstimate', <String, Object?>{
             'amount': Money(draft.codAmountPaisa!).format(),
           })
+        : draft.codSource == 'CHAT_MISMATCH'
+        ? context.tr('cho.codMismatch', <String, Object?>{
+            'amount': Money(draft.codAmountPaisa!).format(),
+          })
         : Money(draft.codAmountPaisa!).format();
     final productUnsure =
         draft.items.isEmpty ||

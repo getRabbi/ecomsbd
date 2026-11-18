@@ -26,6 +26,7 @@ import 'notification_settings_screen.dart';
 import 'connections_screen.dart';
 import 'order_sources_screen.dart';
 import 'network_screen.dart';
+import 'delivery_rules_screen.dart';
 import 'automation_screen.dart';
 
 /// Settings.
@@ -117,6 +118,16 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const AutomationScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.local_shipping_outlined),
+                  title: Text(context.tr('dr.title')),
+                  subtitle: Text(context.tr('dr.subtitle')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DeliveryRulesScreen(),
                     ),
                   ),
                 ),

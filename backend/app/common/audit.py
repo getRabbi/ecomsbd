@@ -64,6 +64,7 @@ class AuditAction(StrEnum):
     # Tenancy
     TENANT_CREATED = "tenant.created"
     TENANT_UPDATED = "tenant.updated"
+    DELIVERY_RULES_UPDATED = "delivery_rules.updated"
     TENANT_MEMBER_ADDED = "tenant.member_added"
     TENANT_MEMBER_ROLE_CHANGED = "tenant.member_role_changed"
     #: An offer of membership was sent. Distinct from MEMBER_ADDED, which is

@@ -50,15 +50,19 @@ from app.chat_orders.models import (
     ChatOrderDraft,
 )
 from app.common.audit import AuditAction, record_audit
+from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.phone import try_normalize_bd_phone
 from app.core.clock import utc_now
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.customers.models import Customer
 from app.customers.service import CustomerService
+from app.delivery_rules.service import DeliveryRulesService
 from app.integrations.models import IntegrationConnection
+from app.orders.cod import CodLine, calculate_cod, is_chat_mismatch
 from app.orders.models import Order, OrderChannel, OrderStatus
 from app.orders.parser import DeterministicOrderParser, ParsedOrder
 from app.orders.parser.base import CONFIDENCE_CONFIRM_THRESHOLD
+from app.orders.zones import resolve_zone
 
 #: Messages further apart than this start a new order session.
 SESSION_WINDOW = timedelta(minutes=25)
@@ -390,7 +394,8 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
         warnings.add("MULTIPLE_PHONES")
     if draft.customer_name and not parsed.customer_name:
         uncertain.add("name")
-    if draft.cod_source == "CATALOG":
+    await _apply_delivery_rules(db, draft, parsed, uncertain, warnings)
+    if draft.cod_source in ("CATALOG", "CHAT_MISMATCH"):
         uncertain.add("amount")
     for item in draft.items:
         status = (item.get("match") or {}).get("status")
@@ -454,6 +459,49 @@ def _present(parsed: ParsedOrder, field: str) -> bool:
         "items": bool(parsed.items),
         "amount": parsed.cod_amount_paisa is not None,
     }[field]
+
+
+async def _apply_delivery_rules(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    parsed: ParsedOrder,
+    uncertain: set[str],
+    warnings: set[str],
+) -> None:
+    """Zone-aware COD (V4 WP0.4), only with the flag on and rules saved.
+
+    A catalogue COD gets the zone charge added. A COD stated in chat is never
+    replaced: when it is further from the calculation than the zone charge, it
+    is marked ``CHAT_MISMATCH`` for the seller to resolve.
+    """
+    if not await FeatureFlagService(db).is_enabled(
+        FlagKey.DELIVERY_RULES_ENABLED, tenant_id=draft.tenant_id
+    ):
+        return
+    rules = await DeliveryRulesService(db).get(draft.tenant_id)
+    if not rules.configured:
+        return
+    zone = resolve_zone(parsed.address, parsed.district)
+    if zone is None:
+        if parsed.address:
+            warnings.add("ZONE_UNKNOWN")
+        return
+    charge = rules.zone_charge(zone) or 0
+    lines = []
+    for item in draft.items:
+        price = (item.get("match") or {}).get("unit_price_paisa")
+        if not isinstance(price, int):
+            return
+        lines.append(CodLine(unit_price_paisa=price, quantity=int(item.get("quantity") or 1)))
+    calculated = calculate_cod(lines, zone_charge_paisa=charge)
+    if calculated is None:
+        return
+    if draft.cod_source == "PARSED" and draft.cod_amount_paisa is not None:
+        if is_chat_mismatch(draft.cod_amount_paisa, calculated, zone_charge_paisa=charge):
+            draft.cod_source = "CHAT_MISMATCH"
+            warnings.add("COD_MISMATCH")
+        return
+    draft.cod_amount_paisa, draft.cod_source = calculated, "CATALOG"
 
 
 def _catalogue_total(items: list[dict[str, Any]]) -> int | None:

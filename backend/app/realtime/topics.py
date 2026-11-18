@@ -106,6 +106,7 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "tenants": T.SHOP,
     "subscriptions": T.SHOP,
     "network_preferences": T.SHOP,
+    "shop_delivery_rules": T.SHOP,
 }
 
 #: The table whose row *is* the topic's entity. A commit that changed exactly

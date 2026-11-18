@@ -27,6 +27,7 @@ const WORKSPACE_LINKS: WorkspaceLink[] = [
   { href: '/team', labelKey: 'nav.team', icon: 'team' },
   { href: '/notifications', labelKey: 'set.notificationSettings', icon: 'bell' },
   { href: '/settings/risk-provider', labelKey: 'nav.riskProvider', icon: 'network' },
+  { href: '/settings/delivery', labelKey: 'nav.deliveryRules', icon: 'couriers', permission: 'settings.manage' },
   { href: '/developers', labelKey: 'nav.developers', icon: 'developers', permission: 'settings.manage' },
 ];
 
