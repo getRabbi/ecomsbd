@@ -1,3 +1,8 @@
+// Wall-clock budgets: CI runs this file alone (`--tags perf --concurrency=1`)
+// so parallel test files do not steal its CPU. See dart_test.yaml.
+@Tags(['perf'])
+library;
+
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;

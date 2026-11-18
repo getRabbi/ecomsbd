@@ -129,7 +129,10 @@ jobs:
         run: flutter analyze
 
       - name: Tests
-        run: flutter test
+        run: flutter test --exclude-tags perf
+
+      - name: Performance tests (alone, wall-clock budgets)
+        run: flutter test --tags perf --concurrency=1
 
       - name: Build debug APK
         # Compile with a synthetic debug-only Firebase project. Production

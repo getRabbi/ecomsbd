@@ -1,0 +1,4 @@
+# Test tags. `perf` marks wall-clock budget tests: CI runs them in their own
+# step with --concurrency=1 so they never compete with the rest of the suite.
+tags:
+  perf:
