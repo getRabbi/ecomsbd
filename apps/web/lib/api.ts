@@ -59,6 +59,8 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Language for the API's own error copy. */
   locale?: string;
+  /** `html`: send `Accept: text/html` and return the body as text. */
+  responseType?: 'json' | 'html';
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -104,7 +106,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    Accept: 'application/json',
+    Accept: options.responseType === 'html' ? 'text/html' : 'application/json',
     'Accept-Language': options.locale ?? 'en',
   };
   if (options.body !== undefined) {
@@ -135,6 +137,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (response.status === 204) {
     return undefined as T;
+  }
+
+  if (options.responseType === 'html') {
+    return (await response.text()) as T;
   }
 
   return (await response.json()) as T;
@@ -180,6 +186,19 @@ export async function upload<T>(path: string, form: FormData, signal?: AbortSign
     throw await parseError(response);
   }
   return (await response.json()) as T;
+}
+
+/**
+ * Fetch an HTML document the API renders (V4 WP0.5 invoices and labels).
+ *
+ * Goes through {@link request} (same base URL, token and error handling) and
+ * returns the body as text instead of parsing JSON.
+ */
+export function fetchHtml(
+  path: string,
+  options: { method?: 'GET' | 'POST'; body?: unknown; query?: Query } = {},
+): Promise<string> {
+  return request<string>(path, { ...options, responseType: 'html' });
 }
 
 /**

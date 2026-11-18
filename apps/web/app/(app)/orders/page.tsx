@@ -8,10 +8,11 @@ import { OrderComposer } from '@/components/OrderComposer';
 import { PasteDetect } from '@/components/PasteDetect';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, LoadingRows } from '@/components/ui';
-import { api, type Page } from '@/lib/api';
+import { ApiError, api, type Page } from '@/lib/api';
 import { courierName, type BookableCourier, type BookingReport } from '@/lib/couriers';
 import { formatDate, formatPaisa } from '@/lib/money';
 import { STATUS_MOVES, errorMessage, type OrderPrefill } from '@/lib/orders';
+import { MAX_BULK_PRINT, printBulk } from '@/lib/print';
 import { useSession } from '@/lib/session';
 import { useShop } from '@/lib/shop';
 import {
@@ -130,6 +131,19 @@ export default function OrdersPage() {
       reload();
     } catch (caught) {
       setNotice(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function printSelected(kind: 'invoice' | 'label') {
+    setBusy(true);
+    try {
+      await printBulk([...selected], kind);
+    } catch (caught) {
+      setNotice(
+        caught instanceof ApiError && caught.code === 'FEATURE_DISABLED' ? t('doc.notEnabled') : errorMessage(caught),
+      );
     } finally {
       setBusy(false);
     }
@@ -270,6 +284,24 @@ export default function OrdersPage() {
                   </button>
                 </>
               ) : null}
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={busy || selected.size > MAX_BULK_PRINT}
+                title={selected.size > MAX_BULK_PRINT ? t('doc.tooMany') : undefined}
+                onClick={() => void printSelected('label')}
+              >
+                {t('doc.printLabels')} ({selected.size})
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={busy || selected.size > MAX_BULK_PRINT}
+                title={selected.size > MAX_BULK_PRINT ? t('doc.tooMany') : undefined}
+                onClick={() => void printSelected('invoice')}
+              >
+                {t('doc.printInvoices')} ({selected.size})
+              </button>
               <span className="bulkbar__hint">{t('orders.bulkHint')}</span>
               <button type="button" className="btn btn--ghost btn--sm" onClick={() => setSelected(new Set())}>
                 {t('common.cancel')}

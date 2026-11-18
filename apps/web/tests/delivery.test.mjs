@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { deliveryBn, deliveryEn } from '../lib/delivery-strings.ts';
+import { documentsBn, documentsEn } from '../lib/documents-strings.ts';
 import { paisaToTaka, setCallSwitch, takaToPaisa, toForm, toPatch } from '../lib/delivery-rules.ts';
 import * as orders from '../lib/orders.ts';
 
@@ -25,6 +26,13 @@ const RULES = {
 test('every delivery-rules string has Bangla', () => {
   assert.deepEqual(Object.keys(deliveryBn).sort(), Object.keys(deliveryEn).sort());
   for (const [key, value] of Object.entries(deliveryBn)) {
+    assert.ok(value.trim().length > 0, key);
+  }
+});
+
+test('every printing string has Bangla', () => {
+  assert.deepEqual(Object.keys(documentsBn).sort(), Object.keys(documentsEn).sort());
+  for (const [key, value] of Object.entries(documentsBn)) {
     assert.ok(value.trim().length > 0, key);
   }
 });

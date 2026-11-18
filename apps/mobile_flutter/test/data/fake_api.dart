@@ -28,10 +28,14 @@ class RecordedRequest {
 
 /// A canned reply.
 class FakeReply {
-  const FakeReply(this.body, {this.statusCode = 200});
+  const FakeReply(this.body, {this.statusCode = 200}) : html = false;
+
+  /// A rendered document, sent as-is with `text/html`.
+  const FakeReply.html(String this.body, {this.statusCode = 200}) : html = true;
 
   final Object body;
   final int statusCode;
+  final bool html;
 }
 
 /// Serves canned replies to the real [ApiClient].
@@ -107,6 +111,15 @@ class FakeApiAdapter implements HttpClientAdapter {
     }
 
     final reply = await handler(request);
+    if (reply.html) {
+      return ResponseBody.fromString(
+        reply.body as String,
+        reply.statusCode,
+        headers: const <String, List<String>>{
+          Headers.contentTypeHeader: <String>['text/html; charset=utf-8'],
+        },
+      );
+    }
     return ResponseBody.fromString(
       jsonEncode(reply.body),
       reply.statusCode,

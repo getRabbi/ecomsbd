@@ -2,8 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.5 — Invoice + shipping label   Step: slice 2 — plan items 7–9 (web print buttons + bulk, mobile `printing`, final checks). Slice 1 (backend, items 1–6) done d99556b; full backend suite not yet re-run after slice 1 (targeted tests green).
-Next-session notes: operator asked (2026-11-18) to keep going WP by WP; ledger updated after every WP. Jinja2 is not a dependency → string templates with `html.escape`.
+WP: WP0.5 — Invoice + shipping label   Step: verification only — code complete. Re-run the full backend suite and `flutter test --exclude-tags perf` (the combined run was stopped by the machine for low memory on 2026-11-18), then mark DONE and start WP0.6.
+Next-session notes: WP0.6 (fraud ratio) — `docs/providers/` has no bdcourier contract → provider-independent parts (normalised `courier_history`, chips on order card / customer page, < 3 parcels = "kom data", automation condition `external_success_bps`) then `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED`. Existing port: `app/risk_providers/contract.py`; conditions: `app/automation/schemas.py` + `facts.py` (`external_data_state` pattern).
 Plan:
 1. Flag `order_documents_enabled` (default off) gates the three endpoints (`FEATURE_DISABLED`).
 2. `app/documents/code128.py`: pure Code128-B → SVG; tests: table invariants (107 symbols, 11 modules, even bar sum, unique), hand-derived vectors from the ISO/IEC 15417 value table, checksum, refusal of non-printable ASCII.
@@ -22,7 +22,7 @@ Plan:
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
 | WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
 | WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
-| WP0.5 | IN_PROGRESS | d99556b | slice 1: tests/test_documents.py 22 passed, ruff + mypy clean | web + mobile print next; flag `order_documents_enabled` default off |
+| WP0.5 | PARTIAL: full backend + Flutter suites not re-run (stopped for low memory) | see log | backend: tests/test_documents.py 22 passed, ruff + mypy clean; Flutter: analyze clean on changed files, format clean, delivery_rules (9) + order_print_sheet (7) tests green; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 added |
 | WP0.6 | TODO | | | |
 | WP0.7 | TODO | | | |
 | WP1.1 | TODO | | | |
@@ -66,6 +66,8 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.5: web prints through a hidden iframe (`srcdoc`, sandbox `allow-modals allow-same-origin`, no scripts) instead of a new window, so no pop-up blocker is involved; `fetchHtml` goes through the existing `request` (new `responseType: 'html'`) so every API call still uses the one authenticated `fetch(buildUrl(...))` path the parity test guards.
+- 2026-11-18 WP0.5: mobile wraps `printing` behind `DocumentPrinter` (`documentPrinterProvider`), so widget tests stub the OS print sheet; `ApiClient.getText/postText` fetch HTML as plain text and still translate JSON error bodies. The print action is hidden for an order that exists only on the phone (not synced, no server id to render).
 - 2026-11-18 WP0.5: "mask on label" is a per-print choice (`mask_phone` query/body flag, default false = full phone), not a stored setting; clients may remember it locally.
 - 2026-11-18 WP0.5: Jinja2 is not a dependency, so documents are string templates with `html.escape` on every field. Noto Sans Bengali 400/700 copied from the Flutter assets into `app/documents/fonts/` with an OFL.txt (copyright read from the font's name table); embedded once per HTML.
 - 2026-11-18 WP0.5: Code128-B test vectors are hand-derived from the ISO/IEC 15417 value table and backed by table invariants (107 unique symbols, 11 modules, even bar sums, stop 13), not an external sample file.
@@ -108,6 +110,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.5 web + mobile printing committed; full suites stopped by the machine for low memory — re-run pending
 - 2026-11-18 WP0.5 slice 1 (backend documents) d99556b; stopped at usage limit — web/mobile print next
 - 2026-11-18 WP0.4 delivery rules + zones + COD (backend, mobile, web) aaa77bd
 - 2026-11-18 operator correction to WP0.3 recorded ef3dc03; WP0.3 slice 2 (LLM path, holdout, eval) c97712c — WP0.3 DONE, G0.3 waiting on operator; checkpoint (context)

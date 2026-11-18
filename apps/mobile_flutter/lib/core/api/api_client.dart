@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -153,6 +154,39 @@ class ApiClient {
   Future<Map<String, dynamic>> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
 
+  /// GET a document the server renders as text (V4 WP0.5 invoices and
+  /// labels are HTML). Errors still arrive as the API's JSON error shape.
+  Future<String> getText(String path, {Map<String, dynamic>? query}) async {
+    final response = await _sendRaw(
+      () => _dio.get<dynamic>(
+        path,
+        queryParameters: query,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: <String, String>{'Accept': 'text/html'},
+        ),
+      ),
+    );
+    final data = response.data;
+    return data is String ? data : '';
+  }
+
+  /// POST for a rendered text document (bulk invoices and labels).
+  Future<String> postText(String path, {Object? body}) async {
+    final response = await _sendRaw(
+      () => _dio.post<dynamic>(
+        path,
+        data: body,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: <String, String>{'Accept': 'text/html'},
+        ),
+      ),
+    );
+    final data = response.data;
+    return data is String ? data : '';
+  }
+
   /// Delete a resource.
   ///
   /// Used only where the server models removal as a DELETE — disconnecting a
@@ -264,7 +298,15 @@ class ApiClient {
   }
 
   ApiError _translateResponse(Response<dynamic> response) {
-    final data = response.data;
+    var data = response.data;
+    // A text request (getText/postText) receives its error body unparsed.
+    if (data is String && data.startsWith('{')) {
+      try {
+        data = jsonDecode(data);
+      } on FormatException {
+        // Not JSON after all: fall through to the generic error.
+      }
+    }
     if (data is Map<String, dynamic> && data['code'] is String) {
       return ApiError.fromJson(data, statusCode: response.statusCode);
     }

@@ -13,6 +13,7 @@ import { developerEn, developerBn } from './developer-strings';
 import { shellEn, shellBn } from './shell-strings';
 import { opsEn, opsBn } from './ops-strings';
 import { deliveryEn, deliveryBn } from './delivery-strings';
+import { documentsEn, documentsBn } from './documents-strings';
 
 /**
  * English and Bangla for the dashboard.
@@ -41,6 +42,7 @@ export const strings = {
     ...shellEn,
     ...opsEn,
     ...deliveryEn,
+    ...documentsEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -674,6 +676,7 @@ export const strings = {
     ...shellBn,
     ...opsBn,
     ...deliveryBn,
+    ...documentsBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',
