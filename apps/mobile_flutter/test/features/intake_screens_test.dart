@@ -1,6 +1,8 @@
 import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/core/api/api_client.dart';
 import 'package:ecomsbd/data/auth/auth_controller.dart';
+import 'package:ecomsbd/data/commerce/commerce_providers.dart';
+import 'package:ecomsbd/data/local/database.dart';
 import 'package:ecomsbd/features/intake/auto_detect_screen.dart';
 import 'package:ecomsbd/features/intake/intake_native.dart';
 import 'package:ecomsbd/features/intake/quick_order_screen.dart';
@@ -14,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../data/fake_api.dart';
+import 'commerce_harness.dart' show orderJson;
 import '../helpers.dart';
 
 typedef _Fake = ({ApiClient client, FakeApiAdapter adapter});
@@ -126,10 +129,12 @@ Widget _app(
   String language,
   Widget home, {
   AuthStage stage = AuthStage.ready,
+  List<Override> extra = const [],
 }) {
   activeAppLocale = language == 'bn' ? AppLocale.bn : AppLocale.en;
   return ProviderScope(
     overrides: [
+      ...extra,
       apiClientProvider.overrideWithValue(fake.client),
       intakeNativeProvider.overrideWithValue(
         MethodChannelIntake(android: true),
@@ -401,10 +406,12 @@ void main() {
         expect(messages.last['sent_at'], isNull);
         expect(find.text('Rina — order mone hocche'), findsOneWidget);
         expect(find.text('01700•••40 · Dhaka'), findsOneWidget);
-        expect(find.text(_t(language, 'qo.created')), findsOneWidget);
+        expect(find.byKey(const ValueKey('qo.create')), findsOneWidget);
         expect(find.text(_t(language, 'qo.duplicate')), findsOneWidget);
 
-        await tester.tap(find.byKey(const ValueKey('qo.done')));
+        // Save draft: it stays in Chat orders; the phone lets go of the chat.
+        await _reveal(tester, 'qo.saveDraft');
+        await tester.tap(find.byKey(const ValueKey('qo.saveDraft')));
         await tester.pumpAndSettle();
         final finish = native.named('finishQuickOrder').single.arguments as Map;
         expect(finish, {'conversationId': 'c1', 'created': true});
@@ -463,4 +470,301 @@ void main() {
       expect(fake.adapter.to('POST', '/intake/captures/manual'), isEmpty);
     });
   }
+
+  group('quick-order sheet (WP1.5)', () {
+    Map<String, Object?> capture({
+      String id = 'c1',
+      String source = 'DEVICE_NOTIFICATION',
+    }) => {
+      'conversationId': id,
+      'expired': false,
+      'source': source,
+      if (source != 'SHARE') ...{
+        'package': 'com.whatsapp.w4b',
+        'conversationKey': 'Rina',
+        'senderDisplay': 'Rina',
+        'connectionId': 'conn-1',
+      },
+      'messages': [
+        {'text': '2ta panjabi nibo, Mirpur 10 Dhaka', 'sentAt': null},
+      ],
+    };
+
+    Map<String, Object?> draft({
+      List<String> phones = const ['+8801700000040'],
+      String? selected = '+8801700000040',
+      List<String> warnings = const [],
+      List<String> uncertain = const [],
+      String matchStatus = 'MATCHED',
+      String? codSource = 'CATALOG',
+      int messages = 1,
+      Map<String, Object?>? customer,
+    }) => {
+      'id': 'd1',
+      'provider': 'DEVICE',
+      'status': 'READY_FOR_REVIEW',
+      'capture_source': 'DEVICE_NOTIFICATION',
+      'source_app': 'com.whatsapp.w4b',
+      'customer_name': 'Rina',
+      'phones': phones,
+      'selected_phone': selected,
+      'address': 'Mirpur 10, Dhaka',
+      'items': [
+        {
+          'name': 'panjabi',
+          'quantity': 2,
+          'match': {
+            'status': matchStatus,
+            'product_id': matchStatus == 'MATCHED' ? 'p1' : null,
+            'product_name': matchStatus == 'MATCHED' ? 'Black Panjabi' : null,
+            'variant_status': 'NONE',
+            'unit_price_paisa': matchStatus == 'MATCHED' ? 90000 : null,
+            'candidates': matchStatus == 'AMBIGUOUS'
+                ? [
+                    {'product_id': 'p1', 'name': 'Black Panjabi'},
+                    {'product_id': 'p2', 'name': 'White Panjabi'},
+                  ]
+                : [],
+          },
+        },
+      ],
+      'cod_amount_paisa': 186000,
+      'cod_source': codSource,
+      'warnings': warnings,
+      'uncertain_fields': uncertain,
+      'missing_fields': <String>[],
+      'message_count': messages,
+      'customer': customer,
+      'last_message_at': '2026-11-19T12:00:00Z',
+    };
+
+    Map<String, Object?> reply(
+      Map<String, Object?> draft, {
+      Map<String, Object?>? courier,
+    }) => {
+      'accepted': 1,
+      'duplicates': 0,
+      'replayed': false,
+      'draft': draft,
+      'courier_suggestion': courier,
+      'attention_id': null,
+    };
+
+    Future<({_FakeNative native, _Fake fake, EcomsbdDatabase db})> open(
+      WidgetTester tester,
+      String language,
+      Map<String, Object?> body, {
+      Map<String, Object?>? chat,
+    }) async {
+      final native = _install(
+        _FakeNative(_device(linked: true), capture: chat ?? capture()),
+      );
+      final fake = buildFakeApi();
+      final db = EcomsbdDatabase.memory();
+      addTearDown(db.close);
+      fake.adapter.onJson('POST', '/intake/captures/manual', body);
+      await _pump(
+        tester,
+        _app(
+          fake,
+          language,
+          const QuickOrderScreen(standalone: true),
+          extra: [
+            databaseProvider.overrideWithValue(db),
+            tenantIdProvider.overrideWithValue(testTenantId),
+          ],
+        ),
+      );
+      return (native: native, fake: fake, db: db);
+    }
+
+    for (final language in ['en', 'bn']) {
+      testWidgets('shows the parsed order and its warnings in $language', (
+        tester,
+      ) async {
+        await open(
+          tester,
+          language,
+          reply(
+            draft(
+              warnings: ['COD_MISMATCH', 'ZONE_UNKNOWN'],
+              uncertain: ['address', 'amount'],
+              codSource: 'CHAT_MISMATCH',
+            ),
+            courier: {
+              'courier': 'steadfast',
+              'source': 'HISTORY',
+              'zone': 'INSIDE_DHAKA',
+              'delivered': 18,
+              'parcels': 20,
+            },
+          ),
+        );
+        expect(find.text(_t(language, 'qo.checkMarked')), findsOneWidget);
+        expect(find.text('Black Panjabi'), findsOneWidget);
+        expect(find.text('1860'), findsOneWidget);
+        await _reveal(tester, 'qo.codMismatch');
+        expect(find.text(_t(language, 'qo.codMismatch')), findsOneWidget);
+        expect(find.text(_t(language, 'qo.zoneUnknown')), findsOneWidget);
+        await _reveal(tester, 'qo.courier');
+        expect(
+          find.text(
+            _t(language, 'qo.courierHistory')
+                .replaceAll('{courier}', 'Steadfast')
+                .replaceAll('{delivered}', '18')
+                .replaceAll('{parcels}', '20'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(_t(language, 'qo.courierNote')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('Create order confirms the draft with the chosen phone', (
+      tester,
+    ) async {
+      final setup = await open(
+        tester,
+        'en',
+        reply(
+          draft(
+            phones: ['+8801700000040', '+8801700000041'],
+            selected: null,
+            uncertain: ['phone'],
+          ),
+          courier: {'courier': 'pathao', 'source': 'SHOP_DEFAULT'},
+        ),
+      );
+      setup.fake.adapter.onJson('POST', '/chat-orders/d1/confirm', {
+        'order': orderJson(id: 'o1', number: 'CP-20261119-0001'),
+        'duplicate_check': null,
+        'replayed': false,
+      });
+      expect(find.text(_t('en', 'qo.choosePhone')), findsOneWidget);
+      expect(find.text('Courier: Pathao (your default)'), findsOneWidget);
+
+      // No phone chosen yet: the form says so and sends nothing.
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+      expect(find.text(_t('en', 'qo.phoneRequired')), findsOneWidget);
+      expect(setup.fake.adapter.to('POST', '/chat-orders/d1/confirm'), isEmpty);
+
+      await _reveal(tester, 'qo.phone.1');
+      await tester.tap(find.byKey(const ValueKey('qo.phone.1')));
+      await tester.pumpAndSettle();
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+
+      final body = setup.fake.adapter
+          .to('POST', '/chat-orders/d1/confirm')
+          .single
+          .jsonBody;
+      expect(body['phone'], '+8801700000041');
+      expect(body['cod_amount_paisa'], 186000);
+      expect(body['items'], [
+        {
+          'product_id': 'p1',
+          'name': 'Black Panjabi',
+          'quantity': 2,
+          'unit_price_paisa': 90000,
+        },
+      ]);
+      expect(find.text('Order CP-20261119-0001 created.'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('qo.done')));
+      await tester.pumpAndSettle();
+      final finish =
+          setup.native.named('finishQuickOrder').single.arguments as Map;
+      expect(finish, {'conversationId': 'c1', 'created': true});
+    });
+
+    testWidgets('an ambiguous product must be chosen before creating', (
+      tester,
+    ) async {
+      final setup = await open(
+        tester,
+        'en',
+        reply(draft(matchStatus: 'AMBIGUOUS', codSource: null)),
+      );
+      expect(find.byKey(const ValueKey('qo.pick.0')), findsOneWidget);
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+      expect(find.text(_t('en', 'qo.chooseProduct')), findsOneWidget);
+      expect(setup.fake.adapter.to('POST', '/chat-orders/d1/confirm'), isEmpty);
+    });
+
+    testWidgets('offline, Create order goes through the outbox', (
+      tester,
+    ) async {
+      final setup = await open(tester, 'en', reply(draft()));
+      setup.fake.adapter.offline = true;
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_t('en', 'qo.queued')), findsOneWidget);
+      final entry =
+          (await setup.db.select(setup.db.outboxEntries).get()).single;
+      // The draft id is the client id: the server closes the draft when the
+      // queued create lands, and a later confirm replays the same order.
+      expect(entry.entityId, 'd1');
+    });
+
+    testWidgets('Aro message lagbe adds a pasted message to the same chat', (
+      tester,
+    ) async {
+      final setup = await open(tester, 'en', reply(draft()));
+      await _reveal(tester, 'qo.more');
+      await tester.tap(find.byKey(const ValueKey('qo.more')));
+      await tester.pumpAndSettle();
+
+      // Nothing pasted: nothing is sent.
+      await tester.tap(find.byKey(const ValueKey('qo.moreAdd')));
+      await tester.pumpAndSettle();
+      expect(find.text(_t('en', 'qo.moreEmpty')), findsOneWidget);
+
+      setup.fake.adapter.onJson(
+        'POST',
+        '/intake/captures/manual',
+        reply(draft(messages: 2)),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('qo.moreText')),
+        'ar ekta lal shari',
+      );
+      await tester.tap(find.byKey(const ValueKey('qo.moreAdd')));
+      await tester.pumpAndSettle();
+
+      final sent = setup.fake.adapter.to('POST', '/intake/captures/manual');
+      expect(sent, hasLength(2));
+      final body = sent.last.jsonBody;
+      expect(body['conversation_key'], 'Rina');
+      expect(body['package'], 'com.whatsapp.w4b');
+      expect((body['messages'] as List).single['text'], 'ar ekta lal shari');
+      expect(find.byKey(const ValueKey('qo.create')), findsOneWidget);
+    });
+
+    testWidgets('a share opens the same sheet with source SHARE', (
+      tester,
+    ) async {
+      final setup = await open(
+        tester,
+        'en',
+        reply(draft()),
+        chat: capture(id: 's1', source: 'SHARE'),
+      );
+      final body = setup.fake.adapter
+          .to('POST', '/intake/captures/manual')
+          .single
+          .jsonBody;
+      expect(body['source'], 'SHARE');
+      expect(body['package'], isNull);
+      // Its own conversation, so "Aro message lagbe" joins the same draft.
+      expect(body['conversation_key'], 'share:s1');
+      expect(find.byKey(const ValueKey('qo.create')), findsOneWidget);
+    });
+  });
 }

@@ -85,7 +85,6 @@ const intakeEn = <String, String>{
   'intake.unlinked': 'Phone unlinked.',
   'qo.title': '{sender} — order mone hocche',
   'qo.sending': 'Making a draft…',
-  'qo.created': 'Draft saved. Open Chat orders to check and confirm it.',
   'qo.duplicate': 'This looks like an order you already have.',
   'qo.attention':
       'This customer already has an order; the message is in Chat orders.',
@@ -100,6 +99,54 @@ const intakeEn = <String, String>{
   'qo.signIn': 'Sign in to ecomsbd first.',
   'qo.openApp': 'Open ecomsbd',
   'qo.messages': 'Messages',
+  'qo.checkMarked': 'Check the marked fields: the reader was not sure of them.',
+  'qo.choosePhone':
+      'The chat has more than one number. Choose the delivery number.',
+  'qo.phone': 'Phone',
+  'qo.name': 'Customer name',
+  'qo.address': 'Delivery address',
+  'qo.items': 'Items',
+  'qo.item': 'Item',
+  'qo.qty': 'Qty',
+  'qo.price': 'Price (৳)',
+  'qo.pick': 'Choose product',
+  'qo.pickVariant': 'Choose size or colour',
+  'qo.notInCatalog': 'Not in your catalogue; saved as written.',
+  'qo.cod': 'COD to collect (৳)',
+  'qo.codCatalog': 'Worked out from your prices and delivery charge. Check it.',
+  'qo.codMismatch':
+      'The amount in the chat does not match your prices and delivery '
+      'charge. Check it with the customer.',
+  'qo.zoneUnknown': 'Area not recognised: no delivery charge was added.',
+  'qo.blocked': 'You blocked this customer.',
+  'qo.knownCustomer': '{name} · {count} orders before',
+  'qo.courierDefault': 'Courier: {courier} (your default)',
+  'qo.courierHistory':
+      'Courier: {courier} — {delivered} of {parcels} delivered in this area '
+      '(your parcels)',
+  'qo.courierNote':
+      'Booking stays separate: saving sends nothing to a courier.',
+  'qo.create': 'Create order',
+  'qo.creating': 'Creating…',
+  'qo.saveDraft': 'Save draft',
+  'qo.saveDraftNote':
+      'The draft stays in Chat orders. Changes made here are not kept.',
+  'qo.more': 'Aro message lagbe',
+  'qo.moreTitle': 'Add more messages',
+  'qo.moreHint': 'Copy the messages in the chat, then paste them here.',
+  'qo.moreAdd': 'Add',
+  'qo.moreEmpty': 'Paste the messages first.',
+  'qo.cancel': 'Cancel',
+  'qo.phoneRequired': 'Enter the delivery phone number',
+  'qo.itemsRequired': 'Add at least one item.',
+  'qo.chooseProduct': 'Choose which product the customer meant.',
+  'qo.amountError': 'Enter an amount like 1250',
+  'qo.ordered': 'Order {number} created.',
+  'qo.orderedNoNumber': 'Order created.',
+  'qo.queued':
+      'No internet: the order is saved on this phone and is sent when you '
+      'are back online.',
+  'qo.closed': 'This chat order is already closed in Chat orders.',
 };
 
 const intakeBn = <String, String>{
@@ -178,7 +225,6 @@ const intakeBn = <String, String>{
   'intake.unlinked': 'ফোন আনলিংক হয়েছে।',
   'qo.title': '{sender} — order mone hocche',
   'qo.sending': 'ড্রাফট বানানো হচ্ছে…',
-  'qo.created': 'ড্রাফট সেভ হয়েছে। চেক করে কনফার্ম করতে Chat orders খুলুন।',
   'qo.duplicate': 'মনে হচ্ছে এই অর্ডার আগেই আছে।',
   'qo.attention': 'এই কাস্টমারের আগের অর্ডার আছে; মেসেজটা Chat orders-এ আছে।',
   'qo.failed': 'ড্রাফট বানানো যায়নি।',
@@ -191,4 +237,50 @@ const intakeBn = <String, String>{
   'qo.signIn': 'আগে ecomsbd-এ সাইন ইন করুন।',
   'qo.openApp': 'ecomsbd খুলুন',
   'qo.messages': 'মেসেজ',
+  'qo.checkMarked':
+      'চিহ্নিত ঘরগুলো দেখে নিন: এগুলো পড়তে নিশ্চিত হওয়া যায়নি।',
+  'qo.choosePhone': 'চ্যাটে একাধিক নম্বর আছে। ডেলিভারির নম্বরটা বেছে নিন।',
+  'qo.phone': 'ফোন',
+  'qo.name': 'কাস্টমারের নাম',
+  'qo.address': 'ডেলিভারির ঠিকানা',
+  'qo.items': 'পণ্য',
+  'qo.item': 'পণ্য',
+  'qo.qty': 'পরিমাণ',
+  'qo.price': 'দাম (৳)',
+  'qo.pick': 'পণ্য বেছে নিন',
+  'qo.pickVariant': 'সাইজ বা রং বেছে নিন',
+  'qo.notInCatalog': 'আপনার ক্যাটালগে নেই; যেমন লেখা তেমন সেভ হবে।',
+  'qo.cod': 'যত টাকা COD নেবেন (৳)',
+  'qo.codCatalog': 'আপনার দাম আর ডেলিভারি চার্জ থেকে হিসাব করা। দেখে নিন।',
+  'qo.codMismatch':
+      'চ্যাটে লেখা টাকা আপনার দাম আর ডেলিভারি চার্জের হিসাবের সাথে মেলে না। '
+      'কাস্টমারের সাথে মিলিয়ে নিন।',
+  'qo.zoneUnknown': 'এলাকা চেনা যায়নি: ডেলিভারি চার্জ যোগ হয়নি।',
+  'qo.blocked': 'এই কাস্টমারকে আপনি ব্লক করেছেন।',
+  'qo.knownCustomer': '{name} · আগে {count}টি অর্ডার',
+  'qo.courierDefault': 'কুরিয়ার: {courier} (আপনার ডিফল্ট)',
+  'qo.courierHistory':
+      'কুরিয়ার: {courier} — এই এলাকায় {parcels}টির মধ্যে {delivered}টি ডেলিভারি '
+      '(আপনার পার্সেল)',
+  'qo.courierNote': 'বুকিং আলাদা: সেভ করলে কুরিয়ারে কিছু যায় না।',
+  'qo.create': 'অর্ডার বানান',
+  'qo.creating': 'বানানো হচ্ছে…',
+  'qo.saveDraft': 'ড্রাফট সেভ করুন',
+  'qo.saveDraftNote':
+      'ড্রাফটটা Chat orders-এ থাকবে। এখানে করা বদলগুলো রাখা হয় না।',
+  'qo.more': 'Aro message lagbe',
+  'qo.moreTitle': 'আরও মেসেজ যোগ করুন',
+  'qo.moreHint': 'চ্যাট থেকে মেসেজগুলো কপি করে এখানে পেস্ট করুন।',
+  'qo.moreAdd': 'যোগ করুন',
+  'qo.moreEmpty': 'আগে মেসেজগুলো পেস্ট করুন।',
+  'qo.cancel': 'বাতিল',
+  'qo.phoneRequired': 'ডেলিভারির ফোন নম্বর দিন',
+  'qo.itemsRequired': 'অন্তত একটি পণ্য যোগ করুন।',
+  'qo.chooseProduct': 'কাস্টমার কোন পণ্যটি চেয়েছেন তা বেছে নিন।',
+  'qo.amountError': '১২৫০-এর মতো করে টাকা লিখুন',
+  'qo.ordered': 'অর্ডার {number} বানানো হয়েছে।',
+  'qo.orderedNoNumber': 'অর্ডার বানানো হয়েছে।',
+  'qo.queued':
+      'ইন্টারনেট নেই: অর্ডারটা এই ফোনে সেভ হয়েছে, অনলাইনে ফিরলে পাঠানো হবে।',
+  'qo.closed': 'এই চ্যাট অর্ডারটা Chat orders-এ আগেই বন্ধ হয়েছে।',
 };

@@ -90,6 +90,7 @@ class QuickOrderCapture {
   const QuickOrderCapture({
     required this.conversationId,
     required this.expired,
+    this.source = deviceNotification,
     this.package,
     this.conversationKey,
     this.senderDisplay,
@@ -103,6 +104,7 @@ class QuickOrderCapture {
     return QuickOrderCapture(
       conversationId: map['conversationId']! as String,
       expired: map['expired'] == true,
+      source: map['source'] == share ? share : deviceNotification,
       package: map['package'] as String?,
       conversationKey: map['conversationKey'] as String?,
       senderDisplay: map['senderDisplay'] as String?,
@@ -125,7 +127,17 @@ class QuickOrderCapture {
     );
   }
 
+  static const deviceNotification = 'DEVICE_NOTIFICATION';
+
+  /// Text another app shared to ecomsbd (Android share target, V4 WP1.5).
+  static const share = 'SHARE';
+
   final String conversationId;
+
+  /// [deviceNotification] or [share].
+  final String source;
+
+  bool get isShare => source == share;
 
   /// The chat closed on the phone (25 minutes without a message) before the tap.
   final bool expired;
@@ -137,21 +149,36 @@ class QuickOrderCapture {
   final String? district;
   final List<QuickOrderMessage> messages;
 
+  /// The conversation on the server. A share has none of its own; its id
+  /// keeps later "Aro message lagbe" pastes on the same draft.
+  String get _conversation => conversationKey ?? 'share:$conversationId';
+
   /// `POST /v1/intake/captures/manual` body for this tap.
-  Map<String, Object?> manualCaptureBody() => <String, Object?>{
-    'source': 'DEVICE_NOTIFICATION',
-    'package': package,
-    'conversation_key': conversationKey,
-    'sender_display': senderDisplay,
-    'connection_id': connectionId,
-    'messages': <Map<String, Object?>>[
-      for (final message in messages)
-        <String, Object?>{
-          'text': message.text,
-          'sent_at': message.sentAt?.toUtc().toIso8601String(),
-        },
+  Map<String, Object?> manualCaptureBody() => _body(<Map<String, Object?>>[
+    for (final message in messages)
+      <String, Object?>{
+        'text': message.text,
+        'sent_at': message.sentAt?.toUtc().toIso8601String(),
+      },
+  ]);
+
+  /// More messages the seller pasted into the open sheet ("Aro message
+  /// lagbe"), for the same conversation and so the same draft.
+  Map<String, Object?> moreMessagesBody(String text, DateTime now) => _body(
+    <Map<String, Object?>>[
+      <String, Object?>{'text': text, 'sent_at': now.toUtc().toIso8601String()},
     ],
-  };
+  );
+
+  Map<String, Object?> _body(List<Map<String, Object?>> messages) =>
+      <String, Object?>{
+        'source': source,
+        'package': package,
+        'conversation_key': _conversation,
+        'sender_display': senderDisplay,
+        'connection_id': connectionId,
+        'messages': messages,
+      };
 }
 
 @immutable
