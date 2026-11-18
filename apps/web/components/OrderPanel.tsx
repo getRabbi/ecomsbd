@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 
 import { Chip, Drawer, ErrorState, Row } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
+import { courierHistoryChip, latestCourierHistory } from '@/lib/courier-history';
 import {
   courierName,
   type BookableCourier,
@@ -13,6 +14,7 @@ import {
   type Tracking,
 } from '@/lib/couriers';
 import type { StringKey } from '@/lib/i18n';
+import type { RiskProfile } from '@/lib/risk';
 import { formatDate, formatPaisa } from '@/lib/money';
 import {
   RETURN_REASONS,
@@ -114,6 +116,10 @@ export function OrderPanel({
   const [maskPhone, setMaskPhone] = useState(false);
 
   const data = order.data;
+  // V4 WP0.6: an external provider's per-courier history, when one is stored.
+  const riskProfile = useApi<RiskProfile>(data?.customer_id ? `/customers/${data.customer_id}/risk-profile` : null);
+  const courierHistory = latestCourierHistory(riskProfile.data?.external.providers ?? []);
+  const courierChip = courierHistoryChip(courierHistory, t('risk.ext.komData'), t('risk.ext.allCouriers'));
 
   async function print(work: () => Promise<void>) {
     setBusy(true);
@@ -180,6 +186,9 @@ export function OrderPanel({
             <Chip {...describeOrderStatus(data.status, locale)} />
             {fulfillment ? <Chip label={fulfillment.label} tone={fulfillment.tone} /> : null}
             <Chip {...describeRisk(data.risk_state, locale)} />
+            {courierChip ? (
+              <Chip label={`${t('risk.ext.history')}: ${courierChip}`} tone={courierHistory?.state === 'OK' ? 'neutral' : 'warn'} />
+            ) : null}
             <span className="table__sub">{formatDate(data.created_at, { locale, withTime: true })} · {data.channel.replaceAll('_', ' ').toLowerCase()}</span>
           </div>
 

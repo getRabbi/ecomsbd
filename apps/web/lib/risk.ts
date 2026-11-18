@@ -1,4 +1,5 @@
 /** Shapes of the V3.7 risk, provider and network endpoints. */
+import type { CourierHistory } from './courier-history';
 import type { StringKey } from './i18n';
 
 type T = (key: StringKey, vars?: Record<string, string | number>) => string;
@@ -20,6 +21,8 @@ export interface LookupResult {
   freshness: Freshness;
   sample_size: number | null;
   confidence: string | null;
+  /** V4 WP0.6: per-courier counts when the provider itemises them. */
+  courier_history?: CourierHistory | null;
 }
 
 export interface ProviderSection {

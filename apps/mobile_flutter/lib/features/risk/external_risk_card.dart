@@ -18,6 +18,91 @@ final customerRiskProfileProvider = FutureProvider.autoDispose
           .get('/customers/$customerId/risk-profile'),
     );
 
+const _courierNames = <String, String>{
+  'steadfast': 'Steadfast',
+  'pathao': 'Pathao',
+  'redx': 'RedX',
+  'paperfly': 'Paperfly',
+  'ecourier': 'eCourier',
+  'carrybee': 'CarryBee',
+  'sundarban': 'Sundarban',
+};
+
+String courierLabel(String key) {
+  final known = _courierNames[key];
+  if (known != null) return known;
+  final words = key.replaceAll('_', ' ');
+  return words.isEmpty ? key : words[0].toUpperCase() + words.substring(1);
+}
+
+/// "Steadfast 15/17 · Pathao 8/9" (V4 WP0.6), or [komData] under the
+/// server's 3-parcel floor. Null when the provider gave no courier history.
+String? courierHistoryText(
+  Object? history, {
+  required String komData,
+  required String allCouriers,
+}) {
+  if (history is! Map) return null;
+  if (history['state'] == 'INSUFFICIENT_DATA') return komData;
+  final rows = <String>[
+    for (final row in history['provider_counts'] as List? ?? const [])
+      if (row is Map && (row['total'] as num? ?? 0) > 0)
+        '${courierLabel('${row['courier']}')} ${row['delivered']}/${row['total']}',
+  ];
+  if (rows.isNotEmpty) return rows.join(' · ');
+  final total = history['aggregate'];
+  return total is Map
+      ? '$allCouriers ${total['delivered']}/${total['total']}'
+      : null;
+}
+
+/// The newest stored courier history across a risk profile's providers.
+Map<String, dynamic>? latestCourierHistory(Map<String, dynamic> profile) {
+  final external = profile['external'];
+  if (external is! Map) return null;
+  Map<String, dynamic>? best;
+  var bestAt = '';
+  for (final section in external['providers'] as List? ?? const []) {
+    final result = section is Map ? section['result'] : null;
+    final history = result is Map ? result['courier_history'] : null;
+    final at = result is Map ? '${result['checked_at'] ?? ''}' : '';
+    if (history is Map<String, dynamic> &&
+        (best == null || at.compareTo(bestAt) > 0)) {
+      best = history;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
+/// The courier-history chip for an order card; nothing when none is stored.
+class CourierHistoryChip extends ConsumerWidget {
+  const CourierHistoryChip({required this.customerId, super.key});
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(customerRiskProfileProvider(customerId));
+    final history = profile.asData == null
+        ? null
+        : latestCourierHistory(profile.asData!.value);
+    final text = courierHistoryText(
+      history,
+      komData: context.tr('xr.komData'),
+      allCouriers: context.tr('xr.allCouriers'),
+    );
+    if (text == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Chip(
+        key: const ValueKey('xr.historyChip'),
+        visualDensity: VisualDensity.compact,
+        label: Text('${context.tr('xr.history')}: $text'),
+      ),
+    );
+  }
+}
+
 /// External provider facts, kept apart from the shop's own Risk Check (V3.7).
 ///
 /// Without a customer it shows whether a provider is available at all. With
@@ -224,6 +309,19 @@ class _ProviderFacts extends StatelessWidget {
                 ),
               ],
             ),
+            if (courierHistoryText(
+                  result['courier_history'],
+                  komData: context.tr('xr.komData'),
+                  allCouriers: context.tr('xr.allCouriers'),
+                )
+                case final text?)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Chip(
+                  key: const ValueKey('xr.providerHistory'),
+                  label: Text('${context.tr('xr.history')}: $text'),
+                ),
+              ),
             for (final fact in result['facts'] as List? ?? const [])
               Text(
                 '${context.tr('xr.fact.${(fact as Map)['code']}')}: ${fact['value']}',

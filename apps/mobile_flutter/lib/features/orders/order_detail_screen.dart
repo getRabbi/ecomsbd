@@ -18,6 +18,7 @@ import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../couriers/courier_compare_screen.dart';
 import '../products/inventory_sheets.dart';
+import '../risk/external_risk_card.dart';
 import '../risk/risk_review_sheet.dart';
 import '../shared/data_state.dart';
 import 'courier_booking_sheet.dart';
@@ -219,6 +220,8 @@ class _OrderBody extends ConsumerWidget {
                   ),
                 ),
               ],
+              if (order.customerId != null)
+                CourierHistoryChip(customerId: order.customerId!),
               if (order.deliveryAddress?.isNotEmpty == true) ...<Widget>[
                 const SizedBox(height: EcomsbdSpacing.sm),
                 // The seller's own words. A courier's normalisation never

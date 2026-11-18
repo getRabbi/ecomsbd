@@ -1,17 +1,9 @@
-# V4 build ledger
+| WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.6 — Fraud ratio adapter (external risk)   Step: slice 1 (plan items 1–6).
-Next-session notes: operator rule (2026-11-18): never re-run the full suites; run only the tests the change touches (see Decisions). `docs/providers/` has no BD Courier contract → provider-independent parts, then `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED`.
-Plan:
-1. `app/risk_providers/contract.py`: `CourierHistory` (`provider_counts[{courier, delivered, cancelled, total}]`, `aggregate`, `as_of`) on `ProviderResult`; `normalize_courier_history` (known couriers only, bounded ints, delivered + cancelled ≤ total, aggregate recomputed from rows when absent).
-2. `external_risk_lookups.courier_history` JSON column (a40001 add_column, portable) written by the service; exposed in the existing external-risk read API.
-3. Sample floor: < 3 parcels → state `INSUFFICIENT_DATA` ("kom data"), never a ratio; `success_bps` = delivered × 10000 / total otherwise.
-4. Automation condition `external_success_bps` (customer, int, gte/lte) from the latest valid lookup; `None` under the floor.
-5. Chip text helper ("Steadfast 15/17 · Pathao 8/9"): web `lib/risk.ts` + Flutter, shown on the order card and customer page; quick-order sheet waits for WP1.5.
-6. Tests (contract normalisation, floor, condition, API shape, chips EN + BN); targeted runs only.
-7. Ledger `BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED` + operator action (supply BD Courier API docs → `docs/providers/bdcourier/CONTRACT.md`).
+WP: WP0.7 — Courier live-readiness   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.7.
+Next-session notes: operator rule: targeted tests only (no full suites). WP0.6 provider-independent parts are done; the BD Courier adapter waits for its contract (operator action). The quick-order sheet chip lands with WP1.5 (reuse `courierHistoryText` / `courierHistoryChip`).
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -58,12 +50,15 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 | G5 | | |
 
 ## Operator actions waiting (things only Rabbi can do)
+- [ ] WP0.6: supply the BD Courier (bdcourier.com) API documentation (or name another licensed provider and its docs). It is transcribed into `docs/providers/bdcourier/CONTRACT.md`; then the adapter is built on `app/risk_providers/contract.py` (fills `CourierHistory`). Never the seller's courier-panel password.
 - [ ] WP0.2 (in progress — DSN being created): create the Sentry project, put its DSN in `apps/mobile_flutter/env/production.json` as `ECOMSBD_SENTRY_DSN`, build, and confirm one test event arrives with phones masked.
 - [ ] WP0.2 (in progress — operator turning it on): turn `product_events_enabled` on (admin console, global) when ready to collect the funnel; check `GET /v1/admin/ops/funnel`.
 - [ ] WP0.3: add 30–50 real masked seller messages (phones replaced with the 017000000xx range, names/addresses kept as typed) to `backend/tests/fixtures/parse_holdout/holdout.yaml`, then run `python -m app.orders.parser.eval --live --set holdout` with `AI_PARSE_API_KEY` and `AI_PARSE_MODEL` (e.g. `claude-haiku-5-5`) set (costs a few cents; runbook `docs/runbooks/AI_PARSE.md`); G0.3 is met when the merged gated accuracy (phones+address+items) is ≥ 90%.
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.6: courier history is a new optional `CourierHistory` on the existing `ProviderResult` (port unchanged for current adapters); courier keys are normalised slugs (any provider-reported courier, max 12 rows) rather than a fixed list, since the provider's courier set is unknown until its contract exists. A row with delivered + cancelled > total or out-of-range counts is dropped, not repaired. The provider's own aggregate is used when valid, else rows are summed.
+- 2026-11-18 WP0.6: under 3 parcels the history state is `INSUFFICIENT_DATA` and `success_bps` is null; the chip then says "too little data" ("কম ডেটা") instead of any count, and `external_success_bps` stays unset so no workflow condition matches thin data.
 - 2026-11-18 operator: do not re-run the full backend / Flutter suites (credit cost); run only the tests the change touches, plus ruff/format/mypy, `flutter analyze` on changed files and the web checks. Overrides §1.5 item 2 / §1.6 loop step 4 "full suite once per WP end".
 - 2026-11-18 WP0.5: web prints through a hidden iframe (`srcdoc`, sandbox `allow-modals allow-same-origin`, no scripts) instead of a new window, so no pop-up blocker is involved; `fetchHtml` goes through the existing `request` (new `responseType: 'html'`) so every API call still uses the one authenticated `fetch(buildUrl(...))` path the parity test guards.
 - 2026-11-18 WP0.5: mobile wraps `printing` behind `DocumentPrinter` (`documentPrinterProvider`), so widget tests stub the OS print sheet; `ApiClient.getText/postText` fetch HTML as plain text and still translate JSON error bodies. The print action is hidden for an order that exists only on the phone (not synced, no server id to render).
@@ -109,6 +104,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP0.6 provider-independent courier history 0ce0cfa + clients; BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED
 - 2026-11-18 WP0.5 DONE (targeted tests per operator rule) 495a35c
 - 2026-11-18 WP0.5 web + mobile printing committed; full suites stopped by the machine for low memory — re-run pending
 - 2026-11-18 WP0.5 slice 1 (backend documents) d99556b; stopped at usage limit — web/mobile print next
