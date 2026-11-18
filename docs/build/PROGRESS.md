@@ -2,26 +2,15 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.3 — LLM order parser (`EnhancedOrderParser`)   Step: slice 2 (LLM path) under the 2026-11-18 operator correction (spec WP0.3 updated). Slice 1 (deterministic + corpus) done.
-Next-session notes: `tests/test_parser.py::...test_the_enhanced_parser_refuses_rather_than_pretending` asserts the old stub raises — replace it with the new boundary test (no client → deterministic + `AI_PARSE_UNAVAILABLE`).
-Plan (slice 2):
-1. Deterministic: no more extraction tuning. Only change: unlabelled heuristics (address ≥2 place hits, currency-marked amount) report MEDIUM, so confidence ≥ 0.8 ⇔ explicit label.
-2. Holdout `tests/fixtures/parse_holdout/holdout.yaml` (operator's 8 cases, no `llm` blocks, never tuned on, not a pass/fail test); `eval --set corpus|holdout`, `--live` prints deterministic-only vs merged.
-3. `ai_client.py`: `AiParseClient` port, `AnthropicParseClient` (httpx Messages API, one forced extract tool, untrusted-data system prompt, delimited text), `FakeAiParseClient`, `AiParseUnavailableError`.
-4. `llm_schema.py`: Pydantic `LlmParseOutput` (extra=forbid, bounded); any violation → LLM result discarded.
-5. `merge.py`: `needs_llm` = any of name/address/items/amount < 0.8; merge = phones deterministic (LLM phone only if normalised + present in text), keep det ≥ 0.8 else LLM; disagreement on a labelled field → `uncertain_fields`.
-6. `ParsedOrder.uncertain_fields` + `ParseResponse.uncertain_fields`; empty address + known customer → last delivery address, `address` uncertain.
-7. `ai_usage` model + table in a40001 (RLS, grants revoked, silent realtime table, model registry); cost from `AI_PARSE_PRICE_*_PER_MTOK_USD` (estimate).
-8. `enhanced.py` async `EnhancedOrderParser`: flag `ai_parse_enabled`, cache SHA-256(normalised text) per tenant 24 h, quota `ai_parse_monthly`, outage/timeout/quota/schema → deterministic + `AI_PARSE_UNAVAILABLE`.
-9. Wire `POST /v1/orders/parse`; settings + `.env.example` + `.env.production.example`; tests (merge, service, API, recorded-LLM corpus).
-10. Runbook `docs/runbooks/ai-parse.md`, IMPLEMENTATION_STATUS row, full suite + lint, push.
+WP: WP0.4 — Shop delivery rules + COD auto-calc   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §2 WP0.4.
+Next-session notes: WP0.3 is code-complete; its gate G0.3 waits on the operator's live holdout run (see Operator actions). Do not tune the deterministic parser (operator rule). `POST /v1/orders/parse` now needs `db`/`settings` and returns `uncertain_fields`.
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
 |---|---|---|---|---|
 | WP0.1 | DONE | 90edda4 | backend 1805 passed/5 skipped, ruff+format+mypy clean; Flutter 541 (perf test flaky under load, green alone); web 66 | docs only: no flag/env/migration needed |
 | WP0.2 | DONE | 58144bd | backend 1830 passed/5 skipped (25 new), ruff+format+mypy clean (319 files); Flutter analyze + format clean, 548 tests (7 new) with the pre-existing timing flake below; migration tests green on SQLite | PostgreSQL suite + a40001 round trip run at phase end |
-| WP0.3 | IN_PROGRESS | 85463f8 | slice 1: corpus 50 cases, deterministic 95.8% gated (phones 50/50, address 47/50, items 41/44); parser+chat-order+order tests green | slice 2 (LLM path) next |
+| WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
 | WP0.4 | TODO | | | |
 | WP0.5 | TODO | | | |
 | WP0.6 | TODO | | | |
@@ -53,7 +42,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 ## Gates
 | Gate | Met? | Evidence |
 |---|---|---|
-| G0 | | |
+| G0 | waiting on operator | G0.3: `python -m app.orders.parser.eval --live --set holdout` (merged gated ≥ 90%); offline holdout deterministic-only 50.0% |
 | G1 | | |
 | G2 | | |
 | G3 | | |
@@ -63,10 +52,19 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 ## Operator actions waiting (things only Rabbi can do)
 - [ ] WP0.2 (in progress — DSN being created): create the Sentry project, put its DSN in `apps/mobile_flutter/env/production.json` as `ECOMSBD_SENTRY_DSN`, build, and confirm one test event arrives with phones masked.
 - [ ] WP0.2 (in progress — operator turning it on): turn `product_events_enabled` on (admin console, global) when ready to collect the funnel; check `GET /v1/admin/ops/funnel`.
-- [ ] WP0.3: add 30–50 real masked seller messages (phones replaced with the 017000000xx range, names/addresses kept as typed) to `backend/tests/fixtures/parse_holdout/holdout.yaml`, then run `python -m app.orders.parser.eval --live --set holdout` with `AI_PARSE_API_KEY` set; G0.3 is met when the merged gated accuracy (phones+address+items) is ≥ 90%.
+- [ ] WP0.3: add 30–50 real masked seller messages (phones replaced with the 017000000xx range, names/addresses kept as typed) to `backend/tests/fixtures/parse_holdout/holdout.yaml`, then run `python -m app.orders.parser.eval --live --set holdout` with `AI_PARSE_API_KEY` and `AI_PARSE_MODEL` (e.g. `claude-haiku-5-5`) set (costs a few cents; runbook `docs/runbooks/AI_PARSE.md`); G0.3 is met when the merged gated accuracy (phones+address+items) is ≥ 90%.
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP0.3: the Anthropic client uses JSON-schema structured output (`output_config.format`) with **no tools** instead of a forced tool call — same schema guarantee, nothing the model can act with, and current models (Opus 5.5, Sonnet 5.5) return 400 on forced `tool_choice`. `anthropic-version: 2026-10-21`, no `temperature`, `effort: low`. Example model `claude-haiku-5-5` ($0.10 / $0.50 per MTok, estimate in env examples).
+- 2026-11-18 WP0.3: text longer than `AI_PARSE_MAX_INPUT_CHARS` is not sent (deterministic + `AI_PARSE_UNAVAILABLE`) rather than truncated — a cut paste can lose the order.
+- 2026-11-18 WP0.3: one `ai_parse_monthly` unit is spent before the call (bounds cost under concurrency); a failed call still spends it and is recorded as `ai_usage` outcome `error`. Cache hits spend nothing.
+- 2026-11-18 WP0.3: `ai_usage` adds `provider` and `error_code` (machine code only) to the spec columns; `cost_micro_usd` is NULL when prices are unset (unknown ≠ free). Prices are `Decimal` settings.
+- 2026-11-18 WP0.3: a model value's confidence is its own `field_confidence` capped at 0.75 (default 0.5), so it never reads as labelled/exact. `uncertain_fields` uses the confidence keys (`name`, `address`, `items`, `amount`). The warning is the literal code `AI_PARSE_UNAVAILABLE` in `warnings`.
+- 2026-11-18 WP0.3: last-address prefill runs only with `ai_parse_enabled` on (it is part of the flagged feature), reads the newest non-deleted order's `delivery_address_raw` for the customer found by phone HMAC, and works whether or not the model answered.
+- 2026-11-18 WP0.3: holdout phones masked to the 017000000xx test range (separators and digit script kept) — §1.6 forbids real numbers in tests; nothing else in the operator's 8 messages changed. Holdout ids `h-01`..`h-08`.
+- 2026-11-18 WP0.3: the eval grader compares items as (word set of name+colour+size, quantity), ignoring the word size/সাইজ, so "black hoodie" + size XXL equals "black hoodie XXL" and "শাড়ি" + colour নীল equals "শাড়ি (নীল)". Grading only — the parser is unchanged; corpus deterministic score unchanged at 95.8%.
+- 2026-11-18 WP0.3: chat-order drafts (`app/chat_orders/service.py`) still parse deterministically; the enhanced path is wired to `POST /v1/orders/parse` only. Drafts move to the Intake service in WP1.3 (L1).
 - 2026-11-18 operator correction (WP0.3): on 8 held-out messages the deterministic parser got phones 8/8, names ~1/8, items ~1/8 while `is_low_confidence` was False for 7/8; the 50-case corpus was written and tuned by the agent, so 95.8% is optimistic. Now: deterministic = phones + labelled fields only (no more tuning); LLM is called unless name/address/items/cod all ≥ 0.8; merge keeps det ≥ 0.8 else LLM, disagreement on a labelled field → `uncertain_fields`; empty address + known customer → last delivery address (uncertain); holdout set `parse_holdout/holdout.yaml` never tuned on; G0.3 measured on the holdout with the live LLM (operator). Spec WP0.3 section updated.
 - 2026-11-18 WP0.3: so that confidence ≥ 0.8 means "came from a label", the two unlabelled heuristics that reported HIGH (address with ≥ 2 place hits, currency-marked amount) now report MEDIUM. Extraction is unchanged.
 - 2026-11-18 operator: `test/performance/*` tagged `@Tags(['perf'])` (declared in `apps/mobile_flutter/dart_test.yaml`); CI runs `flutter test --exclude-tags perf` then `flutter test --tags perf --concurrency=1`. Budgets unchanged. `codemagic.yaml` runs no `flutter test`, so unchanged.
@@ -90,6 +88,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 operator correction to WP0.3 recorded ef3dc03; WP0.3 slice 2 (LLM path, holdout, eval) c97712c — WP0.3 DONE, G0.3 waiting on operator; checkpoint (context)
 - 2026-11-18 operator decisions 4f5b82e; WP0.3 slice 1 deterministic + corpus 85463f8; checkpoint (context)
 - 2026-11-18 WP0.2 done: emits 0279a22, Flutter Sentry b64ab8d, realtime silent table 58144bd; checkpoint (context)
 - 2026-11-17 WP0.2 slice 1: product_events + a40001 + funnel endpoint 390b18b; checkpoint (context)
