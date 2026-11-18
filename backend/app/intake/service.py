@@ -46,10 +46,13 @@ from app.core.logging import get_logger
 from app.integrations.models import IntegrationConnection
 
 __all__ = [
+    "MANUAL_PLATFORM",
     "CaptureResult",
     "CapturedMessage",
     "capture",
     "identity_key",
+    "is_manual",
+    "manual_connection",
     "message_hash",
 ]
 
@@ -57,6 +60,8 @@ log = get_logger(__name__)
 
 #: A device's clock may run ahead; a message is never dated in the future.
 _CLOCK_SKEW = timedelta(minutes=5)
+#: ``config.platform`` of the shop's share/paste connection.
+MANUAL_PLATFORM = "manual"
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +85,8 @@ class CaptureResult:
     #: The new ``chat_messages`` rows, in the order they were given.
     stored: list[uuid.UUID]
     duplicates: int
+    #: Rows that were already stored (a re-upload), in the order given.
+    existing: list[uuid.UUID]
 
 
 def identity_key(provider: str, account_ref: str, conversation_key: str) -> str:
@@ -137,6 +144,49 @@ async def _identity(
     return identity
 
 
+async def manual_connection(
+    db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> IntegrationConnection:
+    """The shop's own connection for shared and pasted messages.
+
+    Chat rows always belong to a connection; a share or a paste from the web
+    has no linked device, so the shop gets one hidden DEVICE connection with
+    platform ``manual``. It has no ingest key, never heartbeats, and is not
+    listed in the Integrations Hub.
+    """
+    account_key = f"manual:{tenant_id}"
+    query = sa.select(IntegrationConnection).where(
+        IntegrationConnection.provider == DEVICE,
+        IntegrationConnection.account_key == account_key,
+    )
+    found = await db.scalar(query)
+    if found is not None:
+        return found
+    conn = IntegrationConnection(
+        tenant_id=tenant_id,
+        provider=DEVICE,
+        name="Shared and pasted messages",
+        state="CONNECTED",
+        account_key=account_key,
+        config={"platform": MANUAL_PLATFORM},
+        created_by=user_id,
+    )
+    try:
+        async with db.begin_nested():
+            db.add(conn)
+            await db.flush()
+    except IntegrityError:
+        found = await db.scalar(query)
+        if found is None:
+            raise
+        return found
+    return conn
+
+
+def is_manual(conn: IntegrationConnection) -> bool:
+    return conn.provider == DEVICE and (conn.config or {}).get("platform") == MANUAL_PLATFORM
+
+
 async def capture(
     db: AsyncSession,
     *,
@@ -170,6 +220,7 @@ async def capture(
     now = utc_now()
     pending: list[tuple[str, CapturedMessage]] = []
     seen: set[str] = set()
+    existing: list[uuid.UUID] = []
     duplicates = 0
     for message in messages:
         message_id = message.message_id or message_hash(
@@ -188,10 +239,11 @@ async def capture(
         )
         if exists is not None:
             duplicates += 1
+            existing.append(exists)
             continue
         pending.append((message_id, message))
     if not pending:
-        return CaptureResult(identity_id=None, stored=[], duplicates=duplicates)
+        return CaptureResult(identity_id=None, stored=[], duplicates=duplicates, existing=existing)
 
     identity = await _identity(
         db,
@@ -230,4 +282,6 @@ async def capture(
             duplicates += 1  # the same message, captured concurrently
             continue
         stored.append(row.id)
-    return CaptureResult(identity_id=identity.id, stored=stored, duplicates=duplicates)
+    return CaptureResult(
+        identity_id=identity.id, stored=stored, duplicates=duplicates, existing=existing
+    )

@@ -349,6 +349,12 @@ async def heartbeat(
     )
     config["last_heartbeat_at"] = now.isoformat()
     config["listener_state"] = listener_state
+    # Back in touch: clear what scan_device_health set (WP1.3). The time of
+    # the last "went quiet" notification is kept, so a flapping phone still
+    # notifies at most once a day.
+    config.pop("health", None)
+    if conn.last_error_code == "HEARTBEAT_STALE":
+        conn.last_error_code = None
     conn.config = config
     conn.last_success_at = now
     await db.flush()

@@ -95,6 +95,16 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=10**9,
             route="inbox",
         ),
+        NotificationKind.DEVICE_NEEDS_ATTENTION: AlertRule(
+            category=NotificationCategory.ORDERS,
+            severity=Severity.ACTION,
+            # app.intake.jobs raises it at most once per device per day.
+            cooldown=_DAY,
+            # Whoever may link a phone may fix one.
+            audience=Permission.SETTINGS_MANAGE,
+            worsen_min_delta=10**9,
+            route="integrations",
+        ),
         NotificationKind.FOLLOW_UP_DUE: AlertRule(
             category=NotificationCategory.CRM,
             severity=Severity.ACTION,

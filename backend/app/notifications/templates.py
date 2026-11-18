@@ -371,6 +371,32 @@ def _chat_order_ready(p: Params, locale: str) -> tuple[str, str]:
     return f"New order from {channel}", "Review it in the Inbox and confirm."
 
 
+def _device_needs_attention(p: Params, locale: str) -> tuple[str, str]:
+    if str(p.get("platform")) == "extension":
+        if locale == "bn":
+            return (
+                "ব্রাউজার এক্সটেনশন থেকে সাড়া নেই",
+                "এক দিনের বেশি সময় ধরে লিংক করা এক্সটেনশন থেকে কোনো সাড়া আসেনি। "
+                "ব্রাউজারে এক্সটেনশনটি চালু আছে কিনা দেখুন।",
+            )
+        return (
+            "A linked browser extension went quiet",
+            "The linked extension has not checked in for over a day. Check that it is "
+            "still installed and switched on.",
+        )
+    if locale == "bn":
+        return (
+            "লিংক করা ফোন থেকে সাড়া নেই",
+            "এক দিনের বেশি সময় ধরে লিংক করা একটি ফোন থেকে কোনো সাড়া আসেনি। ফোনে অ্যাপটি "
+            "খুলে নোটিফিকেশন অ্যাক্সেস চালু আছে কিনা দেখুন।",
+        )
+    return (
+        "A linked phone went quiet",
+        "A linked phone has not checked in for over a day, so new orders are not being "
+        "detected on it. Open the app on that phone and check notification access.",
+    )
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
@@ -378,6 +404,7 @@ def _automation(p: Params, locale: str) -> tuple[str, str]:
 _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.AUTOMATION: _automation,
     NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
+    NotificationKind.DEVICE_NEEDS_ATTENTION: _device_needs_attention,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

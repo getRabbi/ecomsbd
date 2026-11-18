@@ -10,8 +10,11 @@ The flow for one message, run by the worker inside the message's shop:
 3.  read it with the same deterministic parser as the Inbox's "paste a
     message" (:class:`DeterministicOrderParser`), never a second parser;
 4.  match the items to the catalogue and the sender to a customer;
-5.  set the draft's state, and raise one notification the first time it
-    becomes ready for review.
+5.  for a draft that did not come from a Meta webhook (V4 WP1.3): when its
+    phone first appears, attach it to an open draft or a recent order for the
+    same phone instead of keeping a second candidate order;
+6.  set the draft's state, and raise one notification (and one
+    ``intake.draft_ready`` event) the first time it becomes ready for review.
 
 Nothing here creates an order. :func:`confirm` does, through
 ``OrderService.create`` (the same path as ``POST /v1/orders``) with the draft's
@@ -38,9 +41,11 @@ from app.chat_orders import capture, matching
 from app.chat_orders.models import (
     COLLECTING,
     CONFIRMED,
+    DEVICE,
     EXPIRED,
     FINAL_STATES,
     IGNORED,
+    META_WEBHOOK,
     NEEDS_INFO,
     OPEN_STATES,
     READY_FOR_REVIEW,
@@ -83,6 +88,11 @@ CLOSED_DRAFT_RETENTION = timedelta(days=30)
 FOLLOW_UP_WINDOW = timedelta(days=30)
 MAX_ATTEMPTS = 5
 REQUIRED = ("phone", "address", "items")
+#: A draft whose phone has an order this recent is about that order.
+DUPLICATE_ORDER_WINDOW = timedelta(hours=24)
+#: Apps whose conversations are WhatsApp chats (for the order's channel).
+_WHATSAPP_APPS = frozenset({"com.whatsapp", "com.whatsapp.w4b"})
+_MESSENGER_APPS = frozenset({"com.facebook.orca"})
 
 _parser = DeterministicOrderParser()
 
@@ -215,6 +225,7 @@ async def process_message(db: AsyncSession, message_id: uuid.UUID) -> str:
             connection_id=conn.id,
             identity_id=identity.id,
             provider=message.provider,
+            capture_source=message.capture_source,
             status=COLLECTING,
             customer_match="NONE",
             customer_candidates=[],
@@ -244,8 +255,22 @@ async def process_message(db: AsyncSession, message_id: uuid.UUID) -> str:
     if message.message_type != "TEXT":
         draft.attachment_count += max(1, message.attachment_count)
     await db.flush()
-    await rebuild(db, draft, identity)
+    # A draft another sender's messages were merged into is read as its own
+    # sender's; for Meta the owner is always this message's sender.
+    owner = identity
+    if draft.identity_id != identity.id:
+        owner = await db.get(ChatIdentity, draft.identity_id) or identity
+    phone_before = draft.selected_phone
+    await rebuild(db, draft, owner)
     message.processing_status = "PROCESSED"
+    if (
+        draft.capture_source != META_WEBHOOK
+        and draft.selected_phone
+        and draft.selected_phone != phone_before
+    ):
+        draft = await _attach_duplicate(db, draft)
+        message.linked_draft_id = draft.id
+    await _announce_if_ready(db, draft)
     return draft.status
 
 
@@ -270,13 +295,18 @@ async def _link_whatsapp_sender(db: AsyncSession, identity: ChatIdentity) -> Non
 async def _open_session(
     db: AsyncSession, identity: ChatIdentity, at: datetime
 ) -> ChatOrderDraft | None:
+    mine: Any = ChatOrderDraft.identity_id == identity.id
+    if identity.provider == DEVICE:
+        # A device conversation merged into another sender's draft keeps
+        # adding to it (duplicate merge, V4 WP1.3). Meta drafts never move.
+        held = sa.select(ChatMessage.linked_draft_id).where(
+            ChatMessage.identity_id == identity.id, ChatMessage.linked_draft_id.is_not(None)
+        )
+        mine = sa.or_(mine, ChatOrderDraft.id.in_(held))
     drafts = (
         await db.scalars(
             sa.select(ChatOrderDraft)
-            .where(
-                ChatOrderDraft.identity_id == identity.id,
-                ChatOrderDraft.status.in_(OPEN_STATES),
-            )
+            .where(mine, ChatOrderDraft.status.in_(OPEN_STATES))
             .order_by(ChatOrderDraft.last_message_at.desc())
             .with_for_update()
         )
@@ -412,6 +442,8 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
         warnings.add("ATTACHMENT")
     if draft.message_count >= MAX_SESSION_MESSAGES:
         warnings.add("SESSION_FULL")
+    if draft.duplicate_of_order_id is not None:
+        warnings.add("DUPLICATE_ORDER")
 
     await _match_customer(db, draft, identity, phones, sender_phone)
     if draft.customer_match == "AMBIGUOUS":
@@ -446,8 +478,6 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
     draft.status = after
     if after == READY_FOR_REVIEW and draft.ready_at is None:
         draft.ready_at = utc_now()
-    if after == READY_FOR_REVIEW and draft.notified_at is None:
-        await _announce(db, draft)
     await db.flush()
 
 
@@ -544,6 +574,109 @@ async def _match_customer(
     draft.customer_match = "MATCHED" if only == linked or sender_owned else "SUGGESTED"
 
 
+async def _recent_order(db: AsyncSession, phone: str) -> uuid.UUID | None:
+    customer = await _customers(db).find_by_phone(phone)
+    if customer is None:
+        return None
+    return await db.scalar(
+        sa.select(Order.id)
+        .where(
+            Order.customer_id == customer.id,
+            Order.deleted_at.is_(None),
+            Order.created_at >= utc_now() - DUPLICATE_ORDER_WINDOW,
+            Order.status != str(OrderStatus.CANCELLED),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+
+
+async def _attach_duplicate(db: AsyncSession, draft: ChatOrderDraft) -> ChatOrderDraft:
+    """Duplicate merge (V4 WP1.3) for a draft whose phone just appeared.
+
+    *   an open draft with the same phone: this one is merged into it (its
+        messages move over) and the merged draft is returned;
+    *   else an order for that phone made in the last 24 hours: the draft is
+        linked to it (``DUPLICATE_ORDER``) and is never announced as new.
+
+    A draft the seller was already told about is not merged away. Nothing is
+    closed or confirmed here.
+    """
+    phone = draft.selected_phone
+    if phone is None:
+        return draft
+    if draft.notified_at is None:
+        other = await db.scalar(
+            sa.select(ChatOrderDraft)
+            .where(
+                ChatOrderDraft.id != draft.id,
+                ChatOrderDraft.status.in_(OPEN_STATES),
+                ChatOrderDraft.selected_phone == phone,
+            )
+            .order_by(ChatOrderDraft.first_message_at, ChatOrderDraft.id)
+            .limit(1)
+            .with_for_update()
+        )
+        if other is not None:
+            await _merge(db, draft, other)
+            return other
+    draft.duplicate_of_order_id = await _recent_order(db, phone)
+    warnings = set(draft.warnings) - {"DUPLICATE_ORDER"}
+    if draft.duplicate_of_order_id is not None:
+        warnings.add("DUPLICATE_ORDER")
+    draft.warnings = sorted(warnings)
+    await db.flush()
+    return draft
+
+
+async def _merge(db: AsyncSession, draft: ChatOrderDraft, target: ChatOrderDraft) -> None:
+    rows = (
+        await db.scalars(sa.select(ChatMessage).where(ChatMessage.linked_draft_id == draft.id))
+    ).all()
+    for row in rows:
+        row.linked_draft_id = target.id
+    known = set(target.source_message_ids)
+    target.source_message_ids = [
+        *target.source_message_ids,
+        *(mid for mid in draft.source_message_ids if mid not in known),
+    ]
+    target.message_count += draft.message_count
+    target.attachment_count += draft.attachment_count
+    target.first_message_at = min(target.first_message_at, draft.first_message_at)
+    target.last_message_at = max(target.last_message_at, draft.last_message_at)
+    await db.delete(draft)
+    await db.flush()
+    owner = await db.get(ChatIdentity, target.identity_id)
+    if owner is not None:
+        await rebuild(db, target, owner)
+
+
+async def _announce_if_ready(db: AsyncSession, draft: ChatOrderDraft) -> None:
+    """The first time a draft is ready: one push and one ``intake.draft_ready``.
+
+    A draft about an order made in the last 24 hours is never announced.
+    """
+    if draft.status != READY_FOR_REVIEW or draft.notified_at is not None:
+        return
+    if draft.duplicate_of_order_id is not None:
+        return
+    from app.common.outbox import OutboxTopic, enqueue
+
+    await _announce(db, draft)
+    await enqueue(
+        db,
+        OutboxTopic.INTAKE_DRAFT_READY,
+        {
+            "draft_id": str(draft.id),
+            "connection_id": str(draft.connection_id),
+            "provider": draft.provider,
+            "capture_source": draft.capture_source,
+        },
+        tenant_id=draft.tenant_id,
+        dedupe_key=f"intake.draft_ready:{draft.id}",
+    )
+
+
 async def _announce(db: AsyncSession, draft: ChatOrderDraft) -> None:
     """One push per draft: the first time it is ready to review."""
     from app.notifications.models import NotificationCategory, NotificationKind, Severity
@@ -593,6 +726,24 @@ async def ignore(db: AsyncSession, draft: ChatOrderDraft, actor_id: uuid.UUID) -
         context={"provider": draft.provider},
     )
     await db.flush()
+
+
+def order_channel(draft: ChatOrderDraft, identity: ChatIdentity | None) -> OrderChannel:
+    """The order's channel: the Meta provider, or the app a device read it in.
+
+    A shared or pasted message, or an app that carries more than one kind of
+    chat (Business Suite), is a parsed message: ``PASTE_PARSE``.
+    """
+    if draft.provider == "WHATSAPP":
+        return OrderChannel.WHATSAPP
+    if draft.provider != DEVICE:
+        return OrderChannel.MESSENGER
+    app = identity.account_ref if identity is not None else ""
+    if app in _WHATSAPP_APPS:
+        return OrderChannel.WHATSAPP
+    if app in _MESSENGER_APPS:
+        return OrderChannel.MESSENGER
+    return OrderChannel.PASTE_PARSE
 
 
 @dataclass
@@ -647,6 +798,7 @@ async def confirm(
             details={"code": "DRAFT_CLOSED"},
         )
     _check_items(draft, payload.items)
+    owner = await db.get(ChatIdentity, draft.identity_id)
     order, duplicates = await orders.create(
         OrderDraft(
             phone=payload.phone,
@@ -674,9 +826,7 @@ async def confirm(
             # The chat itself is not copied onto the order: raw messages have
             # their own, shorter retention.
             source_text=None,
-            channel=OrderChannel.WHATSAPP
-            if draft.provider == "WHATSAPP"
-            else OrderChannel.MESSENGER,
+            channel=order_channel(draft, owner),
             client_id=draft.id,
         )
     )
@@ -691,10 +841,10 @@ async def confirm(
         identity.customer_id = order.customer_id
         identity.customer_link_source = "CONFIRMED_ORDER"
         identity.customer_linked_at = utc_now()
-    order.metadata_json = {
-        **(order.metadata_json or {}),
-        "chat": {"provider": draft.provider, "draft_id": str(draft.id)},
-    }
+    chat: dict[str, Any] = {"provider": draft.provider, "draft_id": str(draft.id)}
+    if draft.capture_source != META_WEBHOOK:
+        chat["capture_source"] = draft.capture_source
+    order.metadata_json = {**(order.metadata_json or {}), "chat": chat}
     await record_audit(
         db,
         AuditAction.CHAT_ORDER_CONFIRMED,
@@ -732,6 +882,10 @@ def draft_view(
     return {
         "id": draft.id,
         "provider": draft.provider,
+        "capture_source": draft.capture_source,
+        # The app a device read it in (None for Meta).
+        "source_app": identity.account_ref if identity and draft.provider == DEVICE else None,
+        "duplicate_of_order_id": draft.duplicate_of_order_id,
         "status": draft.status,
         "connection_id": draft.connection_id,
         "channel_name": connection.account_name if connection else None,
@@ -838,10 +992,26 @@ async def purge_expired_data(db: AsyncSession, now: datetime | None = None) -> d
         )
         .execution_options(synchronize_session=False)
     )
+    # V4 WP1.3: a device "sender" is a conversation title the phone showed (or
+    # a one-off share). Once nothing of it is left, it goes too.
+    cutoff = moment - MESSAGE_RETENTION
+    identities = await db.execute(
+        sa.delete(ChatIdentity)
+        .where(
+            ChatIdentity.provider == DEVICE,
+            ChatIdentity.created_at < cutoff,
+            sa.or_(ChatIdentity.last_message_at.is_(None), ChatIdentity.last_message_at < cutoff),
+            ~sa.exists().where(ChatMessage.identity_id == ChatIdentity.id),
+            ~sa.exists().where(ChatOrderDraft.identity_id == ChatIdentity.id),
+            ~sa.exists().where(ChatAttention.identity_id == ChatIdentity.id),
+        )
+        .execution_options(synchronize_session=False)
+    )
     return {
         "messages": int(getattr(messages, "rowcount", 0) or 0),
         "attention": int(getattr(attention, "rowcount", 0) or 0),
         "drafts": int(getattr(drafts, "rowcount", 0) or 0),
+        "identities": int(getattr(identities, "rowcount", 0) or 0),
     }
 
 

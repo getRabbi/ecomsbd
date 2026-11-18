@@ -129,6 +129,8 @@ class NotificationKind(StrEnum):
     # --- Chat-to-order --------------------------------------------------
     #: A Messenger or WhatsApp conversation became an order ready to review.
     CHAT_ORDER_READY = "CHAT_ORDER_READY"
+    #: A linked phone or extension sent no heartbeat for a day (V4 WP1.3).
+    DEVICE_NEEDS_ATTENTION = "DEVICE_NEEDS_ATTENTION"
 
 
 class NotificationCategory(StrEnum):

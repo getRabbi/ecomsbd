@@ -123,13 +123,18 @@ async def _one(db: DbSession, row: IntegrationConnection, manage: bool) -> dict[
 
 @router.get("")
 async def hub(db: DbSession, actor: Viewer) -> dict[str, Any]:
-    rows = list(
-        (
+    from app.intake.service import is_manual
+
+    rows = [
+        row
+        for row in (
             await db.scalars(
                 sa.select(IntegrationConnection).order_by(IntegrationConnection.created_at)
             )
         ).all()
-    )
+        # The shop's share/paste connection is not something to manage.
+        if not is_manual(row)
+    ]
     manage = actor.can(Permission.SETTINGS_MANAGE)
     return {
         "providers": [service.availability(p, actor.user_id) for p in service.PROVIDERS],

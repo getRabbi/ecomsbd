@@ -120,6 +120,10 @@ class OutboxTopic(StrEnum):
     EXTERNAL_RISK_LOOKUP_COMPLETED = "external_risk.lookup_completed"
     EXTERNAL_RISK_UNAVAILABLE = "external_risk.provider_unavailable"
 
+    # V4 Intake (WP1.3): a chat-order draft became ready for review, once per
+    # draft. Handled in app.intake.jobs; Phase 4 (Autopilot) builds on it.
+    INTAKE_DRAFT_READY = "intake.draft_ready"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

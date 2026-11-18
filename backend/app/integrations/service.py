@@ -673,6 +673,9 @@ def health(conn: IntegrationConnection, open_issues: int) -> str:
         return "SETUP_INCOMPLETE"
     if conn.state in {"DISABLED", "DISCONNECTED", "AUTH_EXPIRED"}:
         return conn.state
+    if conn.provider == "DEVICE" and (conn.config or {}).get("health") == "NEEDS_ATTENTION":
+        # No heartbeat for a day (app.intake.jobs.scan_device_health).
+        return "NEEDS_ATTENTION"
     if conn.webhook_state == "FAILING":
         return "WEBHOOK_FAILING"
     if conn.sync_state == "FAILING":

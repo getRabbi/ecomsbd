@@ -244,6 +244,7 @@ async def test_four_messages_become_one_ready_draft_with_one_notification(client
     draft = drafts[0]
     assert draft.status == "READY_FOR_REVIEW" and draft.message_count == 4
     assert draft.selected_phone == "+8801712345678"
+    assert draft.capture_source == "META_WEBHOOK", "Meta still enters through the Intake service"
     assert draft.address == "মিরপুর 10 ঢাকা"
     (item,) = draft.items
     assert (item["quantity"], item["size"], item["color"]) == (2, "XL", "কালো")

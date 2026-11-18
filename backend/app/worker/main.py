@@ -34,6 +34,7 @@ from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.forecasting.jobs import snapshot_demand_forecasts
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
+from app.intake.jobs import scan_device_health
 from app.integrations.jobs import (
     process_integration_events,
     run_integration_syncs,
@@ -113,6 +114,7 @@ class WorkerSettings:
         sync_inventories,
         process_chat_messages,
         chat_order_housekeeping,
+        scan_device_health,
         dispatch_outbox,
         snapshot_demand_forecasts,
         prune_external_risk_lookups,
@@ -154,6 +156,8 @@ class WorkerSettings:
         # every 15s; expiry and raw-message retention hourly.
         cron(process_chat_messages, second={8, 23, 38, 53}),
         cron(chat_order_housekeeping, minute={41}),
+        # V4 WP1.3: linked phones silent for a day need the seller's attention.
+        cron(scan_device_health, minute={47}),
         cron(run_integration_syncs, second={25, 55}),
         cron(schedule_integrations, minute=set(range(0, 60, 5))),
         # Two-way stock: compare mapped items every 5 minutes (V3.2).

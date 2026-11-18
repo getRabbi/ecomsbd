@@ -29,6 +29,7 @@ export const integrationsEn = {
   'int.health.DISCONNECTED': 'Disconnected',
   'int.health.DISABLED': 'Turned off',
   'int.health.SETUP_INCOMPLETE': 'Setup not finished',
+  'int.health.NEEDS_ATTENTION': 'Not heard from in a day',
   'int.health.NOT_CONNECTED': 'Not connected',
   'int.health.OFFICIAL_SETUP_REQUIRED': 'Official setup required',
   'int.blocker.SHOPIFY_APP_SETUP_REQUIRED':
@@ -266,6 +267,7 @@ export const integrationsBn: Record<keyof typeof integrationsEn, string> = {
   'int.health.DISCONNECTED': 'সংযোগ বিচ্ছিন্ন',
   'int.health.DISABLED': 'বন্ধ রাখা',
   'int.health.SETUP_INCOMPLETE': 'সেটআপ বাকি',
+  'int.health.NEEDS_ATTENTION': 'এক দিন ধরে সাড়া নেই',
   'int.health.NOT_CONNECTED': 'সংযুক্ত নয়',
   'int.health.OFFICIAL_SETUP_REQUIRED': 'অফিশিয়াল সেটআপ প্রয়োজন',
   'int.blocker.SHOPIFY_APP_SETUP_REQUIRED':
