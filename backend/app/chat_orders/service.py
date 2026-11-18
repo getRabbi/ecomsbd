@@ -878,6 +878,14 @@ async def confirm(
             client_id=draft.id,
         )
     )
+    await _mark_confirmed(db, draft, order, actor_id)
+    return Confirmed(order=order, duplicates=duplicates, replayed=False)
+
+
+async def _mark_confirmed(
+    db: AsyncSession, draft: ChatOrderDraft, order: Order, actor_id: uuid.UUID | None
+) -> None:
+    """Close ``draft`` (locked) as confirmed by ``order``."""
     draft.status, draft.confirmed_order_id = CONFIRMED, order.id
     draft.closed_at, draft.closed_by = utc_now(), actor_id
     draft.customer_id = order.customer_id
@@ -901,7 +909,31 @@ async def confirm(
         context={"provider": draft.provider, "order_id": str(order.id)},
     )
     await db.flush()
-    return Confirmed(order=order, duplicates=duplicates, replayed=False)
+
+
+async def offline_draft(db: AsyncSession, client_id: uuid.UUID) -> ChatOrderDraft | None:
+    """The open draft an offline order create was queued for (V4 WP1.5), locked.
+
+    The quick-order sheet queues a create with the draft id as its client id,
+    the same id confirming the draft online uses, so the queued create and a
+    later confirm can only ever make one order.
+    """
+    draft = await db.scalar(
+        sa.select(ChatOrderDraft).where(ChatOrderDraft.id == client_id).with_for_update()
+    )
+    return draft if draft is not None and draft.status in OPEN_STATES else None
+
+
+async def offline_channel(db: AsyncSession, draft: ChatOrderDraft) -> OrderChannel:
+    return order_channel(draft, await db.get(ChatIdentity, draft.identity_id))
+
+
+async def adopt_offline_order(
+    db: AsyncSession, draft: ChatOrderDraft, order: Order, actor_id: uuid.UUID | None
+) -> None:
+    """The queued create reached the server: close its draft as confirmed."""
+    if draft.status in OPEN_STATES and order.client_id == draft.id:
+        await _mark_confirmed(db, draft, order, actor_id)
 
 
 async def resolve_attention(

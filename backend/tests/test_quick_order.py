@@ -232,3 +232,67 @@ async def test_thin_history_or_an_unknown_zone_suggests_nothing(db: Any) -> None
         await _parcel(db, provider="pathao", status=ConsignmentStatus.DELIVERED)
     assert await suggest_courier(db, tenant.id, address="somewhere near the big mosque") is None
     assert await suggest_courier(db, tenant.id, address=None) is None
+
+
+# ------------------------------------------------------- offline create ---
+
+
+async def _queued_create(client: AsyncClient, shop: dict[str, Any], entity_id: str) -> None:
+    response = await client.post(
+        "/v1/sync/mutations",
+        json={
+            "mutations": [
+                {
+                    "mutation_id": str(uuid.uuid4()),
+                    "entity_type": "ORDER",
+                    "entity_id": entity_id,
+                    "operation": "CREATE",
+                    "payload": {
+                        "phone": "01700000011",
+                        "address": "Mirpur 10, Dhaka",
+                        "items": [{"name": "Panjabi", "quantity": 2, "unit_price_paisa": 90_000}],
+                        "channel": "PASTE_PARSE",
+                    },
+                }
+            ]
+        },
+        headers=auth_header(shop),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["results"][0]["status"] == "APPLIED"
+
+
+async def test_an_offline_create_for_a_draft_confirms_that_draft(
+    client: AsyncClient, unique_phone: str, intake_on: None
+):
+    shop = await signed_in_shop(client, unique_phone)
+    draft = (await _paste(client, shop, "\n".join(CHAT)))["draft"]
+
+    # The sheet queued the create with the draft id as its client id.
+    await _queued_create(client, shop, draft["id"])
+
+    read = await client.get(f"/v1/chat-orders/{draft['id']}", headers=auth_header(shop))
+    assert read.json()["status"] == "CONFIRMED"
+    order_id = read.json()["confirmed_order_id"]
+    order = await client.get(f"/v1/orders/{order_id}", headers=auth_header(shop))
+    assert order.json()["channel"] == "PASTE_PARSE"  # a share: no chat app channel
+
+    # Confirming the same draft later returns that order; nothing new is made.
+    again = await client.post(
+        f"/v1/chat-orders/{draft['id']}/confirm",
+        json={"phone": "01700000011", "items": [{"name": "Panjabi", "quantity": 2}]},
+        headers=auth_header(shop),
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["replayed"] is True and again.json()["order"]["id"] == order_id
+    orders = await client.get("/v1/orders", headers=auth_header(shop))
+    assert len(orders.json()["items"]) == 1
+
+
+async def test_a_queued_create_without_a_draft_is_a_plain_order(
+    client: AsyncClient, unique_phone: str
+):
+    shop = await signed_in_shop(client, unique_phone)
+    await _queued_create(client, shop, str(uuid.uuid4()))
+    (order,) = (await client.get("/v1/orders", headers=auth_header(shop))).json()["items"]
+    assert order["channel"] == "MANUAL"
