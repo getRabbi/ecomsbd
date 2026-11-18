@@ -72,6 +72,8 @@ from app.core.redaction import redact_value
 from app.db.tenancy import allow_cross_tenant
 from app.entitlements.catalog import PlanCode
 from app.entitlements.models import Subscription, SubscriptionStatus
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 
 __all__ = ["BillingService", "PurchaseOutcome"]
 
@@ -1344,9 +1346,24 @@ class BillingService:
             self._db.add(transaction)
             await self._db.flush()
             await savepoint.commit()
-            return transaction
         except IntegrityError:
             await savepoint.rollback()
+        else:
+            # Money actually received: a verified purchase or renewal. A manual
+            # credit is not a payment. A duplicate provider event never gets
+            # here, and the transaction id keeps a retry from counting twice.
+            if (
+                state is TransactionState.VERIFIED
+                and kind in (TransactionKind.PURCHASE, TransactionKind.RENEWAL)
+                and transaction.amount_paisa > 0
+            ):
+                await ProductEventService(self._db).record(
+                    ProductEventName.PLAN_PAID,
+                    tenant_id=tenant_id,
+                    dedupe_key=str(transaction.id),
+                    props={"plan": str(plan), "provider": str(provider)},
+                )
+            return transaction
 
         existing = (
             await self._db.execute(

@@ -48,6 +48,8 @@ from app.orders.numbering import (
     allocate_order_number,
     parse_order_number,
 )
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 from app.products.models import Product, ProductVariant
 from app.products.service import StockService
 
@@ -219,6 +221,9 @@ class OrderService:
             {"order_id": str(order.id), "order_number": order.order_number},
         )
         await self._db.flush()
+        await ProductEventService(self._db).core_action(
+            ProductEventName.FIRST_ORDER, tenant_id=order.tenant_id
+        )
         return order, duplicates
 
     async def _insert_with_number(

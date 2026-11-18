@@ -23,6 +23,8 @@ from app.core.security import CredentialVault
 from app.db.tenancy import allow_cross_tenant
 from app.entitlements.catalog import PlanCode
 from app.entitlements.models import Subscription, SubscriptionSource, SubscriptionStatus
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 from app.tenants.models import BusinessCategory, OnboardingStep, Tenant, TenantUser
 from app.tenants.roles import TenantRole
 
@@ -130,6 +132,12 @@ class TenantService:
             )
             await self._db.flush()
 
+        await ProductEventService(self._db).record(
+            ProductEventName.SHOP_CREATED,
+            tenant_id=tenant.id,
+            user_id=owner_user_id,
+            props={"category": str(business_category)},
+        )
         return tenant
 
     async def get(self, tenant_id: uuid.UUID) -> Tenant:

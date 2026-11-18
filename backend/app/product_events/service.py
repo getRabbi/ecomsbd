@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.core.clock import business_date, business_day_bounds, ensure_utc, utc_now
-from app.core.context import current_tenant_id, use_context
+from app.core.context import current_context, current_tenant_id, use_context
 from app.product_events.models import (
     FUNNEL_STEPS,
     ONCE_PER_SHOP,
@@ -94,6 +94,21 @@ class ProductEventService:
         except Exception:
             log.warning("product event not recorded", extra={"event_name": str(name)})
             return False
+
+    async def core_action(
+        self,
+        name: ProductEventName,
+        *,
+        tenant_id: uuid.UUID,
+        props: dict[str, Any] | None = None,
+        dedupe_key: str | None = None,
+    ) -> None:
+        """A core-loop action: record ``name`` and mark the shop active this week."""
+        user_id = current_context().user_id
+        await self.record(
+            name, tenant_id=tenant_id, user_id=user_id, props=props, dedupe_key=dedupe_key
+        )
+        await self.weekly_active(tenant_id=tenant_id, user_id=user_id)
 
     async def weekly_active(self, *, tenant_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
         """Mark the shop active for the current ISO week (Asia/Dhaka)."""

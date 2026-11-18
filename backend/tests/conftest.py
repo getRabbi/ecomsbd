@@ -208,6 +208,46 @@ async def courier_flags_on(settings) -> AsyncIterator[None]:
         await _remove()
 
 
+@pytest_asyncio.fixture
+async def product_events_on(settings) -> AsyncIterator[None]:
+    """Turn the V4 funnel-event flag on, globally, for one test.
+
+    Committed and removed afterwards for the same reason as ``courier_flags_on``:
+    routes read flags from their own session.
+    """
+    import sqlalchemy as sa
+
+    from app.common.feature_flags import FeatureFlag, FlagKey
+    from app.db.session import get_sessionmaker
+    from app.db.tenancy import install_tenancy_guards, mark_session_system
+
+    install_tenancy_guards()
+    import app.models  # noqa: F401
+
+    key = str(FlagKey.PRODUCT_EVENTS_ENABLED)
+    factory = get_sessionmaker(settings)
+
+    async def _remove() -> None:
+        async with factory() as session:
+            mark_session_system(session.sync_session, "test fixture")
+            await session.execute(
+                sa.delete(FeatureFlag).where(
+                    FeatureFlag.key == key, FeatureFlag.tenant_id.is_(None)
+                )
+            )
+            await session.commit()
+
+    await _remove()
+    async with factory() as session:
+        mark_session_system(session.sync_session, "test fixture")
+        session.add(FeatureFlag(key=key, enabled=True, rollout_percentage=100))
+        await session.commit()
+    try:
+        yield
+    finally:
+        await _remove()
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _no_live_courier() -> AsyncIterator[None]:
     """Refuse a real courier HTTP call from anywhere in the suite.

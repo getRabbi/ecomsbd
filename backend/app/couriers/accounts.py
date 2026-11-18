@@ -57,6 +57,8 @@ from app.couriers.models import (
 )
 from app.couriers.registry import CourierAdapterRegistry, get_courier_registry
 from app.db.tenancy import allow_cross_tenant
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 
 __all__ = [
     "BookableCourier",
@@ -308,6 +310,12 @@ class CourierAccountService:
             provider=account.provider,
             result=str(outcome.result),
         )
+        if outcome.is_valid:
+            await ProductEventService(self._db).core_action(
+                ProductEventName.FIRST_COURIER_CONNECTED,
+                tenant_id=account.tenant_id,
+                props={"provider": account.provider},
+            )
         return account, outcome
 
     async def disconnect(self, provider: str, *, reason: str | None = None) -> CourierAccount:
