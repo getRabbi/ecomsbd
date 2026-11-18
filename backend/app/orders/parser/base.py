@@ -95,6 +95,10 @@ class ParsedOrder:
     #: Set only when exactly one phone was found.
     selected_phone: str | None = None
     address: str | None = None
+    #: Canonical district when one is recognised in the address; a hint for
+    #: delivery-zone choice, never a replacement for the address itself.
+    district: str | None = None
+    thana: str | None = None
     items: list[ParsedItem] = field(default_factory=list)
     cod_amount_paisa: int | None = None
     notes: str | None = None
@@ -139,6 +143,8 @@ class ParsedOrder:
             "phones": list(self.phones),
             "selected_phone": self.selected_phone,
             "address": self.address,
+            "district": self.district,
+            "thana": self.thana,
             "items": [item.to_json() for item in self.items],
             "cod_amount_paisa": self.cod_amount_paisa,
             "notes": self.notes,

@@ -209,3 +209,94 @@ class TestParserContract:
             text = handle.read()
         for forbidden in ("httpx", "requests", "openai", "anthropic", "aiohttp"):
             assert forbidden not in text, f"parser must not import {forbidden}"
+
+
+class TestV4LabelAndDistrictRules:
+    """V4 WP0.3: label shapes and district lines seen in real messages."""
+
+    def test_dash_labels_are_labels(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("name- karim\naddress- kushtia sadar, kushtia\nproduct: watch 1 ta")
+        assert result.customer_name == "karim"
+        assert result.confidence["name"] == FieldConfidence.EXACT
+        assert result.address == "kushtia sadar, kushtia"
+        assert result.district == "Kushtia"
+        assert [item.name for item in result.items] == ["watch"]
+
+    def test_a_hyphenated_product_is_not_a_label(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("01700000001\nt-shirt XL 2ta")
+        assert result.customer_name is None
+        assert result.items[0].name == "t-shirt"
+
+    def test_number_label_without_separator(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Rina\nnumber 01700000002 / 01700000003\nMirpur 2, Dhaka\nabaya 1ta")
+        assert result.phones == ["+8801700000002", "+8801700000003"]
+        assert result.needs_phone_selection
+        assert result.customer_name == "Rina"
+
+    def test_a_lone_district_is_an_uncertain_address_not_a_name(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("01700000004\nTangail\n2ta tshirt L")
+        assert result.customer_name is None
+        assert result.address == "Tangail"
+        assert result.district == "Tangail"
+        # Only a district: offered as a guess, below the confirm threshold.
+        assert result.confidence["address"] < 0.5
+
+    def test_bangla_district_with_nukta_variants(self, parser: DeterministicOrderParser) -> None:
+        precomposed = "০১৭০০০০০০০৫\nবগুড়া\nহিজাব ১টা"
+        decomposed = "০১৭০০০০০০০৫\nবগুড়া\nহিজাব ১টা"
+        assert parser.parse(precomposed).district == "Bogura"
+        assert parser.parse(decomposed).district == "Bogura"
+
+    def test_one_line_message_is_split_into_parts(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse(
+            "Rahim 01700000006 Mirpur 10 Dhaka. Black panjabi XL 2 pcs. total 2450tk"
+        )
+        assert result.customer_name == "Rahim"
+        assert result.address == "Mirpur 10 Dhaka"
+        assert result.items[0].name == "Black panjabi"
+        assert result.items[0].quantity == 2
+        assert result.cod_amount_paisa == 245_000
+
+    def test_md_abbreviation_stays_with_the_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Md. Rahim Uddin\n01700000007\nSavar, Dhaka\ncap 1ta")
+        assert result.customer_name == "Md. Rahim Uddin"
+
+    def test_inline_bangla_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("আপু আমার নাম সুমি, ০১৭০০০০০০০৮, ঠিকানা: আগ্রাবাদ, চট্টগ্রাম।")
+        assert result.customer_name == "সুমি"
+        assert result.address == "আগ্রাবাদ, চট্টগ্রাম"
+
+    def test_phone_intro_words_are_not_a_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("My number is 01700000009\nUttara sector 4, Dhaka\nshirt L 1ta")
+        assert result.customer_name is None
+
+    def test_short_hints_only_match_whole_words(self, parser: DeterministicOrderParser) -> None:
+        # "po" inside "Polash" and "rd" inside "order" are not address words.
+        result = parser.parse("Polash\n01700000010\nmouse 1ta")
+        assert result.customer_name == "Polash"
+        assert result.address is None
+
+    def test_a_greeting_with_a_filler_word_is_not_a_name(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        assert parser.parse("hi apu\nprice koto?").customer_name is None
+
+    def test_thousands_separator_with_one_leading_digit(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("01700000011\nসাভার, আশুলিয়া\nপাঞ্জাবি ২টা M\nমোট: 2,600 টাকা")
+        assert result.cod_amount_paisa == 260_000
+
+    def test_line_price_is_the_unit_price_only_for_one_piece(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        one = parser.parse("01700000012\nproduct: watch 1 ta 1200")
+        assert one.items[0].unit_price_paisa == 120_000
+        two = parser.parse("01700000012\nproduct: watch 2 ta 2400")
+        assert two.items[0].unit_price_paisa is None
+
+    def test_a_size_number_is_not_a_unit_price(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("01700000013\nproduct: shoe size 40")
+        assert result.items[0].unit_price_paisa is None

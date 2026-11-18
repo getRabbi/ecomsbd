@@ -1,0 +1,167 @@
+# English messages. See 01_seed.yaml for the format.
+
+- id: en-01
+  text: "Name: Ayesha Siddiqua\nPhone: 01700000041\nAddress: Flat 5B, House 18, Road 7, Gulshan 1, Dhaka\nProduct: Silk scarf\nQty: 2\nTotal: 1800"
+  expect:
+    customer_name: Ayesha Siddiqua
+    phones: ["+8801700000041"]
+    address: "Flat 5B, House 18, Road 7, Gulshan 1, Dhaka"
+    items: [{name: Silk scarf, quantity: 2, size: null}]
+    cod_amount_paisa: 180000
+  llm:
+    customer_name: Ayesha Siddiqua
+    phones: ["01700000041"]
+    address: "Flat 5B, House 18, Road 7, Gulshan 1, Dhaka"
+    district: Dhaka
+    thana: Gulshan
+    items: [{name: Silk scarf, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: 180000
+    notes: null
+    field_confidence: {customer_name: 0.98, phones: 0.99, address: 0.97, items: 0.95, cod_amount_paisa: 0.95}
+
+- id: en-02
+  text: "Hi, I want to order the blue denim jacket in L.\nMy number is 01700000042\nDeliver to House 9, Sector 3, Uttara, Dhaka"
+  expect:
+    customer_name: null
+    phones: ["+8801700000042"]
+    address: "House 9, Sector 3, Uttara, Dhaka"
+    items: [{name: blue denim jacket, quantity: 1, size: L}]
+  llm:
+    customer_name: null
+    phones: ["01700000042"]
+    address: "House 9, Sector 3, Uttara, Dhaka"
+    district: Dhaka
+    thana: Uttara
+    items: [{name: blue denim jacket, quantity: 1, size: L, color: Blue, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.95, items: 0.85, cod_amount_paisa: 0.0}
+
+- id: en-03
+  text: "Customer: Imran Khan\nContact: 01700000043\nLocation: Sylhet, Amberkhana\nItem: Wireless earbuds x1\nCOD 2450"
+  expect:
+    customer_name: Imran Khan
+    phones: ["+8801700000043"]
+    address: Sylhet, Amberkhana
+    items: [{name: Wireless earbuds, quantity: 1, size: null}]
+    cod_amount_paisa: 245000
+  llm:
+    customer_name: Imran Khan
+    phones: ["01700000043"]
+    address: Sylhet, Amberkhana
+    district: Sylhet
+    thana: Kotwali
+    items: [{name: Wireless earbuds, quantity: 1, size: null, color: null, unit_price_paisa: 245000}]
+    cod_amount_paisa: 245000
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.95}
+
+- id: en-04
+  text: "Rumana\n01700000044\nDhanmondi 27, Dhaka\nGreen dress M\nBlack dress S"
+  expect:
+    customer_name: Rumana
+    phones: ["+8801700000044"]
+    address: Dhanmondi 27, Dhaka
+    items:
+      - {name: Green dress, quantity: 1, size: M}
+      - {name: Black dress, quantity: 1, size: S}
+  llm:
+    customer_name: Rumana
+    phones: ["01700000044"]
+    address: Dhanmondi 27, Dhaka
+    district: Dhaka
+    thana: Dhanmondi
+    items:
+      - {name: Green dress, quantity: 1, size: M, color: Green, unit_price_paisa: null}
+      - {name: Black dress, quantity: 1, size: S, color: Black, unit_price_paisa: null}
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: en-05
+  text: "Please send 3 pcs white t-shirt XL to Rajshahi, Shaheb Bazar. Phone 01700000045. Name Jamil"
+  expect:
+    customer_name: Jamil
+    phones: ["+8801700000045"]
+    address: Rajshahi, Shaheb Bazar
+    items: [{name: white t-shirt, quantity: 3, size: XL}]
+  llm:
+    customer_name: Jamil
+    phones: ["01700000045"]
+    address: Rajshahi, Shaheb Bazar
+    district: Rajshahi
+    thana: Boalia
+    items: [{name: white t-shirt, quantity: 3, size: XL, color: White, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.9, phones: 0.99, address: 0.85, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: en-06
+  text: "Order for Nabila\nMobile: 01700000046\nAddress: Barishal Sadar, Barishal\n1 x Leather handbag (brown)\nPrice 3200 tk"
+  expect:
+    phones: ["+8801700000046"]
+    address: Barishal Sadar, Barishal
+    cod_amount_paisa: 320000
+  llm:
+    customer_name: Nabila
+    phones: ["01700000046"]
+    address: Barishal Sadar, Barishal
+    district: Barishal
+    thana: Barishal Sadar
+    items: [{name: Leather handbag, quantity: 1, size: null, color: Brown, unit_price_paisa: 320000}]
+    cod_amount_paisa: 320000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.95, items: 0.85, cod_amount_paisa: 0.95}
+
+- id: en-07
+  text: "Sabbir Ahmed\n01700000047\nMymensingh town, Ganginarpar\nCricket bat 1 pc"
+  expect:
+    customer_name: Sabbir Ahmed
+    phones: ["+8801700000047"]
+    address: Mymensingh town, Ganginarpar
+    items: [{name: Cricket bat, quantity: 1, size: null}]
+  llm:
+    customer_name: Sabbir Ahmed
+    phones: ["01700000047"]
+    address: Mymensingh town, Ganginarpar
+    district: Mymensingh
+    thana: Kotwali
+    items: [{name: Cricket bat, quantity: 1, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: en-08
+  text: "Name: Lamia\nPhone: 01700000048\nAddress: Rangpur\nProduct: Perfume 2 pcs"
+  expect:
+    customer_name: Lamia
+    phones: ["+8801700000048"]
+    address: Rangpur
+    items: [{name: Perfume, quantity: 2, size: null}]
+  llm:
+    customer_name: Lamia
+    phones: ["01700000048"]
+    address: Rangpur
+    district: Rangpur
+    thana: null
+    items: [{name: Perfume, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.6, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: en-09
+  text: "Can you deliver to Cox's Bazar? Kolatoli road, Hotel Motel zone. 01700000049. Two sunglasses black"
+  expect:
+    customer_name: null
+    phones: ["+8801700000049"]
+    address: Kolatoli road, Hotel Motel zone, Cox's Bazar
+  llm:
+    customer_name: null
+    phones: ["01700000049"]
+    address: Kolatoli road, Hotel Motel zone, Cox's Bazar
+    district: Cox's Bazar
+    thana: Cox's Bazar Sadar
+    items: [{name: sunglasses, quantity: 2, size: null, color: Black, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: Customer asks whether delivery to Cox's Bazar is possible
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.75, items: 0.8, cod_amount_paisa: 0.0}

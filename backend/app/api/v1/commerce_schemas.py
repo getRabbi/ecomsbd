@@ -477,6 +477,9 @@ class ParseResponse(BaseModel):
     #: chooses (section 8).
     selected_phone: str | None = None
     address: str | None = None
+    #: Canonical district / thana when recognised; hints, never the address.
+    district: str | None = None
+    thana: str | None = None
     items: list[ParsedItemResponse] = Field(default_factory=list)
     cod_amount_paisa: int | None = None
     notes: str | None = None

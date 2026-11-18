@@ -272,6 +272,8 @@ async def parse_order_text(
         phones=parsed.phones,
         selected_phone=parsed.selected_phone,
         address=parsed.address,
+        district=parsed.district,
+        thana=parsed.thana,
         items=[
             ParsedItemResponse(
                 name=item.name,

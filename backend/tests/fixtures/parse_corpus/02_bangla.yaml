@@ -1,0 +1,185 @@
+# Bangla script, Bangla digits, টা/টি/খানা counters. See 01_seed.yaml for the format.
+
+- id: bn-01
+  text: "নাম: ফারহানা আক্তার\nমোবাইল: ০১৭০০০০০০২১\nঠিকানা: হাউজ ৭, রোড ৩, ধানমন্ডি, ঢাকা\nকালো বোরকা XL ১টা\nদাম ১৮৫০ টাকা"
+  expect:
+    customer_name: ফারহানা আক্তার
+    phones: ["+8801700000021"]
+    address: "হাউজ 7, রোড 3, ধানমন্ডি, ঢাকা"
+    items: [{name: কালো বোরকা, quantity: 1, size: XL}]
+    cod_amount_paisa: 185000
+  llm:
+    customer_name: ফারহানা আক্তার
+    phones: ["০১৭০০০০০০২১"]
+    address: "হাউজ ৭, রোড ৩, ধানমন্ডি, ঢাকা"
+    district: Dhaka
+    thana: Dhanmondi
+    items: [{name: কালো বোরকা, quantity: 1, size: XL, color: কালো, unit_price_paisa: 185000}]
+    cod_amount_paisa: 185000
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.9}
+
+- id: bn-02
+  text: "আসসালামু আলাইকুম\nআমি একটা লাল শাড়ি নিতে চাই\n০১৭০০০০০০২২\nগ্রাম চরপাড়া, থানা সদর, জেলা ময়মনসিংহ"
+  expect:
+    customer_name: null
+    phones: ["+8801700000022"]
+    address: গ্রাম চরপাড়া, থানা সদর, জেলা ময়মনসিংহ
+    items: [{name: লাল শাড়ি, quantity: 1, size: null}]
+    cod_amount_paisa: null
+  llm:
+    customer_name: null
+    phones: ["০১৭০০০০০০২২"]
+    address: গ্রাম চরপাড়া, থানা সদর, জেলা ময়মনসিংহ
+    district: Mymensingh
+    thana: Mymensingh Sadar
+    items: [{name: লাল শাড়ি, quantity: 1, size: null, color: লাল, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.9, items: 0.85, cod_amount_paisa: 0.0}
+
+- id: bn-03
+  text: "সাদিয়া\n01700000023\nউত্তরা সেক্টর ১০, ঢাকা\nনীল কুর্তি L ২টা"
+  expect:
+    customer_name: সাদিয়া
+    phones: ["+8801700000023"]
+    address: "উত্তরা সেক্টর 10, ঢাকা"
+    items: [{name: নীল কুর্তি, quantity: 2, size: L}]
+  llm:
+    customer_name: সাদিয়া
+    phones: ["01700000023"]
+    address: "উত্তরা সেক্টর ১০, ঢাকা"
+    district: Dhaka
+    thana: Uttara
+    items: [{name: নীল কুর্তি, quantity: 2, size: L, color: নীল, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bn-04
+  text: "০১৭০০০০০০২৪\nবাসা ২২, রোড ৪, ব্লক সি, মিরপুর ১, ঢাকা\nপাঞ্জাবি XL একটা\nমোট ১৫৫০ টাকা"
+  expect:
+    customer_name: null
+    phones: ["+8801700000024"]
+    address: "বাসা 22, রোড 4, ব্লক সি, মিরপুর 1, ঢাকা"
+    items: [{name: পাঞ্জাবি, quantity: 1, size: XL}]
+    cod_amount_paisa: 155000
+  llm:
+    customer_name: null
+    phones: ["০১৭০০০০০০২৪"]
+    address: "বাসা ২২, রোড ৪, ব্লক সি, মিরপুর ১, ঢাকা"
+    district: Dhaka
+    thana: Mirpur
+    items: [{name: পাঞ্জাবি, quantity: 1, size: XL, color: null, unit_price_paisa: 155000}]
+    cod_amount_paisa: 155000
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.9}
+
+- id: bn-05
+  text: "নাম: মোছাঃ রোকসানা বেগম\nফোন: ০১৭০০০০০০২৫\nঠিকানা: গ্রাম: দক্ষিণপাড়া, পোস্ট: বেলকুচি, সিরাজগঞ্জ\nসবুজ থ্রিপিস XXL ১টি"
+  expect:
+    customer_name: মোছাঃ রোকসানা বেগম
+    phones: ["+8801700000025"]
+    address: "গ্রাম: দক্ষিণপাড়া, পোস্ট: বেলকুচি, সিরাজগঞ্জ"
+    items: [{name: সবুজ থ্রিপিস, quantity: 1, size: XXL}]
+  llm:
+    customer_name: মোছাঃ রোকসানা বেগম
+    phones: ["০১৭০০০০০০২৫"]
+    address: "গ্রাম: দক্ষিণপাড়া, পোস্ট: বেলকুচি, সিরাজগঞ্জ"
+    district: Sirajganj
+    thana: Belkuchi
+    items: [{name: সবুজ থ্রিপিস, quantity: 1, size: XXL, color: সবুজ, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.95, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bn-06
+  text: "ভাইয়া ২টা কালো টিশার্ট লাগবে, সাইজ M\n০১৭০০০০০০২৬\nখুলনা সোনাডাঙ্গা"
+  expect:
+    customer_name: null
+    phones: ["+8801700000026"]
+    address: খুলনা সোনাডাঙ্গা
+    items: [{name: কালো টিশার্ট, quantity: 2, size: M}]
+  llm:
+    customer_name: null
+    phones: ["০১৭০০০০০০২৬"]
+    address: খুলনা সোনাডাঙ্গা
+    district: Khulna
+    thana: Sonadanga
+    items: [{name: কালো টিশার্ট, quantity: 2, size: M, color: কালো, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.8, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bn-07
+  text: "নাম: তানভীর হাসান\nনম্বর: ০১৭০০০০০০২৭\nঠিকানা: রাজশাহী, বোয়ালিয়া\nহাতঘড়ি ১টা ২২০০ টাকা"
+  expect:
+    customer_name: তানভীর হাসান
+    phones: ["+8801700000027"]
+    address: রাজশাহী, বোয়ালিয়া
+    items: [{name: হাতঘড়ি, quantity: 1, size: null}]
+    cod_amount_paisa: 220000
+  llm:
+    customer_name: তানভীর হাসান
+    phones: ["০১৭০০০০০০২৭"]
+    address: রাজশাহী, বোয়ালিয়া
+    district: Rajshahi
+    thana: Boalia
+    items: [{name: হাতঘড়ি, quantity: 1, size: null, color: null, unit_price_paisa: 220000}]
+    cod_amount_paisa: 220000
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.9}
+
+- id: bn-08
+  text: "জান্নাত\n০১৭০০০০০০২৮\nসিলেট জিন্দাবাজার\nহিজাব ৩টা কালো\nডেলিভারি সহ কত পড়বে?"
+  expect:
+    customer_name: জান্নাত
+    phones: ["+8801700000028"]
+    address: সিলেট জিন্দাবাজার
+    items: [{name: হিজাব কালো, quantity: 3, size: null}]
+  llm:
+    customer_name: জান্নাত
+    phones: ["০১৭০০০০০০২৮"]
+    address: সিলেট জিন্দাবাজার
+    district: Sylhet
+    thana: Kotwali
+    items: [{name: হিজাব কালো, quantity: 3, size: null, color: কালো, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: Customer asks the total including delivery
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.85, items: 0.85, cod_amount_paisa: 0.0}
+
+- id: bn-09
+  text: "অর্ডার করতে চাই\nনাম: শাকিল\nমোবাইল: ০১৭০০০০০০২৯\nঠিকানা: বগুড়া সদর\nপণ্য: লেদার মানিব্যাগ ২টি"
+  expect:
+    customer_name: শাকিল
+    phones: ["+8801700000029"]
+    address: বগুড়া সদর
+    items: [{name: লেদার মানিব্যাগ, quantity: 2, size: null}]
+  llm:
+    customer_name: শাকিল
+    phones: ["০১৭০০০০০০২৯"]
+    address: বগুড়া সদর
+    district: Bogura
+    thana: Bogura Sadar
+    items: [{name: লেদার মানিব্যাগ, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bn-10
+  text: "০১৭০০০০০০৩০\nকুমিল্লা\nবাচ্চাদের জামা ২খানা"
+  expect:
+    customer_name: null
+    phones: ["+8801700000030"]
+    address: কুমিল্লা
+    items: [{name: বাচ্চাদের জামা, quantity: 2, size: null}]
+  llm:
+    customer_name: null
+    phones: ["০১৭০০০০০০৩০"]
+    address: কুমিল্লা
+    district: Cumilla
+    thana: null
+    items: [{name: বাচ্চাদের জামা, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.4, items: 0.85, cod_amount_paisa: 0.0}
