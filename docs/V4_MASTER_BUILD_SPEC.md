@@ -186,9 +186,17 @@ Migration `a40001`. Branch `v4/phase-0`.
 **Must**
 - Implement `EnhancedOrderParser` in `app/orders/parser/` behind flag `ai_parse_enabled`
   and entitlement `ai_parse_monthly`.
-- Flow: deterministic parse first. Call the LLM only when `is_low_confidence` or a required
-  field is empty. Merge: an LLM field may fill an empty field; it may replace a
-  deterministic field only when the deterministic confidence is `< 0.5`.
+- Flow (operator correction 2026-11-18, supersedes the earlier "LLM only when
+  `is_low_confidence`" rule): the deterministic parser's job is **phones + explicitly
+  labelled fields only**; it is not tuned further. Call the LLM unless every non-phone field
+  (name, address, items, cod) has confidence `>= 0.8` (i.e. came from an explicit label);
+  an empty field also triggers the call.
+- Merge: phones are always deterministic (an LLM phone is kept only if it normalises and
+  appears in the text). For name/address/items/cod: keep the deterministic value when its
+  confidence is `>= 0.8`, otherwise take the LLM value. When both exist and disagree on a
+  labelled field, keep the deterministic one and add the field to `uncertain_fields`.
+- If the address is empty and the phone matches an existing customer of this shop, prefill
+  that customer's last delivery address and mark `address` uncertain.
 - Provider port `AiParseClient` with one implementation `AnthropicParseClient`
   (`httpx`, no SDK dependency required). Config: `AI_PARSE_PROVIDER=anthropic`,
   `AI_PARSE_API_KEY`, `AI_PARSE_MODEL` (example value in `.env.example`: a Haiku-class
@@ -231,9 +239,17 @@ Corpus seed cases (expected output in brackets):
 
 - Also fix the deterministic parser for the label patterns seen in 2, 4, 5:
   `name-`, `address-`, `number`, a lone district line is an address (uncertain), not a name.
+- **Held-out set** (operator correction 2026-11-18): the 50-case corpus was written and tuned
+  by the same agent, so its score is optimistic (on 8 held-out messages the deterministic
+  parser got phones 8/8, names ~1/8, items ~1/8, with `is_low_confidence` False for 7/8).
+  `backend/tests/fixtures/parse_holdout/holdout.yaml` holds the operator's held-out cases. It
+  is **never** used to tune the parser and is not a pass/fail test.
+  `python -m app.orders.parser.eval --live --set holdout` reports deterministic-only and
+  merged accuracy separately. Real masked seller messages (30–50) are added by the operator.
 
 **Gate G0.3**: deterministic + LLM path reaches ≥ 90% field accuracy on phone, address and
-items across the corpus with recorded responses. (Live accuracy is measured by the operator.)
+items, **measured on the held-out set with the live LLM** (operator run). The corpus with
+recorded responses stays a regression test in CI.
 
 ### WP0.4 — Shop delivery rules + COD auto-calc
 

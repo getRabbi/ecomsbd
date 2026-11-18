@@ -2,18 +2,19 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP0.3 — LLM order parser (`EnhancedOrderParser`)   Step: slice 2 — plan items 3–9 (AiParseClient, schema, merge, ai_usage, service, API, config, eval --live, docs). Slice 1 (items 1–2) done.
-Next-session notes: `tests/test_parser.py::...test_the_enhanced_parser_refuses_rather_than_pretending` asserts the old stub raises — replace it with the new boundary test (no client → deterministic + `AI_PARSE_UNAVAILABLE`); `eval.py` `--live` currently exits 2 until `enhanced.py`/`ai_client.py` exist; add the recorded-LLM G0.3 test to `tests/test_parse_corpus.py` (FakeAiParseClient.for_case, `llm_error`).
-Plan:
-1. Deterministic: `label-`/`label ` separators (`name-`, `address-`, `number`), district gazetteer (64, EN+BN) so a lone district line is an address (MEDIUM), one-line messages split into segments; `district`/`thana` on `ParsedOrder` + `ParseResponse` (optional).
-2. Corpus `tests/fixtures/parse_corpus/*.yaml`: 5 seed + 45 cases, each with expected fields and a recorded LLM response; deterministic run always, LLM path with a fake client; G0.3 ≥ 90% on phone/address/items.
-3. `AiParseClient` port + `AnthropicParseClient` (httpx Messages API, forced single extract tool, no acting tools) + `FakeAiParseClient`.
-4. Pydantic `LlmParseOutput` (extra=forbid, bounded); any violation → discard LLM result.
-5. Merge: LLM fills empty fields; replaces only when deterministic confidence < 0.5. LLM phones must normalise and appear in the source text.
-6. `ai_usage` table (tenant-owned, RLS, grants revoked) added to phase-0 migration a40001; cost from `AI_PARSE_PRICE_*_PER_MTOK_USD` (estimate).
-7. `EnhancedOrderParser.parse(...)` async: flag `ai_parse_enabled` + quota `ai_parse_monthly` (UsageCounter), Redis cache SHA-256(normalised text) per tenant 24 h, outage/timeout/quota → deterministic + `AI_PARSE_UNAVAILABLE`.
-8. Wire `POST /v1/orders/parse` to it; config + `.env.example` + `.env.production.example`.
-9. `python -m app.orders.parser.eval --live` (operator-only), runbook `docs/runbooks/ai-parse.md`, IMPLEMENTATION_STATUS row.
+WP: WP0.3 — LLM order parser (`EnhancedOrderParser`)   Step: slice 2 (LLM path) under the 2026-11-18 operator correction (spec WP0.3 updated). Slice 1 (deterministic + corpus) done.
+Next-session notes: `tests/test_parser.py::...test_the_enhanced_parser_refuses_rather_than_pretending` asserts the old stub raises — replace it with the new boundary test (no client → deterministic + `AI_PARSE_UNAVAILABLE`).
+Plan (slice 2):
+1. Deterministic: no more extraction tuning. Only change: unlabelled heuristics (address ≥2 place hits, currency-marked amount) report MEDIUM, so confidence ≥ 0.8 ⇔ explicit label.
+2. Holdout `tests/fixtures/parse_holdout/holdout.yaml` (operator's 8 cases, no `llm` blocks, never tuned on, not a pass/fail test); `eval --set corpus|holdout`, `--live` prints deterministic-only vs merged.
+3. `ai_client.py`: `AiParseClient` port, `AnthropicParseClient` (httpx Messages API, one forced extract tool, untrusted-data system prompt, delimited text), `FakeAiParseClient`, `AiParseUnavailableError`.
+4. `llm_schema.py`: Pydantic `LlmParseOutput` (extra=forbid, bounded); any violation → LLM result discarded.
+5. `merge.py`: `needs_llm` = any of name/address/items/amount < 0.8; merge = phones deterministic (LLM phone only if normalised + present in text), keep det ≥ 0.8 else LLM; disagreement on a labelled field → `uncertain_fields`.
+6. `ParsedOrder.uncertain_fields` + `ParseResponse.uncertain_fields`; empty address + known customer → last delivery address, `address` uncertain.
+7. `ai_usage` model + table in a40001 (RLS, grants revoked, silent realtime table, model registry); cost from `AI_PARSE_PRICE_*_PER_MTOK_USD` (estimate).
+8. `enhanced.py` async `EnhancedOrderParser`: flag `ai_parse_enabled`, cache SHA-256(normalised text) per tenant 24 h, quota `ai_parse_monthly`, outage/timeout/quota/schema → deterministic + `AI_PARSE_UNAVAILABLE`.
+9. Wire `POST /v1/orders/parse`; settings + `.env.example` + `.env.production.example`; tests (merge, service, API, recorded-LLM corpus).
+10. Runbook `docs/runbooks/ai-parse.md`, IMPLEMENTATION_STATUS row, full suite + lint, push.
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -62,9 +63,12 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 ## Operator actions waiting (things only Rabbi can do)
 - [ ] WP0.2 (in progress — DSN being created): create the Sentry project, put its DSN in `apps/mobile_flutter/env/production.json` as `ECOMSBD_SENTRY_DSN`, build, and confirm one test event arrives with phones masked.
 - [ ] WP0.2 (in progress — operator turning it on): turn `product_events_enabled` on (admin console, global) when ready to collect the funnel; check `GET /v1/admin/ops/funnel`.
+- [ ] WP0.3: add 30–50 real masked seller messages (phones replaced with the 017000000xx range, names/addresses kept as typed) to `backend/tests/fixtures/parse_holdout/holdout.yaml`, then run `python -m app.orders.parser.eval --live --set holdout` with `AI_PARSE_API_KEY` set; G0.3 is met when the merged gated accuracy (phones+address+items) is ≥ 90%.
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 operator correction (WP0.3): on 8 held-out messages the deterministic parser got phones 8/8, names ~1/8, items ~1/8 while `is_low_confidence` was False for 7/8; the 50-case corpus was written and tuned by the agent, so 95.8% is optimistic. Now: deterministic = phones + labelled fields only (no more tuning); LLM is called unless name/address/items/cod all ≥ 0.8; merge keeps det ≥ 0.8 else LLM, disagreement on a labelled field → `uncertain_fields`; empty address + known customer → last delivery address (uncertain); holdout set `parse_holdout/holdout.yaml` never tuned on; G0.3 measured on the holdout with the live LLM (operator). Spec WP0.3 section updated.
+- 2026-11-18 WP0.3: so that confidence ≥ 0.8 means "came from a label", the two unlabelled heuristics that reported HIGH (address with ≥ 2 place hits, currency-marked amount) now report MEDIUM. Extraction is unchanged.
 - 2026-11-18 operator: `test/performance/*` tagged `@Tags(['perf'])` (declared in `apps/mobile_flutter/dart_test.yaml`); CI runs `flutter test --exclude-tags perf` then `flutter test --tags perf --concurrency=1`. Budgets unchanged. `codemagic.yaml` runs no `flutter test`, so unchanged.
 - 2026-11-18 WP0.3: required fields for "call the LLM" = phone, address, items (what a booking needs); name is optional, so a missing name alone never costs a model call.
 - 2026-11-18 WP0.3: a lone district line is an address at LOW (0.25) with a warning, so the seller completes it and an LLM answer may replace it; district + area is MEDIUM. Districts match on word boundaries (NFC, nukta variants).
