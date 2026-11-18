@@ -1,4 +1,4 @@
-| WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
+# V4 build ledger
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
@@ -13,7 +13,7 @@ Next-session notes: operator rule: targeted tests only (no full suites). WP0.6 p
 | WP0.3 | DONE | c97712c | backend 1948 passed/5 skipped (118 new across slices), ruff+format+mypy clean (328 files); corpus deterministic 95.8%, merged with recorded answers 100% (authored, optimistic); holdout deterministic-only 50.0% (phones 8/8, address 4/8, items 0/8, names 3/8) | gate G0.3 = merged ≥ 90% on the holdout with the live model — waiting on operator; PostgreSQL suite + a40001 round trip (now with `ai_usage`) at phase end |
 | WP0.4 | DONE | aaa77bd | backend 1993 passed/5 skipped (45 new), ruff+format+mypy clean (334 files); Flutter analyze + format clean, all tests green (9 new, perf excluded as in CI); web typecheck + lint clean, 71 tests (5 new) | flag `delivery_rules_enabled` default off; no new env; no runbook (no job/provider/webhook) |
 | WP0.5 | DONE | 495a35c | targeted: backend test_documents + test_orders + test_delivery_rules + test_platform_primitives 143 passed, ruff + mypy clean; Flutter order_print_sheet + commerce_screens + delivery_rules + chat_orders_inbox 41 passed, analyze clean on changed files; web typecheck + lint clean, 72 tests | flag `order_documents_enabled` default off; `printing` ^5.15.1 |
-| WP0.6 | TODO | | | |
+| WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
 | WP0.7 | TODO | | | |
 | WP1.1 | TODO | | | |
 | WP1.2 | TODO | | | |
