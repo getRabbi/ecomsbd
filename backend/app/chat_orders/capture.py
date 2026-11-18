@@ -15,15 +15,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_hasher, get_vault
-from app.chat_orders.models import ChatIdentity, ChatMessage
-from app.common.phone import try_normalize_bd_phone
+from app.api.deps import get_vault
+from app.chat_orders.models import ChatIdentity
 from app.core.clock import utc_now
-from app.core.ids import new_id
 from app.integrations.models import IntegrationConnection
 from app.messaging.receipts import stop_word
 
@@ -197,47 +193,9 @@ def whatsapp_events(phone_number_id: str, value: dict[str, Any]) -> list[Inbound
 
 
 def identity_key(provider: str, account_ref: str, sender_id: str) -> str:
-    return get_hasher().chat_identity_hash(provider, account_ref, sender_id)
+    from app.intake.service import identity_key as key
 
-
-async def identity_for(
-    db: AsyncSession, conn: IntegrationConnection, inbound: Inbound
-) -> ChatIdentity:
-    """The sender's identity on this connection, created on first contact."""
-    key = identity_key(inbound.provider, inbound.account_ref, inbound.sender_id)
-    query = sa.select(ChatIdentity).where(
-        ChatIdentity.connection_id == conn.id, ChatIdentity.external_key == key
-    )
-    found = await db.scalar(query)
-    if found is not None:
-        if inbound.display_name and not found.display_name:
-            found.display_name = inbound.display_name
-        return found
-    row_id = new_id()
-    phone = (
-        try_normalize_bd_phone("+" + inbound.sender_id) if inbound.provider == "WHATSAPP" else None
-    )
-    identity = ChatIdentity(
-        id=row_id,
-        connection_id=conn.id,
-        provider=inbound.provider,
-        external_key=key,
-        external_id_enc=get_vault().encrypt(inbound.sender_id, context=f"chat-identity:{row_id}"),
-        account_ref=inbound.account_ref,
-        display_name=inbound.display_name,
-        phone_masked=phone.masked if phone else None,
-    )
-    try:
-        async with db.begin_nested():
-            db.add(identity)
-            await db.flush()
-    except IntegrityError:
-        # A concurrent delivery from the same customer created it first.
-        found = await db.scalar(query)
-        if found is None:
-            raise
-        return found
-    return identity
+    return key(provider, account_ref, sender_id)
 
 
 def external_id(identity: ChatIdentity) -> str:
@@ -246,37 +204,33 @@ def external_id(identity: ChatIdentity) -> str:
 
 
 async def record(db: AsyncSession, conn: IntegrationConnection, messages: list[Inbound]) -> int:
-    """Store each new message once. Returns how many were new."""
+    """Store each new message once, through the Intake service (V4 rule L1).
+
+    Returns how many were new.
+    """
+    from app.chat_orders.models import META_WEBHOOK
+    from app.intake import service as intake
+
     stored = 0
     for inbound in messages:
-        exists = await db.scalar(
-            sa.select(ChatMessage.id).where(
-                ChatMessage.connection_id == conn.id,
-                ChatMessage.provider == inbound.provider,
-                ChatMessage.provider_message_id == inbound.message_id,
-            )
-        )
-        if exists is not None:
-            continue
-        identity = await identity_for(db, conn, inbound)
-        row = ChatMessage(
-            connection_id=conn.id,
-            identity_id=identity.id,
+        result = await intake.capture(
+            db,
+            tenant_id=conn.tenant_id,
+            connection=conn,
+            source=META_WEBHOOK,
             provider=inbound.provider,
-            provider_message_id=inbound.message_id,
             account_ref=inbound.account_ref,
-            message_type=inbound.message_type,
-            text=inbound.text,
-            attachment_count=inbound.attachments,
-            provider_timestamp=inbound.at,
-            received_at=utc_now(),
-            processing_status="RECEIVED",
+            conversation_key=inbound.sender_id,
+            sender_display=inbound.display_name,
+            messages=[
+                intake.CapturedMessage(
+                    text=inbound.text,
+                    at=inbound.at,
+                    message_id=inbound.message_id,
+                    message_type=inbound.message_type,
+                    attachments=inbound.attachments,
+                )
+            ],
         )
-        try:
-            async with db.begin_nested():
-                db.add(row)
-                await db.flush()
-        except IntegrityError:
-            continue  # the same delivery, retried concurrently
-        stored += 1
+        stored += len(result.stored)
     return stored

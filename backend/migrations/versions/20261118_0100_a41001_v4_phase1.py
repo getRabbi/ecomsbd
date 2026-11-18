@@ -1,4 +1,5 @@
-"""V4 phase 1: device ingest keys, pairing codes (WP1.1); intake rules (WP1.2)."""
+"""V4 phase 1: device ingest keys, pairing codes (WP1.1); intake rules (WP1.2);
+chat capture sources and duplicate links (WP1.3)."""
 
 import unicodedata
 import uuid
@@ -14,6 +15,7 @@ branch_labels = None
 depends_on = None
 
 _TABLES = ["device_ingest_keys", "device_pairing_codes", "intake_rule_sets", "shop_intake_settings"]
+_CAPTURE_TABLES = ["chat_messages", "chat_order_drafts"]
 
 # Digit classes spelled out (ASCII + Bangla U+09E6..U+09EF): ``\d`` means
 # different things in Java, JavaScript and Python.
@@ -287,6 +289,21 @@ def upgrade():
     op.create_index("ix_shop_intake_settings_tenant_id", "shop_intake_settings", ["tenant_id"])
     op.create_index("ix_shop_intake_settings_created_at", "shop_intake_settings", ["created_at"])
 
+    # WP1.3: where each chat row came from (rule L1). Every existing row arrived
+    # through a verified Meta webhook, so the server default is the backfill.
+    for table in _CAPTURE_TABLES:
+        with op.batch_alter_table(table) as batch_op:
+            batch_op.add_column(
+                sa.Column(
+                    "capture_source",
+                    sa.String(24),
+                    nullable=False,
+                    server_default="META_WEBHOOK",
+                )
+            )
+    with op.batch_alter_table("chat_order_drafts") as batch_op:
+        batch_op.add_column(sa.Column("duplicate_of_order_id", GUID, nullable=True))
+
     db = op.get_bind()
     if db.dialect.name == "postgresql":
         roles = (
@@ -303,5 +320,10 @@ def upgrade():
 
 
 def downgrade():
+    with op.batch_alter_table("chat_order_drafts") as batch_op:
+        batch_op.drop_column("duplicate_of_order_id")
+    for table in reversed(_CAPTURE_TABLES):
+        with op.batch_alter_table(table) as batch_op:
+            batch_op.drop_column("capture_source")
     for table in reversed(_TABLES):
         op.drop_table(table)

@@ -2,7 +2,18 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP1.3 — Capture endpoint + Intake service   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 WP1.3.
+WP: WP1.3 — Capture endpoint + Intake service   Step: 2 (build, slice 1 of 3)
+Plan:
+1. a41001: `capture_source` (String 24, NOT NULL, server default `META_WEBHOOK` = backfill) on `chat_messages` + `chat_order_drafts`; `chat_order_drafts.duplicate_of_order_id`.
+2. `app/intake/service.py` `capture(...)`: identity key = HMAC(`DEVICE`, package, conversation_key); message id = keyed hash of package|conversation|sent_at|text; rows `RECEIVED` for the chat-order worker. Meta `capture.record` calls it (same keys, no behaviour change).
+3. Device/manual rows use provider `DEVICE` (no WhatsApp-only paths); `account_ref` = package. Manual captures without a device use one hidden per-shop DEVICE connection (`platform: manual`).
+4. `POST /v1/intake/captures` (ingest key): one conversation per batch, ≤ 50 × ≤ 4,000 chars, `Idempotency-Key` required, 120/min/connection, package must be in `enabled_packages`.
+5. `POST /v1/intake/captures/manual` (`order.write` + flag): SHARE / PASTE / DEVICE_NOTIFICATION; folds inline and returns the draft.
+6. Duplicate merge (non-Meta drafts, when the selected phone first appears/changes): open draft with that phone → merge into it; else order ≤ 24 h → `duplicate_of_order_id` + `DUPLICATE_ORDER`, never announced.
+7. Outbox `intake.draft_ready` (+ handler) when a draft is first announced as READY_FOR_REVIEW.
+8. `scan_device_health` hourly: no heartbeat 24 h → health `NEEDS_ATTENTION` + `DEVICE_NEEDS_ATTENTION` notification at most once per 24 h; heartbeat clears it.
+9. Housekeeping: also delete DEVICE identities with nothing left after retention.
+10. Tests (new `test_intake_capture.py` + chat_orders/device_links/migrations/smart_alerts), runbook, IMPLEMENTATION_STATUS, ledger.
 Next-session notes: operator rule: targeted tests only. WP1.1/WP1.2 are backend-only: the phone's link/pair screens and the "Auto order detect" per-app toggles (`GET/PATCH /v1/intake/settings`) come with WP1.4; the web pairing card with WP1.4/WP5. WP1.3 capture should check the message's package against the shop's `enabled_packages` (`app/intake/rules.py`).
 
 ## Status

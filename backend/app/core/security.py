@@ -165,6 +165,14 @@ class SecretHasher:
         """
         return self._hmac_hex(self._phone_key, "chat.v1", provider, account, sender)
 
+    def chat_message_hash(self, account: str, conversation: str, sent_at: str, text: str) -> str:
+        """Dedupe key for a message a device read (V4 WP1.3).
+
+        Keyed, so the stored id says nothing about a short message's text; on
+        the phone-search key for the same reason as :meth:`chat_identity_hash`.
+        """
+        return self._hmac_hex(self._phone_key, "chatmsg.v1", account, conversation, sent_at, text)
+
     def ip_hash(self, ip: str | None) -> str | None:
         """Keyed hash of a client address.
 
