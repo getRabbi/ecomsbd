@@ -65,6 +65,8 @@ class AuditAction(StrEnum):
     TENANT_CREATED = "tenant.created"
     TENANT_UPDATED = "tenant.updated"
     DELIVERY_RULES_UPDATED = "delivery_rules.updated"
+    #: V4 WP1.2: the seller changed which apps a linked phone reads.
+    INTAKE_SETTINGS_UPDATED = "intake.settings_updated"
     TENANT_MEMBER_ADDED = "tenant.member_added"
     TENANT_MEMBER_ROLE_CHANGED = "tenant.member_role_changed"
     #: An offer of membership was sent. Distinct from MEMBER_ADDED, which is
@@ -179,6 +181,9 @@ class AuditAction(StrEnum):
     #: V4 WP0.5: invoices/labels printed (kind, size, count, masked; no phones).
     DOCUMENTS_PRINTED = "privacy.documents_printed"
     ADMIN_REPAIR_ACTION = "admin.repair_action"
+    #: V4 WP1.2: an intake rule set version published (inactive) or activated.
+    ADMIN_INTAKE_RULES_CREATED = "admin.intake_rules_created"
+    ADMIN_INTAKE_RULES_ACTIVATED = "admin.intake_rules_activated"
 
     # Integrations Hub (V3.1)
     INTEGRATION_CREATED = "integration.created"

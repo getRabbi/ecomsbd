@@ -33,6 +33,7 @@ from app.api.v1 import (
     forecasting,
     imports,
     insights,
+    intake,
     integration_webhooks,
     integrations,
     integrations_sync,
@@ -59,6 +60,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(delivery_rules.router)
 api_router.include_router(devices.router)
+api_router.include_router(intake.router)
 api_router.include_router(documents.router)
 api_router.include_router(messaging.router)
 # Unauthenticated: one-click unsubscribe links and signed provider receipts.

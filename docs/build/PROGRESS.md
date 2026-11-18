@@ -2,8 +2,8 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: WP1.2 — Intake rules config   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 WP1.2.
-Next-session notes: operator rule: targeted tests only. WP1.1 is backend-only: the phone's link/pair screens come with WP1.4 and the web "show pairing code" card with WP1.4/WP5 (spec lists only the endpoints in WP1.1).
+WP: WP1.3 — Capture endpoint + Intake service   Step: 1 (plan in ≤ 10 bullets here, then explore narrowly). Read only spec §3 WP1.3.
+Next-session notes: operator rule: targeted tests only. WP1.1/WP1.2 are backend-only: the phone's link/pair screens and the "Auto order detect" per-app toggles (`GET/PATCH /v1/intake/settings`) come with WP1.4; the web pairing card with WP1.4/WP5. WP1.3 capture should check the message's package against the shop's `enabled_packages` (`app/intake/rules.py`).
 
 ## Status
 | WP | Status | Commit | Verified | Notes |
@@ -16,7 +16,7 @@ Next-session notes: operator rule: targeted tests only. WP1.1 is backend-only: t
 | WP0.6 | BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED | see log | provider-independent parts done: backend test_courier_history 12 + test_risk_network_v37/automation/migrations 71 passed, ruff + mypy clean; Flutter courier_history_chip + external_risk_card + commerce_screens + risk_and_courier_v1 38 passed, analyze clean; web typecheck + lint, 77 tests | no adapter until the contract exists; quick-order sheet chip → WP1.5 |
 | WP0.7 | BLOCKED: STATEMENT_SAMPLE_REQUIRED | see log | smoke (pathao/redx) 9 + Pathao resolver + statement profiles + payouts 52 + reconciliation 66 passed, ruff + mypy clean | statement profiles wait for real samples; smoke and resolver done; live calls are operator steps |
 | WP1.1 | DONE | see log | test_device_links 12 (incl. route sweep: no non-intake route accepts an ingest key) + auth/integrations/team/migrations/realtime 93 + deletion paths 15 passed; ruff + mypy clean | migration a41001; flag `intake_device_enabled` default off |
-| WP1.2 | TODO | | | |
+| WP1.2 | DONE | see log | test_intake_rules 41 (schema refusals, seed phone parity with `extract_phones`, ETag/304, toggles + coverage, admin publish/activate/rollback, permissions) + device_links/realtime/migrations/admin/delivery_rules 137 passed; ruff + format + mypy clean (352 files) | migration a41001 extended; flag `intake_device_enabled` (no new flag, no env); runbook `INTAKE_RULES.md` |
 | WP1.3 | TODO | | | |
 | WP1.4 | TODO | | | |
 | WP1.5 | TODO | | | |
@@ -62,6 +62,12 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - [x] Perf test decision (2026-11-18): keep every budget; tag `perf`, run alone in CI with `--concurrency=1`. Done.
 
 ## Decisions made during build (spec was silent)
+- 2026-11-18 WP1.2: v1 `default_enabled` — Business Suite and WhatsApp Business on; personal WhatsApp and Messenger off (they carry private chats; the seller turns them on). Extension hosts ship with no selectors (`verified_at: null`): DOM selectors are unverified provider details (§1.2), and the schema refuses a selector without `verified_at`, so the extension uses text selection until OPS publishes checked ones.
+- 2026-11-18 WP1.2: the schema's safety rails: regexes only in the Java/JS/Python common subset (no `\d \w \s \b`, inline flags, named groups; must compile; must not match empty text); a phone alone must not reach the threshold and the threshold must be reachable; `phone.required` is fixed `true`; keywords NFC + lower-case + de-duplicated; ≤ 64 KiB. v1 score: phone 40, intent 20 (≤ 2 hits), address 10 (≤ 2), district 20, threshold 60. The device phone regex is stricter than `extract_phones` on one point: no number inside a longer digit run.
+- 2026-11-18 WP1.2: "district list reference" = payload `district_list: "bd_districts_64"`, which `GET /v1/intake/rules` resolves from the parser gazetteer (`app/orders/parser/districts.py`), so the list lives in one place. The v1 seed is frozen inside migration a41001 (it NFC-normalises its own keywords).
+- 2026-11-18 WP1.2: ETag = first 32 hex of SHA-256 over the canonical response bytes (the exact bytes served); weak comparison for `If-None-Match` (incl. `W/` and `*`); `Cache-Control: private, no-cache`. No active version → 503 `SERVICE_UNAVAILABLE` (devices keep their cache).
+- 2026-11-18 WP1.2: one active version without a partial unique index (not portable, ADR 0004): activation locks every row (`FOR UPDATE`) and deactivates the others; reads take the newest active. Activation needs a reason (≥ 8 chars) and re-validates the stored payload; activating the active version is a no-op with no audit row. Admin GET needs `OPS_READ` (devices read the same rules anyway); publish/activate reuse `FEATURE_FLAG_WRITE` (OPS + SUPERADMIN) instead of a new permission. Admin routes are not behind the flag, so a version can be prepared first.
+- 2026-11-18 WP1.2: per-shop overrides live in `shop_intake_settings` (one row per shop, realtime `shop` topic): `covered_packages` is server-only (`set_covered_packages`, for Phase 6) and refused in the seller PATCH; `package_toggles` `null` = back to default; toggles for packages the active rules no longer list are dropped on the next PATCH. Seller routes `GET/PATCH /v1/intake/settings` need `settings.manage` + the flag. Not to be confused with the device-reported `covered_packages` in the connection config (WP1.1 heartbeat).
 - 2026-11-18 WP1.1: linking and pairing need `settings.manage` (owner/manager): a linked phone is a new data source for the shop. A DEVICE connection's `account_key` is `install:` + SHA-256(install id), so the existing global unique (provider, account_key) makes one install belong to one shop; linking an install live in another shop is 409 `LINKED_ELSEWHERE`.
 - 2026-11-18 WP1.1: one live key per connection — re-linking rotates it (the old key is revoked). Pairing codes live in `device_pairing_codes` (hash, 10 min, conditional UPDATE so a code is claimed once even under a race); claims are limited to 10 per IP hash per 10 minutes. Session auth refuses any `edk_` bearer with "Device keys only work on intake routes".
 - 2026-11-18 WP1.1: the first intake route is `POST /v1/intake/heartbeat` (records `listener_state`, `app_version`, `covered_packages`, `last_heartbeat_at` on the connection); WP1.3 adds capture. Ingest-key requests run as actor PROVIDER with the shop's tenant, like the public API.
@@ -115,6 +121,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-18 WP1.2 intake rules config (backend) on v4/phase-1
 - 2026-11-18 WP1.1 device links + ingest keys (backend) on v4/phase-1
 - 2026-11-18 WP0.7 smoke 0b37662 + Pathao resolver + statement profiles; Phase 0 code complete, G0 waiting on operator
 - 2026-11-18 WP0.6 provider-independent courier history 0ce0cfa + clients; BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED

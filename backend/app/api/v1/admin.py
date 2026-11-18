@@ -40,6 +40,9 @@ from app.api.v1.admin_schemas import (
     AdminIdentityResponse,
     FunnelResponse,
     FunnelStepResponse,
+    IntakeRulesActivatePayload,
+    IntakeRulesCreatePayload,
+    IntakeRuleSetResponse,
     OpsCountsResponse,
     ProviderHealthResponse,
     RepairActionResponse,
@@ -53,10 +56,12 @@ from app.api.v1.admin_schemas import (
     TenantSummaryResponse,
 )
 from app.billing.providers.registry import PROVIDER_FLAGS
+from app.common.audit import AuditAction, record_audit
 from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.provider_health import ProviderHealthService
 from app.core.errors import ValidationError
 from app.db.session import system_session
+from app.intake import rules as intake_rules
 from app.product_events.service import ProductEventService
 
 router = APIRouter(prefix="/admin", tags=["admin"], include_in_schema=False)
@@ -294,6 +299,79 @@ async def list_flags(
         }
         for key in FlagKey
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Intake rules (V4 WP1.2)
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/intake-rules", response_model=list[IntakeRuleSetResponse], summary="Intake rule versions"
+)
+async def list_intake_rules(
+    admin: CurrentAdmin,
+    db: AdminDb,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[IntakeRuleSetResponse]:
+    """Newest first, with payloads: devices of every shop follow the active one."""
+    admin.require(AdminPermission.OPS_READ)
+    rows = await intake_rules.list_versions(db, limit=limit)
+    return [IntakeRuleSetResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/intake-rules",
+    response_model=IntakeRuleSetResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Publish an intake rules version (inactive)",
+)
+async def create_intake_rules(
+    payload: IntakeRulesCreatePayload, admin: CurrentAdmin, db: AdminDb
+) -> IntakeRuleSetResponse:
+    """Rule L5: a Meta/WhatsApp UI change is fixed by a new version, not a release.
+
+    Nothing changes on any device until the version is activated.
+    """
+    admin.require(AdminPermission.FEATURE_FLAG_WRITE)
+    row = await intake_rules.create_version(
+        db, payload.payload, created_by=admin.label, note=payload.note
+    )
+    await record_audit(
+        db,
+        AuditAction.ADMIN_INTAKE_RULES_CREATED,
+        entity_type="intake_rule_sets",
+        entity_id=row.id,
+        context={"version": row.version, "admin": admin.label},
+    )
+    return IntakeRuleSetResponse.model_validate(row)
+
+
+@router.post(
+    "/intake-rules/{version}/activate",
+    response_model=IntakeRuleSetResponse,
+    summary="Make one intake rules version the active one",
+)
+async def activate_intake_rules(
+    version: int, payload: IntakeRulesActivatePayload, admin: CurrentAdmin, db: AdminDb
+) -> IntakeRuleSetResponse:
+    """Exactly one version stays active; activating an older one is the rollback."""
+    admin.require(AdminPermission.FEATURE_FLAG_WRITE)
+    result = await intake_rules.activate_version(db, version, activated_by=admin.label)
+    if result.changed:
+        await record_audit(
+            db,
+            AuditAction.ADMIN_INTAKE_RULES_ACTIVATED,
+            entity_type="intake_rule_sets",
+            entity_id=result.rule_set.id,
+            reason=payload.reason,
+            context={
+                "version": version,
+                "previous_version": result.previous_version,
+                "admin": admin.label,
+            },
+        )
+    return IntakeRuleSetResponse.model_validate(result.rule_set)
 
 
 # --------------------------------------------------------------------------- #

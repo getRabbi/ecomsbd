@@ -107,6 +107,7 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "subscriptions": T.SHOP,
     "network_preferences": T.SHOP,
     "shop_delivery_rules": T.SHOP,
+    "shop_intake_settings": T.SHOP,
 }
 
 #: The table whose row *is* the topic's entity. A commit that changed exactly
@@ -159,6 +160,8 @@ SILENT_TABLES: frozenset[str] = frozenset(
         # V4 linked-device credentials: never shown in a seller list
         "device_ingest_keys",
         "device_pairing_codes",
+        # V4 global device rules: admin-managed, devices poll them with an ETag
+        "intake_rule_sets",
         # imports: committed rows arrive as orders, products or customers
         "imports",
         "import_rows",

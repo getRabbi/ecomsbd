@@ -14,8 +14,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.intake.rules_schema import IntakeRulesV1
+
 __all__ = [
     "AdminIdentityResponse",
+    "IntakeRuleSetResponse",
+    "IntakeRulesActivatePayload",
+    "IntakeRulesCreatePayload",
     "OpsCountsResponse",
     "ProviderHealthResponse",
     "RepairActionResponse",
@@ -169,3 +174,32 @@ class RepairResultResponse(BaseModel):
     reason: str
     admin_label: str
     created_at: datetime
+
+
+class IntakeRulesCreatePayload(BaseModel):
+    """V4 WP1.2: a new rules version. It is stored inactive."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payload: IntakeRulesV1
+    note: str | None = Field(default=None, max_length=200)
+
+
+class IntakeRulesActivatePayload(BaseModel):
+    """Every device of every shop follows the active version, so say why."""
+
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+class IntakeRuleSetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    schema_version: int
+    active: bool
+    payload: dict[str, Any]
+    created_by: str
+    note: str | None
+    created_at: datetime
+    activated_at: datetime | None
+    activated_by: str | None
