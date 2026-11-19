@@ -250,6 +250,21 @@ def _tenant_context(tenant_id: uuid.UUID, job: str) -> Any:
     )
 
 
+async def _upload_intro(tenant_id: uuid.UUID, transport: Any, manifest: Any) -> bool:
+    """WP3.3: give the provider the shop's on intro if it needs uploads. A
+    failure keeps the shop's rows in the manual queue this tick."""
+    from app.voice.intro import ensure_intro_uploaded
+
+    try:
+        return await ensure_intro_uploaded(tenant_id, transport, manifest)
+    except Exception as exc:
+        log.warning(
+            "intro upload failed",
+            extra={"tenant_id": str(tenant_id), "error": type(exc).__name__},
+        )
+        return False
+
+
 async def dispatch_confirmation_calls(ctx: dict[str, Any] | None = None) -> dict[str, int]:
     """Place due IVR calls and reconcile stuck ones (V4 WP3.2, every 30 s).
 
@@ -262,9 +277,11 @@ async def dispatch_confirmation_calls(ctx: dict[str, Any] | None = None) -> dict
 
     from app.confirmations.calls import PreparedCall, place, services, voice_gate, voice_transport
     from app.confirmations.manual import QuietHours
+    from app.core.config import get_settings
     from app.delivery_rules.service import DeliveryRulesService
     from app.orders.models import Order, OrderStatus
     from app.tenants.models import Tenant, TenantStatus
+    from app.voice.manifest import available_voice_manifests
 
     now = utc_now()
     counts: Counter[str] = Counter()
@@ -324,12 +341,19 @@ async def dispatch_confirmation_calls(ctx: dict[str, Any] | None = None) -> dict
         by_tenant.setdefault(tenant_id, []).append(confirmation_id)
 
     transport = voice_transport()
+    manifest = available_voice_manifests(get_settings()).get(transport.name)
     for tenant_id, ids in by_tenant.items():
         token = _tenant_context(tenant_id, "confirmation_calls")
         try:
             async with session_scope() as db:
                 gate = await voice_gate(db, tenant_id, transport=transport)
                 rules = await DeliveryRulesService(db).get(tenant_id)
+            if gate.reason == "NO_INTRO_AUDIO" and await _upload_intro(
+                tenant_id, transport, manifest
+            ):
+                # WP3.3: the provider needed the shop's intro first; now it has it.
+                async with session_scope() as db:
+                    gate = await voice_gate(db, tenant_id, transport=transport)
             if not gate.on:
                 counts["voice_off"] += len(ids)  # they stay in the manual queue
                 continue

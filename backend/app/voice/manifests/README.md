@@ -18,6 +18,7 @@ capabilities:
   dynamic_audio:      {state: false, verified_at: 2026-11-20, evidence: "CONTRACT.md §2: one file per call"}
   callback_signature: {state: true,  detail: "hmac_sha256 base64, X-Signature", verified_at: 2026-11-20, evidence: "CONTRACT.md §5"}
   caller_id:          {state: unknown}
+  audio_upload:       {state: true,  verified_at: 2026-11-20, evidence: "CONTRACT.md §2: upload, then reference the file id"}
 facts:
   max_call_seconds:     {value: 60,  verified_at: 2026-11-20, evidence: "CONTRACT.md §2"}
   price_per_call_paisa: {value: 150, verified_at: 2026-11-20, evidence: "price sheet 2026-11"}
@@ -25,5 +26,7 @@ blockers: []
 ```
 
 Calls run only when `dtmf_capture` and `callback_signature` are verified,
+`audio_upload` is known either way (`true` = the shop's intro is uploaded to the
+provider first; `false` = the provider fetches our stored file by link),
 `max_call_seconds` and a price are known, `credential_fields` is declared and
 `blockers` is empty (`VoiceManifest.ready_for_calls`).

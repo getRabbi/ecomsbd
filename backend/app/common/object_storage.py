@@ -26,6 +26,13 @@ class ObjectStorage:
             raise ValueError("Invalid object category")
         return f"{kind}/{tenant_id}/{object_id}"
 
+    @staticmethod
+    def voice_intro_key(tenant_id: uuid.UUID, version: int, extension: str) -> str:
+        """V4 WP3.3: ``voice/<tenant>/intro-v<n>.<wav|mp3>``."""
+        if extension not in {"wav", "mp3"} or version < 1:
+            raise ValueError("Invalid voice intro key")
+        return f"voice/{tenant_id}/intro-v{version}.{extension}"
+
     def _client(self) -> Any:
         settings = self._settings
         assert settings.r2_access_key_id and settings.r2_secret_access_key  # noqa: S101
@@ -71,11 +78,12 @@ class ObjectStorage:
         await self._request("delete_object", key)
 
     async def delete_tenant(self, tenant_id: uuid.UUID) -> None:
-        """Remove personal imports/exports; payout evidence follows financial retention."""
+        """Remove personal imports/exports and the shop's voice intros (they speak
+        the shop's name); payout evidence follows financial retention."""
 
         def run() -> None:
             with closing(self._client()) as client:
-                for kind in ("imports", "exports"):
+                for kind in ("imports", "exports", "voice"):
                     pages = client.get_paginator("list_objects_v2").paginate(
                         Bucket=self._settings.r2_bucket, Prefix=f"{kind}/{tenant_id}/"
                     )

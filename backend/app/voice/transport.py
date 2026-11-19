@@ -36,12 +36,16 @@ from app.core.logging import get_logger
 from app.core.redaction import mask_phone
 
 __all__ = [
+    "AUDIO_CONTENT_TYPES",
     "DEFAULT_DTMF_OPTIONS",
     "DisabledVoiceTransport",
     "DtmfAction",
     "DtmfOption",
     "MockVoiceTransport",
     "SegmentKind",
+    "VoiceAudio",
+    "VoiceAudioOutcome",
+    "VoiceAudioResult",
     "VoiceAvailability",
     "VoiceAvailabilityState",
     "VoiceCall",
@@ -234,6 +238,60 @@ class VoiceCallResult:
 
 
 # --------------------------------------------------------------------------- #
+# Recordings (WP3.3)
+# --------------------------------------------------------------------------- #
+
+#: What a recording handed to a provider may be.
+AUDIO_CONTENT_TYPES = frozenset({"audio/wav", "audio/mpeg"})
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class VoiceAudio:
+    """A recording for a provider whose manifest says recordings are uploaded
+    before a call plays them (``audio_upload``)."""
+
+    #: Our storage key (``voice/<tenant>/intro-v<n>.wav``): a stable name for it.
+    key: str
+    content: bytes
+    content_type: str
+
+    def __post_init__(self) -> None:
+        if not _valid_audio_ref(self.key):
+            raise ValueError("an audio key is 1-200 letters, digits or : _ . / -")
+        if not self.content:
+            raise ValueError("a recording has content")
+        if self.content_type not in AUDIO_CONTENT_TYPES:
+            raise ValueError("a recording is audio/wav or audio/mpeg")
+
+    def __repr__(self) -> str:
+        return f"VoiceAudio({self.key!r}, {self.content_type}, {len(self.content)} bytes)"
+
+
+class VoiceAudioOutcome(StrEnum):
+    UPLOADED = "UPLOADED"
+    #: The provider refused the file (format, length): sending it again is pointless.
+    REJECTED = "REJECTED"
+    #: Not stored this time; trying later may work.
+    FAILED = "FAILED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceAudioResult:
+    outcome: VoiceAudioOutcome
+    provider: str
+    #: The provider's id for the recording: what ``VoiceCall.audio_ref`` carries.
+    audio_ref: str | None = None
+    #: A machine code only; never the provider's response body.
+    detail: str | None = None
+    auth_failure: bool = False
+
+    def __post_init__(self) -> None:
+        if (self.outcome is VoiceAudioOutcome.UPLOADED) != _valid_audio_ref(self.audio_ref):
+            raise ValueError("an uploaded recording, and only one, carries a valid audio_ref")
+
+
+# --------------------------------------------------------------------------- #
 # Callbacks
 # --------------------------------------------------------------------------- #
 
@@ -304,6 +362,12 @@ class VoiceTransport(Protocol):
 
     async def place_call(self, call: VoiceCall) -> VoiceCallResult: ...
 
+    async def upload_audio(self, audio: VoiceAudio) -> VoiceAudioResult:
+        """Hand a recording to the provider before any call plays it. Called
+        only where the manifest verifies ``audio_upload``; the result's
+        ``audio_ref`` is what a ``VoiceCall`` then carries."""
+        ...
+
     async def verify_callback(self, headers: Mapping[str, str], body: bytes) -> bool:
         """Whether a callback is genuinely the provider's. Refuses everything
         when the callback secret is not configured."""
@@ -327,6 +391,11 @@ class DisabledVoiceTransport:
     async def place_call(self, call: VoiceCall) -> VoiceCallResult:
         log.info("voice call not placed: no transport configured", extra=call.redacted())
         return VoiceCallResult(VoiceCallOutcome.NOT_CONFIGURED, self.name, detail=CONTRACT_REQUIRED)
+
+    async def upload_audio(self, audio: VoiceAudio) -> VoiceAudioResult:
+        return VoiceAudioResult(
+            VoiceAudioOutcome.NOT_CONFIGURED, self.name, detail=CONTRACT_REQUIRED
+        )
 
     async def verify_callback(self, headers: Mapping[str, str], body: bytes) -> bool:
         return False
@@ -355,8 +424,28 @@ class MockVoiceTransport:
     ref_prefix: str = field(default_factory=lambda: f"mock-{uuid.uuid4().hex[:8]}")
     #: Every request that reached the "provider", duplicates excluded.
     calls: list[VoiceCall] = field(default_factory=list)
+    #: Every recording handed over, repeats of a known key excluded.
+    uploads: list[VoiceAudio] = field(default_factory=list)
     _script: deque[VoiceCallResult] = field(default_factory=deque)
     _placed: dict[str, str] = field(default_factory=dict)
+    _audio_script: deque[VoiceAudioOutcome] = field(default_factory=deque)
+    _audio: dict[str, str] = field(default_factory=dict)
+
+    def script_audio(self, *outcomes: VoiceAudioOutcome) -> None:
+        """The next ``upload_audio`` answers, in order; then ``UPLOADED`` again."""
+        self._audio_script.extend(outcomes)
+
+    async def upload_audio(self, audio: VoiceAudio) -> VoiceAudioResult:
+        known = self._audio.get(audio.key)
+        if known is not None:
+            return VoiceAudioResult(VoiceAudioOutcome.UPLOADED, self.name, audio_ref=known)
+        scripted = self._audio_script.popleft() if self._audio_script else None
+        if scripted is not None and scripted is not VoiceAudioOutcome.UPLOADED:
+            return VoiceAudioResult(scripted, self.name, detail=f"MOCK_{scripted}")
+        self.uploads.append(audio)
+        ref = f"{self.ref_prefix}-audio-{len(self.uploads)}"
+        self._audio[audio.key] = ref
+        return VoiceAudioResult(VoiceAudioOutcome.UPLOADED, self.name, audio_ref=ref)
 
     def script(self, *outcomes: VoiceCallOutcome, auth_failure: bool = False) -> None:
         """The next ``place_call`` answers, in order; then ``PLACED`` again."""

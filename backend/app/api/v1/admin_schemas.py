@@ -261,6 +261,37 @@ class VoiceProviderResponse(BaseModel):
     health: list[ProviderHealthResponse]
 
 
+class VoiceIntroAdminView(BaseModel):
+    """One version of a shop's call intro (V4 WP3.3). No audio, no secrets."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    state: str
+    source: str
+    shop_name: str
+    content_type: str
+    byte_size: int
+    sha256: str
+    duration_ms: int | None
+    created_by: str
+    created_at: datetime
+    previewed_at: datetime | None
+    approved_at: datetime | None
+    retired_at: datetime | None
+    retired_reason: str | None
+    #: Providers that already hold this recording (names only).
+    uploaded_to: list[str]
+
+
+class VoiceIntrosAdminResponse(BaseModel):
+    tenant_id: uuid.UUID
+    shop_name: str
+    #: What to record for the shop's current name.
+    script: str
+    versions: list[VoiceIntroAdminView]
+
+
 class VoiceProviderUpdatePayload(BaseModel):
     """Connect, rotate or switch. An omitted secret keeps the stored one."""
 

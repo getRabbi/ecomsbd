@@ -55,6 +55,7 @@ from app.api.v1 import (
     sync,
     team,
     tenants,
+    voice,
     voice_webhooks,
     whatsapp_signup,
 )
@@ -114,6 +115,8 @@ api_router.include_router(courier_webhooks.router)
 # Unauthenticated: voice provider callbacks, stored, then verified by the
 # transport's signature check before anything is applied (V4 WP3.2).
 api_router.include_router(voice_webhooks.router)
+# V4 WP3.3: the shop's confirmation-call intro (settings.manage).
+api_router.include_router(voice.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
 api_router.include_router(rto.router)

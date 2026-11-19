@@ -21,7 +21,8 @@ callbacks then say what happened. Three rules shape everything here:
 Voice is "on" for a shop (:func:`voice_gate`) only with the
 ``voice_confirmation_enabled`` flag, a configured transport, its platform
 account switched on, the provider's breaker closed and the shop's intro audio
-(WP3.3). While it is off, ``CALL_QUEUED`` rows stay in the seller's manual call
+(WP3.3: a version the seller played and turned on, made for the shop's current
+name, and on the provider where it needs uploads). While it is off, ``CALL_QUEUED`` rows stay in the seller's manual call
 queue (WP2.3), so nothing waits unseen.
 """
 
@@ -162,10 +163,15 @@ def client_ref(confirmation_id: uuid.UUID, attempt_no: int) -> str:
     return f"confirmation:{confirmation_id}:{attempt_no}"
 
 
-async def intro_audio_ref(db: AsyncSession, tenant_id: uuid.UUID) -> str | None:
-    """The shop's recorded intro (WP3.3 builds it). ``None`` until then: a
-    call with nothing to play is not placed, so voice stays off."""
-    return None
+async def intro_audio_ref(db: AsyncSession, tenant_id: uuid.UUID, *, provider: str) -> str | None:
+    """The shop's intro as ``provider`` plays it (WP3.3): the version the
+    seller listened to and turned on, made for the shop's current name.
+    ``None`` = nothing to play, so voice stays off for the shop."""
+    from app.voice.intro import IntroAudioService
+    from app.voice.manifest import available_voice_manifests
+
+    manifest = available_voice_manifests(get_settings()).get(provider)
+    return await IntroAudioService(db).call_ref(tenant_id, provider=provider, manifest=manifest)
 
 
 async def has_voice_credit(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
@@ -185,6 +191,8 @@ class VoiceGate:
     #: Why it is off: a machine code.
     reason: str | None = None
     audio_ref: str | None = None
+    #: The two recordings around a spoken amount; only with ``dynamic_audio``.
+    amount_prompts: tuple[str, str] | None = None
 
 
 async def voice_gate(
@@ -223,10 +231,15 @@ async def voice_gate(
     )
     if health is not None and not health.allows_request():
         return VoiceGate(False, voice.name, "BREAKER_OPEN")
-    audio = await intro_audio_ref(db, tenant_id)
+    audio = await intro_audio_ref(db, tenant_id, provider=voice.name)
     if audio is None:
         return VoiceGate(False, voice.name, "NO_INTRO_AUDIO")
-    return VoiceGate(True, voice.name, None, audio)
+    from app.voice.intro import amount_prompts
+    from app.voice.manifest import available_voice_manifests
+
+    settings = get_settings()
+    prompts = amount_prompts(available_voice_manifests(settings).get(voice.name), settings)
+    return VoiceGate(True, voice.name, None, audio, prompts)
 
 
 # --------------------------------------------------------------------------- #
@@ -340,10 +353,14 @@ class IvrCalls:
             row, AttemptChannel.IVR, provider=gate.provider, now=now
         )
         await self._confirmations.transition(row, S.CALLING, Cause.DIALING, now=now)
+        from app.voice.intro import call_audio
+
         call = VoiceCall(
             to_e164=phone,
             client_ref=client_ref(row.id, attempt.attempt_no),
-            audio_ref=gate.audio_ref,
+            **call_audio(
+                gate.audio_ref, cod_paisa=row.cod_paisa_snapshot, prompts=gate.amount_prompts
+            ),
         )
         return PreparedCall(row.tenant_id, row.id, attempt.id, gate.provider, call)
 

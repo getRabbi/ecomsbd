@@ -130,6 +130,16 @@ class ErrorCode(StrEnum):
     #: V4 WP3.1: the voice provider cannot be turned on yet (manifest, credentials
     #: or callback secret missing).
     VOICE_PROVIDER_NOT_READY = "VOICE_PROVIDER_NOT_READY"
+    #: V4 WP3.3: the recording is not a WAV/MP3 we can use (size, length, format).
+    VOICE_AUDIO_INVALID = "VOICE_AUDIO_INVALID"
+    #: V4 WP3.3: an intro can be turned on only after a seller played it.
+    VOICE_INTRO_NOT_PREVIEWED = "VOICE_INTRO_NOT_PREVIEWED"
+    #: V4 WP3.3: the intro speaks a shop name the shop no longer has.
+    VOICE_INTRO_OUTDATED = "VOICE_INTRO_OUTDATED"
+    #: V4 WP3.3: no TTS provider; the ecomsbd team records the intro.
+    TTS_PROVIDER_REQUIRED = "TTS_PROVIDER_REQUIRED"
+    #: V4 WP3.3: recordings need R2, which this deployment has not configured.
+    AUDIO_STORAGE_NOT_CONFIGURED = "AUDIO_STORAGE_NOT_CONFIGURED"
     PAYOUT_IMPORT_INVALID = "PAYOUT_IMPORT_INVALID"
     RECONCILIATION_MISMATCH = "RECONCILIATION_MISMATCH"
     SYNC_CONFLICT = "SYNC_CONFLICT"
@@ -388,6 +398,36 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         409,
         "ভয়েস প্রোভাইডার এখনো চালু করা যাবে না। তথ্য সম্পূর্ণ করুন।",
         "This voice provider cannot be turned on yet.",
+        False,
+    ),
+    ErrorCode.VOICE_AUDIO_INVALID: (
+        422,
+        "অডিও ফাইলটি ব্যবহার করা যাবে না। ২ MB-এর ছোট WAV বা MP3 দিন।",
+        "This recording cannot be used. Send a WAV or MP3 under 2 MB.",
+        False,
+    ),
+    ErrorCode.VOICE_INTRO_NOT_PREVIEWED: (
+        409,
+        "চালু করার আগে কলের ভূমিকাটি একবার শুনে নিন।",
+        "Listen to the call intro once before turning it on.",
+        False,
+    ),
+    ErrorCode.VOICE_INTRO_OUTDATED: (
+        409,
+        "এই রেকর্ডিংয়ে দোকানের পুরনো নাম আছে। নতুন রেকর্ডিং লাগবে।",
+        "This recording speaks the shop's old name. A new one is needed.",
+        False,
+    ),
+    ErrorCode.TTS_PROVIDER_REQUIRED: (
+        409,
+        "স্বয়ংক্রিয় ভয়েস এখনো চালু নেই। ecomsbd টিম আপনার রেকর্ডিং তৈরি করে দেবে।",
+        "Automatic voice is not available yet. The ecomsbd team records your intro.",
+        False,
+    ),
+    ErrorCode.AUDIO_STORAGE_NOT_CONFIGURED: (
+        503,
+        "রেকর্ডিং রাখার জায়গা এখনো চালু হয়নি।",
+        "Recording storage is not configured.",
         False,
     ),
     ErrorCode.PAYOUT_IMPORT_INVALID: (

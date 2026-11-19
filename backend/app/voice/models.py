@@ -16,14 +16,18 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.clock import utc_now
-from app.db.base import Base, PrimaryKeyMixin, TimestampMixin
+from app.db.base import Base, PrimaryKeyMixin, TenantOwned, TimestampMixin
 from app.db.types import GUID, JSONColumn, TZDateTime
 
 __all__ = [
+    "INTRO_ON_PREDICATE",
     "CallbackState",
+    "IntroSource",
+    "IntroState",
     "VoiceCallEvent",
     "VoiceCallbackDelivery",
     "VoiceEventResult",
+    "VoiceIntroAudio",
     "VoiceProviderConnection",
 ]
 
@@ -159,3 +163,76 @@ class VoiceCallEvent(Base, PrimaryKeyMixin, TimestampMixin):
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
     attempt_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
     delivery_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+
+
+class IntroState(StrEnum):
+    """``voice_intro_audio.state``."""
+
+    #: Stored; the seller may listen to it and turn calls on with it.
+    READY = "READY"
+    #: The recording calls play. At most one per shop.
+    ON = "ON"
+    #: Replaced, or made for a shop name the shop no longer has.
+    RETIRED = "RETIRED"
+
+
+class IntroSource(StrEnum):
+    #: Made by the TTS port (``TTS_PROVIDER_REQUIRED`` until a contract exists).
+    TTS = "TTS"
+    #: Recorded by the operator and uploaded in the admin console.
+    UPLOAD = "UPLOAD"
+
+
+#: One recording in use per shop. Partial unique index on PostgreSQL and SQLite.
+INTRO_ON_PREDICATE = "state = 'ON'"
+
+
+class VoiceIntroAudio(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """One version of a shop's confirmation-call intro (V4 WP3.3).
+
+    The recording speaks the shop's name, so a version belongs to the name it
+    was made for and a rename retires it. The bytes live in R2
+    (``voice/<tenant>/intro-v<n>.<ext>``); a seller of the shop must play them
+    back before the version can be turned on.
+    """
+
+    __tablename__ = "voice_intro_audio"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "version", name="uq_voice_intro_audio_version"),
+        sa.Index(
+            "uq_voice_intro_audio_on",
+            "tenant_id",
+            unique=True,
+            postgresql_where=sa.text(INTRO_ON_PREDICATE),
+            sqlite_where=sa.text(INTRO_ON_PREDICATE),
+        ),
+        sa.CheckConstraint("version > 0", name="version_positive"),
+        sa.CheckConstraint("byte_size > 0", name="byte_size_positive"),
+    )
+
+    version: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    state: Mapped[str] = mapped_column(sa.String(12), nullable=False, default=IntroState.READY)
+    source: Mapped[str] = mapped_column(sa.String(12), nullable=False)
+    #: The shop name the recording speaks (the script's only variable part).
+    shop_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    #: The Bangla script it was made from (the TTS input; what the operator reads).
+    script: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    storage_key: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    content_type: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+    byte_size: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    #: WAV only; an MP3's length is not measured.
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    #: Who made it: an admin label, or ``tts:<provider>``.
+    created_by: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    #: The first time a seller of the shop played it back (needed to turn it on).
+    previewed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    previewed_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    #: ``REPLACED`` or ``SHOP_RENAMED``.
+    retired_reason: Mapped[str | None] = mapped_column(sa.String(24), nullable=True)
+    #: The provider's own id for the uploaded recording, per provider, where its
+    #: manifest says recordings are uploaded before a call.
+    provider_refs: Mapped[dict[str, Any]] = mapped_column(JSONColumn, nullable=False, default=dict)

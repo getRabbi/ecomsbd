@@ -208,4 +208,9 @@ class TenantService:
                 tenant_id=tenant.id,
             )
         await self._db.flush()
+        if "name" in changed:
+            # V4 WP3.3: the call intro speaks the shop's name; the old one retires.
+            from app.voice.intro import IntroAudioService
+
+            await IntroAudioService(self._db).shop_renamed(tenant)
         return tenant

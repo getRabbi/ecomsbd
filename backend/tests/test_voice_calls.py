@@ -162,7 +162,7 @@ async def voice(engine_on: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterat
     transport = Hooked()
     monkeypatch.setattr(calls, "voice_transport", lambda: transport)
 
-    async def audio(_db: Any, _tenant_id: uuid.UUID) -> str:
+    async def audio(_db: Any, _tenant_id: uuid.UUID, **_kw: Any) -> str:
         return AUDIO
 
     monkeypatch.setattr(calls, "intro_audio_ref", audio)
@@ -661,7 +661,7 @@ async def test_voice_off_keeps_queued_rows_with_the_seller(
 
     voice.mock.available = True
 
-    async def no_audio(_db: Any, _tenant_id: uuid.UUID) -> None:
+    async def no_audio(_db: Any, _tenant_id: uuid.UUID, **_kw: Any) -> None:
         return None
 
     monkeypatch.setattr(calls, "intro_audio_ref", no_audio)

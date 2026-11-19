@@ -138,6 +138,10 @@ class OutboxTopic(StrEnum):
     # Handled in app.billing.jobs (the seller's notification).
     BILLING_MANUAL_PAYMENT_REVIEWED = "billing.manual_payment_reviewed"
 
+    # V4 WP3.3: make the shop's confirmation-call intro with the TTS port, for
+    # the shop name in the payload. Handled in app.voice.jobs.
+    VOICE_INTRO_REQUESTED = "voice.intro_requested"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, File, Header, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import AdminPrincipal, authenticate_admin
@@ -57,6 +57,8 @@ from app.api.v1.admin_schemas import (
     SupportCaseResponse,
     SupportCaseUpdatePayload,
     TenantSummaryResponse,
+    VoiceIntroAdminView,
+    VoiceIntrosAdminResponse,
     VoiceProviderConnectionView,
     VoiceProviderResponse,
     VoiceProviderUpdatePayload,
@@ -454,6 +456,85 @@ async def update_voice_provider(
         actor=admin.label,
     )
     return await _voice_response(db, provider, service.manifest(provider), row)
+
+
+async def _voice_intros(db: AsyncSession, tenant_id: uuid.UUID) -> VoiceIntrosAdminResponse:
+    from app.core.errors import NotFoundError
+    from app.tenants.models import Tenant
+    from app.voice.intro import IntroAudioService, intro_script
+
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None or tenant.deleted_at is not None:
+        raise NotFoundError("Shop not found")
+    rows = await IntroAudioService(db).versions(tenant_id)
+    return VoiceIntrosAdminResponse(
+        tenant_id=tenant_id,
+        shop_name=tenant.name,
+        script=intro_script(tenant.name),
+        versions=[VoiceIntroAdminView.model_validate(_intro_view(row)) for row in rows],
+    )
+
+
+def _intro_view(row: Any) -> dict[str, Any]:
+    fields = set(VoiceIntroAdminView.model_fields) - {"uploaded_to"}
+    return {
+        **{name: getattr(row, name) for name in fields},
+        "uploaded_to": sorted(row.provider_refs or {}),
+    }
+
+
+@router.get(
+    "/voice/intros/{tenant_id}",
+    response_model=VoiceIntrosAdminResponse,
+    summary="A shop's call intro recordings and the script to record",
+)
+async def list_voice_intros(
+    tenant_id: uuid.UUID, admin: CurrentAdmin, db: AdminDb
+) -> VoiceIntrosAdminResponse:
+    admin.require(AdminPermission.OPS_READ)
+    return await _voice_intros(db, tenant_id)
+
+
+@router.put(
+    "/voice/intros/{tenant_id}",
+    response_model=VoiceIntrosAdminResponse,
+    summary="Upload a shop's call intro (WAV or MP3, ≤ 2 MB)",
+)
+async def upload_voice_intro(
+    tenant_id: uuid.UUID,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    file: Annotated[UploadFile, File()],
+) -> VoiceIntrosAdminResponse:
+    """The operator's recording of the script for the shop's current name.
+
+    Stored as a new ``READY`` version; calls play it only after a seller of
+    the shop has listened to it and turned it on.
+    """
+    from app.voice.intro import MAX_AUDIO_BYTES, IntroAudioService
+    from app.voice.models import IntroSource
+
+    admin.require(AdminPermission.VOICE_AUDIO_WRITE)
+    # One byte over the limit is enough to refuse it (VOICE_AUDIO_INVALID).
+    content = await file.read(MAX_AUDIO_BYTES + 1)
+    row = await IntroAudioService(db).add(
+        tenant_id, content, source=IntroSource.UPLOAD, created_by=admin.label
+    )
+    await record_audit(
+        db,
+        AuditAction.ADMIN_VOICE_INTRO_UPLOADED,
+        entity_type="voice_intro_audio",
+        entity_id=row.id,
+        tenant_id=tenant_id,
+        context={
+            "version": row.version,
+            "content_type": row.content_type,
+            "byte_size": row.byte_size,
+            "sha256": row.sha256,
+            "admin": admin.label,
+        },
+    )
+    return await _voice_intros(db, tenant_id)
 
 
 # --------------------------------------------------------------------------- #

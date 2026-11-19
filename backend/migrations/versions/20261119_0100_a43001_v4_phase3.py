@@ -1,4 +1,5 @@
-"""V4 phase 3: the platform's voice provider accounts (WP3.1) and call callbacks (WP3.2)."""
+"""V4 phase 3: the platform's voice provider accounts (WP3.1), call callbacks (WP3.2) and
+each shop's intro recordings (WP3.3)."""
 
 from alembic import op
 import sqlalchemy as sa
@@ -9,8 +10,16 @@ down_revision = "a42001"
 branch_labels = None
 depends_on = None
 
-# Platform-level (not tenant-owned): RLS on, client roles revoked.
-_TABLES = ["voice_provider_connections", "voice_callback_deliveries", "voice_call_events"]
+# Platform-level and tenant-owned alike: RLS on, client roles revoked.
+_TABLES = [
+    "voice_provider_connections",
+    "voice_callback_deliveries",
+    "voice_call_events",
+    "voice_intro_audio",
+]
+
+# WP3.3: one recording in use per shop. Partial unique index on PostgreSQL and SQLite.
+_INTRO_ON_PREDICATE = "state = 'ON'"
 
 
 def upgrade():
@@ -90,6 +99,48 @@ def upgrade():
         "ix_confirmation_attempts_provider_ref",
         "confirmation_attempts",
         ["provider", "provider_ref"],
+    )
+
+    # WP3.3: tenant-owned versions of a shop's confirmation-call intro.
+    op.create_table(
+        "voice_intro_audio",
+        sa.Column("id", GUID, primary_key=True),
+        sa.Column(
+            "tenant_id", GUID, sa.ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+        ),
+        sa.Column("created_at", TZDateTime(), nullable=False),
+        sa.Column("updated_at", TZDateTime(), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
+        sa.Column("state", sa.String(12), nullable=False),
+        sa.Column("source", sa.String(12), nullable=False),
+        sa.Column("shop_name", sa.String(255), nullable=False),
+        sa.Column("script", sa.Text(), nullable=False),
+        sa.Column("storage_key", sa.String(200), nullable=False),
+        sa.Column("content_type", sa.String(40), nullable=False),
+        sa.Column("byte_size", sa.Integer(), nullable=False),
+        sa.Column("sha256", sa.String(64), nullable=False),
+        sa.Column("duration_ms", sa.Integer(), nullable=True),
+        sa.Column("created_by", sa.String(120), nullable=False),
+        sa.Column("previewed_at", TZDateTime(), nullable=True),
+        sa.Column("previewed_by", GUID, nullable=True),
+        sa.Column("approved_at", TZDateTime(), nullable=True),
+        sa.Column("approved_by", GUID, nullable=True),
+        sa.Column("retired_at", TZDateTime(), nullable=True),
+        sa.Column("retired_reason", sa.String(24), nullable=True),
+        sa.Column("provider_refs", JSONColumn, nullable=False),
+        sa.UniqueConstraint("tenant_id", "version", name="uq_voice_intro_audio_version"),
+        sa.CheckConstraint("version > 0", name="version_positive"),
+        sa.CheckConstraint("byte_size > 0", name="byte_size_positive"),
+    )
+    op.create_index("ix_voice_intro_audio_tenant_id", "voice_intro_audio", ["tenant_id"])
+    op.create_index("ix_voice_intro_audio_created_at", "voice_intro_audio", ["created_at"])
+    op.create_index(
+        "uq_voice_intro_audio_on",
+        "voice_intro_audio",
+        ["tenant_id"],
+        unique=True,
+        postgresql_where=sa.text(_INTRO_ON_PREDICATE),
+        sqlite_where=sa.text(_INTRO_ON_PREDICATE),
     )
 
     db = op.get_bind()

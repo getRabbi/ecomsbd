@@ -308,6 +308,7 @@ def _ready_raw(**overrides: Any) -> dict[str, Any]:
             "dynamic_audio": {"state": False, **_PROOF},
             "callback_signature": {"state": True, "detail": "hmac_sha256", **_PROOF},
             "caller_id": {"state": "unknown"},
+            "audio_upload": {"state": True, **_PROOF},
         },
         "facts": {
             "max_call_seconds": {"value": 60, **_PROOF},

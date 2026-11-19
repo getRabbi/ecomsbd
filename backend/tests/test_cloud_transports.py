@@ -126,7 +126,7 @@ async def test_r2_private_roundtrip_and_tenant_deletion(r2, monkeypatch):
     prefixes = [
         c.kwargs["Prefix"] for c in client.get_paginator.return_value.paginate.call_args_list
     ]
-    assert prefixes == [f"imports/{tenant}/", f"exports/{tenant}/"]
+    assert prefixes == [f"imports/{tenant}/", f"exports/{tenant}/", f"voice/{tenant}/"]
     assert client.close.call_count == 4
 
 

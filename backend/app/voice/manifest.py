@@ -63,6 +63,10 @@ class VoiceCapability(StrEnum):
     CALLBACK_SIGNATURE = "callback_signature"
     #: The number the customer sees can be chosen.
     CALLER_ID = "caller_id"
+    #: WP3.3: ``true`` = a recording is uploaded to the provider before a call
+    #: plays it (``VoiceTransport.upload_audio``); ``false`` = the provider
+    #: fetches our stored file by link. Unknown = we cannot get the intro to it.
+    AUDIO_UPLOAD = "audio_upload"
 
 
 class VoiceFact(StrEnum):
@@ -129,6 +133,9 @@ class VoiceManifest:
         if not self.supports(VoiceCapability.CALLBACK_SIGNATURE):
             # A callback we cannot verify could confirm an order nobody confirmed.
             missing.append("CALLBACK_SIGNATURE_UNVERIFIED")
+        if self.state(VoiceCapability.AUDIO_UPLOAD) is CapabilityState.UNKNOWN:
+            # Either answer works; not knowing means the intro cannot be played.
+            missing.append("AUDIO_DELIVERY_UNVERIFIED")
         if self.fact(VoiceFact.MAX_CALL_SECONDS) is None:
             missing.append("MAX_CALL_SECONDS_UNVERIFIED")
         if all(self.fact(price) is None for price in _PRICES):
@@ -362,6 +369,7 @@ def mock_manifest() -> VoiceManifest:
                     **_MOCK_EVIDENCE,
                 },
                 "caller_id": {"state": False, **_MOCK_EVIDENCE},
+                "audio_upload": {"state": True, **_MOCK_EVIDENCE},
             },
             "facts": {
                 "max_call_seconds": {"value": 60, **_MOCK_EVIDENCE},

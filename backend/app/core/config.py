@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
 from decimal import Decimal
 from enum import StrEnum
@@ -480,6 +481,15 @@ class Settings(BaseSettings):
     #: (VOICE_PROVIDER_CONTRACT_REQUIRED); ``mock`` is the local/test double.
     #: A provider value is added only with its contract-based adapter.
     voice_transport: str = "disabled"
+    #: V4 WP3.3 text-to-speech for shop intros. ``disabled`` makes nothing
+    #: (TTS_PROVIDER_REQUIRED: the operator uploads a recording); ``fake`` is
+    #: the local/test double. A provider value comes only with its contract.
+    tts_provider: str = "disabled"
+    #: V4 WP3.3: the two platform recordings around a spoken amount ("আপনার
+    #: অর্ডারের মূল্য" … "টাকা।"), as the voice provider knows them. Used only
+    #: when the provider's manifest verifies ``dynamic_audio``; both or neither.
+    voice_amount_prefix_audio_ref: str | None = None
+    voice_amount_suffix_audio_ref: str | None = None
 
     # -------------------------------------------------------------- email ---
     #: TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED. Provider-neutral, like push and
@@ -726,6 +736,24 @@ class Settings(BaseSettings):
             raise ValueError(f"VOICE_TRANSPORT must be one of {sorted(allowed)}")
         return lowered
 
+    @field_validator("tts_provider")
+    @classmethod
+    def _validate_tts_provider(cls, value: str) -> str:
+        allowed = {"disabled", "fake"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"TTS_PROVIDER must be one of {sorted(allowed)}")
+        return lowered
+
+    @field_validator("voice_amount_prefix_audio_ref", "voice_amount_suffix_audio_ref")
+    @classmethod
+    def _validate_amount_audio_ref(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9:_./\-]{1,200}", value.strip()):
+            raise ValueError("an amount audio ref is 1-200 letters, digits or : _ . / -")
+        return value.strip()
+
     @field_validator("email_transport")
     @classmethod
     def _validate_email_transport(cls, value: str) -> str:
@@ -854,6 +882,15 @@ class Settings(BaseSettings):
         if self.app_env.is_deployed and self.voice_transport == "mock":
             # A mock "placed" call would let confirmations look answered.
             problems.append("VOICE_TRANSPORT=mock is forbidden outside local/test")
+        if self.app_env.is_deployed and self.tts_provider == "fake":
+            # A fake intro is silence: calls would ring customers and say nothing.
+            problems.append("TTS_PROVIDER=fake is forbidden outside local/test")
+        if (self.voice_amount_prefix_audio_ref is None) != (
+            self.voice_amount_suffix_audio_ref is None
+        ):
+            problems.append(
+                "VOICE_AMOUNT_PREFIX_AUDIO_REF and VOICE_AMOUNT_SUFFIX_AUDIO_REF go together"
+            )
 
         # Admin tokens are compared in constant time but are still bearer
         # credentials: a short one is guessable, and a placeholder one is a

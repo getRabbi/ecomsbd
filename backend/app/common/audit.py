@@ -190,6 +190,13 @@ class AuditAction(StrEnum):
     ADMIN_INTAKE_RULES_ACTIVATED = "admin.intake_rules_activated"
     #: V4 WP3.1: the platform's voice provider account connected, rotated or switched.
     ADMIN_VOICE_PROVIDER_UPDATED = "admin.voice_provider_updated"
+    #: V4 WP3.3: the operator uploaded a shop's intro recording.
+    ADMIN_VOICE_INTRO_UPLOADED = "admin.voice_intro_uploaded"
+    #: V4 WP3.3: a shop intro made by TTS, turned on (confirmation calls start
+    #: playing it) or turned off by the seller.
+    VOICE_INTRO_CREATED = "voice.intro_created"
+    VOICE_INTRO_TURNED_ON = "voice.intro_turned_on"
+    VOICE_INTRO_TURNED_OFF = "voice.intro_turned_off"
 
     # Integrations Hub (V3.1)
     INTEGRATION_CREATED = "integration.created"
