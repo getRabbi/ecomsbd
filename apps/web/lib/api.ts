@@ -61,6 +61,11 @@ interface RequestOptions {
   locale?: string;
   /** `html`: send `Accept: text/html` and return the body as text. */
   responseType?: 'json' | 'html';
+  /**
+   * No seller session: the customer's confirm page (V4 WP2.3) calls the API's
+   * public routes. No token is read or sent, and a 401 signs nobody out.
+   */
+  anonymous?: boolean;
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -99,16 +104,18 @@ async function parseError(response: Response): Promise<ApiError> {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = await getAccessToken();
-  if (!token) {
+  const token = options.anonymous ? null : await getAccessToken();
+  if (!token && !options.anonymous) {
     throw new ApiError(401, 'NOT_AUTHENTICATED', 'Please sign in again.');
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
     Accept: options.responseType === 'html' ? 'text/html' : 'application/json',
     'Accept-Language': options.locale ?? 'en',
   };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -124,7 +131,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     cache: 'no-store',
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.anonymous) {
     // The session is gone or rejected. Clearing it locally stops every other
     // panel on the page from retrying with the same dead token.
     await signOutHere();
@@ -145,6 +152,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   return (await response.json()) as T;
 }
+
+/** The API's unauthenticated routes (V4 WP2.3 confirm page). Same fetch path. */
+export const publicApi = {
+  get: <T>(path: string, signal?: AbortSignal) =>
+    request<T>(path, { anonymous: true, signal }),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, { anonymous: true, method: 'POST', body }),
+};
 
 export const api = {
   get: <T>(path: string, query?: Query, signal?: AbortSignal) =>
