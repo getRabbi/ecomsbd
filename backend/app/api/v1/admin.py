@@ -57,17 +57,22 @@ from app.api.v1.admin_schemas import (
     SupportCaseResponse,
     SupportCaseUpdatePayload,
     TenantSummaryResponse,
+    VoiceProviderConnectionView,
+    VoiceProviderResponse,
+    VoiceProviderUpdatePayload,
 )
 from app.billing.manual_payments import ManualPaymentReview
 from app.billing.models import ManualPaymentState
 from app.billing.providers.registry import PROVIDER_FLAGS
 from app.common.audit import AuditAction, record_audit
 from app.common.feature_flags import FeatureFlagService, FlagKey
-from app.common.provider_health import ProviderHealthService
+from app.common.provider_health import ProviderHealthService, ProviderKind
 from app.core.errors import ValidationError
 from app.db.session import system_session
 from app.intake import rules as intake_rules
 from app.product_events.service import ProductEventService
+from app.voice.manifest import available_voice_manifests
+from app.voice.service import VoiceConnectionService, VoiceConnectionUpdate, connection_view
 
 router = APIRouter(prefix="/admin", tags=["admin"], include_in_schema=False)
 
@@ -377,6 +382,78 @@ async def activate_intake_rules(
             },
         )
     return IntakeRuleSetResponse.model_validate(result.rule_set)
+
+
+# --------------------------------------------------------------------------- #
+# Voice provider (V4 WP3.1)
+# --------------------------------------------------------------------------- #
+
+
+def _voice_service(db: AsyncSession, settings: Any) -> VoiceConnectionService:
+    return VoiceConnectionService(db, get_vault(settings), available_voice_manifests(settings))
+
+
+async def _voice_response(
+    db: AsyncSession, provider: str, manifest: Any, connection: Any
+) -> VoiceProviderResponse:
+    views = [
+        view
+        for view in await ProviderHealthService(db).snapshot()
+        if view.kind == str(ProviderKind.VOICE) and view.provider == provider
+    ]
+    view = connection_view(connection)
+    return VoiceProviderResponse(
+        provider=provider,
+        manifest=manifest.as_dict() if manifest is not None else None,
+        connection=VoiceProviderConnectionView.model_validate(view) if view else None,
+        health=[ProviderHealthResponse.model_validate(item.as_dict()) for item in views],
+    )
+
+
+@router.get(
+    "/voice/providers", response_model=list[VoiceProviderResponse], summary="Voice providers"
+)
+async def list_voice_providers(
+    admin: CurrentAdmin, db: AdminDb, settings: SettingsDep
+) -> list[VoiceProviderResponse]:
+    """Every provider with a verified manifest, and any stored account. Never a secret."""
+    admin.require(AdminPermission.OPS_READ)
+    manifests = available_voice_manifests(settings)
+    service = _voice_service(db, settings)
+    connections = {row.provider: row for row in await service.list()}
+    return [
+        await _voice_response(db, provider, manifests.get(provider), connections.get(provider))
+        for provider in sorted(set(manifests) | set(connections))
+    ]
+
+
+@router.put(
+    "/voice/providers/{provider}",
+    response_model=VoiceProviderResponse,
+    summary="Connect, rotate or switch the platform voice provider",
+)
+async def update_voice_provider(
+    provider: str,
+    payload: VoiceProviderUpdatePayload,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+) -> VoiceProviderResponse:
+    """Only a provider whose manifest exists (a verified contract) can be connected."""
+    admin.require(AdminPermission.PROVIDER_CREDENTIALS_WRITE)
+    service = _voice_service(db, settings)
+    row = await service.update(
+        provider,
+        VoiceConnectionUpdate(
+            credentials=payload.credentials,
+            callback_secret=payload.callback_secret,
+            caller_id=payload.caller_id,
+            enabled=payload.enabled,
+            reason=payload.reason,
+        ),
+        actor=admin.label,
+    )
+    return await _voice_response(db, provider, service.manifest(provider), row)
 
 
 # --------------------------------------------------------------------------- #

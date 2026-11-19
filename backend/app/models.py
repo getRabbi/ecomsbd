@@ -26,7 +26,8 @@ import app.order_sources.models
 import app.procurement.models
 import app.product_events.models
 import app.public_api.models
-import app.risk_providers.models  # noqa: F401
+import app.risk_providers.models
+import app.voice.models  # noqa: F401
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken

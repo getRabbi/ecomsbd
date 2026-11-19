@@ -125,6 +125,11 @@ class ErrorCode(StrEnum):
     #: INVALID_COURIER_CREDENTIALS, which is one rejected attempt.
     COURIER_ACCOUNT_NEEDS_RECONNECT = "COURIER_ACCOUNT_NEEDS_RECONNECT"
     RISK_PROVIDER_UNAVAILABLE = "RISK_PROVIDER_UNAVAILABLE"
+    #: V4 WP3.1: no manifest (no verified contract) for this voice provider.
+    VOICE_PROVIDER_UNKNOWN = "VOICE_PROVIDER_UNKNOWN"
+    #: V4 WP3.1: the voice provider cannot be turned on yet (manifest, credentials
+    #: or callback secret missing).
+    VOICE_PROVIDER_NOT_READY = "VOICE_PROVIDER_NOT_READY"
     PAYOUT_IMPORT_INVALID = "PAYOUT_IMPORT_INVALID"
     RECONCILIATION_MISMATCH = "RECONCILIATION_MISMATCH"
     SYNC_CONFLICT = "SYNC_CONFLICT"
@@ -372,6 +377,18 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         "ঝুঁকি যাচাইয়ের তথ্য এখন পাওয়া যাচ্ছে না।",
         "The risk data source is unavailable.",
         True,
+    ),
+    ErrorCode.VOICE_PROVIDER_UNKNOWN: (
+        404,
+        "এই ভয়েস প্রোভাইডারের যাচাই করা চুক্তি নেই।",
+        "This voice provider has no verified contract.",
+        False,
+    ),
+    ErrorCode.VOICE_PROVIDER_NOT_READY: (
+        409,
+        "ভয়েস প্রোভাইডার এখনো চালু করা যাবে না। তথ্য সম্পূর্ণ করুন।",
+        "This voice provider cannot be turned on yet.",
+        False,
     ),
     ErrorCode.PAYOUT_IMPORT_INVALID: (
         422,

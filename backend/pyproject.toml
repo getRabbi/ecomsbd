@@ -60,6 +60,7 @@ include = ["app*"]
 "app.orders" = ["data/*.yaml"]
 "app.documents" = ["fonts/*.ttf", "fonts/OFL.txt"]
 "app.payouts" = ["profiles/*.yaml"]
+"app.voice" = ["manifests/*.yaml"]
 
 [tool.ruff]
 line-length = 100

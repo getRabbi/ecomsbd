@@ -82,6 +82,9 @@ class AdminPermission(StrEnum):
     BILLING_GRANT = "admin.billing_grant"
     #: Reveal a masked phone number, with a reason and an audit entry.
     PII_REVEAL = "admin.pii_reveal"
+    #: V4 WP3.1: set the platform's own provider credentials (voice). They
+    #: spend the operator's money, so SUPERADMIN only.
+    PROVIDER_CREDENTIALS_WRITE = "admin.provider_credentials_write"
 
 
 _MATRIX: dict[PlatformAdminRole, frozenset[AdminPermission]] = {

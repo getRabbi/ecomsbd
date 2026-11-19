@@ -188,6 +188,8 @@ class AuditAction(StrEnum):
     #: V4 WP1.2: an intake rule set version published (inactive) or activated.
     ADMIN_INTAKE_RULES_CREATED = "admin.intake_rules_created"
     ADMIN_INTAKE_RULES_ACTIVATED = "admin.intake_rules_activated"
+    #: V4 WP3.1: the platform's voice provider account connected, rotated or switched.
+    ADMIN_VOICE_PROVIDER_UPDATED = "admin.voice_provider_updated"
 
     # Integrations Hub (V3.1)
     INTEGRATION_CREATED = "integration.created"

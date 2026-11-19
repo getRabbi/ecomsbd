@@ -238,3 +238,34 @@ class ManualPaymentRejectPayload(BaseModel):
     """Shown to the seller, so write it for them."""
 
     reason: str = Field(min_length=3, max_length=400)
+
+
+class VoiceProviderConnectionView(BaseModel):
+    """The platform's voice account as the console sees it (V4 WP3.1). No secrets."""
+
+    enabled: bool
+    has_credentials: bool
+    has_callback_secret: bool
+    masked_identifier: str | None
+    caller_id: str | None
+    credentials_rotated_at: datetime | None
+    updated_at: datetime | None
+    updated_by: str
+
+
+class VoiceProviderResponse(BaseModel):
+    provider: str
+    #: ``None`` when a connection outlived its manifest (contract withdrawn).
+    manifest: dict[str, Any] | None
+    connection: VoiceProviderConnectionView | None
+    health: list[ProviderHealthResponse]
+
+
+class VoiceProviderUpdatePayload(BaseModel):
+    """Connect, rotate or switch. An omitted secret keeps the stored one."""
+
+    credentials: dict[str, str] | None = None
+    callback_secret: str | None = Field(default=None, min_length=16, max_length=4096)
+    caller_id: str | None = Field(default=None, max_length=20)
+    enabled: bool = False
+    reason: str = Field(min_length=8, max_length=400)

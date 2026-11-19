@@ -61,6 +61,7 @@ class ProviderKind(StrEnum):
     RISK = "RISK"
     AI_PARSER = "AI_PARSER"
     STORAGE = "STORAGE"
+    VOICE = "VOICE"
 
 
 class HealthState(StrEnum):

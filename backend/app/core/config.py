@@ -475,6 +475,12 @@ class Settings(BaseSettings):
     sms_transport: str = "disabled"
     notification_max_attempts: int = 5
 
+    # -------------------------------------------------------------- voice ---
+    #: V4 Phase 3 IVR confirmation calls. ``disabled`` places nothing
+    #: (VOICE_PROVIDER_CONTRACT_REQUIRED); ``mock`` is the local/test double.
+    #: A provider value is added only with its contract-based adapter.
+    voice_transport: str = "disabled"
+
     # -------------------------------------------------------------- email ---
     #: TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED. Provider-neutral, like push and
     #: SMS. ``console`` writes the message to the log and sends nothing — it is
@@ -711,6 +717,15 @@ class Settings(BaseSettings):
             raise ValueError(f"transport must be one of {sorted(allowed)}")
         return lowered
 
+    @field_validator("voice_transport")
+    @classmethod
+    def _validate_voice_transport(cls, value: str) -> str:
+        allowed = {"disabled", "mock"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"VOICE_TRANSPORT must be one of {sorted(allowed)}")
+        return lowered
+
     @field_validator("email_transport")
     @classmethod
     def _validate_email_transport(cls, value: str) -> str:
@@ -836,6 +851,9 @@ class Settings(BaseSettings):
             problems.append("a gateway secret is required when SMS_TRANSPORT=sms_gateway")
         if self.app_env.is_deployed and "mock" in (self.push_transport, self.sms_transport):
             problems.append("mock notification transports are forbidden outside local/test")
+        if self.app_env.is_deployed and self.voice_transport == "mock":
+            # A mock "placed" call would let confirmations look answered.
+            problems.append("VOICE_TRANSPORT=mock is forbidden outside local/test")
 
         # Admin tokens are compared in constant time but are still bearer
         # credentials: a short one is guessable, and a placeholder one is a
