@@ -15,6 +15,52 @@ worker `dispatch_confirmation_calls`, callback route
 `POST /v1/webhooks/voice/{provider}`, stuck-call reconciler. Calls also need the
 shop's intro audio (WP3.3), so voice stays off everywhere until then.
 
+**Status (WP3.3):** shop intro recordings are built (`app/voice/intro.py`,
+`voice_intro_audio`). No TTS provider exists (`TTS_PROVIDER_REQUIRED`): the
+operator records each pilot shop's intro and uploads it; the seller listens to it
+in web Settings → Confirmation call voice and turns calls on.
+
+## Shop intro audio (WP3.3)
+
+The call opens with: "আসসালামু আলাইকুম। আপনি <shop name> থেকে একটি অর্ডার
+করেছেন। অর্ডার কনফার্ম করতে ১ চাপুন। বাতিল করতে ২ চাপুন। দোকানের সাথে কথা
+বলতে ৩ চাপুন।"
+
+- **Versions** per shop: `READY` (stored, can be heard and turned on) → `ON` (calls
+  play it; one per shop) → `RETIRED` (`REPLACED` by a newer one, or
+  `SHOP_RENAMED`). Bytes in R2 at `voice/<tenant>/intro-v<n>.wav|.mp3` (R2 must be
+  configured, else `503 AUDIO_STORAGE_NOT_CONFIGURED`); account deletion removes
+  `voice/<tenant>/`.
+- **Recording it (operator, while no TTS):** `GET /v1/admin/voice/intros/{tenant_id}`
+  (`admin.ops_read`) gives the exact `script` for the shop's current name. Record
+  it (WAV PCM or MP3, ≤ 2 MB, WAV ≤ 60 s; ~12 s is normal) and upload:
+  `curl -X PUT -H "X-Admin-Token: …" -F file=@intro.wav $API/v1/admin/voice/intros/{tenant_id}`
+  (`admin.voice_audio_write`: OPS, SUPERADMIN). It is stored `READY`; nothing plays
+  until the seller turns it on. A bad file → `422 VOICE_AUDIO_INVALID` with
+  `details.reason` (`EMPTY`, `TOO_LARGE`, `TOO_LONG`, `UNREADABLE_WAV`,
+  `NOT_WAV_OR_MP3`).
+- **Seller:** `/v1/voice/intro` (flag `voice_confirmation_enabled`,
+  `settings.manage`). Playing a version (`GET …/{version}/audio`) records the
+  preview; `POST …/{version}/turn-on` refuses a version nobody played
+  (`409 VOICE_INTRO_NOT_PREVIEWED`) or one for an old name
+  (`409 VOICE_INTRO_OUTDATED`); `POST …/turn-off` stops calls (the version stays
+  `READY`).
+- **Rename:** changing the shop name retires its recordings at once: calls stop
+  and rows wait in the manual queue until a recording for the new name is on.
+  With a TTS provider and the flag on, a new one is requested automatically
+  (outbox `voice.intro_requested`, once per name).
+- **Provider delivery:** the manifest's `audio_upload` says how the provider gets
+  the file (`true` = upload first; `false` = it fetches our file; unknown = not
+  ready, `AUDIO_DELIVERY_UNVERIFIED`). With `true`, the call worker uploads the
+  `ON` version once per provider before the shop's first call and keeps the
+  provider's id (`provider_refs`); a failed upload keeps the shop's rows in the
+  manual queue and is retried on the next tick.
+- **Spoken amount:** only when the manifest verifies `dynamic_audio` **and** both
+  `VOICE_AMOUNT_PREFIX_AUDIO_REF` ("আপনার অর্ডারের মূল্য") and
+  `VOICE_AMOUNT_SUFFIX_AUDIO_REF` ("টাকা।") are set (recordings the operator
+  put at the provider), and the COD is whole taka above zero. Otherwise the call
+  says no amount (the SMS link carries it).
+
 ## How a call runs (WP3.2)
 
 1. The policy queues `CALL_QUEUED` with `next_action_at` = start + 2 min.
@@ -73,6 +119,9 @@ its `CALL_QUEUED` rows stay in the seller's manual call queue
 | `voice_confirmation_enabled` | feature flag (admin console, global or per shop) | off | Phase 3 calls run for the shop (WP3.2) |
 | `VOICE_TRANSPORT` | env | `disabled` | `disabled` places nothing; `mock` is local/test only and refused when deployed |
 | connection `enabled` | `PUT /v1/admin/voice/providers/{provider}` | off | the platform account may place calls |
+| shop intro `ON` | seller: web Settings → Confirmation call voice | none | calls for the shop play it; without one the shop's rows stay in the manual queue (WP3.3) |
+| `TTS_PROVIDER` | env | `disabled` | `disabled` makes no recordings (`TTS_PROVIDER_REQUIRED`); `fake` is local/test only and refused when deployed |
+| `VOICE_AMOUNT_PREFIX_AUDIO_REF` / `_SUFFIX_` | env | empty | both set + verified `dynamic_audio` → the COD is spoken after the intro |
 
 A connection can be turned on only when its manifest is ready (DTMF capture and
 callback signature verified with a date and evidence, max call length and a
@@ -126,7 +175,11 @@ has credentials **and** a callback secret. Refusals answer
    answers 200 with `masked_identifier` and no secret.
 2. Staging/production: `GET /v1/admin/voice/providers` is `[]` until a contract
    and its manifest ship; `PUT` answers `404 VOICE_PROVIDER_UNKNOWN`.
-3. Tests: `python -m pytest tests/test_voice_transport.py tests/test_voice_calls.py -q`.
+3. Tests: `python -m pytest tests/test_voice_transport.py tests/test_voice_calls.py tests/test_voice_intro.py -q`.
+   WP3.3 local check: `VOICE_TRANSPORT=mock`, R2 configured, flag on for a test
+   shop; upload a WAV with `PUT /v1/admin/voice/intros/{tenant_id}`; in web
+   Settings → Confirmation call voice press Listen, then Turn on; the next
+   `dispatch_confirmation_calls` tick uploads it to the mock and places calls.
 4. Staging, once a provider and WP3.3 audio exist: turn the flag on for a test
    shop, request a confirmation on an order to your own number, answer and
    press 1; the order is `CONFIRMED` and `voice_call_events` shows `DTMF:1`
