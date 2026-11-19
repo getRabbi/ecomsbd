@@ -390,14 +390,20 @@ async def test_a_material_edit_supersedes_and_starts_again(db, settings):
 
     assert first.state == "SUPERSEDED" and first.method is None
     second = await db.get(OrderConfirmation, first.superseded_by)
-    assert second is not None and second.state == "PENDING"
+    # The restart runs the policy (WP2.2): a buyer the shop does not know is called.
+    assert second is not None
+    assert (second.state, second.decision, second.reason_code) == (
+        "CALL_QUEUED",
+        "CALL",
+        "VERIFY_NEW",
+    )
     assert second.order_version == order.version and second.cod_paisa_snapshot == 100_000
 
     # The same items again is not a change.
     await orders.update(
         order.id, items=[OrderItemDraft(name="Red Abaya", unit_price_paisa=100_000)]
     )
-    assert second.state == "PENDING"
+    assert second.state == "CALL_QUEUED"
 
 
 async def test_cod_moves_past_ten_percent_of_the_snapshot_are_material(db, settings):
@@ -562,7 +568,9 @@ async def test_request_and_already_confirmed_in_chat_through_the_api(
     assert first.json()["created"] and not again.json()["created"]
     row = first.json()["confirmation"]
     assert again.json()["confirmation"]["id"] == row["id"]
-    assert (row["state"], row["order_id"]) == ("PENDING", order["id"])
+    assert (row["state"], row["order_id"]) == ("CALL_QUEUED", order["id"])
+    assert (row["decision"], row["reason_code"]) == ("CALL", "VERIFY_NEW")
+    assert row["facts"]["own_band"] == "INSUFFICIENT_DATA" and row["facts"]["external"] is None
     shown = (await client.get(_url(order), headers=headers)).json()
     assert shown["enabled"] and shown["confirmation"]["id"] == row["id"]
 
@@ -647,7 +655,7 @@ _SHEET_ORDER = {"phone": "01700000011", "items": [{"name": "Panjabi", "quantity"
 
 @pytest.mark.parametrize(
     ("mode", "state", "order_status"),
-    [("REQUEST", "PENDING", "DRAFT"), ("SELLER_CHAT", "CONFIRMED", "CONFIRMED")],
+    [("REQUEST", "CALL_QUEUED", "DRAFT"), ("SELLER_CHAT", "CONFIRMED", "CONFIRMED")],
 )
 async def test_the_sheet_creates_the_order_and_its_confirmation_in_one_call(
     client: AsyncClient,
@@ -719,7 +727,7 @@ async def test_a_queued_create_carries_its_confirmation_request(
     shown = await client.get(
         f"/v1/orders/{result['entity_id']}/confirmation", headers=auth_header(shop)
     )
-    assert shown.json()["confirmation"]["state"] == "PENDING"
+    assert shown.json()["confirmation"]["state"] == "CALL_QUEUED"
 
 
 async def test_a_plain_order_create_can_ask_for_a_confirmation(
@@ -728,7 +736,7 @@ async def test_a_plain_order_create_can_ask_for_a_confirmation(
     shop = await signed_in_shop(client, unique_phone)
     order = (await create_order(client, shop, phone="01700000025", confirmation="REQUEST"))["order"]
     shown = await client.get(_url(order), headers=auth_header(shop))
-    assert shown.json()["confirmation"]["state"] == "PENDING"
+    assert shown.json()["confirmation"]["state"] == "CALL_QUEUED"
 
 
 def test_an_order_source_cannot_claim_a_confirmation():

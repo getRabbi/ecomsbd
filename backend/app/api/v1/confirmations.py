@@ -46,6 +46,8 @@ class ConfirmationView(BaseModel):
     state: str
     decision: str | None
     reason_code: str | None
+    #: What the policy read (counts, band, thresholds) for the "why" display.
+    facts: dict[str, Any] | None
     method: str | None
     attempt_count: int
     next_action_at: datetime | None
@@ -62,6 +64,7 @@ def confirmation_view(row: OrderConfirmation) -> dict[str, Any]:
         state=row.state,
         decision=row.decision,
         reason_code=row.reason_code,
+        facts=row.facts,
         method=row.method,
         attempt_count=row.attempt_count,
         next_action_at=row.next_action_at,
@@ -104,7 +107,7 @@ async def start_confirmation(
     if payload.mode == "SELLER_CHAT":
         result = await service.resolve_in_chat(order_id, actor_id=principal.user_id)
     else:
-        result = await service.request(order_id, requested_by=principal.user_id)
+        result = await service.start(order_id, requested_by=principal.user_id)
     await db.flush()
     return {"confirmation": confirmation_view(result.confirmation), "created": result.created}
 

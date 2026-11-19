@@ -1,4 +1,4 @@
-# Runbook: customer order confirmations (V4 WP2.1)
+# Runbook: customer order confirmations (V4 WP2.1, policy WP2.2)
 
 A confirmation records whether the **customer** really wants an order, separate
 from the order's own status (rule L7). It lives in `order_confirmations`
@@ -19,14 +19,44 @@ and hashed SMS-link tokens in `confirmation_links` (WP2.3).
   `CONFIRMATION_NEEDS_ATTENTION` alert. **Customer no** → order `CANCELLED`,
   reason `CUSTOMER_DECLINED`, same guard; the customer is never flagged.
 - **Material edit** (items changed, or COD more than 10% away from the snapshot)
-  → the open confirmation becomes `SUPERSEDED` and a new `PENDING` one starts
-  (`superseded_by` links them). **Order cancelled** → the open confirmation is
+  → the open confirmation becomes `SUPERSEDED` and a new one starts and is
+  decided again (`superseded_by` links them). **Order cancelled** → the open confirmation is
   `CANCELLED` with no method.
 - Starting one: `POST /v1/orders/{id}/confirmation` (`REQUEST` | `SELLER_CHAT`),
   or the optional `confirmation` field on `POST /v1/orders`,
   `POST /v1/chat-orders/{id}/confirm` and an offline `ORDER` create through
   `/v1/sync/mutations` (the quick-order sheet's two buttons). All idempotent per
   order. Order sources (website/store) cannot set it.
+
+## Policy (WP2.2): who gets called
+
+`app/confirmations/policy.py` `decide(facts, rules)` runs once on every new
+`PENDING` row (`ConfirmationService.start`, and the restart after a material
+edit) and moves it at once: `AUTO_CONFIRM` → `CONFIRMED` (`AUTO_TRUSTED`, the
+order moves as `system:customer_confirmation`), `CALL` → `CALL_QUEUED`,
+`SELLER_REVIEW` → `SELLER_REVIEW` (+ `confirmation.review_needed`). First match wins;
+the order is fixed, the thresholds are the shop's `shop_delivery_rules`
+(`PATCH /v1/delivery-rules`):
+
+| # | When | Decision / `reason_code` |
+|---|---|---|
+| 1 | customer flag `BLOCKED` | `SELLER_REVIEW` / `CUSTOMER_BLOCKED` |
+| 2 | external success < `risk_low_bps` (5000) over ≥ 5 parcels, or own-shop band `HIGH` | `SELLER_REVIEW` / `HIGH_RISK` |
+| 3 | COD > `max_auto_cod_paisa` (৳5,000) | `CALL` / `HIGH_VALUE` |
+| 4 | ≥ `trusted_repeat_min` (2) own deliveries and band `LOW` | `AUTO_CONFIRM` / `TRUSTED_REPEAT` |
+| 5 | fresh external ≥ `trusted_network_bps` (8500) over ≥ 5 parcels, no own-shop return | `AUTO_CONFIRM` / `TRUSTED_NETWORK` |
+| 6 | anything else | `CALL` / `VERIFY_NEW` |
+
+`call_nobody` turns rules 3–6 into `SELLER_REVIEW` / `SHOP_MANUAL`;
+`call_everyone` turns rules 4–5 into `CALL` / `CALL_EVERYONE`. Rules 1–2 always
+stand. Facts come from stored data only (`app/confirmations/facts.py`): the
+seller-private flag, the own-shop band (`app/customers/risk.py`, the customer
+screen's band) and the newest answered lookup of an **enabled, shipped** external
+provider. No such provider or answer → external is `null`: the external half of
+rule 2 and rule 5 are skipped. An expired answer still counts for rule 2, never
+for rule 5. Nothing here calls a provider. The row keeps `decision`,
+`reason_code` and `facts` (counts, band, thresholds — no phone or name), returned
+by `GET /v1/orders/{id}/confirmation` for the "why" display.
 
 ## Flag
 
@@ -54,6 +84,9 @@ without a handler would sit at the head of the outbox.
 
 - Outbox rows `topic LIKE 'confirmation.%'` stuck in `PENDING`/`FAILED`: handler
   error (logs `app.confirmations`, `confirmation event`).
+- Decision mix: `SELECT reason_code, count(*) FROM order_confirmations GROUP BY 1`.
+  Almost everything `SHOP_MANUAL` / `CALL_EVERYONE` = the shop's switches; a jump
+  in `HIGH_RISK` after a provider change = check that provider's answers.
 - Many `order_outcome IN ('ORDER_CHANGED','ORDER_NOT_DRAFT')`: sellers edit or
   confirm orders while a confirmation runs — expected occasionally; a spike means
   a client is editing orders automatically.
@@ -62,8 +95,9 @@ without a handler would sit at the head of the outbox.
 
 ## Containment
 
-Turn `confirmation_engine_enabled` off for the shop (or globally). Nothing books a
-courier from a confirmation in WP2.1 (that is WP2.4 through the automation
+Turn `confirmation_engine_enabled` off for the shop (or globally). To stop
+auto-confirmation only, the seller turns on `call_everyone` (or `call_nobody`).
+Nothing books a courier from a confirmation in WP2.1–2.2 (that is WP2.4 through the automation
 engine), so the blast radius is order status only.
 
 ## Recovery
@@ -75,6 +109,7 @@ engine), so the blast radius is order status only.
 
 ## Verification
 
-`cd backend && python -m pytest tests/test_confirmations.py -q` (state table,
-illegal moves, order guards, supersede/cancel hooks, handlers, API, sheet paths);
+`cd backend && python -m pytest tests/test_confirmations.py tests/test_confirmation_policy.py -q`
+(state table, illegal moves, order guards, supersede/cancel hooks, handlers, API,
+sheet paths; every policy rule, boundary, override and external case);
 Flutter `flutter test test/features/intake_screens_test.dart`.

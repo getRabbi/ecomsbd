@@ -30,15 +30,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
 from app.common.outbox import OutboxTopic, enqueue
+from app.confirmations import facts as policy_facts
 from app.confirmations.models import (
     OPEN_STATES,
     AttemptChannel,
     ConfirmationAttempt,
+    ConfirmationDecision,
     ConfirmationMethod,
     ConfirmationState,
     OrderConfirmation,
     OrderOutcome,
 )
+from app.confirmations.policy import PolicyRules, decide
 from app.confirmations.state_machine import Cause, ConfirmationStateMachine
 from app.core.clock import utc_now
 from app.core.context import ActorType
@@ -162,7 +165,7 @@ async def start_for_new_order(
         if current is not None:  # asked to call first, then said "already confirmed"
             return current
         return (await service.resolve_in_chat(order.id, actor_id=actor_id)).confirmation
-    return (await service.request(order.id, requested_by=actor_id)).confirmation
+    return (await service.start(order.id, requested_by=actor_id)).confirmation
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,9 +184,46 @@ class ConfirmationService:
 
     # ------------------------------------------------------------ start ---
 
-    async def request(self, order_id: uuid.UUID, *, requested_by: uuid.UUID | None) -> Requested:
-        """Start a confirmation for a ``DRAFT`` order, once.
+    async def start(self, order_id: uuid.UUID, *, requested_by: uuid.UUID | None) -> Requested:
+        """Start a confirmation and let the policy decide what happens next.
 
+        The entry point for every caller: :meth:`request` plus the policy
+        (WP2.2) on a ``PENDING`` row it has not decided yet. Idempotent: a
+        repeat returns the row as it is, decided once.
+        """
+        result = await self.request(order_id, requested_by=requested_by)
+        row = result.confirmation
+        if row.confirmation_state is S.PENDING and row.decision is None:
+            await self.decide(row)
+        return result
+
+    async def decide(self, row: OrderConfirmation) -> OrderConfirmation:
+        """Run the policy on a ``PENDING`` row and move it out of ``PENDING``.
+
+        The decision, its reason code and the facts and thresholds it read are
+        stored on the row first, so the outbox event and the "why" display
+        carry them.
+        """
+        from app.delivery_rules.service import DeliveryRulesService
+
+        order = await self._orders.get(row.order_id)
+        facts = await policy_facts.collect(self._db, order)
+        rules = PolicyRules.from_values(await DeliveryRulesService(self._db).get(order.tenant_id))
+        decision, reason = decide(facts, rules)
+        row.decision = str(decision)
+        row.reason_code = str(reason)
+        row.facts = {**facts.as_dict(), "rules": rules.as_dict()}
+        await self._db.flush()
+        if decision is ConfirmationDecision.AUTO_CONFIRM:
+            return await self.transition(row, S.CONFIRMED, Cause.AUTO_TRUSTED)
+        if decision is ConfirmationDecision.CALL:
+            return await self.transition(row, S.CALL_QUEUED, Cause.DECIDED_CALL)
+        return await self.transition(row, S.SELLER_REVIEW, Cause.DECIDED_REVIEW)
+
+    async def request(self, order_id: uuid.UUID, *, requested_by: uuid.UUID | None) -> Requested:
+        """Open a ``PENDING`` confirmation for a ``DRAFT`` order, once.
+
+        The bare step: the policy has not run. Callers use :meth:`start`.
         Idempotent per order: a second request (an offline replay, a double
         tap) returns the confirmation that is open, or the one that already
         ended, instead of calling the customer twice.
@@ -376,6 +416,7 @@ class ConfirmationService:
         successor = await self._start(order, requested_by=current.requested_by, replaces=current)
         current.superseded_by = successor.id
         await self._db.flush()
+        await self.decide(successor)
 
     async def on_order_cancelled(self, order: Order) -> None:
         current = await open_for_order(self._db, order.id, lock=True)
