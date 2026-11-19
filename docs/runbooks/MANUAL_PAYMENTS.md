@@ -16,6 +16,11 @@ Table: `billing_payment_submissions` (migration `a42001`).
 | Feature | flag `manual_payments_enabled` (global or per shop) | off |
 | Receiving numbers | `MANUAL_PAYMENT_ACCOUNTS` (JSON list, see `.env.production.example`) | empty |
 | Hidden anyway | `FREE_LAUNCH_MODE=true`; any Play build (`X-Distribution-Channel: PLAY` or `DISTRIBUTION_CHANNEL=PLAY`, master spec §27.1) | — |
+| Mobile builds | Every Flutter build sends `X-Distribution-Channel: PLAY` (Play, App Store) unless built with `--dart-define=ECOMSBD_DIRECT_BUILD=true` (a directly distributed APK) | store build |
+
+So with `DISTRIBUTION_CHANNEL=DIRECT` on the server, the web Billing page and a
+direct APK show the form, while Play / App Store builds never do. Setting the
+server to `PLAY` hides it everywhere, the web included.
 
 `GET /v1/billing/manual-payments/options` returns `available` and, when off,
 `unavailable_reason`: `FEATURE_OFF`, `FREE_LAUNCH`, `CHANNEL` or `NO_ACCOUNTS`.
