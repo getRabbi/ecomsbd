@@ -16,10 +16,17 @@ export interface ReceivingAccount {
   label: string;
 }
 
+export interface PaymentQuote {
+  months: number;
+  amount: { amount_paisa: number; currency: string };
+}
+
 export interface PayablePlan {
   code: string;
   name: string;
   monthly_price: { amount_paisa: number; currency: string };
+  /** The exact amount per month choice, from the server. */
+  amounts: PaymentQuote[];
 }
 
 export interface ManualPaymentOptions {
@@ -55,9 +62,6 @@ export interface PaymentForm {
 }
 
 export type PaymentField = 'plan' | 'months' | 'method' | 'payer' | 'trx';
-
-/** The month choices offered; the server accepts 1–12. */
-export const MONTH_CHOICES = [1, 3, 6, 12] as const;
 
 export const manualPaymentEn = {
   'mp.title': 'Pay by bKash or Nagad',
@@ -121,9 +125,14 @@ export const manualPaymentBn: Record<ManualPaymentKey, string> = {
   'mp.nagad': 'নগদ',
 };
 
-/** Integer paisa × months. The server computes the same and is the authority. */
-export function amountPaisa(plan: PayablePlan | undefined, months: number): number {
-  return plan ? plan.monthly_price.amount_paisa * months : 0;
+/** The month choices the server quoted for this plan. */
+export function monthChoices(plan: PayablePlan | undefined): number[] {
+  return plan ? plan.amounts.map((quote) => quote.months) : [];
+}
+
+/** The server's exact amount for this plan and months; `null` if it quoted none. */
+export function amountPaisa(plan: PayablePlan | undefined, months: number): number | null {
+  return plan?.amounts.find((quote) => quote.months === months)?.amount.amount_paisa ?? null;
 }
 
 /** `৳597` / `৳1,250.50` from integer paisa. */
@@ -157,7 +166,8 @@ export function isBdMobile(raw: string): boolean {
 export function invalidFields(form: PaymentForm, options: ManualPaymentOptions): PaymentField[] {
   const invalid: PaymentField[] = [];
   if (!options.plans.some((plan) => plan.code === form.plan)) invalid.push('plan');
-  if (!(form.months >= options.min_months && form.months <= options.max_months)) invalid.push('months');
+  const plan = options.plans.find((candidate) => candidate.code === form.plan);
+  if (amountPaisa(plan, form.months) === null) invalid.push('months');
   if (!options.accounts.some((account) => account.method === form.method)) invalid.push('method');
   if (!isBdMobile(form.payer)) invalid.push('payer');
   if (!isTrx(form.trx)) invalid.push('trx');

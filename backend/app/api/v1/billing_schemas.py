@@ -33,6 +33,7 @@ __all__ = [
     "ManualPaymentAccountResponse",
     "ManualPaymentOptionsResponse",
     "ManualPaymentPlanResponse",
+    "ManualPaymentQuoteResponse",
     "ManualPaymentSubmissionResponse",
     "ManualPaymentSubmitPayload",
     "PlayVerifyPayload",
@@ -89,6 +90,10 @@ class SubscriptionResponse(BaseModel):
     #: Last four characters of the provider reference, for support. Never the
     #: reference itself.
     provider_reference_suffix: str | None = None
+    #: A manual grant the seller did not pay for. ``False`` for any provider
+    #: purchase and for an approved bKash / Nagad TrxID payment (V4 WP2.5),
+    #: which is also ``manual_admin`` but was paid.
+    support_credit: bool = False
 
 
 class BillingProviderStateResponse(BaseModel):
@@ -214,10 +219,17 @@ class ManualPaymentAccountResponse(BaseModel):
     label: str
 
 
+class ManualPaymentQuoteResponse(BaseModel):
+    months: int
+    #: Exactly what to send: catalogue price × months.
+    amount: MoneyAmount
+
+
 class ManualPaymentPlanResponse(BaseModel):
     code: str
     name: str
     monthly_price: MoneyAmount
+    amounts: list[ManualPaymentQuoteResponse] = Field(default_factory=list)
 
 
 class ManualPaymentOptionsResponse(BaseModel):

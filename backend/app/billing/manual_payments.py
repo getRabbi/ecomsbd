@@ -64,6 +64,7 @@ __all__ = [
     "DAYS_PER_MONTH",
     "MAX_MONTHS",
     "MIN_MONTHS",
+    "MONTH_CHOICES",
     "PAID_PLANS",
     "Availability",
     "ManualPaymentReview",
@@ -81,6 +82,9 @@ MAX_MONTHS = 12
 #: A paid month is 30 days, whatever the calendar month.
 DAYS_PER_MONTH = 30
 PAID_PLANS: tuple[PlanCode, ...] = (PlanCode.STARTER, PlanCode.PRO)
+#: What the screens offer (the API accepts any 1–12). Each comes with its exact
+#: amount from the server: the client never computes money.
+MONTH_CHOICES: tuple[int, ...] = (1, 3, 6, 12)
 
 #: Per shop. Enough for typos; too few to probe which TrxIDs exist.
 SUBMITS_PER_WINDOW = 10

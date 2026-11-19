@@ -87,6 +87,10 @@ async def payments_on(settings: Any, monkeypatch: pytest.MonkeyPatch) -> AsyncIt
         reset_settings_cache()
 
 
+def _another_phone() -> str:
+    return f"018{uuid.uuid4().int % 100_000_000:08d}"
+
+
 def _trx() -> str:
     return "TX" + uuid.uuid4().hex[:10].upper()
 
@@ -190,6 +194,13 @@ async def test_options_show_the_receiving_numbers_and_the_monthly_prices(
         "pro": 39_900,
     }
     assert (body["min_months"], body["max_months"]) == (1, 12)
+    starter = body["plans"][0]
+    assert [(q["months"], q["amount"]["amount_paisa"]) for q in starter["amounts"]] == [
+        (1, 19_900),
+        (3, 59_700),
+        (6, 119_400),
+        (12, 238_800),
+    ]
 
 
 async def test_a_play_build_never_gets_the_form(
@@ -219,7 +230,7 @@ async def test_free_launch_mode_and_no_accounts_hide_the_form(
 
 async def test_only_the_owner_may_pay(client: AsyncClient, unique_phone: str, payments_on: Any):
     owner = await signed_in_shop(client, unique_phone, plan="pro")
-    manager = await _member_session(client, owner, f"0171{unique_phone[-7:]}", TenantRole.MANAGER)
+    manager = await _member_session(client, owner, _another_phone(), TenantRole.MANAGER)
     assert (await client.get(OPTIONS, headers=auth_header(manager))).status_code == 403
     assert (await _submit(client, manager, _trx())).status_code == 403
 
@@ -268,7 +279,7 @@ async def test_a_submission_grants_nothing_and_keeps_the_payer_number_masked(
 
 async def test_one_trx_id_pays_once(client: AsyncClient, unique_phone: str, payments_on: Any):
     shop = await signed_in_shop(client, unique_phone)
-    other = await signed_in_shop(client, f"0181{unique_phone[-7:]}")
+    other = await signed_in_shop(client, _another_phone())
     trx = _trx()
     first = await _submit(client, shop, trx)
     assert first.status_code == 201
@@ -356,6 +367,10 @@ async def test_approve_grants_the_plan_once_with_a_fixed_end(
     assert transaction.provider_event_id == f"manual_payment:{submitted['id']}"
     entitlements = (await client.get("/v1/billing/entitlements", headers=auth_header(shop))).json()
     assert entitlements["plan"] == "starter"
+    # Paid, so not "given to you by support", although the source is manual.
+    seen = (await client.get("/v1/billing/subscription", headers=auth_header(shop))).json()
+    assert (seen["provider"], seen["support_credit"]) == ("manual_admin", False)
+    assert seen["status_reason"].startswith("Paid: ")
 
     refused = await client.post(
         f"/v1/admin/payments/{submitted['id']}/reject",
@@ -384,6 +399,15 @@ async def test_approve_adds_after_time_already_paid(
     assert datetime.fromisoformat(approved.json()["period_end"]) == paid.current_period_end + (
         timedelta(days=30)
     )
+
+
+async def test_a_support_grant_is_still_called_support_credit(
+    client: AsyncClient, unique_phone: str, payments_on: Any
+):
+    shop = await signed_in_shop(client, unique_phone)
+    await grant_plan(shop["tenant_id"], "starter", days=20)
+    seen = (await client.get("/v1/billing/subscription", headers=auth_header(shop))).json()
+    assert (seen["provider"], seen["support_credit"]) == ("manual_admin", True)
 
 
 async def test_reject_needs_a_reason_the_seller_then_sees(

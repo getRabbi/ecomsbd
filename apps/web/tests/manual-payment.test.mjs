@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   amountPaisa,
   cleanTrx,
+  monthChoices,
   formatTaka,
   invalidFields,
   isBdMobile,
@@ -21,8 +22,16 @@ const OPTIONS = {
   unavailable_reason: null,
   accounts: [{ method: 'BKASH', number: '01700000001', label: 'Personal' }],
   plans: [
-    { code: 'starter', name: 'Starter', monthly_price: { amount_paisa: 19900, currency: 'BDT' } },
-    { code: 'pro', name: 'Pro', monthly_price: { amount_paisa: 39900, currency: 'BDT' } },
+    {
+      code: 'starter',
+      name: 'Starter',
+      monthly_price: { amount_paisa: 19900, currency: 'BDT' },
+      amounts: [
+        { months: 1, amount: { amount_paisa: 19900, currency: 'BDT' } },
+        { months: 3, amount: { amount_paisa: 59700, currency: 'BDT' } },
+      ],
+    },
+    { code: 'pro', name: 'Pro', monthly_price: { amount_paisa: 39900, currency: 'BDT' }, amounts: [] },
   ],
   min_months: 1,
   max_months: 12,
@@ -40,9 +49,11 @@ test('every bKash / Nagad payment string has Bangla', () => {
   }
 });
 
-test('the amount is the monthly price times months, shown from integer paisa', () => {
+test('the amount is the server quote for the months, shown from integer paisa', () => {
   assert.equal(amountPaisa(OPTIONS.plans[0], 3), 59700);
-  assert.equal(amountPaisa(undefined, 3), 0);
+  assert.equal(amountPaisa(OPTIONS.plans[0], 6), null);
+  assert.equal(amountPaisa(undefined, 3), null);
+  assert.deepEqual(monthChoices(OPTIONS.plans[0]), [1, 3]);
   assert.equal(formatTaka(59700), '৳597');
   assert.equal(formatTaka(478800), '৳4,788');
   assert.equal(formatTaka(125050), '৳1,250.50');

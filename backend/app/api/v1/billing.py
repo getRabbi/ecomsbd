@@ -58,6 +58,7 @@ from app.api.v1.billing_schemas import (
     ManualPaymentAccountResponse,
     ManualPaymentOptionsResponse,
     ManualPaymentPlanResponse,
+    ManualPaymentQuoteResponse,
     ManualPaymentSubmissionResponse,
     ManualPaymentSubmitPayload,
     PlayVerifyPayload,
@@ -73,8 +74,10 @@ from app.api.v1.schemas import EntitlementsResponse, MoneyAmount, PlanResponse
 from app.billing.manual_payments import (
     MAX_MONTHS,
     MIN_MONTHS,
+    MONTH_CHOICES,
     PAID_PLANS,
     ManualPaymentService,
+    amount_for,
 )
 from app.billing.models import (
     BillingPaymentSubmission,
@@ -82,6 +85,7 @@ from app.billing.models import (
     BillingTransaction,
     ManualPaymentState,
     SubscriptionEvent,
+    TransactionKind,
 )
 from app.billing.providers.registry import PROVIDER_FLAGS
 from app.billing.service import PurchaseOutcome
@@ -169,6 +173,7 @@ async def get_usage(principal: TenantPrincipal, entitlements: EntitlementsDep) -
 )
 async def get_subscription(
     principal: TenantPrincipal,
+    db: DbSession,
     billing: BillingServiceDep,
     entitlements: EntitlementsDep,
 ) -> SubscriptionResponse | None:
@@ -177,7 +182,27 @@ async def get_subscription(
     if subscription is None:
         return None
     snapshot = await entitlements.snapshot(tenant_id)
-    return _subscription_response(subscription, in_grace=snapshot.in_grace)
+    return _subscription_response(
+        subscription,
+        in_grace=snapshot.in_grace,
+        support_credit=await _is_support_credit(db, subscription),
+    )
+
+
+async def _is_support_credit(db: DbSession, subscription: Subscription) -> bool:
+    """A manual grant is support credit unless its latest grant was paid for."""
+    if subscription.source != str(BillingProviderKind.MANUAL_ADMIN):
+        return False
+    latest = await db.scalar(
+        sa.select(BillingTransaction.kind)
+        .where(
+            BillingTransaction.tenant_id == subscription.tenant_id,
+            BillingTransaction.provider == str(BillingProviderKind.MANUAL_ADMIN),
+        )
+        .order_by(BillingTransaction.occurred_at.desc())
+        .limit(1)
+    )
+    return latest != str(TransactionKind.PURCHASE)
 
 
 @router.get(
@@ -508,6 +533,13 @@ async def manual_payment_options(
                     code=str(code),
                     name=catalog[code].name,
                     monthly_price=MoneyAmount(amount_paisa=catalog[code].price_paisa),
+                    amounts=[
+                        ManualPaymentQuoteResponse(
+                            months=months,
+                            amount=MoneyAmount(amount_paisa=amount_for(code, months)),
+                        )
+                        for months in MONTH_CHOICES
+                    ],
                 )
                 for code in PAID_PLANS
             ]
@@ -650,7 +682,10 @@ def _provider_or_400(value: str | None, *, default: BillingProviderKind) -> Bill
 
 
 def _subscription_response(
-    subscription: Subscription, *, in_grace: bool | None = None
+    subscription: Subscription,
+    *,
+    in_grace: bool | None = None,
+    support_credit: bool | None = None,
 ) -> SubscriptionResponse:
     grace = (
         in_grace
@@ -674,6 +709,11 @@ def _subscription_response(
         verified_at=subscription.verified_at,
         last_synced_at=subscription.last_synced_at,
         provider_reference_suffix=reference[-4:] if reference else None,
+        support_credit=(
+            support_credit
+            if support_credit is not None
+            else subscription.source == str(BillingProviderKind.MANUAL_ADMIN)
+        ),
     )
 
 

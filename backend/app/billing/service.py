@@ -856,7 +856,9 @@ class BillingService:
         subscription.last_synced_at = now
         subscription.granted_by_user_id = actor_id
         subscription.grant_reason = reason
-        subscription.status_reason = f"Support credit: {reason}"
+        subscription.status_reason = (
+            f"Paid: {reason}" if amount_paisa > 0 else f"Support credit: {reason}"
+        )
 
         await self._record_event(
             subscription,

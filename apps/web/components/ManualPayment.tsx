@@ -5,11 +5,11 @@ import { useState, type ReactNode } from 'react';
 import { Card, Chip, ErrorState, type Tone } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import {
-  MONTH_CHOICES,
   amountPaisa,
   formatTaka,
   invalidFields,
   methodKey,
+  monthChoices,
   refusalKey,
   stateKey,
   submitBody,
@@ -143,7 +143,11 @@ function PaymentFormCard({
         <select
           className="input"
           value={form.plan}
-          onChange={(e) => setForm({ ...form, plan: e.target.value })}
+          onChange={(e) => {
+            const next = options.plans.find((candidate) => candidate.code === e.target.value);
+            const months = monthChoices(next).includes(form.months) ? form.months : (monthChoices(next)[0] ?? 1);
+            setForm({ ...form, plan: e.target.value, months });
+          }}
         >
           {options.plans.map((candidate) => (
             <option key={candidate.code} value={candidate.code}>
@@ -160,7 +164,7 @@ function PaymentFormCard({
           value={form.months}
           onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}
         >
-          {MONTH_CHOICES.filter((m) => m >= options.min_months && m <= options.max_months).map((m) => (
+          {monthChoices(plan).map((m) => (
             <option key={m} value={m}>
               {t('mp.monthsValue', { count: m })}
             </option>
@@ -184,7 +188,9 @@ function PaymentFormCard({
       )}
       <div style={{ marginTop: 14 }}>
         <p className="card__hint">{t('mp.amount')}</p>
-        <p style={{ fontSize: 22, fontWeight: 700 }}>{formatTaka(amountPaisa(plan, form.months))}</p>
+        <p style={{ fontSize: 22, fontWeight: 700 }}>
+          {formatTaka(amountPaisa(plan, form.months) ?? 0)}
+        </p>
         <p className="card__hint">{t('mp.sendTo')}</p>
         {accounts.map((account) => (
           <p key={account.number}>
