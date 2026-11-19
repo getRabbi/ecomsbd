@@ -19,6 +19,7 @@ import '../couriers/courier_compare_screen.dart';
 import '../risk/risk_review_sheet.dart';
 import '../shared/data_state.dart';
 import '../shared/inputs.dart';
+import 'call_queue_screen.dart';
 import 'courier_booking_sheet.dart';
 import 'order_compose_screen.dart';
 import 'order_detail_screen.dart';
@@ -171,6 +172,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 _PendingBanner(count: pending, onSync: _sync),
                 const SizedBox(height: EcomsbdSpacing.sm),
               ],
+              // V4 WP2.3: orders waiting for a confirmation call.
+              const CallQueueBanner(),
               if (state.isStale) ...<Widget>[
                 StaleDataNotice(
                   fetchedAt: state.fetchedAt,
