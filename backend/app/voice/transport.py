@@ -23,6 +23,7 @@ import hashlib
 import hmac
 import json
 import re
+import uuid
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -350,6 +351,8 @@ class MockVoiceTransport:
     callback_secret: str | None = MOCK_CALLBACK_SECRET
     available: bool = True
     name: str = "mock"
+    #: Call references are unique per instance, as a real provider's are.
+    ref_prefix: str = field(default_factory=lambda: f"mock-{uuid.uuid4().hex[:8]}")
     #: Every request that reached the "provider", duplicates excluded.
     calls: list[VoiceCall] = field(default_factory=list)
     _script: deque[VoiceCallResult] = field(default_factory=deque)
@@ -386,7 +389,7 @@ class MockVoiceTransport:
             return scripted
         # An UNKNOWN call did reach the mock provider: a repeat is a duplicate,
         # as it would be at a provider that honours idempotency keys.
-        provider_ref = f"mock-call-{len(self.calls)}"
+        provider_ref = f"{self.ref_prefix}-call-{len(self.calls)}"
         self._placed[call.client_ref] = provider_ref
         if scripted is not None and scripted.outcome is VoiceCallOutcome.UNKNOWN:
             return scripted

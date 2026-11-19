@@ -113,6 +113,16 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=10**9,
             route="orders",
         ),
+        NotificationKind.CHAT_CALLBACK_REQUESTED: AlertRule(
+            category=NotificationCategory.ORDERS,
+            severity=Severity.ACTION,
+            # One per confirmation (app.confirmations.jobs).
+            cooldown=timedelta(days=3650),
+            # Owner and manager: the call may end with cancelling the order.
+            audience=Permission.ORDER_CANCEL,
+            worsen_min_delta=10**9,
+            route="call_queue",
+        ),
         NotificationKind.BILLING_PAYMENT_REVIEWED: AlertRule(
             category=NotificationCategory.MONEY,
             severity=Severity.ACTION,

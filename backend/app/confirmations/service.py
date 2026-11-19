@@ -52,8 +52,10 @@ if TYPE_CHECKING:
     from app.orders.service import OrderService
 
 __all__ = [
+    "CALL_TIMEOUT",
     "CUSTOMER_CONFIRMATION_ACTOR",
     "CUSTOMER_DECLINED",
+    "FIRST_CALL_DELAY",
     "LINK_TTL",
     "MAX_CALL_ATTEMPTS",
     "RETRY_AFTER",
@@ -72,10 +74,17 @@ CUSTOMER_DECLINED = "CUSTOMER_DECLINED"
 #: ``Order.cancellation_reason`` when the seller cancelled from the review queue.
 SELLER_REVIEW_CANCELLED = "CONFIRMATION_CANCELLED_BY_SELLER"
 
-#: Calls per confirmation (Phase 3 places them; the rule lives here).
+#: Calls per confirmation (Phase 3 places them; the rule lives here). Counts
+#: every attempt on the row; a seller's own call never mixes with IVR calls on
+#: one row, because a row the seller takes never returns to the call queue.
 MAX_CALL_ATTEMPTS = 2
 #: Wait after an unanswered call before the next one.
 RETRY_AFTER = timedelta(minutes=30)
+#: The first IVR call waits this long after the confirmation starts (WP3.2).
+FIRST_CALL_DELAY = timedelta(minutes=2)
+#: A ``CALLING`` row with no final callback by then is reconciled as an
+#: ambiguous call (WP3.2): the seller decides, nobody is called again.
+CALL_TIMEOUT = timedelta(minutes=10)
 #: An SMS confirm link is good for this long (WP2.3).
 LINK_TTL = timedelta(hours=6)
 #: COD moved by more than this, in basis points of the snapshot, is material.
@@ -217,7 +226,10 @@ class ConfirmationService:
         if decision is ConfirmationDecision.AUTO_CONFIRM:
             return await self.transition(row, S.CONFIRMED, Cause.AUTO_TRUSTED)
         if decision is ConfirmationDecision.CALL:
-            return await self.transition(row, S.CALL_QUEUED, Cause.DECIDED_CALL)
+            first_call = (row.created_at or utc_now()) + FIRST_CALL_DELAY
+            return await self.transition(
+                row, S.CALL_QUEUED, Cause.DECIDED_CALL, next_action_at=first_call
+            )
         return await self.transition(row, S.SELLER_REVIEW, Cause.DECIDED_REVIEW)
 
     async def request(self, order_id: uuid.UUID, *, requested_by: uuid.UUID | None) -> Requested:
@@ -373,6 +385,8 @@ class ConfirmationService:
             return now + RETRY_AFTER
         if target is S.SMS_LINK_SENT:
             return now + LINK_TTL
+        if target is S.CALLING:
+            return now + CALL_TIMEOUT
         if target is S.CALL_QUEUED:
             return requested or now
         return None

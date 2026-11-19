@@ -55,6 +55,7 @@ from app.api.v1 import (
     sync,
     team,
     tenants,
+    voice_webhooks,
     whatsapp_signup,
 )
 
@@ -110,6 +111,9 @@ api_router.include_router(couriers.router)
 # Steadfast route stores what it receives and processes nothing, because no
 # verified signature contract exists (STEADFAST_WEBHOOK_CONTRACT_REQUIRED).
 api_router.include_router(courier_webhooks.router)
+# Unauthenticated: voice provider callbacks, stored, then verified by the
+# transport's signature check before anything is applied (V4 WP3.2).
+api_router.include_router(voice_webhooks.router)
 api_router.include_router(billing.router)
 api_router.include_router(analytics.router)
 api_router.include_router(rto.router)

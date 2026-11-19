@@ -43,11 +43,15 @@ class Cause(StrEnum):
     # The call queue (Phase 3) and the manual queue (WP2.3).
     DIALING = "DIALING"
     VOICE_UNAVAILABLE = "VOICE_UNAVAILABLE"
+    #: The customer's number already had its calls for the day (WP3.2).
+    CALL_LIMIT = "CALL_LIMIT"
     # What a call returned.
     DTMF_CONFIRM = "DTMF_CONFIRM"
     DTMF_CANCEL = "DTMF_CANCEL"
     DTMF_CALLBACK = "DTMF_CALLBACK"
     CALL_UNKNOWN = "CALL_UNKNOWN"
+    #: The provider certainly did not place the call (WP3.2).
+    CALL_FAILED = "CALL_FAILED"
     CALL_NO_ANSWER = "CALL_NO_ANSWER"
     # After no answer.
     RETRY = "RETRY"
@@ -71,10 +75,10 @@ def _table() -> dict[tuple[ConfirmationState, ConfirmationState], frozenset[Caus
         (S.PENDING, S.CALL_QUEUED): {Cause.DECIDED_CALL},
         (S.PENDING, S.SELLER_REVIEW): {Cause.DECIDED_REVIEW},
         (S.CALL_QUEUED, S.CALLING): {Cause.DIALING},
-        (S.CALL_QUEUED, S.SELLER_REVIEW): {Cause.VOICE_UNAVAILABLE},
+        (S.CALL_QUEUED, S.SELLER_REVIEW): {Cause.VOICE_UNAVAILABLE, Cause.CALL_LIMIT},
         (S.CALLING, S.CONFIRMED): {Cause.DTMF_CONFIRM},
         (S.CALLING, S.CANCELLED): {Cause.DTMF_CANCEL},
-        (S.CALLING, S.SELLER_REVIEW): {Cause.DTMF_CALLBACK, Cause.CALL_UNKNOWN},
+        (S.CALLING, S.SELLER_REVIEW): {Cause.DTMF_CALLBACK, Cause.CALL_UNKNOWN, Cause.CALL_FAILED},
         (S.CALLING, S.NO_ANSWER): {Cause.CALL_NO_ANSWER},
         (S.NO_ANSWER, S.CALL_QUEUED): {Cause.RETRY},
         (S.NO_ANSWER, S.SMS_LINK_SENT): {Cause.LINK_SENT},

@@ -748,6 +748,7 @@ class TestPushAndWording:
             NotificationKind.CHAT_ORDER_READY: {"provider": "MESSENGER"},
             NotificationKind.DEVICE_NEEDS_ATTENTION: {"platform": "android"},
             NotificationKind.CONFIRMATION_NEEDS_ATTENTION: {"reason": "REVIEW_NEEDED"},
+            NotificationKind.CHAT_CALLBACK_REQUESTED: {"digit": "3"},
             NotificationKind.BILLING_PAYMENT_REVIEWED: {
                 "state": "APPROVED",
                 "plan": "starter",

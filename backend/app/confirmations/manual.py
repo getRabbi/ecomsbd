@@ -87,14 +87,16 @@ class AttemptStatus(StrEnum):
     NO_ANSWER = "NO_ANSWER"
 
 
-def voice_available() -> bool:
-    """Whether the IVR can place calls. Always ``False`` until Phase 3 (WP3.1)
-    adds the ``VoiceTransport``; then queued rows leave the manual queue."""
-    return False
+async def voice_available(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    """Whether the IVR calls this shop's customers (WP3.2 :func:`voice_gate`).
+    While it does, queued rows are the IVR's and leave the manual queue."""
+    from app.confirmations.calls import voice_gate
+
+    return (await voice_gate(db, tenant_id)).on
 
 
-def queue_states() -> tuple[ConfirmationState, ...]:
-    if voice_available():
+def queue_states(voice_on: bool) -> tuple[ConfirmationState, ...]:
+    if voice_on:
         return (S.SELLER_REVIEW,)
     return (S.SELLER_REVIEW, S.CALL_QUEUED)
 
@@ -156,14 +158,14 @@ class QueueEntry:
     manual_calls: int
 
 
-async def queue(db: AsyncSession, *, limit: int = 100) -> list[QueueEntry]:
+async def queue(db: AsyncSession, *, voice_on: bool, limit: int = 100) -> list[QueueEntry]:
     """The shop's call queue: COD high to low, then the oldest order first."""
     rows = (
         await db.execute(
             sa.select(OrderConfirmation, Order)
             .join(Order, Order.id == OrderConfirmation.order_id)
             .where(
-                OrderConfirmation.state.in_([str(state) for state in queue_states()]),
+                OrderConfirmation.state.in_([str(state) for state in queue_states(voice_on)]),
                 Order.deleted_at.is_(None),
             )
             .order_by(
@@ -318,7 +320,11 @@ class ManualCallService:
 
     async def _queued(self, order: Order) -> OrderConfirmation:
         row = await open_for_order(self._db, order.id, lock=True)
-        if row is None or row.confirmation_state not in queue_states():
+        voice_on = row is not None and (
+            row.confirmation_state is not S.CALL_QUEUED
+            or await voice_available(self._db, order.tenant_id)
+        )
+        if row is None or row.confirmation_state not in queue_states(voice_on):
             raise ConflictError(
                 "This order is not waiting in the call queue",
                 message_bn="এই অর্ডারটি কল তালিকায় নেই",

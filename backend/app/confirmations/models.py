@@ -163,6 +163,8 @@ class ConfirmationAttempt(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
         ),
         sa.CheckConstraint("attempt_no >= 1", name="attempt_no_positive"),
         sa.CheckConstraint("cost_paisa IS NULL OR cost_paisa >= 0", name="cost_non_negative"),
+        # A voice callback names the provider's call (WP3.2).
+        sa.Index("ix_confirmation_attempts_provider_ref", "provider", "provider_ref"),
     )
 
     confirmation_id: Mapped[uuid.UUID] = mapped_column(

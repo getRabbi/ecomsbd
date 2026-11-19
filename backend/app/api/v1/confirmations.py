@@ -216,11 +216,13 @@ async def confirmation_action(
 @queue_router.get("/queue", summary="The seller's call queue")
 async def call_queue(db: DbSession, principal: Operator) -> dict[str, Any]:
     await _require_enabled(db, principal)
-    rules = await DeliveryRulesService(db).get(principal.require_tenant())
+    tenant_id = principal.require_tenant()
+    rules = await DeliveryRulesService(db).get(tenant_id)
+    voice_on = await voice_available(db, tenant_id)
     return {
-        "voice_available": voice_available(),
+        "voice_available": voice_on,
         "quiet_hours": QuietHours.from_rules(rules).as_dict(utc_now()),
-        "items": [_entry_view(entry) for entry in await queue(db)],
+        "items": [_entry_view(entry) for entry in await queue(db, voice_on=voice_on)],
     }
 
 

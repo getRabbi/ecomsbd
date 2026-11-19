@@ -443,6 +443,19 @@ def _confirmation_needs_attention(p: Params, locale: str) -> tuple[str, str]:
     return bn if locale == "bn" else en
 
 
+def _chat_callback_requested(_p: Params, locale: str) -> tuple[str, str]:
+    """No name or number: a push is shown on a lock screen."""
+    if locale == "bn":
+        return (
+            "কাস্টমার দোকানের সাথে কথা বলতে চান",
+            "কনফার্মেশন কলে কাস্টমার ৩ চেপেছেন। কল তালিকা খুলে কাস্টমারকে কল করুন।",
+        )
+    return (
+        "A customer wants to talk to the shop",
+        "On the confirmation call the customer pressed 3. Open the call queue and call them.",
+    )
+
+
 _PLAN_NAMES_BN = {"starter": "স্টার্টার", "pro": "প্রো"}
 
 
@@ -477,6 +490,7 @@ _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
     NotificationKind.DEVICE_NEEDS_ATTENTION: _device_needs_attention,
     NotificationKind.CONFIRMATION_NEEDS_ATTENTION: _confirmation_needs_attention,
+    NotificationKind.CHAT_CALLBACK_REQUESTED: _chat_callback_requested,
     NotificationKind.BILLING_PAYMENT_REVIEWED: _billing_payment_reviewed,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
