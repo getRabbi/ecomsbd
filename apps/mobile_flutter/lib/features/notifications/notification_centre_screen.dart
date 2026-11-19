@@ -19,6 +19,7 @@ import '../money/payouts_screen.dart';
 import '../money/receivables_screen.dart';
 import '../billing/plans_screen.dart';
 import '../customers/customers_screen.dart';
+import '../orders/call_queue_screen.dart';
 import '../orders/order_detail_screen.dart';
 import '../forecasting/forecast_screen.dart';
 import '../procurement/procurement_screen.dart';
@@ -89,6 +90,8 @@ Widget? notificationDestination(AppNotification notification) {
     'courier_account' || 'courier_accounts' => const CourierAccountsScreen(),
     'product' || 'products' => const ProductsScreen(),
     'order' when id != null => OrderDetailScreen(orderId: id),
+    // V4 WP3.2: the customer pressed 3 on the confirmation call.
+    'call_queue' => const CallQueueScreen(),
     'purchase_order' when id != null => PurchaseOrderScreen(orderId: id),
     'purchase_order' ||
     'purchase_orders' ||

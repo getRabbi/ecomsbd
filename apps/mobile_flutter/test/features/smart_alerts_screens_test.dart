@@ -3,6 +3,7 @@ import 'package:ecomsbd/data/analytics/models.dart';
 import 'package:ecomsbd/features/insights/rto_screen.dart';
 import 'package:ecomsbd/features/money/receivables_screen.dart';
 import 'package:ecomsbd/features/notifications/notification_centre_screen.dart';
+import 'package:ecomsbd/features/orders/call_queue_screen.dart';
 import 'package:ecomsbd/features/orders/order_detail_screen.dart';
 import 'package:ecomsbd/features/settings/courier_accounts_screen.dart';
 import 'package:ecomsbd/features/settings/notification_settings_screen.dart';
@@ -95,6 +96,10 @@ void main() {
       expect(order, isA<OrderDetailScreen>());
       expect((order! as OrderDetailScreen).orderId, 'o1');
       expect(notificationDestination(alert('order')), isNull);
+      expect(
+        notificationDestination(alert('call_queue', 'o1')),
+        isA<CallQueueScreen>(),
+      );
       expect(notificationDestination(alert('a_future_screen')), isNull);
       expect(notificationDestination(alert(null)), isNull);
     });
