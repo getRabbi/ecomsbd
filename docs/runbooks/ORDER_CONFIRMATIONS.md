@@ -1,4 +1,4 @@
-# Runbook: customer order confirmations (V4 WP2.1, policy WP2.2)
+# Runbook: customer order confirmations (V4 WP2.1, policy WP2.2, call queue + SMS link WP2.3)
 
 A confirmation records whether the **customer** really wants an order, separate
 from the order's own status (rule L7). It lives in `order_confirmations`
@@ -58,11 +58,61 @@ for rule 5. Nothing here calls a provider. The row keeps `decision`,
 `reason_code` and `facts` (counts, band, thresholds — no phone or name), returned
 by `GET /v1/orders/{id}/confirmation` for the "why" display.
 
+## Call queue and SMS link (WP2.3)
+
+**Queue.** `GET /v1/confirmations/queue` (`order.write`) lists `SELLER_REVIEW` rows
+and, while voice is off (until Phase 3), `CALL_QUEUED` rows: COD high to low, then
+the oldest order. The phone's Call queue screen (and the orders-list banner) reads it.
+
+**Actions.** `POST /v1/orders/{id}/confirmation/{action}`, only for an order in the
+queue (else `409 CONFIRMATION_NOT_IN_QUEUE`):
+
+- `call_now` — refused during the shop's quiet hours (`shop_delivery_rules`
+  `quiet_start`/`quiet_end`, Asia/Dhaka, may wrap midnight) with
+  `409 CONFIRMATION_QUIET_HOURS` unless `{"override_quiet": true}`. Opens a
+  `MANUAL_CALL` attempt (dialing again before an answer reuses it) and returns the
+  number for the `tel:` link. Each call writes `confirmation.call_started`
+  (`quiet_override` in its context) and `privacy.phone_revealed`
+  (`confirmation_call`). 30 calls per user per 10 minutes, then `429`.
+- `mark_confirmed` / `mark_cancelled` — `SELLER_CONFIRM` / `SELLER_CANCEL`; method
+  `MANUAL_CALL` when an open manual call exists, else `SELLER`. A repeated tap after
+  the answer landed returns the same row.
+- `mark_no_answer` ("Dhoreni") — closes the manual call `NO_ANSWER`; the row stays
+  in review (the state machine has no move for it; no `confirmation.no_answer`).
+
+A `CALL_QUEUED` row the seller acts on goes `CALL_QUEUED → SELLER_REVIEW`
+(`VOICE_UNAVAILABLE`) first, with **no** seller alert (the seller is the one acting).
+
+**SMS link.** The `follow_up_confirmations` job (worker, minutes 4, 9, … 59) takes
+due rows in their own tenant session:
+
+- `NO_ANSWER` with calls left and the 30-minute wait over → `CALL_QUEUED` (`RETRY`).
+- `NO_ANSWER` after the last call → if `confirmation_sms_link_enabled` is on, an SMS
+  transport is configured (`SMS_TRANSPORT`), `PUBLIC_WEB_URL` is set and the order has
+  a customer: outside quiet hours a link row (token = 22 url-safe chars derived from
+  the link id; only its SHA-256 stored; 6 h) + `SMS_LINK` attempt, `→ SMS_LINK_SENT`,
+  and `confirmation.link_requested`; during quiet hours it waits. Otherwise
+  `→ SELLER_REVIEW` (`ATTEMPTS_EXHAUSTED`).
+- `SMS_LINK_SENT` past 6 h → open links expired, `→ SELLER_REVIEW` (`LINK_EXPIRED`).
+
+The `confirmation.link_requested` handler sends one SMS:
+`<shop, ≤ 24 chars>: order Tk 1,250. Confirm/cancel: <PUBLIC_WEB_URL>/c/<token>`
+("Tk", so the text stays one GSM-7 segment). The attempt records provider, reference
+and segments. A refused send (or no customer) kills the link and moves the row to
+the seller; a temporary failure raises, so the outbox retries with the same link.
+
+**Public page.** `apps/web/app/c/[token]` calls `GET /v1/public/confirmations/{token}`
+(reads only — SMS apps prefetch links) and `POST` with `{"result": "confirm" | "cancel"}`
+once (`LINK_CONFIRM` / `LINK_CANCEL`, the order moves as the customer). Every reply
+has one shape; unknown, expired and closed links read `UNAVAILABLE`, a used one
+`ANSWERED` with its result. 60 views and 10 answers per minute per client address.
+
 ## Flag
 
 | Switch | Where | Default |
 |---|---|---|
 | `confirmation_engine_enabled` | `feature_flags` row (global or per shop), admin console | **off** |
+| `confirmation_sms_link_enabled` | same; needs `SMS_TRANSPORT` + `PUBLIC_WEB_URL` too | **off** |
 
 Off: `POST .../confirmation` answers `FEATURE_DISABLED`, the `confirmation` field
 on order creates is ignored (the order still lands — a replayed offline create
@@ -73,7 +123,8 @@ does not touch open rows: order edits and cancels still end them correctly.
 ## Outbox topics (handlers in `app/confirmations/jobs.py`)
 
 `confirmation.confirmed`, `confirmation.cancelled`, `confirmation.no_answer`,
-`confirmation.callback_requested`, `confirmation.review_needed`. Payloads carry ids
+`confirmation.callback_requested`, `confirmation.review_needed`,
+`confirmation.link_requested` (WP2.3: sends the SMS). Payloads carry ids
 and codes only (no phone, name or text). `review_needed`, and a confirmed /
 cancelled event whose `order_outcome` is not `APPLIED`, raise one
 `CONFIRMATION_NEEDS_ATTENTION` notification per confirmation and reason (dedupe
@@ -92,11 +143,23 @@ without a handler would sit at the head of the outbox.
   a client is editing orders automatically.
 - `IntegrityError` on `uq_order_confirmations_open_order`: two starts raced; the
   request is idempotent, the client retry returns the existing row.
+- Sweep: log `confirmation follow-up finished` (counts `RETRY`, `LINK`, `QUIET`,
+  `REVIEW`, `EXPIRED`, `failed`); `failed > 0` → `confirmation follow-up failed` with
+  the confirmation id and error class.
+- Links: log `confirmation link` (`outcome`, `segments`);
+  `SELECT status, count(*) FROM confirmation_attempts WHERE channel = 'SMS_LINK' GROUP BY 1`
+  — `NOT_CONFIGURED` / `REJECTED` = gateway problem; `segments > 1` = a long shop name
+  in Bangla (UCS-2).
+- Call reveals: `audit_logs` `privacy.phone_revealed` with reason `confirmation_call`
+  far above the number of queue rows = someone reading numbers out; the per-user
+  limit returns `429`.
 
 ## Containment
 
 Turn `confirmation_engine_enabled` off for the shop (or globally). To stop
 auto-confirmation only, the seller turns on `call_everyone` (or `call_nobody`).
+To stop SMS links only, turn `confirmation_sms_link_enabled` off: due rows then go
+to the seller; links already sent keep working until they expire.
 Nothing books a courier from a confirmation in WP2.1–2.2 (that is WP2.4 through the automation
 engine), so the blast radius is order status only.
 
@@ -106,10 +169,22 @@ engine), so the blast radius is order status only.
   `APPLIED`): the seller confirms it from the order screen as usual.
 - Never edit `order_confirmations.state` by hand; a stuck open row ends when its
   order is cancelled or materially edited.
+- A link SMS that never arrived (outbox event dead-lettered): the row stays
+  `SMS_LINK_SENT` and goes to the seller when the link expires (6 h), or the seller
+  answers from the queue sooner once it is in review.
+- A leaked link: expire it (`UPDATE confirmation_links SET expires_at = now()` for that
+  confirmation); the next sweep hands the row to the seller.
 
 ## Verification
 
-`cd backend && python -m pytest tests/test_confirmations.py tests/test_confirmation_policy.py -q`
+`cd backend && python -m pytest tests/test_confirmations.py tests/test_confirmation_policy.py tests/test_confirmation_queue.py tests/test_confirmation_links.py -q`
 (state table, illegal moves, order guards, supersede/cancel hooks, handlers, API,
-sheet paths; every policy rule, boundary, override and external case);
-Flutter `flutter test test/features/intake_screens_test.dart`.
+sheet paths; every policy rule, boundary, override and external case; queue order,
+quiet hours, call reveal + audit, outcomes, rate limits; link text, token, sweep,
+send, expiry, public page);
+Flutter `flutter test test/features/intake_screens_test.dart test/features/call_queue_screen_test.dart`;
+web `cd apps/web && npm test` (`tests/confirm-link.test.mjs`).
+Live SMS needs a gateway (`SMS_PROVIDER_CONTRACT_REQUIRED`): until then either the
+transport is off (no link is made; the row goes to the seller) or
+`SmsGatewayTransport` answers `NOT_CONFIGURED` (the link is killed and the row goes
+to the seller).
