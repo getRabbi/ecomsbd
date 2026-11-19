@@ -10,7 +10,10 @@ credential read here, by design (V3.4 section 4 and 16):
 * a courier booking goes through the V2 booking service and its
   BOOKING_UNKNOWN rules (see ``app.automation.jobs``);
 * store pushes and sync retries are the V3.1/V3.2 integration queue, keyed by
-  the same operation key the automatic sync uses.
+  the same operation key the automatic sync uses;
+* a confirmation request (V4) is the confirmation service's own ``start``: the
+  order moves only when its policy auto-confirms, exactly as for a request the
+  seller makes. Converting a chat draft into an order waits for Autopilot.
 
 Every performer returns ``(status, result_id, outcome)`` and raises the
 application errors of the service it called when it cannot go ahead.
@@ -388,5 +391,45 @@ async def perform(
             return "SKIPPED", None, reason
         return "SUCCEEDED", str(po.id), None
 
+    if action == "REQUEST_CONFIRMATION":
+        return await _request_confirmation(db, subject)
+
+    if action == "CONVERT_DRAFT_TO_ORDER":
+        # Autopilot (V4 Phase 4) owns the shop- and order-level gates. Until it
+        # ships, no draft becomes an order on a workflow's word (L11).
+        return "SKIPPED", None, "AUTOPILOT_DISABLED"
+
     # No eval, arbitrary HTTP, ledger, stock, status or reconciliation action.
     raise ValidationError("Unsupported automation action")
+
+
+async def _request_confirmation(db: AsyncSession, subject: dict[str, Any]) -> Outcome:
+    """Start the customer confirmation (V4 WP2.1); the WP2.2 policy decides.
+
+    The order's status moves only if the policy auto-confirms it, and then
+    through the confirmation service, never here. Idempotent per order like
+    every caller of ``ConfirmationService.start``: a repeat, or an order the
+    seller already sent to confirmation, returns the confirmation that exists.
+    """
+    from app.common.feature_flags import FeatureFlagService, FlagKey
+    from app.confirmations.service import ConfirmationService
+    from app.orders.service import OrderService
+
+    order = await _order(db, subject)
+    if not await FeatureFlagService(db).is_enabled(
+        FlagKey.CONFIRMATION_ENGINE_ENABLED, tenant_id=order.tenant_id
+    ):
+        return "SKIPPED", None, "CONFIRMATION_ENGINE_DISABLED"
+    customers = CustomerService(db, hasher=get_hasher(), vault=get_vault())
+    service = ConfirmationService(db, orders=OrderService(db, customers=customers))
+    try:
+        requested = await service.start(order.id, requested_by=None)
+    except ConflictError as exc:
+        # Raised before anything is written: the order is no longer a draft.
+        if (exc.details or {}).get("code") == "ORDER_NOT_DRAFT":
+            return "SKIPPED", None, "ORDER_NOT_DRAFT"
+        raise
+    row = requested.confirmation
+    if not requested.created:
+        return "SUCCEEDED", str(row.id), "ALREADY_REQUESTED"
+    return "SUCCEEDED", str(row.id), row.decision or row.state

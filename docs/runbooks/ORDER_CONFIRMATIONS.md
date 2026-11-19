@@ -1,4 +1,4 @@
-# Runbook: customer order confirmations (V4 WP2.1, policy WP2.2, call queue + SMS link WP2.3)
+# Runbook: customer order confirmations (V4 WP2.1, policy WP2.2, call queue + SMS link WP2.3, automation hooks WP2.4)
 
 A confirmation records whether the **customer** really wants an order, separate
 from the order's own status (rule L7). It lives in `order_confirmations`
@@ -107,6 +107,41 @@ once (`LINK_CONFIRM` / `LINK_CANCEL`, the order moves as the customer). Every re
 has one shape; unknown, expired and closed links read `UNAVAILABLE`, a used one
 `ANSWERED` with its result. 60 views and 10 answers per minute per client address.
 
+## Automation hooks (WP2.4)
+
+Workflow triggers (V3.4 engine, consumed when the outbox row is written, in the
+same transaction): `confirmation.confirmed` and `confirmation.cancelled` start
+**only when `order_outcome = APPLIED`** (the answer moved the order; an answer the
+order could not take goes to the seller alert, and a confirmation ended by the
+order's own cancel is `order.cancelled`); `confirmation.no_answer` and
+`confirmation.callback_requested` (IVR, Phase 3); `intake.draft_ready` (subject: the
+draft — only draft-level actions and the shop-level ones fit it).
+
+Actions:
+- `REQUEST_CONFIRMATION` (order triggers) = `ConfirmationService.start(order,
+  requested_by=None)`; the policy decides (step outcome `CALL` / `AUTO_CONFIRM` /
+  `SELLER_REVIEW`). A repeat → `ALREADY_REQUESTED`; a non-draft order → SKIPPED
+  `ORDER_NOT_DRAFT`; flag off → SKIPPED `CONFIRMATION_ENGINE_DISABLED`. Switching a
+  workflow with this step on while the flag is off is refused (blocker
+  `CONFIRMATION_ENGINE_DISABLED`; a recipe install stays a draft).
+- `CONVERT_DRAFT_TO_ORDER` (draft trigger) → always SKIPPED `AUTOPILOT_DISABLED`
+  until Phase 4 ships the Autopilot gates. No draft becomes an order from a workflow.
+
+Recipes: `order_confirm_customer` ("Order → confirm with the customer",
+`order.created` → `REQUEST_CONFIRMATION`) and `confirmation_book_track` ("Customer
+confirmed → book courier → send tracking", `confirmation.confirmed` →
+`BOOK_COURIER` + `SEND_TEMPLATE`). The tracking update goes on the chosen
+transactional channel (email / WhatsApp); there is no SMS channel in
+`SEND_TEMPLATE`. A shop that also keeps the V3.4 `order.confirmed → book` workflow
+books once: the second booking step records `ALREADY_BOOKED`.
+
+**Detection**: Automation → run history; skipped steps show the reason above.
+**Containment**: switch the workflow off (runs in progress stop with
+`WORKFLOW_DISABLED`) or the flag off (steps skip). **Verification**: with the flag
+on for a test shop, install `order_confirm_customer`, create an order → one run,
+step `CALL`, the order in the call queue; Confirm it → a `confirmation.confirmed`
+run books once.
+
 ## Flag
 
 | Switch | Where | Default |
@@ -116,7 +151,8 @@ has one shape; unknown, expired and closed links read `UNAVAILABLE`, a used one
 
 Off: `POST .../confirmation` answers `FEATURE_DISABLED`, the `confirmation` field
 on order creates is ignored (the order still lands — a replayed offline create
-must never fail), and the quick-order sheet shows the single **Create order**.
+must never fail), the quick-order sheet shows the single **Create order**, and
+workflow `REQUEST_CONFIRMATION` steps skip (`CONFIRMATION_ENGINE_DISABLED`).
 `GET .../confirmation` always answers and reports `enabled`. Turning the flag off
 does not touch open rows: order edits and cancels still end them correctly.
 

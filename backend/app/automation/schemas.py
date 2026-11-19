@@ -159,6 +159,10 @@ CONFIGS: dict[str, type[Input]] = {
     "CREATE_TEAM_TASK": TeamTaskAction,
     "CREATE_DRAFT_PO": DraftPurchaseOrderAction,
     "HOLD_FOR_REVIEW": ReviewHoldAction,
+    # V4 WP2.4: start the customer confirmation (the WP2.2 policy decides who
+    # is called); turn a ready chat draft into an order (Autopilot, Phase 4).
+    "REQUEST_CONFIRMATION": EmptyAction,
+    "CONVERT_DRAFT_TO_ORDER": EmptyAction,
 }
 WORKFLOW_ACTIONS = tuple(CONFIGS)
 
@@ -197,6 +201,13 @@ TRIGGER_SUBJECTS: dict[str, str] = {
     "risk.repeated_rto": "order",
     "risk.external_lookup_completed": "customer",
     "risk.external_provider_unavailable": "customer",
+    # V4 WP2.4: customer confirmation and order intake. ``confirmed`` and
+    # ``cancelled`` start only when the answer moved the order.
+    "confirmation.confirmed": "order",
+    "confirmation.cancelled": "order",
+    "confirmation.no_answer": "order",
+    "confirmation.callback_requested": "order",
+    "intake.draft_ready": "draft",
 }
 WORKFLOW_TRIGGERS = tuple(TRIGGER_SUBJECTS)
 
@@ -207,6 +218,8 @@ SUBJECT_PROVIDES: dict[str, frozenset[str]] = {
     "product": frozenset({"product"}),
     "integration": frozenset({"integration"}),
     "purchase_order": frozenset({"purchase_order"}),
+    #: A chat-order draft (V4 Intake): no order or customer exists yet.
+    "draft": frozenset({"draft"}),
     "shop": frozenset(),
 }
 
@@ -226,6 +239,8 @@ ACTION_NEEDS: dict[str, str | None] = {
     "CREATE_TEAM_TASK": None,
     "CREATE_DRAFT_PO": "product",
     "HOLD_FOR_REVIEW": "order",
+    "REQUEST_CONFIRMATION": "order",
+    "CONVERT_DRAFT_TO_ORDER": "draft",
 }
 
 #: Events a run can wait for, and the subject they are matched on.

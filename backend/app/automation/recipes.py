@@ -280,6 +280,34 @@ def _confirm_then_ship(p: Params) -> dict:
     }
 
 
+def _confirm_customer(p: Params) -> dict:
+    """V4 WP2.4: every new order goes to customer confirmation; the policy
+    decides whether the customer is called, trusted or left to the seller."""
+    return {
+        "trigger": "order.created",
+        "steps": [
+            {"type": "action", "id": "confirm", "action": "REQUEST_CONFIRMATION", "config": {}}
+        ],
+    }
+
+
+def _confirmed_book_track(p: Params) -> dict:
+    """V4 WP2.4: the customer's yes books the courier (L10: the V3.4
+    ``BOOK_COURIER`` path) and sends the tracking update."""
+    return {
+        "trigger": "confirmation.confirmed",
+        "steps": [
+            {
+                "type": "action",
+                "id": "book",
+                "action": "BOOK_COURIER",
+                "config": {"provider": p["provider"]},
+            },
+            _message("tracking", p),
+        ],
+    }
+
+
 #: Tag names a recipe creates if the shop does not have them yet.
 TAGS: dict[str, tuple[str, str]] = {
     "returned": ("Returned parcel", "ফেরত পার্সেল"),
@@ -348,6 +376,19 @@ RECIPES: dict[str, dict[str, Any]] = {
         ),
         "build": _confirm_then_ship,
         "needs": ["provider", "channel", "tags:automated"],
+    },
+    "order_confirm_customer": {
+        "name": ("Order → confirm with the customer", "অর্ডার → গ্রাহকের কাছে নিশ্চিত করুন"),
+        "build": _confirm_customer,
+        "needs": [],
+    },
+    "confirmation_book_track": {
+        "name": (
+            "Customer confirmed → book courier → send tracking",
+            "গ্রাহক নিশ্চিত করলে → কুরিয়ার বুক → ট্র্যাকিং পাঠান",
+        ),
+        "build": _confirmed_book_track,
+        "needs": ["provider", "channel"],
     },
 }
 

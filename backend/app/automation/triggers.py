@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.customer_segments import REPEAT_MIN_ORDERS
 from app.analytics.rto import DISPATCHED_STATUSES, CustomerHistory, RtoService
+from app.chat_orders.models import ChatOrderDraft
 from app.common.outbox import OutboxEvent, OutboxTopic
 from app.consignments.models import Consignment
 from app.customers.risk import REPEATED_RTO_MIN, RiskAssessment, assess
@@ -38,6 +39,15 @@ ALERT_TRIGGERS = {
     "PURCHASE_ORDER_OVERDUE": "purchase_order.overdue",
     "SUPPLIER_PAYMENT_OVERDUE": "supplier_payment.due",
 }
+#: V4 WP2.4: confirmation outbox topics and the trigger each one starts.
+CONFIRMATION_TRIGGERS: dict[str, str] = {
+    OutboxTopic.CONFIRMATION_CONFIRMED: "confirmation.confirmed",
+    OutboxTopic.CONFIRMATION_CANCELLED: "confirmation.cancelled",
+    OutboxTopic.CONFIRMATION_NO_ANSWER: "confirmation.no_answer",
+    OutboxTopic.CONFIRMATION_CALLBACK_REQUESTED: "confirmation.callback_requested",
+}
+_MOVES_ORDER = frozenset({OutboxTopic.CONFIRMATION_CONFIRMED, OutboxTopic.CONFIRMATION_CANCELLED})
+APPLIED = "APPLIED"
 DELIVERED = frozenset({"DELIVERED", "PARTIAL_DELIVERED"})
 DISPATCHED = frozenset(DISPATCHED_STATUSES)
 RETURNED = frozenset({"RETURNED"})
@@ -161,6 +171,32 @@ async def read_event(db: AsyncSession, event: OutboxEvent) -> Reading:
                 await _risk_signals(db, order.customer_id, payload, subject, key, add)
         else:
             add("cod.settled", subject, key)
+        return reading
+
+    if topic in CONFIRMATION_TRIGGERS:
+        # A customer answer the order could not take (edited, or no longer a
+        # draft) moved nothing: the seller is alerted instead, and a workflow
+        # never books or messages on it. A confirmation that ended because the
+        # order itself was cancelled has no outcome either: ``order.cancelled``.
+        if topic in _MOVES_ORDER and payload.get("order_outcome") != APPLIED:
+            return reading
+        found = await _order_subject(db, event)
+        if found is not None:
+            order, subject = found
+            add(CONFIRMATION_TRIGGERS[topic], subject, f"order:{order.id}")
+        return reading
+
+    if topic == OutboxTopic.INTAKE_DRAFT_READY:
+        draft_id = _id(payload.get("draft_id"))
+        if draft_id is None:
+            return reading
+        draft = await db.scalar(
+            sa.select(ChatOrderDraft.id).where(
+                ChatOrderDraft.id == draft_id, ChatOrderDraft.tenant_id == event.tenant_id
+            )
+        )
+        if draft is not None:
+            add("intake.draft_ready", {"draft_id": str(draft)}, f"draft:{draft}")
         return reading
 
     if topic == OutboxTopic.ALERT_RAISED:

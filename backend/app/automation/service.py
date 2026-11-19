@@ -112,6 +112,12 @@ TOPICS = frozenset(
         OutboxTopic.STOCKOUT_PREDICTED,
         OutboxTopic.EXTERNAL_RISK_LOOKUP_COMPLETED,
         OutboxTopic.EXTERNAL_RISK_UNAVAILABLE,
+        # V4 WP2.4.
+        OutboxTopic.CONFIRMATION_CONFIRMED,
+        OutboxTopic.CONFIRMATION_CANCELLED,
+        OutboxTopic.CONFIRMATION_NO_ANSWER,
+        OutboxTopic.CONFIRMATION_CALLBACK_REQUESTED,
+        OutboxTopic.INTAKE_DRAFT_READY,
     }
 )
 
@@ -233,7 +239,19 @@ async def _action_config(
         )
         if account is None or account.status != "CONNECTED":
             problems.append("COURIER_NOT_CONNECTED")
+    if step.action == "REQUEST_CONFIRMATION" and enabling and not await confirmations_on(db):
+        problems.append("CONFIRMATION_ENGINE_DISABLED")
     return config, problems
+
+
+async def confirmations_on(db: AsyncSession) -> bool:
+    """``confirmation_engine_enabled`` for the shop in scope (V4 WP2.1)."""
+    from app.common.feature_flags import FeatureFlagService, FlagKey
+    from app.core.context import current_context
+
+    return await FeatureFlagService(db).is_enabled(
+        FlagKey.CONFIRMATION_ENGINE_ENABLED, tenant_id=current_context().tenant_id
+    )
 
 
 async def validate_definition(
@@ -271,7 +289,10 @@ async def validate_definition(
             step.config = config
             for code in found:
                 (
-                    blockers if code in {"CHANNEL_DISABLED", "COURIER_NOT_CONNECTED"} else problems
+                    blockers
+                    if code
+                    in {"CHANNEL_DISABLED", "COURIER_NOT_CONNECTED", "CONFIRMATION_ENGINE_DISABLED"}
+                    else problems
                 ).append(code)
         elif isinstance(step, BranchStep):
             problems += await _condition_problems(db, step.conditions.model_dump(), provides)

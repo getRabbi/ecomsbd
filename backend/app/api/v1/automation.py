@@ -51,6 +51,7 @@ from app.automation.schemas import (
 from app.automation.service import (
     MAX_WORKFLOWS,
     VALUES,
+    confirmations_on,
     publish,
     rule_definition,
     validate_definition,
@@ -58,6 +59,7 @@ from app.automation.service import (
 )
 from app.common.audit import AuditAction, record_audit
 from app.common.operation_lock import lock_shop
+from app.confirmations.service import latest_for_order
 from app.consignments.models import Consignment
 from app.core.clock import ensure_utc, utc_now
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -558,6 +560,17 @@ async def _would(db: DbSession, step: dict, subject: dict) -> tuple[str, str | N
                 "BOOKING",
                 "BOOKING_UNKNOWN",
             } else "ALREADY_BOOKED"
+    if action == "CONVERT_DRAFT_TO_ORDER":
+        return "SKIP", "AUTOPILOT_DISABLED"
+    if action == "REQUEST_CONFIRMATION" and order_id:
+        if not await confirmations_on(db):
+            return "SKIP", "CONFIRMATION_ENGINE_DISABLED"
+        order_uuid = uuid.UUID(order_id)
+        if await latest_for_order(db, order_uuid) is not None:
+            return "SKIP", "ALREADY_REQUESTED"
+        status = await db.scalar(sa.select(Order.status).where(Order.id == order_uuid))
+        if status != OrderStatus.DRAFT:
+            return "SKIP", "ORDER_NOT_DRAFT"
     return "RUN", None
 
 

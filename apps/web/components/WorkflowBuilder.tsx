@@ -447,6 +447,10 @@ function ActionConfig({
       );
     case 'PUSH_STORE_STATUS':
       return <p className="card__hint">{t('auto.cfg.storeNote')}</p>;
+    case 'REQUEST_CONFIRMATION':
+      return <p className="card__hint">{t('auto.cfg.confirmNote')}</p>;
+    case 'CONVERT_DRAFT_TO_ORDER':
+      return <p className="card__hint">{t('auto.cfg.convertNote')}</p>;
     case 'SET_ORDER_LABEL':
     case 'TRIGGER_WEBHOOK':
       return text('label', t('auto.cfg.label'), 40);
