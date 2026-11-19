@@ -113,6 +113,16 @@ ALERT_RULES: Final = MappingProxyType(
             worsen_min_delta=10**9,
             route="orders",
         ),
+        NotificationKind.BILLING_PAYMENT_REVIEWED: AlertRule(
+            category=NotificationCategory.MONEY,
+            severity=Severity.ACTION,
+            # One per submission and outcome (app.billing.jobs).
+            cooldown=timedelta(days=3650),
+            # Whoever may pay for the plan hears how the payment went.
+            audience=Permission.BILLING_MANAGE,
+            worsen_min_delta=10**9,
+            route="billing",
+        ),
         NotificationKind.FOLLOW_UP_DUE: AlertRule(
             category=NotificationCategory.CRM,
             severity=Severity.ACTION,

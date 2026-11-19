@@ -17,6 +17,7 @@ from typing import Any, ClassVar
 from arq import cron
 from arq.connections import RedisSettings
 
+import app.billing.jobs  # registers the billing outbox handlers
 import app.confirmations.jobs  # noqa: F401  (registers the confirmation outbox handlers)
 from app import __version__
 from app.analytics.network import build_network_benchmarks

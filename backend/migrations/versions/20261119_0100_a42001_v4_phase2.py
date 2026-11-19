@@ -1,4 +1,5 @@
-"""V4 phase 2: customer order confirmations, attempts and SMS links (WP2.1)."""
+"""V4 phase 2: customer order confirmations, attempts and SMS links (WP2.1); seller
+bKash/Nagad TrxID payment submissions (WP2.5)."""
 
 from alembic import op
 import sqlalchemy as sa
@@ -9,7 +10,12 @@ down_revision = "a41001"
 branch_labels = None
 depends_on = None
 
-_TABLES = ["order_confirmations", "confirmation_attempts", "confirmation_links"]
+_TABLES = [
+    "order_confirmations",
+    "confirmation_attempts",
+    "confirmation_links",
+    "billing_payment_submissions",
+]
 
 # One open confirmation per order. Partial unique index: PostgreSQL and SQLite
 # both support the WHERE clause.
@@ -127,6 +133,38 @@ def upgrade():
     )
     _base_indexes("confirmation_links")
     op.create_index("ix_confirmation_links_confirmation", "confirmation_links", ["confirmation_id"])
+
+    op.create_table(
+        "billing_payment_submissions",
+        *_base_columns(),
+        sa.Column("plan_code", sa.String(32), nullable=False),
+        sa.Column("months", sa.Integer(), nullable=False),
+        sa.Column("amount_paisa", sa.BigInteger(), nullable=False),
+        sa.Column("method", sa.String(16), nullable=False),
+        sa.Column("payer_number_masked", sa.String(20), nullable=False),
+        sa.Column("trx_id", sa.String(32), nullable=False),
+        sa.Column("state", sa.String(16), nullable=False),
+        sa.Column("submitted_by", GUID, nullable=True),
+        sa.Column("reviewed_by", sa.String(120), nullable=True),
+        sa.Column("reviewed_at", TZDateTime(), nullable=True),
+        sa.Column("reason", sa.String(400), nullable=True),
+        sa.Column("period_end", TZDateTime(), nullable=True),
+        sa.Column("subscription_id", GUID, nullable=True),
+        # One payment is one TrxID: unique across every shop and state.
+        sa.UniqueConstraint("method", "trx_id", name="uq_billing_payment_submissions_method_trx"),
+        sa.CheckConstraint(
+            "months >= 1 AND months <= 12", name="ck_billing_payment_submissions_months_in_range"
+        ),
+        sa.CheckConstraint(
+            "amount_paisa > 0", name="ck_billing_payment_submissions_amount_positive"
+        ),
+    )
+    _base_indexes("billing_payment_submissions")
+    op.create_index(
+        "ix_billing_payment_submissions_state_created",
+        "billing_payment_submissions",
+        ["state", "created_at"],
+    )
 
     db = op.get_bind()
     if db.dialect.name == "postgresql":

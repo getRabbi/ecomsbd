@@ -748,6 +748,11 @@ class TestPushAndWording:
             NotificationKind.CHAT_ORDER_READY: {"provider": "MESSENGER"},
             NotificationKind.DEVICE_NEEDS_ATTENTION: {"platform": "android"},
             NotificationKind.CONFIRMATION_NEEDS_ATTENTION: {"reason": "REVIEW_NEEDED"},
+            NotificationKind.BILLING_PAYMENT_REVIEWED: {
+                "state": "APPROVED",
+                "plan": "starter",
+                "valid_until": "2027-02-17",
+            },
         }
         assert set(samples) == set(rules.ALERT_RULES)
         for kind, params in samples.items():

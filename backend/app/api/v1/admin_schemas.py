@@ -21,6 +21,9 @@ __all__ = [
     "IntakeRuleSetResponse",
     "IntakeRulesActivatePayload",
     "IntakeRulesCreatePayload",
+    "ManualPaymentApprovePayload",
+    "ManualPaymentRejectPayload",
+    "ManualPaymentReviewResponse",
     "OpsCountsResponse",
     "ProviderHealthResponse",
     "RepairActionResponse",
@@ -203,3 +206,35 @@ class IntakeRuleSetResponse(BaseModel):
     created_at: datetime
     activated_at: datetime | None
     activated_by: str | None
+
+
+class ManualPaymentReviewResponse(BaseModel):
+    """A seller's bKash / Nagad TrxID submission (V4 WP2.5). Payer number masked."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    plan_code: str
+    months: int
+    amount_paisa: int
+    method: str
+    payer_number_masked: str
+    trx_id: str
+    state: str
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    reason: str | None = None
+    period_end: datetime | None = None
+    subscription_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class ManualPaymentApprovePayload(BaseModel):
+    note: str | None = Field(default=None, max_length=300)
+
+
+class ManualPaymentRejectPayload(BaseModel):
+    """Shown to the seller, so write it for them."""
+
+    reason: str = Field(min_length=3, max_length=400)

@@ -43,6 +43,9 @@ from app.api.v1.admin_schemas import (
     IntakeRulesActivatePayload,
     IntakeRulesCreatePayload,
     IntakeRuleSetResponse,
+    ManualPaymentApprovePayload,
+    ManualPaymentRejectPayload,
+    ManualPaymentReviewResponse,
     OpsCountsResponse,
     ProviderHealthResponse,
     RepairActionResponse,
@@ -55,6 +58,8 @@ from app.api.v1.admin_schemas import (
     SupportCaseUpdatePayload,
     TenantSummaryResponse,
 )
+from app.billing.manual_payments import ManualPaymentReview
+from app.billing.models import ManualPaymentState
 from app.billing.providers.registry import PROVIDER_FLAGS
 from app.common.audit import AuditAction, record_audit
 from app.common.feature_flags import FeatureFlagService, FlagKey
@@ -372,6 +377,86 @@ async def activate_intake_rules(
             },
         )
     return IntakeRuleSetResponse.model_validate(result.rule_set)
+
+
+# --------------------------------------------------------------------------- #
+# Manual bKash / Nagad payments (V4 WP2.5)
+# --------------------------------------------------------------------------- #
+
+
+def _payment_review(
+    admin: AdminPrincipal, db: AsyncSession, settings: Any, registry: Any
+) -> ManualPaymentReview:
+    return ManualPaymentReview(
+        db, settings=settings, registry=registry, admin_id=admin.admin_id, admin_label=admin.label
+    )
+
+
+@router.get(
+    "/payments",
+    response_model=list[ManualPaymentReviewResponse],
+    summary="Sellers' bKash / Nagad TrxID payments",
+)
+async def list_manual_payments(
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+    registry: ProviderRegistryDep,
+    payment_state: Annotated[ManualPaymentState | None, Query(alias="state")] = None,
+    tenant_id: Annotated[uuid.UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[ManualPaymentReviewResponse]:
+    """``?state=SUBMITTED`` is the work queue, oldest first."""
+    admin.require(AdminPermission.BILLING_READ)
+    rows = await _payment_review(admin, db, settings, registry).list(
+        state=payment_state, tenant_id=tenant_id, limit=limit
+    )
+    return [ManualPaymentReviewResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/payments/{submission_id}/approve",
+    response_model=ManualPaymentReviewResponse,
+    summary="Approve a TrxID payment: grant the plan",
+)
+async def approve_manual_payment(
+    submission_id: uuid.UUID,
+    payload: ManualPaymentApprovePayload,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+    registry: ProviderRegistryDep,
+) -> ManualPaymentReviewResponse:
+    """Only after the TrxID and amount were found in the receiving wallet.
+
+    Grants through the manual billing provider with the period end fixed now;
+    approving again returns the same row and grants nothing more.
+    """
+    admin.require(AdminPermission.BILLING_GRANT)
+    row, _changed = await _payment_review(admin, db, settings, registry).approve(
+        submission_id, note=payload.note
+    )
+    return ManualPaymentReviewResponse.model_validate(row)
+
+
+@router.post(
+    "/payments/{submission_id}/reject",
+    response_model=ManualPaymentReviewResponse,
+    summary="Reject a TrxID payment",
+)
+async def reject_manual_payment(
+    submission_id: uuid.UUID,
+    payload: ManualPaymentRejectPayload,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+    registry: ProviderRegistryDep,
+) -> ManualPaymentReviewResponse:
+    admin.require(AdminPermission.BILLING_GRANT)
+    row, _changed = await _payment_review(admin, db, settings, registry).reject(
+        submission_id, reason=payload.reason
+    )
+    return ManualPaymentReviewResponse.model_validate(row)
 
 
 # --------------------------------------------------------------------------- #

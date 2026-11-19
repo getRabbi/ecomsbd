@@ -134,6 +134,10 @@ class OutboxTopic(StrEnum):
     # WP2.3: send the SMS confirm link that was just created (ids only).
     CONFIRMATION_LINK_REQUESTED = "confirmation.link_requested"
 
+    # V4 WP2.5: an operator approved or rejected a seller's TrxID payment.
+    # Handled in app.billing.jobs (the seller's notification).
+    BILLING_MANUAL_PAYMENT_REVIEWED = "billing.manual_payment_reviewed"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

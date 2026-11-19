@@ -423,6 +423,14 @@ class Settings(BaseSettings):
     bkash_password: SecretStr | None = None
     bkash_webhook_secret: SecretStr | None = None
 
+    #: V4 WP2.5: the operator's own bKash / Nagad receiving numbers, shown to a
+    #: seller who pays by send-money and types the TrxID. JSON list, e.g.
+    #:   MANUAL_PAYMENT_ACCOUNTS='[{"method": "BKASH", "number": "01XXXXXXXXX", "label": "Personal"}]'
+    #: An entry with an unknown method or a number that is not a Bangladeshi
+    #: mobile is ignored (app.billing.manual_payments), so a typo hides that
+    #: account rather than stopping the API.
+    manual_payment_accounts: Annotated[list[Any], NoDecode] = Field(default_factory=list)
+
     # ------------------------------------------------------- integrations ---
     # Shopify public app from the Shopify Dev Dashboard. Until both are set the
     # Integrations Hub reports SHOPIFY_APP_SETUP_REQUIRED and starts no OAuth.
@@ -666,6 +674,15 @@ class Settings(BaseSettings):
     @classmethod
     def _decode_mapping(cls, value: Any) -> Any:
         return _parse_env_mapping(value)
+
+    @field_validator("manual_payment_accounts", mode="before")
+    @classmethod
+    def _decode_json_list(cls, value: Any) -> Any:
+        """Blank is empty; anything else must be a JSON list."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        return json.loads(text) if text else []
 
     @field_validator("log_level")
     @classmethod

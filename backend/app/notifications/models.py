@@ -134,6 +134,8 @@ class NotificationKind(StrEnum):
     #: A customer confirmation needs the seller: review it, or the customer's
     #: answer could not move the order because it changed (V4 WP2.1).
     CONFIRMATION_NEEDS_ATTENTION = "CONFIRMATION_NEEDS_ATTENTION"
+    #: A bKash / Nagad TrxID payment was approved or rejected (V4 WP2.5).
+    BILLING_PAYMENT_REVIEWED = "BILLING_PAYMENT_REVIEWED"
 
 
 class NotificationCategory(StrEnum):

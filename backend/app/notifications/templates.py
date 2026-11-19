@@ -443,6 +443,31 @@ def _confirmation_needs_attention(p: Params, locale: str) -> tuple[str, str]:
     return bn if locale == "bn" else en
 
 
+_PLAN_NAMES_BN = {"starter": "স্টার্টার", "pro": "প্রো"}
+
+
+def _billing_payment_reviewed(p: Params, locale: str) -> tuple[str, str]:
+    """No TrxID, number or rejection text: a push is shown on a lock screen."""
+    plan = str(p.get("plan") or "")
+    until = str(p.get("valid_until") or "")
+    if str(p.get("state")) == "APPROVED":
+        if locale == "bn":
+            return (
+                "পেমেন্ট গ্রহণ করা হয়েছে",
+                f"আপনার {_PLAN_NAMES_BN.get(plan, plan)} প্ল্যান চালু হয়েছে, মেয়াদ {until} পর্যন্ত।",
+            )
+        return "Payment approved", f"Your {plan.title()} plan is active until {until}."
+    if locale == "bn":
+        return (
+            "পেমেন্ট যাচাই করা যায়নি",
+            "আপনার বিকাশ/নগদ পেমেন্টটি গ্রহণ করা যায়নি। কারণ দেখতে বিলিং খুলুন।",
+        )
+    return (
+        "Payment not approved",
+        "We could not accept your bKash/Nagad payment. Open Billing to see why.",
+    )
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
@@ -452,6 +477,7 @@ _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
     NotificationKind.DEVICE_NEEDS_ATTENTION: _device_needs_attention,
     NotificationKind.CONFIRMATION_NEEDS_ATTENTION: _confirmation_needs_attention,
+    NotificationKind.BILLING_PAYMENT_REVIEWED: _billing_payment_reviewed,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

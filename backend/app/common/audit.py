@@ -128,6 +128,10 @@ class AuditAction(StrEnum):
     BILLING_WEBHOOK_RECEIVED = "billing.webhook_received"
     BILLING_WEBHOOK_REJECTED = "billing.webhook_rejected"
     BILLING_MANUAL_GRANT = "billing.manual_grant"
+    #: V4 WP2.5: a seller's bKash / Nagad TrxID, and the operator's review of it.
+    BILLING_MANUAL_PAYMENT_SUBMITTED = "billing.manual_payment_submitted"
+    BILLING_MANUAL_PAYMENT_APPROVED = "billing.manual_payment_approved"
+    BILLING_MANUAL_PAYMENT_REJECTED = "billing.manual_payment_rejected"
     BILLING_RECONCILED = "billing.reconciled"
     SUBSCRIPTION_STATE_CHANGED = "billing.subscription_state_changed"
     SUBSCRIPTION_CANCELLED = "billing.subscription_cancelled"

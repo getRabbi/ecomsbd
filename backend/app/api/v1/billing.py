@@ -14,6 +14,9 @@ Master spec section 39's billing routes, completed in Phase F::
     POST /v1/billing/web/confirm
     POST /v1/billing/cancel
     POST /v1/billing/webhooks/{provider}
+    GET  /v1/billing/manual-payments/options   (V4 WP2.5)
+    GET  /v1/billing/manual-payments
+    POST /v1/billing/manual-payments
 
 Three rules are visible in the routing itself:
 
@@ -40,6 +43,7 @@ from app.api.deps import (
     EntitlementsDep,
     FeatureFlagsDep,
     ProviderRegistryDep,
+    SettingsDep,
     TenantPrincipal,
     require_permission,
 )
@@ -51,6 +55,11 @@ from app.api.v1.billing_schemas import (
     CheckoutPayload,
     CheckoutResponse,
     ConfirmCheckoutPayload,
+    ManualPaymentAccountResponse,
+    ManualPaymentOptionsResponse,
+    ManualPaymentPlanResponse,
+    ManualPaymentSubmissionResponse,
+    ManualPaymentSubmitPayload,
     PlayVerifyPayload,
     PurchaseResultResponse,
     RestorePurchasesPayload,
@@ -61,9 +70,17 @@ from app.api.v1.billing_schemas import (
     UsageView,
 )
 from app.api.v1.schemas import EntitlementsResponse, MoneyAmount, PlanResponse
+from app.billing.manual_payments import (
+    MAX_MONTHS,
+    MIN_MONTHS,
+    PAID_PLANS,
+    ManualPaymentService,
+)
 from app.billing.models import (
+    BillingPaymentSubmission,
     BillingProviderKind,
     BillingTransaction,
+    ManualPaymentState,
     SubscriptionEvent,
 )
 from app.billing.providers.registry import PROVIDER_FLAGS
@@ -450,6 +467,120 @@ async def cancel_subscription(
     )
     entitlements.invalidate(tenant_id)
     return _subscription_response(subscription)
+
+
+# --------------------------------------------------------------------------- #
+# Manual bKash / Nagad payment (V4 WP2.5)
+# --------------------------------------------------------------------------- #
+
+
+def _manual_payments(db: DbSession, settings: SettingsDep) -> ManualPaymentService:
+    return ManualPaymentService(db, settings=settings)
+
+
+ManualPaymentsDep = Annotated[ManualPaymentService, Depends(_manual_payments)]
+
+
+@router.get(
+    "/manual-payments/options",
+    response_model=ManualPaymentOptionsResponse,
+    summary="Where to send a bKash / Nagad payment, and how much",
+)
+async def manual_payment_options(
+    principal: TenantPrincipal,
+    _: BillingManager,
+    service: ManualPaymentsDep,
+    channel: DistributionChannelDep,
+) -> ManualPaymentOptionsResponse:
+    """Off unless the flag is on, Free Launch Mode is off, the build may show an
+    external payment option (never Play) and a receiving number is configured."""
+    availability = await service.availability(principal.require_tenant(), channel)
+    catalog = plan_catalog()
+    return ManualPaymentOptionsResponse(
+        available=availability.available,
+        unavailable_reason=str(availability.reason) if availability.reason else None,
+        accounts=[
+            ManualPaymentAccountResponse(**account.as_dict()) for account in availability.accounts
+        ],
+        plans=(
+            [
+                ManualPaymentPlanResponse(
+                    code=str(code),
+                    name=catalog[code].name,
+                    monthly_price=MoneyAmount(amount_paisa=catalog[code].price_paisa),
+                )
+                for code in PAID_PLANS
+            ]
+            if availability.available
+            else []
+        ),
+        min_months=MIN_MONTHS,
+        max_months=MAX_MONTHS,
+    )
+
+
+@router.get(
+    "/manual-payments",
+    response_model=list[ManualPaymentSubmissionResponse],
+    summary="This shop's bKash / Nagad payment submissions",
+)
+async def list_manual_payments(
+    principal: TenantPrincipal, _: BillingManager, service: ManualPaymentsDep
+) -> list[ManualPaymentSubmissionResponse]:
+    rows = await service.list_mine(principal.require_tenant())
+    return [manual_payment_response(row) for row in rows]
+
+
+@router.post(
+    "/manual-payments",
+    response_model=ManualPaymentSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a bKash / Nagad TrxID",
+)
+async def submit_manual_payment(
+    payload: ManualPaymentSubmitPayload,
+    response: Response,
+    principal: TenantPrincipal,
+    _: BillingManager,
+    service: ManualPaymentsDep,
+    channel: DistributionChannelDep,
+) -> ManualPaymentSubmissionResponse:
+    """Nothing is granted here: an operator checks the TrxID first.
+
+    The same TrxID sent again for the same plan returns the first submission
+    (200); a TrxID used before for anything else is refused (409
+    ``TRX_ID_ALREADY_USED``).
+    """
+    row, created = await service.submit(
+        tenant_id=principal.require_tenant(),
+        actor_id=principal.user_id,
+        channel=channel,
+        plan_code=payload.plan_code,
+        months=payload.months,
+        method=payload.method,
+        payer_number=payload.payer_number,
+        trx_id=payload.trx_id,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return manual_payment_response(row)
+
+
+def manual_payment_response(row: BillingPaymentSubmission) -> ManualPaymentSubmissionResponse:
+    return ManualPaymentSubmissionResponse(
+        id=row.id,
+        plan=row.plan_code,
+        months=row.months,
+        amount=MoneyAmount(amount_paisa=row.amount_paisa),
+        method=row.method,
+        payer_number_masked=row.payer_number_masked,
+        trx_id=row.trx_id,
+        state=row.state,
+        reason=row.reason if row.state == ManualPaymentState.REJECTED else None,
+        period_end=row.period_end,
+        reviewed_at=row.reviewed_at,
+        created_at=row.created_at,
+    )
 
 
 # --------------------------------------------------------------------------- #

@@ -65,6 +65,8 @@ class FlagKey(StrEnum):
     CONFIRMATION_ENGINE_ENABLED = "confirmation_engine_enabled"
     #: V4 WP2.3: after the last unanswered call, SMS the customer a confirm link.
     CONFIRMATION_SMS_LINK_ENABLED = "confirmation_sms_link_enabled"
+    #: V4 WP2.5: a seller pays by bKash / Nagad send-money and submits the TrxID.
+    MANUAL_PAYMENTS_ENABLED = "manual_payments_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -99,6 +101,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.INTAKE_DEVICE_ENABLED: False,
     FlagKey.CONFIRMATION_ENGINE_ENABLED: False,
     FlagKey.CONFIRMATION_SMS_LINK_ENABLED: False,
+    FlagKey.MANUAL_PAYMENTS_ENABLED: False,
 }
 
 

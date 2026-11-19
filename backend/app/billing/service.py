@@ -804,36 +804,52 @@ class BillingService:
         *,
         tenant_id: uuid.UUID,
         plan: PlanCode,
-        days: int,
+        days: int | None = None,
         reason: str,
         actor_id: uuid.UUID | None,
         actor_label: str | None = None,
+        until: datetime | None = None,
+        amount_paisa: int = 0,
+        provider_reference: str | None = None,
+        provider_event_id: str | None = None,
     ) -> Subscription:
         """Issue support credit (master spec section 103).
 
         Requires a reason, records who granted it, and is audited. The manual
         provider is not reachable from any seller-facing route, so this is the
         only way a subscription can be created without provider evidence.
+
+        Either ``days`` (extend from the later of now and the current end) or
+        an absolute ``until`` (V4 WP2.5: an approved bKash/Nagad payment, whose
+        end was fixed once at approval). With ``amount_paisa`` the transaction
+        row is a ``PURCHASE`` of that amount, not a zero ``CREDIT``.
         """
-        if days <= 0:
+        if (days is None) == (until is None):
+            raise ValueError("a manual grant takes either days or until")
+        if days is not None and days <= 0:
             raise ValueError("a manual grant must last at least one day")
         if not reason.strip():
             raise ValueError("a manual grant requires a reason")
+        if amount_paisa < 0:
+            raise ValueError("a manual grant amount cannot be negative")
+        now = utc_now()
+        if until is not None and ensure_utc(until) <= now:
+            raise ValueError("a manual grant must end in the future")
 
         subscription = await self._subscription_or_new(
             tenant_id, provider=BillingProviderKind.MANUAL_ADMIN
         )
         previous_status, previous_plan = subscription.status, subscription.plan_code
-        now = utc_now()
         # Extend from whichever is later: an existing paid period is not
         # shortened by a support credit added on top of it.
         base = max(now, subscription.current_period_end or now)
+        period_end = ensure_utc(until) if until is not None else base + timedelta(days=days or 0)
 
         subscription.plan_code = str(plan)
         subscription.status = str(SubscriptionStatus.ACTIVE)
         subscription.source = str(BillingProviderKind.MANUAL_ADMIN)
         subscription.current_period_start = subscription.current_period_start or now
-        subscription.current_period_end = base + timedelta(days=days)
+        subscription.current_period_end = period_end
         subscription.grace_until = None
         subscription.cancel_at_period_end = True  # credit does not auto-renew
         subscription.verified_at = now
@@ -855,11 +871,13 @@ class BillingService:
             subscription=subscription,
             provider=BillingProviderKind.MANUAL_ADMIN,
             plan=plan,
-            kind=TransactionKind.CREDIT,
+            kind=TransactionKind.PURCHASE if amount_paisa > 0 else TransactionKind.CREDIT,
             state=TransactionState.VERIFIED,
             result=VerificationResult.VERIFIED,
             detail=reason,
-            amount_paisa=0,
+            provider_reference=provider_reference,
+            provider_event_id=provider_event_id,
+            amount_paisa=amount_paisa,
         )
         await record_audit(
             self._db,
@@ -870,6 +888,7 @@ class BillingService:
             context={
                 "plan": str(plan),
                 "days": days,
+                "amount_paisa": amount_paisa,
                 "granted_by": actor_label,
                 "valid_until": subscription.current_period_end.isoformat(),
             },
