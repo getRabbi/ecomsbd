@@ -204,6 +204,8 @@ class AuditAction(StrEnum):
     # V4 customer confirmation (WP2.1)
     CONFIRMATION_REQUESTED = "confirmation.requested"
     CONFIRMATION_STATE_CHANGED = "confirmation.state_changed"
+    #: WP2.3: the seller dialed from the call queue (quiet-hours override noted).
+    CONFIRMATION_CALL_STARTED = "confirmation.call_started"
 
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"

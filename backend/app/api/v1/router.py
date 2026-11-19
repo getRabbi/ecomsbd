@@ -63,6 +63,7 @@ api_router.include_router(delivery_rules.router)
 api_router.include_router(devices.router)
 api_router.include_router(intake.router)
 api_router.include_router(confirmations.router)
+api_router.include_router(confirmations.queue_router)
 api_router.include_router(documents.router)
 api_router.include_router(messaging.router)
 # Unauthenticated: one-click unsubscribe links and signed provider receipts.

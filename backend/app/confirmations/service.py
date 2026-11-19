@@ -444,6 +444,10 @@ class ConfirmationService:
         elif state is S.NO_ANSWER:
             await self._emit(OutboxTopic.CONFIRMATION_NO_ANSWER, row, cause)
         elif state is S.SELLER_REVIEW:
+            if cause is Cause.VOICE_UNAVAILABLE and actor_id is not None:
+                # The seller took the row from the call queue themselves
+                # (WP2.3): there is nobody to tell.
+                return
             if cause is Cause.DTMF_CALLBACK:
                 await self._emit(OutboxTopic.CONFIRMATION_CALLBACK_REQUESTED, row, cause)
             await self._emit(OutboxTopic.CONFIRMATION_REVIEW_NEEDED, row, cause)
