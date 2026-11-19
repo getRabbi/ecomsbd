@@ -1,6 +1,7 @@
 'use client';
 
 import { CurrentAccess } from '@/components/current-access';
+import { ManualPayment } from '@/components/ManualPayment';
 import { PageHeader } from '@/components/shell';
 import { Card, ErrorState } from '@/components/ui';
 import { launchCopy, showPlanUi } from '@/lib/access';
@@ -17,11 +18,14 @@ export default function PlansPage() {
     <PageHeader title={copy.currentAccess} />
     <div className="content">
       <CurrentAccess />
-      {showPlanUi(access) ? <Card title={copy.plans}>
-        {plans.error ? <ErrorState error={plans.error} onRetry={plans.reload} /> :
-          plans.data?.map(plan => <p key={plan.code}>{plan.name}</p>)}
-        <p className="card__hint">{copy.unavailable}</p>
-      </Card> : null}
+      {showPlanUi(access) ? <>
+        <Card title={copy.plans}>
+          {plans.error ? <ErrorState error={plans.error} onRetry={plans.reload} /> :
+            plans.data?.map(plan => <p key={plan.code}>{plan.name}</p>)}
+        </Card>
+        {/* V4 WP2.5: bKash / Nagad TrxID payment when the server offers it. */}
+        <ManualPayment fallback={<Card><p className="card__hint">{copy.unavailable}</p></Card>} />
+      </> : null}
     </div>
   </>;
 }
