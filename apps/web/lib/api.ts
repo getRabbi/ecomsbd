@@ -59,8 +59,11 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Language for the API's own error copy. */
   locale?: string;
-  /** `html`: send `Accept: text/html` and return the body as text. */
-  responseType?: 'json' | 'html';
+  /**
+   * `html`: send `Accept: text/html` and return the body as text.
+   * `blob`: return the body as a Blob (V4 WP3.3 call-intro playback).
+   */
+  responseType?: 'json' | 'html' | 'blob';
   /**
    * No seller session: the customer's confirm page (V4 WP2.3) calls the API's
    * public routes. No token is read or sent, and a 401 signs nobody out.
@@ -109,8 +112,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(401, 'NOT_AUTHENTICATED', 'Please sign in again.');
   }
 
+  const accept = { html: 'text/html', blob: '*/*', json: 'application/json' };
   const headers: Record<string, string> = {
-    Accept: options.responseType === 'html' ? 'text/html' : 'application/json',
+    Accept: accept[options.responseType ?? 'json'],
     'Accept-Language': options.locale ?? 'en',
   };
   if (token) {
@@ -148,6 +152,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (options.responseType === 'html') {
     return (await response.text()) as T;
+  }
+  if (options.responseType === 'blob') {
+    return (await response.blob()) as T;
   }
 
   return (await response.json()) as T;
@@ -214,6 +221,11 @@ export function fetchHtml(
   options: { method?: 'GET' | 'POST'; body?: unknown; query?: Query } = {},
 ): Promise<string> {
   return request<string>(path, { ...options, responseType: 'html' });
+}
+
+/** Fetch a file the API serves to play in the page (V4 WP3.3 intro audio). */
+export function fetchBlob(path: string): Promise<Blob> {
+  return request<Blob>(path, { responseType: 'blob' });
 }
 
 /**
