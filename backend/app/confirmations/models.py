@@ -178,6 +178,9 @@ class ConfirmationAttempt(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     #: Only what the provider reported; never computed here.
     cost_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
     cost_quality: Mapped[str | None] = mapped_column(sa.String(12), nullable=True)
+    #: SMS link attempts (WP2.3): segments the provider charged, else the
+    #: GSM 03.38 count of the text sent.
+    segments: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     started_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 

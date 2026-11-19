@@ -63,6 +63,8 @@ class FlagKey(StrEnum):
     INTAKE_DEVICE_ENABLED = "intake_device_enabled"
     #: V4 WP2.1+: customer confirmation of orders (``order_confirmations``).
     CONFIRMATION_ENGINE_ENABLED = "confirmation_engine_enabled"
+    #: V4 WP2.3: after the last unanswered call, SMS the customer a confirm link.
+    CONFIRMATION_SMS_LINK_ENABLED = "confirmation_sms_link_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -96,6 +98,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.ORDER_DOCUMENTS_ENABLED: False,
     FlagKey.INTAKE_DEVICE_ENABLED: False,
     FlagKey.CONFIRMATION_ENGINE_ENABLED: False,
+    FlagKey.CONFIRMATION_SMS_LINK_ENABLED: False,
 }
 
 

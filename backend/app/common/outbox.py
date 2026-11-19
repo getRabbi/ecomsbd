@@ -131,6 +131,8 @@ class OutboxTopic(StrEnum):
     CONFIRMATION_NO_ANSWER = "confirmation.no_answer"
     CONFIRMATION_CALLBACK_REQUESTED = "confirmation.callback_requested"
     CONFIRMATION_REVIEW_NEEDED = "confirmation.review_needed"
+    # WP2.3: send the SMS confirm link that was just created (ids only).
+    CONFIRMATION_LINK_REQUESTED = "confirmation.link_requested"
 
 
 class OutboxEvent(Base):

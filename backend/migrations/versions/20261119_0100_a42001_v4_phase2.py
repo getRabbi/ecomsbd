@@ -96,6 +96,7 @@ def upgrade():
         sa.Column("duration_seconds", sa.Integer(), nullable=True),
         sa.Column("cost_paisa", sa.BigInteger(), nullable=True),
         sa.Column("cost_quality", sa.String(12), nullable=True),
+        sa.Column("segments", sa.Integer(), nullable=True),
         sa.Column("started_at", TZDateTime(), nullable=False),
         sa.Column("ended_at", TZDateTime(), nullable=True),
         sa.UniqueConstraint(

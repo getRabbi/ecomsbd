@@ -22,6 +22,7 @@ from app import __version__
 from app.analytics.network import build_network_benchmarks
 from app.automation.jobs import dispatch_automation, scan_segment_entries
 from app.chat_orders.jobs import chat_order_housekeeping, process_chat_messages
+from app.confirmations.jobs import follow_up_confirmations
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -159,6 +160,8 @@ class WorkerSettings:
         cron(chat_order_housekeeping, minute={41}),
         # V4 WP1.3: linked phones silent for a day need the seller's attention.
         cron(scan_device_health, minute={47}),
+        # V4 WP2.3: retry / SMS link / seller after no answer; expired links.
+        cron(follow_up_confirmations, minute=set(range(4, 60, 5))),
         cron(run_integration_syncs, second={25, 55}),
         cron(schedule_integrations, minute=set(range(0, 60, 5))),
         # Two-way stock: compare mapped items every 5 minutes (V3.2).

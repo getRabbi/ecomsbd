@@ -173,6 +173,16 @@ class SecretHasher:
         """
         return self._hmac_hex(self._phone_key, "chatmsg.v1", account, conversation, sent_at, text)
 
+    def confirmation_link_token(self, link_id: uuid.UUID) -> str:
+        """The SMS confirm link's token (V4 WP2.3): 22 url-safe characters.
+
+        Derived from the link's random id rather than drawn fresh, so a retried
+        send carries the same link; only the token's SHA-256 is stored. On the
+        session key: rotating it ends every open link with every session.
+        """
+        digest = hmac.new(self._token_key, f"conflink.v1|{link_id}".encode(), sha256).digest()
+        return _b64encode(digest[:16])
+
     def ip_hash(self, ip: str | None) -> str | None:
         """Keyed hash of a client address.
 
