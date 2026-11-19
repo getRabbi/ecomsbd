@@ -17,6 +17,7 @@ import '../insights/rto_screen.dart';
 import '../money/cases_screen.dart';
 import '../money/payouts_screen.dart';
 import '../money/receivables_screen.dart';
+import '../billing/plans_screen.dart';
 import '../customers/customers_screen.dart';
 import '../orders/order_detail_screen.dart';
 import '../forecasting/forecast_screen.dart';
@@ -93,6 +94,7 @@ Widget? notificationDestination(AppNotification notification) {
     'purchase_orders' ||
     'payables' => const ProcurementScreen(),
     'forecasting' => const ForecastScreen(),
+    'billing' => const PlansScreen(),
     _ => null,
   };
 }

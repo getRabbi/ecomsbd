@@ -47,6 +47,9 @@ class ApiClient {
       headers: <String, String>{
         'accept': 'application/json',
         if (appVersion != null) 'x-app-version': appVersion,
+        // Narrows the server's billing channel: a store build is never
+        // offered an out-of-app payment (master spec §27.1, V4 WP2.5).
+        if (!Env.directBuild) 'x-distribution-channel': 'PLAY',
       },
       // Non-2xx responses are handled by the error interceptor, which turns
       // them into ApiError; Dio must not throw first.

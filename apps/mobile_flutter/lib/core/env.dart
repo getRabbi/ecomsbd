@@ -52,6 +52,13 @@ class Env {
   /// website keys — is done there, and the app links to its real pages.
   static const String webDashboardHost = 'scalemyprints.com';
 
+  /// Only a directly distributed APK sets
+  /// `--dart-define=ECOMSBD_DIRECT_BUILD=true`. Every other build (Google
+  /// Play, App Store, the default) tells the API it is a store build, which is
+  /// the restrictive claim the server always believes: no out-of-app payment
+  /// option (bKash / Nagad TrxID, bKash web) is offered (master spec §27.1).
+  static const bool directBuild = bool.fromEnvironment('ECOMSBD_DIRECT_BUILD');
+
   /// Sentry DSN. Empty disables reporting.
   static const String sentryDsn = String.fromEnvironment('ECOMSBD_SENTRY_DSN');
 

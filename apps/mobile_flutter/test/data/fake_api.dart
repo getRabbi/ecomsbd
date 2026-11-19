@@ -15,12 +15,16 @@ class RecordedRequest {
     required this.path,
     required this.query,
     this.body,
+    this.headers = const <String, dynamic>{},
   });
 
   final String method;
   final String path;
   final Map<String, dynamic> query;
   final Object? body;
+
+  /// What the client sent, lower-case names as Dio holds them.
+  final Map<String, dynamic> headers;
 
   Map<String, dynamic> get jsonBody =>
       body is Map<String, dynamic> ? body! as Map<String, dynamic> : const {};
@@ -85,6 +89,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       path: options.path,
       query: Map<String, dynamic>.from(options.queryParameters),
       body: options.data,
+      headers: Map<String, dynamic>.from(options.headers),
     );
     requests.add(request);
 
