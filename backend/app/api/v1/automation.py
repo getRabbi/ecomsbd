@@ -561,7 +561,13 @@ async def _would(db: DbSession, step: dict, subject: dict) -> tuple[str, str | N
                 "BOOKING_UNKNOWN",
             } else "ALREADY_BOOKED"
     if action == "CONVERT_DRAFT_TO_ORDER":
-        return "SKIP", "AUTOPILOT_DISABLED"
+        # The shop gate only: a preview has no draft to check the order gate on.
+        from app.autopilot.service import run_reason
+        from app.core.context import current_context
+
+        tenant_id = current_context().tenant_id
+        reason = await run_reason(db, tenant_id) if tenant_id is not None else "AUTOPILOT_DISABLED"
+        return ("SKIP", reason) if reason else ("RUN", None)
     if action == "REQUEST_CONFIRMATION" and order_id:
         if not await confirmations_on(db):
             return "SKIP", "CONFIRMATION_ENGINE_DISABLED"
@@ -995,7 +1001,10 @@ async def install_recipe(
     blocker: str | None = None
     try:
         async with db.begin_nested():
-            await publish(db, row, row.draft or {}, actor=actor.user_id, enable=body.enable)
+            # Autopilot is always installed switched off (Phase 4): the seller
+            # turns it on after reading what it will do.
+            enable = body.enable and key not in workflow_recipes.INSTALL_DISABLED
+            await publish(db, row, row.draft or {}, actor=actor.user_id, enable=enable)
         await _audit(
             db, AuditAction.AUTOMATION_WORKFLOW_PUBLISHED, row.id, version=row.published_version
         )

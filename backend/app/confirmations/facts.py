@@ -23,7 +23,7 @@ from app.risk_providers import registry
 from app.risk_providers.contract import history_state
 from app.risk_providers.models import ExternalRiskLookup, RiskProviderConnection
 
-__all__ = ["collect", "external_history"]
+__all__ = ["collect", "collect_for", "external_history"]
 
 
 async def external_history(db: AsyncSession, customer_id: uuid.UUID) -> ExternalHistory | None:
@@ -68,7 +68,18 @@ async def external_history(db: AsyncSession, customer_id: uuid.UUID) -> External
 
 async def collect(db: AsyncSession, order: Order) -> PolicyFacts:
     """The facts for ``order``. A customer-less order is an unknown buyer."""
-    customer = await db.get(Customer, order.customer_id) if order.customer_id is not None else None
+    return await collect_for(db, order.customer_id, order.cod_amount_paisa)
+
+
+async def collect_for(
+    db: AsyncSession, customer_id: uuid.UUID | None, cod_paisa: int
+) -> PolicyFacts:
+    """The facts for an order of ``cod_paisa`` by this customer (or a new buyer).
+
+    Autopilot (Phase 4) asks before the order exists, with the same inputs the
+    order will have, so its gate sees the decision the confirmation will make.
+    """
+    customer = await db.get(Customer, customer_id) if customer_id is not None else None
     own: RiskAssessment = UNKNOWN
     external: ExternalHistory | None = None
     if customer is not None:
@@ -76,7 +87,7 @@ async def collect(db: AsyncSession, order: Order) -> PolicyFacts:
         external = await external_history(db, customer.id)
     return PolicyFacts(
         customer_blocked=customer is not None and customer.flag == CustomerFlag.BLOCKED,
-        cod_paisa=order.cod_amount_paisa,
+        cod_paisa=cod_paisa,
         own_band=own.state,
         own_delivered=own.delivered_count,
         own_returned=own.returned_count,

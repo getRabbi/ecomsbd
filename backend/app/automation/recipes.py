@@ -308,6 +308,22 @@ def _confirmed_book_track(p: Params) -> dict:
     }
 
 
+def _autopilot(p: Params) -> dict:
+    """V4 Phase 4: a ready chat draft becomes an order when both Autopilot
+    gates pass, and goes to customer confirmation. Booking is the
+    "Customer confirmed -> book courier" recipe's, after the customer's yes."""
+    return {
+        "trigger": "intake.draft_ready",
+        "steps": [
+            {"type": "action", "id": "convert", "action": "CONVERT_DRAFT_TO_ORDER", "config": {}},
+            {"type": "action", "id": "confirm", "action": "REQUEST_CONFIRMATION", "config": {}},
+        ],
+    }
+
+
+#: Recipes that are installed switched off whatever the request says.
+INSTALL_DISABLED = frozenset({"autopilot"})
+
 #: Tag names a recipe creates if the shop does not have them yet.
 TAGS: dict[str, tuple[str, str]] = {
     "returned": ("Returned parcel", "ফেরত পার্সেল"),
@@ -389,6 +405,14 @@ RECIPES: dict[str, dict[str, Any]] = {
         ),
         "build": _confirmed_book_track,
         "needs": ["provider", "channel"],
+    },
+    "autopilot": {
+        "name": (
+            "Autopilot: chat order → order → confirm with the customer",
+            "অটোপাইলট: চ্যাট অর্ডার → অর্ডার → গ্রাহকের কাছে নিশ্চিত",
+        ),
+        "build": _autopilot,
+        "needs": [],
     },
 }
 

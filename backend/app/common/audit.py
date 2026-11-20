@@ -222,6 +222,11 @@ class AuditAction(StrEnum):
     #: WP2.3: the seller dialed from the call queue (quiet-hours override noted).
     CONFIRMATION_CALL_STARTED = "confirmation.call_started"
 
+    # V4 Autopilot (Phase 4): the shop's switch, consent and "Pause 1 hour".
+    AUTOPILOT_UPDATED = "autopilot.updated"
+    AUTOPILOT_PAUSED = "autopilot.paused"
+    AUTOPILOT_RESUMED = "autopilot.resumed"
+
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"
     PURCHASE_ORDER_SAVED = "procurement.po_saved"

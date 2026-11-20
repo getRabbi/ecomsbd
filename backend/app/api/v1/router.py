@@ -17,6 +17,7 @@ from app.api.v1 import (
     analytics,
     auth,
     automation,
+    autopilot,
     billing,
     campaigns,
     chat_orders,
@@ -63,6 +64,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(delivery_rules.router)
+api_router.include_router(autopilot.router)
 api_router.include_router(devices.router)
 api_router.include_router(intake.router)
 api_router.include_router(confirmations.router)

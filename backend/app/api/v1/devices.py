@@ -75,6 +75,9 @@ class HeartbeatResponse(BaseModel):
     connection_id: str
     listener_state: str
     last_heartbeat_at: str
+    #: V4 Phase 4: the seller turned Autopilot on with consent (and has not
+    #: paused it), so order-like messages may be uploaded without a tap (L4).
+    autopilot_on: bool = False
 
 
 async def _require_flag(db: DbSession, tenant_id: object) -> None:
@@ -169,10 +172,13 @@ async def device_heartbeat(
         covered_packages=payload.covered_packages,
         listener_state=payload.listener_state,
     )
+    from app.autopilot.service import device_upload_allowed
+
     return HeartbeatResponse(
         connection_id=str(conn.id),
         listener_state=config["listener_state"],
         last_heartbeat_at=config["last_heartbeat_at"],
+        autopilot_on=await device_upload_allowed(db, conn.tenant_id),
     )
 
 

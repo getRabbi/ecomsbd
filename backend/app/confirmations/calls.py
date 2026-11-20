@@ -204,12 +204,19 @@ class VoiceGate:
 
 
 async def voice_gate(
-    db: AsyncSession, tenant_id: uuid.UUID, *, transport: VoiceTransport | None = None
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    transport: VoiceTransport | None = None,
+    ignore_pause: bool = False,
 ) -> VoiceGate:
     """Whether the IVR may call this shop's customers right now.
 
     Read-only (the breaker is peeked, not probed), so the seller's call queue
-    can ask it on every load.
+    can ask it on every load. While the shop's Autopilot is paused (Phase 4,
+    "Pause 1 hour") it is off with ``SHOP_PAUSED``: queued calls hold, stay
+    queued and show in the seller's own queue; nothing is cancelled.
+    ``ignore_pause`` is for Autopilot's checklist, which asks about voice itself.
     """
     from app.common.feature_flags import FeatureFlagService, FlagKey
     from app.common.provider_health import ProviderHealth, scope_key_for
@@ -219,6 +226,11 @@ async def voice_gate(
         FlagKey.VOICE_CONFIRMATION_ENABLED, tenant_id=tenant_id
     ):
         return VoiceGate(False, "", "FLAG_OFF")
+    if not ignore_pause:
+        from app.autopilot.service import is_paused
+
+        if await is_paused(db, tenant_id):
+            return VoiceGate(False, "", "SHOP_PAUSED")
     voice = transport or voice_transport()
     state = voice.availability().state
     if state is not VoiceAvailabilityState.AVAILABLE:

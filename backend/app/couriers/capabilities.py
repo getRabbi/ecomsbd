@@ -130,6 +130,16 @@ class ProviderManifest:
     #: ``docs/RELEASE_READINESS.md`` and the admin console.
     blockers: list[str] = field(default_factory=list)
 
+    #: V4 Phase 4: the date a live booking run (``app.provider_smoke``) proved
+    #: this provider on a real merchant account, with what was run. ``None``
+    #: until the operator records one; Autopilot needs it.
+    live_verified_at: date | None = None
+    live_evidence: str | None = None
+
+    @property
+    def is_live_verified(self) -> bool:
+        return self.live_verified_at is not None and bool(self.live_evidence)
+
     def state(self, capability: Capability) -> CapabilityState:
         return self.capabilities.get(capability, CapabilityState.UNKNOWN)
 
@@ -175,19 +185,26 @@ class ProviderManifest:
         }
 
 
+def _date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return date.fromisoformat(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def _parse_manifest(raw: dict[str, Any], *, source: Path) -> ProviderManifest:
     provider = str(raw.get("provider") or source.stem)
-    verified_raw = raw.get("verified_at")
-    verified_at: date | None
-    if isinstance(verified_raw, date):
-        verified_at = verified_raw
-    elif isinstance(verified_raw, str) and verified_raw.strip():
-        try:
-            verified_at = date.fromisoformat(verified_raw.strip())
-        except ValueError:
-            verified_at = None
-    else:
-        verified_at = None
+    verified_at = _date(raw.get("verified_at"))
+    # Both a date and the evidence, or it was not live-verified.
+    live = raw.get("live_verification")
+    live_at = _date(live.get("verified_at")) if isinstance(live, dict) else None
+    live_evidence = _optional_str(live.get("evidence")) if isinstance(live, dict) else None
+    if live_at is None or live_evidence is None:
+        live_at, live_evidence = None, None
 
     declared = raw.get("capabilities") or {}
     capabilities: dict[Capability, CapabilityState] = {}
@@ -228,6 +245,8 @@ def _parse_manifest(raw: dict[str, Any], *, source: Path) -> ProviderManifest:
         endpoints=endpoints,
         unknowns=unknowns,
         blockers=[str(blocker) for blocker in (raw.get("blockers") or [])],
+        live_verified_at=live_at,
+        live_evidence=live_evidence,
     )
 
 

@@ -826,13 +826,14 @@ async def confirm(
     draft: ChatOrderDraft,
     payload: Any,
     orders: Any,
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
 ) -> Confirmed:
     """Create the order through the canonical order service, exactly once.
 
     ``draft`` must be locked by the caller. A confirmed draft returns its
     order; the draft id is the order's ``client_id``, so even two requests
-    racing past the lock end at the same order.
+    racing past the lock end at the same order. ``actor_id`` is ``None`` for
+    Autopilot (Phase 4): the system made the order from the draft as it stood.
     """
     from app.orders.service import OrderDraft, OrderItemDraft
 

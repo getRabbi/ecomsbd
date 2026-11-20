@@ -69,6 +69,9 @@ class FlagKey(StrEnum):
     MANUAL_PAYMENTS_ENABLED = "manual_payments_enabled"
     #: V4 Phase 3: IVR confirmation calls (``VoiceTransport``).
     VOICE_CONFIRMATION_ENABLED = "voice_confirmation_enabled"
+    #: V4 Phase 4: Autopilot turns ready chat drafts into orders. Off is the
+    #: global kill switch; a shop's own row off is that shop's.
+    AUTOPILOT_ENABLED = "autopilot_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -105,6 +108,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.CONFIRMATION_SMS_LINK_ENABLED: False,
     FlagKey.MANUAL_PAYMENTS_ENABLED: False,
     FlagKey.VOICE_CONFIRMATION_ENABLED: False,
+    FlagKey.AUTOPILOT_ENABLED: False,
 }
 
 

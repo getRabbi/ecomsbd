@@ -47,6 +47,7 @@ from app.automation.schemas import (
     WaitStep,
     WorkflowDefinition,
     compile_plan,
+    converted_before,
     dump,
     legacy_definition,
     structural_problems,
@@ -276,13 +277,25 @@ async def validate_definition(
             "Invalid workflow", details={"fields": [list(e["loc"]) for e in exc.errors()][:20]}
         ) from exc
     problems = structural_problems(definition)
-    provides = SUBJECT_PROVIDES[TRIGGER_SUBJECTS[definition.trigger]]
+    subject = TRIGGER_SUBJECTS[definition.trigger]
+    provides = SUBJECT_PROVIDES[subject]
     problems += await _condition_problems(db, definition.conditions.model_dump(), provides)
     blockers: list[str] = []
+    plan = compile_plan(definition)
     for step, _ in walk(definition.steps):
         if isinstance(step, ActionStep):
             needs = ACTION_NEEDS[step.action]
-            if needs is not None and needs not in provides:
+            # V4 Phase 4: after Autopilot turns the draft into an order, the
+            # order's steps may follow - but never a booking. An order made
+            # from a chat is booked only once its customer confirmed (L11),
+            # by a ``confirmation.confirmed`` workflow.
+            after_convert = (
+                subject == "draft"
+                and needs in SUBJECT_PROVIDES["order"]
+                and step.action != "BOOK_COURIER"
+                and converted_before(plan, step.id)
+            )
+            if needs is not None and needs not in provides and not after_convert:
                 problems.append(f"ACTION_NOT_AVAILABLE:{step.action}")
                 continue
             config, found = await _action_config(db, step, publisher=publisher, enabling=enabling)

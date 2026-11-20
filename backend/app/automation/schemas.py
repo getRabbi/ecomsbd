@@ -561,6 +561,15 @@ def _always_before(plan: dict[str, Any], target: str) -> set[str]:
     return common
 
 
+def converted_before(plan: dict[str, Any], target: str) -> bool:
+    """Whether a ``CONVERT_DRAFT_TO_ORDER`` step runs before ``target`` on every
+    path (V4 Phase 4): only then may a draft-triggered step use the order."""
+    return any(
+        plan["steps"][step].get("action") == "CONVERT_DRAFT_TO_ORDER"
+        for step in _always_before(plan, target)
+    )
+
+
 def is_acyclic(plan: dict[str, Any]) -> bool:
     """Defence in depth for plans read back from storage."""
     state: dict[str, int] = {}

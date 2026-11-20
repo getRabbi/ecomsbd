@@ -7,13 +7,15 @@ and call switches are read by the confirmation policy (WP2.2) and Autopilot
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, PrimaryKeyMixin, TenantOwned, TimestampMixin
-from app.db.types import Paisa
+from app.db.types import GUID, Paisa, TZDateTime
 
 __all__ = ["DEFAULTS", "ShopDeliveryRules"]
 
@@ -74,3 +76,13 @@ class ShopDeliveryRules(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     autopilot_daily_cap: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=30)
     call_everyone: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
     call_nobody: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+
+    # V4 Phase 4: the shop's Autopilot switch (``app.autopilot``). Not part of
+    # :data:`DEFAULTS`, so the delivery rules API neither shows nor changes it.
+    autopilot_on: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    autopilot_consent_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    autopilot_consent_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    #: "Pause 1 hour": no draft is converted and queued IVR calls hold until then.
+    autopilot_paused_until: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    #: The seller accepts working the call queue by hand while voice is off.
+    autopilot_manual_queue: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
