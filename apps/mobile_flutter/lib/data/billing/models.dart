@@ -224,6 +224,7 @@ class UsageLine {
     'risk_checks_daily' => 'Risk checks today',
     'sms_segments_monthly' => 'SMS this month',
     'ai_parse_monthly' => 'AI paste-parse this month',
+    'voice_calls_monthly' => 'Confirmation calls this month',
     _ => entitlement,
   };
 }
