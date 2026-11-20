@@ -8,10 +8,13 @@ import { Card, Chip, ErrorState } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import {
   canTurnOn,
+  courierName,
   courierProblemKey,
+  deliveredPercent,
   reasonKey,
   type AutopilotStatus,
   type CheckLine,
+  type CourierComparison,
 } from '@/lib/autopilot';
 import type { StringKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
@@ -66,6 +69,34 @@ function lineLabel(t: ReturnType<typeof useSession>['t'], line: CheckLine): stri
   return t(key);
 }
 
+/** Below the courier line: the default is used; the rest is a suggestion. */
+function Comparison({ view }: { view: CourierComparison }) {
+  const { t } = useSession();
+  return (
+    <span className="card__hint" style={{ display: 'grid', gap: 2, marginTop: 4 }}>
+      {view.default ? <span>{t('ap.usesDefault', { courier: courierName(view.default) })}</span> : null}
+      {view.options.length === 0 ? (
+        <span>{t('ap.compareNone')}</span>
+      ) : (
+        <>
+          <span>{t('ap.compare', { days: view.days })}</span>
+          {view.options.map((option) => (
+            <span key={option.courier}>
+              {t('ap.compareRow', {
+                courier: courierName(option.courier),
+                percent: deliveredPercent(option),
+                delivered: option.delivered,
+                parcels: option.parcels,
+              })}
+              {option.is_default ? ` · ${t('ap.compareDefault')}` : ''}
+            </span>
+          ))}
+        </>
+      )}
+    </span>
+  );
+}
+
 function AutopilotPanel({ status, onChanged }: { status: AutopilotStatus; onChanged: () => void }) {
   const { t, locale } = useSession();
   const [consent, setConsent] = useState(status.consent_at !== null);
@@ -116,6 +147,7 @@ function AutopilotPanel({ status, onChanged }: { status: AutopilotStatus; onChan
                     {t(courierProblemKey(line.detail.problem))}
                   </span>
                 ) : null}
+                {line.key === 'COURIER' ? <Comparison view={status.courier_comparison} /> : null}
               </span>
             </li>
           ))}

@@ -34,7 +34,13 @@ from app.orders.models import Order
 from app.orders.zones import DeliveryZone, resolve_zone
 from app.risk_providers.contract import SAMPLE_FLOOR
 
-__all__ = ["HISTORY_WINDOW", "MAX_PARCELS", "CourierSuggestion", "suggest_courier"]
+__all__ = [
+    "HISTORY_WINDOW",
+    "MAX_PARCELS",
+    "CourierSuggestion",
+    "compare_couriers",
+    "suggest_courier",
+]
 
 HISTORY_WINDOW = timedelta(days=180)
 #: The newest parcels read; enough to judge, bounded for a request path.
@@ -87,9 +93,11 @@ async def suggest_courier(
     return await _best_in_zone(db, tenant_id, zone)
 
 
-async def _best_in_zone(
-    db: AsyncSession, tenant_id: uuid.UUID, zone: DeliveryZone
-) -> CourierSuggestion | None:
+async def _tally(
+    db: AsyncSession, tenant_id: uuid.UUID, zone: DeliveryZone | None
+) -> dict[str, list[int]]:
+    """``{courier: [delivered, finished]}`` from the shop's own recent parcels,
+    in ``zone`` (or every parcel when ``zone`` is ``None``)."""
     rows = (
         await db.execute(
             sa.select(
@@ -112,24 +120,55 @@ async def _best_in_zone(
     ).all()
     counts: dict[str, list[int]] = {}
     for provider, status, area, district in rows:
-        if resolve_zone(area, district) != zone:
+        if zone is not None and resolve_zone(area, district) != zone:
             continue
         tally = counts.setdefault(str(provider), [0, 0])
         tally[1] += 1
         if status == ConsignmentStatus.DELIVERED:
             tally[0] += 1
-    best: tuple[str, int, int] | None = None
-    for courier in sorted(counts):
-        delivered, parcels = counts[courier]
-        if parcels < SAMPLE_FLOOR:
-            continue
-        if best is None or _better(delivered, parcels, best[1], best[2]):
-            best = (courier, delivered, parcels)
-    if best is None:
+    return counts
+
+
+def _ranked(counts: dict[str, list[int]]) -> list[tuple[str, int, int]]:
+    """Couriers with enough parcels, best delivered rate first (then more parcels)."""
+    judged = [(c, d, p) for c, (d, p) in sorted(counts.items()) if p >= SAMPLE_FLOOR]
+    ranked: list[tuple[str, int, int]] = []
+    for row in judged:
+        at = next(
+            (i for i, other in enumerate(ranked) if _better(row[1], row[2], other[1], other[2])),
+            len(ranked),
+        )
+        ranked.insert(at, row)
+    return ranked
+
+
+async def _best_in_zone(
+    db: AsyncSession, tenant_id: uuid.UUID, zone: DeliveryZone
+) -> CourierSuggestion | None:
+    ranked = _ranked(await _tally(db, tenant_id, zone))
+    if not ranked:
         return None
+    courier, delivered, parcels = ranked[0]
     return CourierSuggestion(
-        courier=best[0], source=HISTORY, zone=zone, delivered=best[1], parcels=best[2]
+        courier=courier, source=HISTORY, zone=zone, delivered=delivered, parcels=parcels
     )
+
+
+async def compare_couriers(
+    db: AsyncSession, tenant_id: uuid.UUID, *, zone: DeliveryZone | None = None, limit: int = 3
+) -> list[CourierSuggestion]:
+    """Up to ``limit`` couriers ranked by the shop's own delivered rate.
+
+    Display only, beside the shop's default courier (Autopilot books with the
+    default; this is the comparison the seller sees). A courier under the
+    sample floor is not ranked.
+    """
+    return [
+        CourierSuggestion(
+            courier=courier, source=HISTORY, zone=zone, delivered=delivered, parcels=parcels
+        )
+        for courier, delivered, parcels in _ranked(await _tally(db, tenant_id, zone))[:limit]
+    ]
 
 
 def _better(delivered: int, parcels: int, best_delivered: int, best_parcels: int) -> bool:

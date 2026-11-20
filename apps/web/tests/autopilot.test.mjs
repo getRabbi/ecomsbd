@@ -7,7 +7,9 @@ import {
   autopilotBn,
   autopilotEn,
   canTurnOn,
+  courierName,
   courierProblemKey,
+  deliveredPercent,
   homeCard,
   reasonKey,
 } from '../lib/autopilot.ts';
@@ -25,6 +27,7 @@ function status(overrides = {}) {
     checklist: LINES.map((key) => ({ key, ok: true, reason: `${key}_X`, detail: {} })),
     reason: 'AUTOPILOT_OFF',
     workflow: { installed: false, enabled: false },
+    courier_comparison: { default: 'steadfast', days: 180, options: [] },
     ...overrides,
   };
 }
@@ -63,6 +66,17 @@ test('every reason code, checklist line and courier problem has a label', () => 
     assert.ok(autopilotEn[`ap.c.${code}`], code);
   }
   assert.equal(courierProblemKey(undefined), 'ap.r.COURIER_NOT_READY');
+});
+
+test('the courier comparison never rounds a rate up', () => {
+  assert.equal(deliveredPercent({ delivered: 2, parcels: 3 }), 66);
+  assert.equal(deliveredPercent({ delivered: 3, parcels: 3 }), 100);
+  assert.equal(deliveredPercent({ delivered: 0, parcels: 0 }), 0);
+  assert.equal(courierName('redx'), 'RedX');
+  assert.equal(courierName('carrybee'), 'Carrybee');
+  for (const key of ['ap.usesDefault', 'ap.compare', 'ap.compareRow']) {
+    assert.deepEqual(autopilotBn[key].match(/\{\w+\}/g).sort(), autopilotEn[key].match(/\{\w+\}/g).sort(), key);
+  }
 });
 
 test('turning on waits for every line; consent may be ticked on the page', () => {

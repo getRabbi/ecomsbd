@@ -26,6 +26,33 @@ export interface AutopilotStatus {
   /** Why it is not acting right now (a switch or a failing line), or null. */
   reason: string | null;
   workflow: { installed: boolean; enabled: boolean };
+  /** The default courier Autopilot uses, and the shop's best three by its own
+   * delivered rate (a suggestion only; the default is always used). */
+  courier_comparison: CourierComparison;
+}
+
+export interface CourierOption {
+  courier: string;
+  delivered: number;
+  parcels: number;
+  is_default: boolean;
+}
+
+export interface CourierComparison {
+  default: string | null;
+  days: number;
+  options: CourierOption[];
+}
+
+/** Whole percent, rounded down so a rate never reads better than it is. */
+export function deliveredPercent(option: Pick<CourierOption, 'delivered' | 'parcels'>): number {
+  return option.parcels > 0 ? Math.floor((option.delivered * 100) / option.parcels) : 0;
+}
+
+/** A courier key as a name (`steadfast` -> `Steadfast`, `redx` -> `RedX`). */
+export function courierName(key: string): string {
+  const names: Record<string, string> = { steadfast: 'Steadfast', pathao: 'Pathao', redx: 'RedX' };
+  return names[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 export interface AutopilotDecision {
@@ -97,7 +124,6 @@ const REASONS = [
   'ITEM_NOT_MATCHED',
   'COD_NOT_CALCULATED',
   'ZONE_UNRESOLVED',
-  'LOCATION_UNRESOLVED',
   'COD_MISMATCH',
   'OUT_OF_STOCK',
   'DUPLICATE_RECENT',
@@ -178,7 +204,6 @@ export const autopilotEn = {
   'ap.r.ITEM_NOT_MATCHED': 'an item was not found in your products',
   'ap.r.COD_NOT_CALCULATED': 'the price could not be calculated',
   'ap.r.ZONE_UNRESOLVED': 'the delivery area is unknown',
-  'ap.r.LOCATION_UNRESOLVED': 'this courier needs an area Autopilot cannot check yet',
   'ap.r.COD_MISMATCH': 'the amount does not match your prices',
   'ap.r.OUT_OF_STOCK': 'an item is out of stock',
   'ap.r.DUPLICATE_RECENT': 'this customer ordered in the last 24 hours',
@@ -191,6 +216,11 @@ export const autopilotEn = {
   'ap.c.NOT_LIVE_VERIFIED': 'ecomsbd has not verified this courier live yet',
   'ap.c.NOT_CONNECTED': 'Connect your account with this courier',
   'ap.c.UNHEALTHY': 'This courier is failing right now',
+  'ap.usesDefault': 'Autopilot uses your default courier: {courier}',
+  'ap.compare': 'Compare: your delivered rate, last {days} days',
+  'ap.compareRow': '{courier}: {percent}% delivered ({delivered} of {parcels})',
+  'ap.compareDefault': 'your default',
+  'ap.compareNone': 'Not enough of your own parcels yet to compare couriers.',
 } as const;
 
 export type AutopilotKey = keyof typeof autopilotEn;
@@ -252,7 +282,6 @@ export const autopilotBn: Record<AutopilotKey, string> = {
   'ap.r.ITEM_NOT_MATCHED': 'একটি পণ্য আপনার পণ্যের তালিকায় পাওয়া যায়নি',
   'ap.r.COD_NOT_CALCULATED': 'দাম হিসাব করা যায়নি',
   'ap.r.ZONE_UNRESOLVED': 'ডেলিভারি এলাকা জানা নেই',
-  'ap.r.LOCATION_UNRESOLVED': 'এই কুরিয়ারের এলাকা অটোপাইলট এখনো যাচাই করতে পারে না',
   'ap.r.COD_MISMATCH': 'টাকার পরিমাণ আপনার দামের সাথে মেলে না',
   'ap.r.OUT_OF_STOCK': 'একটি পণ্য স্টকে নেই',
   'ap.r.DUPLICATE_RECENT': 'এই কাস্টমার গত ২৪ ঘণ্টায় অর্ডার করেছেন',
@@ -265,4 +294,9 @@ export const autopilotBn: Record<AutopilotKey, string> = {
   'ap.c.NOT_LIVE_VERIFIED': 'ecomsbd এখনো এই কুরিয়ার লাইভ যাচাই করেনি',
   'ap.c.NOT_CONNECTED': 'এই কুরিয়ারে আপনার অ্যাকাউন্ট কানেক্ট করুন',
   'ap.c.UNHEALTHY': 'এই কুরিয়ার এখন কাজ করছে না',
+  'ap.usesDefault': 'অটোপাইলট আপনার ডিফল্ট কুরিয়ার ব্যবহার করে: {courier}',
+  'ap.compare': 'তুলনা: গত {days} দিনে আপনার ডেলিভারির হার',
+  'ap.compareRow': '{courier}: {percent}% ডেলিভারি ({parcels}টির মধ্যে {delivered}টি)',
+  'ap.compareDefault': 'আপনার ডিফল্ট',
+  'ap.compareNone': 'কুরিয়ার তুলনা করার মতো যথেষ্ট পার্সেল এখনো নেই।',
 };

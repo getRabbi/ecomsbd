@@ -54,8 +54,6 @@ MIN_CONFIRMED_ORDERS = 20
 PAUSE_FOR = timedelta(hours=1)
 #: The recipe key of the Autopilot workflow.
 RECIPE_KEY = "autopilot"
-#: Couriers whose booking would need location ids Autopilot cannot resolve yet.
-_LOCATION_ID_COURIERS = frozenset({"pathao", "redx"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,10 +426,6 @@ async def _order_gate(
     zone = resolve_zone(draft.address)
     if zone is None:
         return "ZONE_UNRESOLVED", None
-    if row.default_courier in _LOCATION_ID_COURIERS:
-        # Their booking sends location ids Autopilot cannot yet resolve and
-        # check (decision 2026-11-20): held, never booked on a guessed area.
-        return "LOCATION_UNRESOLVED", None
     rules = await DeliveryRulesService(db).get(draft.tenant_id)
     charge = rules.zone_charge(zone)
     calculated = (
@@ -590,6 +584,32 @@ async def status_view(db: AsyncSession, tenant_id: uuid.UUID) -> dict[str, Any]:
         "checklist": [item.as_dict() for item in items],
         "reason": await run_reason(db, tenant_id, row),
         "workflow": await _workflow(db),
+        "courier_comparison": await _comparison(db, tenant_id, row),
+    }
+
+
+async def _comparison(
+    db: AsyncSession, tenant_id: uuid.UUID, row: ShopDeliveryRules | None
+) -> dict[str, Any]:
+    """The default courier Autopilot uses, and below it the shop's three best
+    couriers by its own delivered rate (operator decision 2026-11-20: the
+    default is always used; the comparison is a suggestion only)."""
+    from app.delivery_rules.suggestion import HISTORY_WINDOW, compare_couriers
+
+    default = row.default_courier if row is not None else None
+    options = await compare_couriers(db, tenant_id, limit=3)
+    return {
+        "default": default,
+        "days": HISTORY_WINDOW.days,
+        "options": [
+            {
+                "courier": option.courier,
+                "delivered": option.delivered,
+                "parcels": option.parcels,
+                "is_default": option.courier == default,
+            }
+            for option in options
+        ],
     }
 
 

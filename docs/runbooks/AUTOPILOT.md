@@ -29,13 +29,17 @@ manual-queue mode), `NOT_ENOUGH_CONFIRMED` (< 20 CONFIRMED confirmations),
 `CONSENT_MISSING`.
 
 Order gate, in order: `DRAFT_NOT_READY`, `FIELDS_UNCERTAIN`, `PHONE_NOT_SINGLE`,
-`ITEM_NOT_MATCHED`, `COD_NOT_CALCULATED`, `ZONE_UNRESOLVED`, `LOCATION_UNRESOLVED`
-(default courier Pathao / RedX: always, until their booking sends checked location
-ids), `COD_MISMATCH` (the draft's COD must equal the shop's own calculation),
+`ITEM_NOT_MATCHED`, `COD_NOT_CALCULATED`, `ZONE_UNRESOLVED`, `COD_MISMATCH` (the draft's COD must equal the shop's own calculation),
 `OUT_OF_STOCK`, `DUPLICATE_RECENT` (draft linked to an order, another open draft or an
 order for the phone in 24 h), `POLICY_SELLER_REVIEW` (the WP2.2 policy on the same
 facts), `DAILY_CAP_REACHED` (`shop_delivery_rules.autopilot_daily_cap`, Dhaka day),
 then `ORDER_REFUSED` if the order service refuses (a plan limit, a changed product).
+
+Courier: whatever default courier the shop chose (Steadfast, Pathao or RedX) is the one
+used. `GET /v1/autopilot` → `courier_comparison` shows, below it, the shop's three best
+couriers by its own delivered rate over 180 days (≥ 3 finished parcels each) — a
+suggestion only. A trusted repeat buyer (policy `AUTO_CONFIRM`) counts as confirmed and
+is booked without a call. Auto uploads use the free built-in parser (no LLM call).
 
 ## Detection
 

@@ -601,16 +601,17 @@ async def test_each_order_gate_failure_keeps_the_draft_with_its_reason(
     assert (await _convert(shop, draft_id)).reason == "DUPLICATE_RECENT"
     assert await count(Order, Order.tenant_id == _tenant(shop)) == orders_before
 
-    # Pathao / RedX bookings need location ids Autopilot cannot check yet.
+    # Whatever default courier the shop chose is used (operator decision):
+    # a Pathao shop converts like a Steadfast one.
     await _connect(shop, "pathao")
     await _set(shop, default_courier="pathao")
-    held = await _convert(shop, await _new_draft(client, ready, "+8801700000050"))
-    assert held.reason == "LOCATION_UNRESOLVED"
+    made = await _convert(shop, await _new_draft(client, ready, "+8801700000050"))
+    assert made.outcome == "CONVERTED"
     await _set(shop, default_courier="steadfast")
-    # The cap counts today's conversions: one made, a cap of 1 holds the next.
+    # The cap counts today's conversions: two made, a cap of 2 holds the next.
     made = await _convert(shop, await _new_draft(client, ready, "+8801700000051"))
     assert made.outcome == "CONVERTED"
-    await _set(shop, autopilot_daily_cap=1)
+    await _set(shop, autopilot_daily_cap=2)
     held = await _convert(shop, await _new_draft(client, ready, "+8801700000052"))
     assert held.reason == "DAILY_CAP_REACHED"
 
@@ -688,6 +689,36 @@ async def test_the_preview_shows_the_shop_gate_reason(client: AsyncClient, ready
         f"/v1/automation/workflows/{wf['id']}/preview", headers=headers, json={}
     )
     assert "AUTOPILOT_PAUSED" in preview.text
+
+
+async def test_the_status_compares_the_three_best_couriers_below_the_default(db: Any) -> None:
+    from app.consignments.models import ConsignmentStatus
+    from tests.test_quick_order import _parcel, _tenant
+
+    tenant = await _tenant(db)
+    delivered, returned = ConsignmentStatus.DELIVERED, ConsignmentStatus.RETURNED
+    for status in (delivered, delivered, delivered, returned):  # pathao 3/4, inside Dhaka
+        await _parcel(db, provider="pathao", status=status)
+    for _ in range(3):  # steadfast 3/3, outside Dhaka: every zone counts here
+        await _parcel(db, provider="steadfast", status=delivered, district="Chandpur", area=None)
+    for status in (delivered, returned, returned):  # redx 1/3
+        await _parcel(db, provider="redx", status=status)
+    for _ in range(2):  # carrybee 2/2: under the sample floor, not ranked
+        await _parcel(db, provider="carrybee", status=delivered)
+    for _ in range(3):  # paperfly 0/3: a fourth courier, cut by the limit of three
+        await _parcel(db, provider="paperfly", status=returned)
+    await db.flush()
+    db.add(ShopDeliveryRules(tenant_id=tenant.id, default_courier="redx"))
+    await db.flush()
+    view = (await autopilot.status_view(db, tenant.id))["courier_comparison"]
+    assert view["default"] == "redx" and view["days"] == 180
+    assert [
+        (o["courier"], o["delivered"], o["parcels"], o["is_default"]) for o in view["options"]
+    ] == [
+        ("steadfast", 3, 3, False),
+        ("pathao", 3, 4, False),
+        ("redx", 1, 3, True),
+    ]
 
 
 def test_no_shipped_courier_manifest_is_live_verified():
