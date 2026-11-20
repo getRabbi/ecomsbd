@@ -287,22 +287,9 @@ async def test_message_text_is_never_logged(
 ):
     shop = await signed_in_shop(client, unique_phone)
     key = (await _linked(client, shop))["ingest_key"]
-    # Alembic's fileConfig (test_migrations) disables every logger that existed
-    # when it ran; switch ecomsbd's back on for this test so it is not vacuous.
-    disabled = [
-        logger
-        for name, logger in logging.root.manager.loggerDict.items()
-        if name.startswith("app") and isinstance(logger, logging.Logger) and logger.disabled
-    ]
-    for logger in disabled:
-        logger.disabled = False
-    try:
-        with caplog.at_level(logging.DEBUG):
-            await _upload(client, key, _batch(CHAT, chat="Secret Sender"))
-            await _fold(shop)
-    finally:
-        for logger in disabled:
-            logger.disabled = True
+    with caplog.at_level(logging.DEBUG):
+        await _upload(client, key, _batch(CHAT, chat="Secret Sender"))
+        await _fold(shop)
     # Everything ecomsbd logs, and anything at INFO or above. (The SQLite
     # driver's own DEBUG trace prints query parameters; it is off in production.)
     records = [r for r in caplog.records if r.name.startswith("app") or r.levelno >= logging.INFO]

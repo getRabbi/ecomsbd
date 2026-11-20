@@ -2,15 +2,15 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-QUEUE (operator, 2026-11-20 run 3 — fixed order; every later session follows it with plain Prompt B):
-- Q1 WP4 finish — DONE (420eb86, e77288b).
-- Q2 INTEGRATION CHECKPOINT — PARTIAL: compose up, `a44001` round trip + full V4 round trip to `a39001` green on PostgreSQL 16, `V4_RELEASE_PR.md` written; PostgreSQL suite killed for low memory (operator action below).
-- Q3 WP5 Chrome extension (branch `v4/phase-5` from `v4/phase-4` head 395e891) — DONE (f6c8adf, 9afc8fc, 6c50c78 + docs); G5 = Chrome Web Store (operator).
-- Q4 WP6 Official Meta path on (branch `v4/phase-6` from `v4/phase-5` head) — NEXT.
+QUEUE (operator, 2026-11-21 run 4 — fixed order; every later session follows it with plain Prompt B):
+- OPERATOR NOTES (run 4): the operator ran the PostgreSQL suite elsewhere on `v4/phase-4` @ 395e891: "2439 passed, 3 failed, 1 skipped"; `main` @ 711f917: 1810 passed. Tests stay targeted per WP; ONE full SQLite suite run, only in Q8. No PostgreSQL and no docker in this run — the operator runs PostgreSQL once at the end.
+- F1–F3 FIXES (on `v4/phase-5`, one commit) — DONE: F1 realtime table coverage (`autopilot_decisions` → orders topic for the Home card, `billing_payment_submissions` → shop topic for the Plans card, the 7 voice tables silent); F2 `migrations/env.py` `fileConfig(..., disable_existing_loggers=False)` + the logger re-enable workaround in `test_intake_capture.py` removed; F3 the dispatcher test drains (≤ 50 passes) — job and assertions unchanged.
+- Q1–Q3 (run 3) DONE: WP4 finish, integration checkpoint (PARTIAL: PostgreSQL suite → now run by the operator), WP5 Chrome extension.
+- Q4 WP6 Official Meta path on (branch `v4/phase-6` from `v4/phase-5` head incl. fixes) — NEXT.
 - Q5 WP7.3 Own API domain (branch `v4/phase-7` from `v4/phase-6` head).
 - Q6 WP7.4 Referral (same branch).
-- Q7 WP7.1 + WP7.2: mark BLOCKED (SMS_PROVIDER_CONTRACT_REQUIRED, CARRYBEE_CONTRACT_REQUIRED, PAPERFLY_CONTRACT_REQUIRED) + operator actions; nothing provider-specific, no placeholder adapters.
-- Q8 FINAL: `docs/build/V4_RELEASE_PR.md` for Phases 0–7, final summary at the top of this file, `docs/IMPLEMENTATION_STATUS.md`, push every v4 branch, stop.
+- Q7 WP7.1 + WP7.2: mark BLOCKED (SMS_PROVIDER_CONTRACT_REQUIRED, CARRYBEE_CONTRACT_REQUIRED, PAPERFLY_CONTRACT_REQUIRED) + operator actions; no provider code, no placeholder adapters.
+- Q8 FINAL: one full SQLite suite run on `v4/phase-7` head (background, read only the summary line; fix only what fails); `docs/build/V4_RELEASE_PR.md` for Phases 0–7; final summary at the top of this file; `docs/IMPLEMENTATION_STATUS.md`; push every v4 branch. Never push or merge main. Report in ≤ 10 lines with the final branch head sha. Stop.
 Rules: each branch starts from the previous phase's head (nothing merged to main); push each branch at WP end; never push or merge main.
 
 WP: Q4 WP6 Official Meta path on   Step: not started — first step: `git checkout -b v4/phase-6` from `v4/phase-5` head, then plan here (≤ 10 bullets) from spec §8: (1) Messenger/WhatsApp connection → `ACTIVE` adds its packages to the shop's `covered_packages` (`shop_intake_settings`), disconnect removes them; devices ignore covered packages on the next rules refresh; (2) "Coming soon" for Messenger/WhatsApp goes away only when `META_APP_REVIEW_APPROVED=true` (config, new env var) **and** a connection health check passes; (3) end-to-end test: a Meta webhook chat-to-order draft flows into the confirmation + Autopilot pipeline. No new tables.
@@ -275,6 +275,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-21 run 4: operator notes + queue F1–F3, Q4–Q8 written into Now; F1–F3 fixed on v4/phase-5 (3 named tests + migration round trip → logging tests green); next Q4 WP6
 - 2026-11-20 run 3: operator queue Q1–Q8 written into Now; Q1 + Q2 found done (Q2 PARTIAL: PostgreSQL suite); Q3 WP5 DONE on v4/phase-5 (f6c8adf backend, 9afc8fc web, 6c50c78 extension); next Q4 WP6
 - 2026-11-20 Integration checkpoint: compose Postgres 16 + Redis 7 up; a44001 round trip + full V4 round trip to a39001 green; PostgreSQL suite stopped for low memory (operator action); V4_RELEASE_PR.md written; stopped (no WP5)
 - 2026-11-20 WP4 DONE: v4/phase-4 pushed; 8 operator decisions applied 420eb86 (LLM read for Autopilot uploads, Pathao/RedX hold restored, Dhoreni → SMS link, global voice cap every mode); Flutter Settings + Home card e77288b; integration checkpoint next (no WP5)

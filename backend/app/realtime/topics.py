@@ -50,6 +50,8 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "chat_order_drafts": T.ORDERS,
     "order_confirmations": T.ORDERS,
     "confirmation_attempts": T.ORDERS,
+    # V4 Autopilot decisions: the Home "Autopilot today" card counts them
+    "autopilot_decisions": T.ORDERS,
     # customers
     "customers": T.CUSTOMERS,
     "customer_addresses": T.CUSTOMERS,
@@ -110,6 +112,8 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "network_preferences": T.SHOP,
     "shop_delivery_rules": T.SHOP,
     "shop_intake_settings": T.SHOP,
+    # V4 manual TrxID payments: the Plans card lists the shop's submissions
+    "billing_payment_submissions": T.SHOP,
 }
 
 #: The table whose row *is* the topic's entity. A commit that changed exactly
@@ -219,5 +223,14 @@ SILENT_TABLES: frozenset[str] = frozenset(
         # risk lookups are metered and audited reads, not shop data
         "external_risk_lookups",
         "risk_provider_connections",
+        # V4 voice: provider traffic, metering and admin-managed audio; the
+        # confirmation and its attempts (mapped above) are what screens show
+        "voice_provider_connections",
+        "voice_call_events",
+        "voice_callback_deliveries",
+        "voice_call_charges",
+        "voice_credit_packs",
+        "voice_daily_usage",
+        "voice_intro_audio",
     }
 )
