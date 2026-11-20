@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, EmptyState, ErrorState, Tile } from '@/components/ui';
 import { api } from '@/lib/api';
 import {
-  isComingSoon,
+  isComingSoonFor,
   PROVIDERS,
   type Availability,
   type Connection,
@@ -44,6 +44,7 @@ export default function IntegrationsPage() {
   const [adding, setAdding] = useState<Provider | null | 'choose'>(null);
 
   const allItems = hub.data?.items ?? [];
+  const isComingSoon = (provider: string) => isComingSoonFor(provider, hub.data?.providers);
   const gatedIds = new Set(allItems.filter((c) => isComingSoon(c.provider)).map((c) => c.id));
   const items = allItems.filter((c) => !gatedIds.has(c.id));
   const live = items.filter((c) => c.state !== 'DISCONNECTED');
@@ -220,7 +221,7 @@ function ProviderCard({
   const { t } = labels;
   const blocked = availability && !availability.available;
 
-  if (isComingSoon(provider)) {
+  if (isComingSoonFor(provider, availability ? [availability] : null)) {
     // No connection list, no blocker text, no button: nothing here can be
     // acted on, and a provider error for a launch-gated provider is noise.
     return (
@@ -337,7 +338,7 @@ function AddDrawer({
       <form onSubmit={submit} className="wizard__body">
         <fieldset className="wizard__choices" disabled={busy} style={{ gridTemplateColumns: '1fr' }}>
           <legend>{t('int.choose')}</legend>
-          {PROVIDERS.filter((option) => !isComingSoon(option)).map((option) => {
+          {PROVIDERS.filter((option) => !isComingSoonFor(option, providers)).map((option) => {
             const status = providers.find((p) => p.provider === option);
             const blocked = status ? !status.available : false;
             return (

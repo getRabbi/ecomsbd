@@ -25,11 +25,35 @@ export function isComingSoon(provider: string): boolean {
   return COMING_SOON_PROVIDERS.has(provider);
 }
 
+/**
+ * V4 Phase 6: the official Meta path opens per shop. The API answers
+ * `coming_soon: false` for Messenger / WhatsApp only when Meta App Review is
+ * attested, the shop's flag is on and a health check passed; nothing else can
+ * lift the gate, and no answer (an older API, a failed load) keeps it.
+ */
+export const SERVER_GATED_PROVIDERS: ReadonlySet<string> = new Set<Provider>(['MESSENGER', 'WHATSAPP']);
+
+export function isComingSoonFor(
+  provider: string,
+  providers: readonly Availability[] | null | undefined,
+): boolean {
+  if (!isComingSoon(provider)) {
+    return false;
+  }
+  if (!SERVER_GATED_PROVIDERS.has(provider)) {
+    return true;
+  }
+  const status = providers?.find((p) => p.provider === provider);
+  return status?.coming_soon !== false;
+}
+
 export interface Availability {
   provider: Provider;
   available: boolean;
   blocker: string | null;
   one_click?: boolean;
+  /** V4 Phase 6: the API's launch gate (Messenger / WhatsApp). */
+  coming_soon?: boolean;
 }
 
 export interface Connection {

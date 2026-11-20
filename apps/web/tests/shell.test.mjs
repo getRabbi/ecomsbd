@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { COMING_SOON_PROVIDERS, isComingSoon, PROVIDERS } from '../lib/integrations.ts';
+import { COMING_SOON_PROVIDERS, isComingSoon, isComingSoonFor, PROVIDERS } from '../lib/integrations.ts';
 import { workspaceReady } from '../lib/me.ts';
 import { allowed, isActive, NAV, QUICK_ACTIONS, safeNextPath, sectionOf, visibleNav } from '../lib/nav.ts';
 import {
@@ -78,6 +78,21 @@ test('exactly the five launch-gated integrations are Coming Soon; couriers never
   for (const courier of ['STEADFAST', 'PATHAO', 'REDX', 'MANUAL']) {
     assert.equal(isComingSoon(courier), false, courier);
   }
+});
+
+test('only the API opens Messenger / WhatsApp; the store and website paths stay Coming Soon', () => {
+  const row = (provider, coming_soon) => ({ provider, available: true, blocker: null, coming_soon });
+  // No answer (older API, failed load) or no field keeps every gate shut.
+  assert.ok(PROVIDERS.every((provider) => isComingSoonFor(provider, null)));
+  assert.ok(isComingSoonFor('MESSENGER', [{ provider: 'MESSENGER', available: true, blocker: null }]));
+  assert.ok(isComingSoonFor('MESSENGER', [row('MESSENGER', true)]));
+  assert.equal(isComingSoonFor('MESSENGER', [row('MESSENGER', false)]), false);
+  assert.ok(isComingSoonFor('WHATSAPP', [row('MESSENGER', false)]), 'per provider');
+  assert.equal(isComingSoonFor('WHATSAPP', [row('WHATSAPP', false)]), false);
+  for (const provider of ['SHOPIFY', 'WOOCOMMERCE', 'CUSTOM_WEBSITE']) {
+    assert.ok(isComingSoonFor(provider, [row(provider, false)]), provider);
+  }
+  assert.equal(isComingSoonFor('STEADFAST', null), false);
 });
 
 test('shop form: validation mirrors what the API would silently mishandle', () => {
