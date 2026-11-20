@@ -137,7 +137,10 @@ async def hub(db: DbSession, actor: Viewer) -> dict[str, Any]:
     ]
     manage = actor.can(Permission.SETTINGS_MANAGE)
     return {
-        "providers": [service.availability(p, actor.user_id) for p in service.PROVIDERS],
+        "providers": [
+            await service.provider_view(db, p, actor.require_tenant(), actor.user_id)
+            for p in service.PROVIDERS
+        ],
         "items": await connection_views(db, rows, manage),
         "can_manage": manage,
         "can_retry": actor.can(Permission.ORDER_WRITE),
@@ -246,7 +249,9 @@ async def detail(connection_id: uuid.UUID, db: DbSession, actor: Viewer) -> dict
         "connection": await _one(db, conn, manage),
         "runs": [service.run_view(run) for run in runs],
         "events": [service.event_view(event) for event in events],
-        "availability": service.availability(conn.provider, actor.user_id),
+        "availability": await service.provider_view(
+            db, conn.provider, actor.require_tenant(), actor.user_id
+        ),
         "can_manage": manage,
         "can_retry": actor.can(Permission.ORDER_WRITE),
     }
@@ -441,6 +446,8 @@ async def update(
                     until=utc_now(),
                     actor_id=None,
                 )
+    if body.enabled is not None:
+        await service.refresh_meta_coverage(db, conn)
     await service.audit(
         db, AuditAction.INTEGRATION_CONFIGURED, conn, enabled=body.enabled, renamed=bool(body.name)
     )

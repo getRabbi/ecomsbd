@@ -97,6 +97,24 @@ def availability(provider: str, user_id: uuid.UUID | None = None) -> dict[str, A
     return result
 
 
+async def provider_view(
+    db: AsyncSession, provider: str, tenant_id: uuid.UUID, user_id: uuid.UUID | None
+) -> dict[str, Any]:
+    """:func:`availability` plus the launch gate: ``coming_soon`` is what the
+    hub shows instead of a Connect button."""
+    from app.intake.coverage import META_PROVIDERS, launch_open
+
+    result = availability(provider, user_id)
+    if provider in META_PROVIDERS:
+        # V4 Phase 6: App Review attested, the shop's flag, a passing check.
+        opened = await launch_open(db, tenant_id, provider, available=result["available"])
+        result["coming_soon"] = not opened
+    else:
+        # The store and website paths stay behind the clients' launch gate.
+        result["coming_soon"] = True
+    return result
+
+
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -844,6 +862,16 @@ async def went_live(db: AsyncSession, conn: IntegrationConnection) -> None:
     ).all()
     for row in rows:
         row.status, row.resolved_at = "RESOLVED", utc_now()
+    await refresh_meta_coverage(db, conn)
+
+
+async def refresh_meta_coverage(db: AsyncSession, conn: IntegrationConnection) -> None:
+    """V4 Phase 6: a Messenger / WhatsApp connection that starts or stops
+    delivering changes which phone apps the shop's devices skip."""
+    from app.intake.coverage import META_PROVIDERS, refresh_coverage
+
+    if conn.provider in META_PROVIDERS:
+        await refresh_coverage(db, conn.tenant_id)
 
 
 async def register_webhooks(
@@ -975,6 +1003,7 @@ async def health_check(db: AsyncSession, conn: IntegrationConnection) -> dict[st
             await record_issue(db, conn, kind="AUTH", topic="auth.check", code=exc.code)
         checks.append({"key": "AUTH", "ok": False, "code": exc.code})
     conn.config = {**conn.config, "checked_at": utc_now().isoformat()}
+    await refresh_meta_coverage(db, conn)
     return {
         "ok": all(check["ok"] for check in checks) if checks else True,
         "checks": checks,
@@ -1007,6 +1036,7 @@ async def disconnect(db: AsyncSession, conn: IntegrationConnection, *, remote: b
         from app.device_links.service import revoke_connection_keys
 
         await revoke_connection_keys(db, conn.id)
+    await refresh_meta_coverage(db, conn)
     await audit(db, AuditAction.INTEGRATION_DISCONNECTED, conn)
 
 

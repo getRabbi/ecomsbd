@@ -74,6 +74,9 @@ class FlagKey(StrEnum):
     AUTOPILOT_ENABLED = "autopilot_enabled"
     #: V4 Phase 5: the Chrome extension captures from Messenger / WhatsApp Web.
     EXTENSION_ENABLED = "extension_enabled"
+    #: V4 Phase 6: Messenger / WhatsApp official connections cover the matching
+    #: phone apps and may leave "Coming soon" (with META_APP_REVIEW_APPROVED).
+    META_OFFICIAL_PATH_ENABLED = "meta_official_path_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -112,6 +115,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.VOICE_CONFIRMATION_ENABLED: False,
     FlagKey.AUTOPILOT_ENABLED: False,
     FlagKey.EXTENSION_ENABLED: False,
+    FlagKey.META_OFFICIAL_PATH_ENABLED: False,
 }
 
 

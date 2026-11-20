@@ -144,6 +144,13 @@ async def scan_device_health(ctx: dict[str, Any] | None = None) -> dict[str, int
             )
         finally:
             clear_context(token)
+    # V4 Phase 6: covered apps follow the shop's Meta connections; this
+    # catches the changes no hook saw at once (a token found expired while a
+    # webhook was processed, a webhook subscription failing, the flag off).
+    from app.intake.coverage import sweep_coverage
+
+    swept = await sweep_coverage()
+    counts["coverage_shops"], counts["coverage_failed"] = swept["shops"], swept["failed"]
     log.info("device health scan finished", extra=counts)
     return counts
 

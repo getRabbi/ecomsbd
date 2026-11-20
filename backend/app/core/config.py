@@ -455,6 +455,10 @@ class Settings(BaseSettings):
     meta_whatsapp_test_user_ids: list[uuid.UUID] = Field(default_factory=list)
     # Local/test environments only. Production requires independent admin auth.
     meta_whatsapp_manual_enabled: bool = False
+    #: V4 WP6: operator attestation that Meta App Review granted the Messenger
+    #: and WhatsApp permissions. Messenger / WhatsApp leave "Coming soon" only
+    #: with this, the `meta_official_path_enabled` flag and a passing check.
+    meta_app_review_approved: bool = False
 
     # ------------------------------------------------------------- admin ---
     # Platform admin is a separate identity from any seller account. Empty by
