@@ -1,0 +1,176 @@
+# V4 release (Phases 0–4) — pull request notes
+
+Branch chain: `v4/phase-0` → `v4/phase-1` → `v4/phase-2` → `v4/phase-3` → `v4/phase-4`
+(each cut from the one before; none merged to `main`). This PR is `v4/phase-4` → `main`.
+Spec: `docs/V4_MASTER_BUILD_SPEC.md`. Ledger (per-WP commits, tests, decisions):
+`docs/build/PROGRESS.md`.
+
+**Safe to merge dark.** Every new feature is behind a flag that defaults **off**, every
+new provider is disabled until its contract and credentials exist, and the migrations
+only add tables/columns (no data is rewritten except the `chat_order_drafts.capture_source`
+backfill to `META_WEBHOOK`). With every flag off, the app behaves as V3.
+
+## What Phases 0–4 add
+
+**Phase 0 — make the core loop real**
+- WP0.1 docs truth. WP0.2 crash + funnel visibility: `product_events` + admin funnel
+  (`GET /v1/admin/ops/funnel`), Sentry with phone masking (mobile DSN via `env/production.json`).
+- WP0.3 LLM order parser (`EnhancedOrderParser`): deterministic first, the model only for
+  guessed/missing fields, strict schema (L12), `ai_usage` cost rows, 24 h answer cache,
+  metered by `ai_parse_monthly`; eval harness `python -m app.orders.parser.eval`.
+- WP0.4 shop delivery rules + COD auto-calculation (zone charges, default courier, thresholds).
+- WP0.5 invoice + 4×6 shipping label (web + mobile print).
+- WP0.6 courier-history chip + external-risk card (provider adapter **BLOCKED:
+  EXTERNAL_RISK_CONTRACT_REQUIRED**).
+- WP0.7 courier live-readiness: `app.provider_smoke` (read-only by default), Pathao
+  location resolver, statement profile loader (**BLOCKED: STATEMENT_SAMPLE_REQUIRED**).
+
+**Phase 1 — intake (auto-detect)**
+- WP1.1 linked devices: `DEVICE` connections, scoped ingest keys (`intake.capture`), pairing codes.
+- WP1.2 versioned intake rules (`intake_rule_sets`, admin publish / activate / rollback, ETag).
+- WP1.3 capture endpoint + Intake service (`POST /v1/intake/captures`, manual share/paste,
+  dedupe, 24 h duplicate-order link, retention).
+- WP1.4 Android Notification Listener (native Kotlin, heads-up + translucent quick-order;
+  no overlay / accessibility / call-log / SMS permissions).
+- WP1.5 quick-order sheet + Android share target (iOS Share Extension = operator, needs Xcode).
+
+**Phase 2 — confirmation engine + manual payments**
+- WP2.1 `order_confirmations` (own state machine, attempts, idempotent requests).
+- WP2.2 deterministic, explainable call policy (stored reason code; no ML).
+- WP2.3 manual call queue (quiet hours, audited number reveal, rate limit) + SMS confirm
+  link (`/c/<token>`; gateway **BLOCKED: SMS_PROVIDER_CONTRACT_REQUIRED**). A seller's
+  "Dhoreni" also sends the link once (`SELLER_REVIEW → SMS_LINK_SENT`, `SELLER_NO_ANSWER`).
+- WP2.4 automation hooks: confirmation + intake triggers, `REQUEST_CONFIRMATION`,
+  `CONVERT_DRAFT_TO_ORDER`, recipes incl. "Customer confirmed → book courier".
+- WP2.5 seller plan payment by bKash/Nagad TrxID (admin approve/reject; never in store builds).
+
+**Phase 3 — voice IVR** (mock provider only; real calls **BLOCKED:
+VOICE_PROVIDER_CONTRACT_REQUIRED**)
+- WP3.1 `VoiceTransport` port + YAML capability manifests + platform voice account.
+- WP3.2 call orchestration: dispatcher, signed callbacks, DTMF 1/2/3, reconciler, per-customer cap.
+- WP3.3 shop intro audio versions (operator upload; TTS **BLOCKED: TTS_PROVIDER_REQUIRED**),
+  seller listen + turn on (web).
+- WP3.4 call credits: plan allowance → packs, `VOICE_DAILY_GLOBAL_CAP` (every mode),
+  `VOICE_DAILY_SHOP_CAP` (Free Launch), admin grant + report.
+
+**Phase 4 — Autopilot** (opt-in, L11)
+- Shop gate (Settings checklist, re-checked every run) + order gate in
+  `CONVERT_DRAFT_TO_ORDER`; any failure leaves the draft with the seller and a reason code.
+  Autopilot never books: booking stays the WP2.4 confirmed → book workflow.
+- Pathao orders need resolved city/zone; RedX orders are always held (`LOCATION_UNRESOLVED`).
+- Autopilot shops' automatic uploads are read through the LLM merge path (metered).
+- Recipe "Autopilot" installed disabled; kill switches: flag, per-shop toggle, Pause 1 hour.
+- Web + mobile: Settings → Autopilot, Home "Autopilot today".
+
+## Migrations (single head `a44001`, all portable, downgrade implemented)
+
+| Id | File | Adds |
+|---|---|---|
+| `a40001` | `20261117_0100_a40001_v4_phase0.py` | `product_events`, `ai_usage`, `shop_delivery_rules`; widens `chat_order_drafts.cod_source` (16 chars, `CHAT_MISMATCH`); adds `external_risk_lookups.courier_history` |
+| `a41001` | `20261118_0100_a41001_v4_phase1.py` | `device_ingest_keys`, `device_pairing_codes`, `intake_rule_sets` (seed v1), `shop_intake_settings`; `chat_order_drafts.capture_source` (backfill `META_WEBHOOK`) + `duplicate_of_order_id` |
+| `a42001` | `20261119_0100_a42001_v4_phase2.py` | `order_confirmations`, `confirmation_attempts` (+ `segments`), `confirmation_links`, `billing_payment_submissions` |
+| `a43001` | `20261119_0100_a43001_v4_phase3.py` | `voice_provider_connections`, `voice_callback_deliveries`, `voice_call_events` (platform tables), `voice_intro_audio`, `voice_credit_packs`, `voice_call_charges`, `voice_daily_usage` |
+| `a44001` | `20261120_0100_a44001_v4_phase4.py` | `shop_delivery_rules`: `autopilot_on`, `autopilot_consent_at/_by`, `autopilot_paused_until`, `autopilot_manual_queue`; `autopilot_decisions` |
+
+Every new business table is tenant-owned with RLS on and client-role grants revoked
+(pattern of `a39001`); platform tables (voice account, callbacks, daily usage) have RLS on
+and client roles revoked. Integration checkpoint result (PostgreSQL suite + round trip):
+see the last section.
+
+## New feature flags (all default **off**, `app/common/feature_flags.py`)
+
+| Flag | Turns on | Needs first |
+|---|---|---|
+| `product_events_enabled` | funnel events + admin funnel | — |
+| `delivery_rules_enabled` | zone charges, COD auto-calc, default courier | — |
+| `order_documents_enabled` | invoice + shipping label | — |
+| `intake_device_enabled` | linked phones, captures, intake rules | — |
+| `confirmation_engine_enabled` | customer confirmations, policy, call queue | `delivery_rules_enabled` (thresholds) |
+| `confirmation_sms_link_enabled` | SMS confirm link | engine + `SMS_TRANSPORT` + `PUBLIC_WEB_URL` (gateway contract) |
+| `manual_payments_enabled` | bKash/Nagad TrxID plan payments | `MANUAL_PAYMENT_ACCOUNTS` |
+| `voice_confirmation_enabled` | IVR calls, intro audio | engine + `VOICE_TRANSPORT` + provider account + intro + credit |
+| `autopilot_enabled` | Autopilot (global kill switch) | the whole checklist per shop |
+
+Existing flag now used by V4: `ai_parse_enabled` (the LLM parser; off). New entitlements:
+`voice_calls_monthly` (Free 0 / Starter 50 / Pro 200), `autopilot` (Pro).
+
+## New environment variables (both `.env.example` and `.env.production.example`)
+
+| Variable | Default | When |
+|---|---|---|
+| `AI_PARSE_PROVIDER` | `anthropic` | with `ai_parse_enabled` |
+| `AI_PARSE_API_KEY` | empty (secret) | REQUIRED WHEN `ai_parse_enabled` |
+| `AI_PARSE_MODEL` | `claude-haiku-5-5` | REQUIRED WHEN `ai_parse_enabled` |
+| `AI_PARSE_TIMEOUT_SECONDS` | `8` | optional |
+| `AI_PARSE_MAX_INPUT_CHARS` | `6000` | optional |
+| `AI_PARSE_PRICE_INPUT_PER_MTOK_USD` / `_OUTPUT_` | `0.10` / `0.50` | cost estimate in `ai_usage` |
+| `MANUAL_PAYMENT_ACCOUNTS` | empty | REQUIRED WHEN `manual_payments_enabled` (JSON list) |
+| `VOICE_TRANSPORT` | `disabled` | REQUIRED WHEN `voice_confirmation_enabled` (`mock` refused when deployed) |
+| `TTS_PROVIDER` | `disabled` | optional (`fake` refused when deployed) |
+| `VOICE_AMOUNT_PREFIX_AUDIO_REF` / `_SUFFIX_` | empty | optional, both or neither (spoken COD) |
+| `VOICE_DAILY_GLOBAL_CAP` | `300` | every mode; 0 = no calls |
+| `VOICE_DAILY_SHOP_CAP` | `30` | Free Launch Mode only; 0 = no calls |
+
+Existing variables V4 reads: `SMS_TRANSPORT`, `PUBLIC_WEB_URL`, `R2_*` (intro audio),
+`FREE_LAUNCH_MODE`, `DISTRIBUTION_CHANNEL`. Mobile build defines: `ECOMSBD_SENTRY_DSN`
+(`env/production.json`), `ECOMSBD_DIRECT_BUILD` (not used: no direct APK, operator decision).
+
+## New jobs, topics, routes (runbooks in `docs/runbooks/`)
+
+- Worker: `follow_up_confirmations` (SMS link / retries / expiry), `dispatch_confirmation_calls`
+  (IVR + reconciler). Runbooks `ORDER_CONFIRMATIONS.md`, `VOICE_CONFIRMATION.md`.
+- Outbox topics (each with a handler): `intake.draft_ready`, `confirmation.*`,
+  `confirmation.link_requested`, `billing.manual_payment_reviewed`, `voice.intro_requested`.
+- Public: `GET/POST /v1/public/confirmations/{token}` (+ web `/c/[token]`),
+  `POST /v1/webhooks/voice/{provider}` (refuses everything without a verified provider).
+- Runbooks: `AI_PARSE.md`, `INTAKE_RULES.md`, `INTAKE_CAPTURE.md`, `ORDER_CONFIRMATIONS.md`,
+  `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`.
+
+## Staging turn-on order
+
+Each step is a flag on for one test shop first (admin console, tenant row), checked, then
+widened. Stop at the first step whose check fails; turning a flag off is the rollback.
+
+1. Deploy; `alembic upgrade head` (→ `a44001`, one head). Nothing visible changes.
+2. `product_events_enabled` (global) → `GET /v1/admin/ops/funnel` shows events. Ship the
+   mobile build with `ECOMSBD_SENTRY_DSN`; one test event arrives with the phone masked.
+3. `delivery_rules_enabled` → set three zone charges + default courier; a new order's COD
+   = items + zone charge. Then `order_documents_enabled` → print an invoice and a label.
+4. `ai_parse_enabled` with `AI_PARSE_API_KEY` / `AI_PARSE_MODEL` — only after the G0.3
+   live holdout run ≥ 90% (runbook `AI_PARSE.md`).
+5. Courier live: run `python -m app.provider_smoke steadfast --account-id <id>`, then add
+   `live_verification` to the courier's manifest (runbook `AUTOPILOT.md`).
+6. `intake_device_enabled` → link an Android phone, publish/activate rules, capture a
+   WhatsApp message into Chat orders (G1 steps in the ledger).
+7. `confirmation_engine_enabled` → a new order gets a confirmation and appears in the call
+   queue. Then, once an SMS gateway exists: `SMS_TRANSPORT`, `PUBLIC_WEB_URL`,
+   `confirmation_sms_link_enabled`. Separately: `MANUAL_PAYMENT_ACCOUNTS` +
+   `manual_payments_enabled` → one staged TrxID payment approved (G2).
+8. Voice, once a provider contract exists: `VOICE_TRANSPORT`, the provider account
+   (`PUT /v1/admin/voice/providers/{provider}`), an intro per shop, credit, then
+   `voice_confirmation_enabled` (G3: 200 real calls, report).
+9. `autopilot_enabled` for pilot shops only (Pro, ≥ 20 confirmed, default courier
+   live-verified, consent in Settings → Autopilot, the "Autopilot" and "Customer confirmed
+   → book courier" workflows on). G4: 5 shops × 14 days, 0 wrong bookings.
+
+## Blocked / operator items (not in this PR)
+
+`EXTERNAL_RISK_CONTRACT_REQUIRED` (WP0.6), `STATEMENT_SAMPLE_REQUIRED` (WP0.7),
+`SMS_PROVIDER_CONTRACT_REQUIRED` (WP2.3), `VOICE_PROVIDER_CONTRACT_REQUIRED` (WP3.1),
+`TTS_PROVIDER_REQUIRED` (WP3.3); iOS Share Extension (Xcode); gates G0–G4 need real-world
+evidence (ledger → "Operator actions waiting").
+
+## Integration checkpoint (2026-11-20)
+
+Local `docker compose up -d` (Docker 29.9.3; `postgres:16-alpine`, `redis:7-alpine`),
+against the compose database with an explicit local `DATABASE_URL`:
+
+- `alembic upgrade head && alembic downgrade -1 && alembic upgrade head`:
+  **green** — `a44001 → a43001 → a44001`, `alembic heads` = one head `a44001`.
+- Extra, because no Phase 0–3 round trip had run on PostgreSQL: `alembic downgrade a39001`
+  (a44001 → a43001 → a42001 → a41001 → a40001 → a39001) then `upgrade head`: **green**.
+- PostgreSQL suite (`TEST_DATABASE_URL=…/ecomsbd_test python -m pytest -q`): **not run to
+  the end** — the session stopped it because this 8 GB machine ran low on memory (not a
+  test failure). Its session setup did migrate `ecomsbd_test` to `a44001` through the
+  suite's own Alembic path before it stopped. No test result exists yet; run it on a
+  machine with more memory or in CI before merging (operator action in the ledger).
