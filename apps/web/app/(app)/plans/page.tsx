@@ -2,6 +2,7 @@
 
 import { CurrentAccess } from '@/components/current-access';
 import { ManualPayment } from '@/components/ManualPayment';
+import { Referral } from '@/components/Referral';
 import { PageHeader } from '@/components/shell';
 import { Card, ErrorState } from '@/components/ui';
 import { launchCopy, showPlanUi } from '@/lib/access';
@@ -25,6 +26,8 @@ export default function PlansPage() {
         </Card>
         {/* V4 WP2.5: bKash / Nagad TrxID payment when the server offers it. */}
         <ManualPayment fallback={<Card><p className="card__hint">{copy.unavailable}</p></Card>} />
+        {/* V4 WP7.4: refer a shop; renders nothing unless the server offers it. */}
+        <Referral />
       </> : null}
     </div>
   </>;

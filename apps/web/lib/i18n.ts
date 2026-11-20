@@ -15,6 +15,7 @@ import { opsEn, opsBn } from './ops-strings';
 import { deliveryEn, deliveryBn } from './delivery-strings';
 import { documentsEn, documentsBn } from './documents-strings';
 import { manualPaymentEn, manualPaymentBn } from './manual-payment';
+import { referralEn, referralBn } from './referral';
 import { voiceIntroEn, voiceIntroBn } from './voice-intro';
 import { autopilotEn, autopilotBn } from './autopilot';
 import { extensionEn, extensionBn } from './extension';
@@ -48,6 +49,7 @@ export const strings = {
     ...deliveryEn,
     ...documentsEn,
     ...manualPaymentEn,
+    ...referralEn,
     ...voiceIntroEn,
     ...autopilotEn,
     ...extensionEn,
@@ -686,6 +688,7 @@ export const strings = {
     ...deliveryBn,
     ...documentsBn,
     ...manualPaymentBn,
+    ...referralBn,
     ...voiceIntroBn,
     ...autopilotBn,
     ...extensionBn,
