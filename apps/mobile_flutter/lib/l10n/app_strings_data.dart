@@ -18,6 +18,7 @@ import 'call_queue_strings.dart';
 import 'manual_payment_strings.dart';
 import 'chat_order_strings.dart';
 import 'delivery_rules_strings.dart';
+import 'autopilot_strings.dart';
 import 'intake_strings.dart';
 import 'documents_strings.dart';
 import 'crm_strings.dart';
@@ -48,6 +49,7 @@ final Map<String, String> banglaStrings = <String, String>{
   ...integrationsBn,
   ...sellerOpsBn,
   ...deliveryRulesBn,
+  ...autopilotBn,
   ...callQueueBn,
   ...manualPaymentBn,
   ...intakeBn,
@@ -96,6 +98,7 @@ final Map<String, String> englishStrings = <String, String>{
   ...integrationsEn,
   ...sellerOpsEn,
   ...deliveryRulesEn,
+  ...autopilotEn,
   ...callQueueEn,
   ...manualPaymentEn,
   ...intakeEn,

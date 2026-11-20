@@ -157,6 +157,10 @@ class ApiClient {
   Future<Map<String, dynamic>> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
 
+  /// PUT a whole setting (V4 Phase 4: `PUT /autopilot`).
+  Future<Map<String, dynamic>> put(String path, {Object? body}) =>
+      _send(() => _dio.put<dynamic>(path, data: body));
+
   /// GET a document the server renders as text (V4 WP0.5 invoices and
   /// labels are HTML). Errors still arrive as the API's JSON error shape.
   Future<String> getText(String path, {Map<String, dynamic>? query}) async {

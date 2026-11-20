@@ -107,6 +107,9 @@ const automationEn = <String, String>{
       'Customer confirmation is not on for this shop',
   'auto.reason.ORDER_NOT_DRAFT': 'Order was already confirmed or moved on',
   'auto.reason.ALREADY_REQUESTED': 'Confirmation was already requested',
+  'auto.reason.CONVERTED': 'Autopilot made the order',
+  'auto.reason.DRAFT_NOT_CONVERTED':
+      'Skipped: Autopilot left the chat order for you',
   'auto.reason.AUTOPILOT_DISABLED':
       'Autopilot is not on yet; the draft waits for you',
   'auto.reason.CALL': 'Queued for a confirmation call',
@@ -213,6 +216,9 @@ const automationBn = <String, String>{
       'এই শপে গ্রাহক নিশ্চিতকরণ চালু নেই',
   'auto.reason.ORDER_NOT_DRAFT': 'অর্ডারটি আগেই নিশ্চিত হয়েছে বা এগিয়ে গেছে',
   'auto.reason.ALREADY_REQUESTED': 'নিশ্চিতকরণ আগেই চাওয়া হয়েছে',
+  'auto.reason.CONVERTED': 'অটোপাইলট অর্ডারটি তৈরি করেছে',
+  'auto.reason.DRAFT_NOT_CONVERTED':
+      'বাদ: অটোপাইলট চ্যাট অর্ডারটি আপনার জন্য রেখে দিয়েছে',
   'auto.reason.AUTOPILOT_DISABLED':
       'অটোপাইলট এখনো চালু নয়; খসড়াটি আপনার অপেক্ষায়',
   'auto.reason.CALL': 'নিশ্চিতকরণ কলের সারিতে রাখা হয়েছে',

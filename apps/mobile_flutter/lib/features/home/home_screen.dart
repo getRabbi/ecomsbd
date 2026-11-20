@@ -15,6 +15,7 @@ import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_strings.dart';
 import '../expenses/expenses_screen.dart';
+import '../autopilot/autopilot_home_card.dart';
 import '../orders/order_compose_screen.dart';
 import '../shared/data_state.dart';
 import 'widgets/seller_today.dart';
@@ -128,6 +129,7 @@ class _HomeBody extends ConsumerWidget {
             ),
             TodayAttention(metrics: metrics, onNavigate: onNavigate),
             TodaySuggestions(metrics: metrics, onNavigate: onNavigate),
+            const AutopilotHomeCard(),
             const CourierSavingPreview(),
             SectionHeader(
               title: context.tr('home.quickTitle'),
