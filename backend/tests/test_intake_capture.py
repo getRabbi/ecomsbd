@@ -265,13 +265,21 @@ async def test_uploads_are_rate_limited_per_device(
     assert intake_api.CAPTURES_PER_MINUTE == 2 and intake_api.MAX_BATCH == 50
 
 
-async def test_extension_captures_wait_for_phase_5(
-    client: AsyncClient, unique_phone: str, intake_on: None
+async def test_an_extension_needs_its_flag_and_never_uses_the_phone_upload(
+    client: AsyncClient, unique_phone: str, intake_on: None, settings: Any
 ):
+    """Phase 5: linking an extension needs `extension_enabled`; once linked it
+    captures through `/intake/captures/extension` only (test_intake_extension)."""
+    from tests.conftest import _global_flag_on
+
     shop = await signed_in_shop(client, unique_phone)
-    key = (await _linked(client, shop, platform="extension"))["ingest_key"]
-    refused = await _upload(client, key, _batch(CHAT))
-    assert refused.status_code == 403 and refused.json()["code"] == "FEATURE_DISABLED"
+    off = await client.post(LINK, json=_device(platform="extension"), headers=auth_header(shop))
+    assert off.status_code == 403 and off.json()["code"] == "FEATURE_DISABLED"
+    async for _ in _global_flag_on(settings, "extension_enabled"):
+        key = (await _linked(client, shop, platform="extension"))["ingest_key"]
+        refused = await _upload(client, key, _batch(CHAT))
+        assert refused.status_code == 403
+        assert refused.json()["details"]["reason"] == "USE_EXTENSION_CAPTURE"
 
 
 async def test_message_text_is_never_logged(

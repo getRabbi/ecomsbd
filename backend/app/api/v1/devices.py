@@ -8,8 +8,13 @@
   phone exchanges the code for its key.
 * ``POST /v1/intake/heartbeat`` — the first intake route: the only kind of
   route an ingest key is valid on.
+* ``GET /v1/devices/extensions`` — the shop's linked browser extensions, for
+  the web Settings card (V4 Phase 5).
+* ``POST /v1/intake/unlink`` — ingest key: the extension's Unpair revokes its
+  own key and disconnects its link.
 
-All behind ``intake_device_enabled``.
+All behind ``intake_device_enabled``; the browser extension also behind
+``extension_enabled``.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from app.db.session import system_session
 from app.device_links import service
 from app.device_links.auth import IngestPrincipal, require_ingest_key
 from app.device_links.models import INTAKE_CAPTURE, DevicePairingCode
+from app.device_links.service import DEVICE_PROVIDER
 from app.integrations.models import IntegrationConnection
 from app.tenants.roles import Permission
 
@@ -80,12 +86,18 @@ class HeartbeatResponse(BaseModel):
     autopilot_on: bool = False
 
 
-async def _require_flag(db: DbSession, tenant_id: object) -> None:
-    if not await FeatureFlagService(db).is_enabled(
+async def _require_flag(db: DbSession, tenant_id: object, platform: str = "android") -> None:
+    flags = FeatureFlagService(db)
+    if not await flags.is_enabled(
         FlagKey.INTAKE_DEVICE_ENABLED,
         tenant_id=tenant_id,  # type: ignore[arg-type]
     ):
         raise AppError("Linked devices are not enabled", code=ErrorCode.FEATURE_DISABLED)
+    if platform == "extension" and not await flags.is_enabled(
+        FlagKey.EXTENSION_ENABLED,
+        tenant_id=tenant_id,  # type: ignore[arg-type]
+    ):
+        raise AppError("The browser extension is not enabled", code=ErrorCode.FEATURE_DISABLED)
 
 
 def _key(issued: service.IssuedKey) -> KeyResponse:
@@ -99,7 +111,7 @@ async def link_device(
     payload: DeviceInfo, principal: TenantPrincipal, db: DbSession
 ) -> KeyResponse:
     tenant_id = principal.require_tenant()
-    await _require_flag(db, tenant_id)
+    await _require_flag(db, tenant_id, payload.platform)
     async with system_session("device link: install uniqueness") as unscoped:
         issued = await service.link_device(
             db,
@@ -144,10 +156,8 @@ async def claim_pairing(payload: ClaimRequest, request: Request) -> KeyResponse:
                 )
             )
         ).scalar_one_or_none()
-        if pending is not None and not await FeatureFlagService(unscoped).is_enabled(
-            FlagKey.INTAKE_DEVICE_ENABLED, tenant_id=pending
-        ):
-            raise AppError("Linked devices are not enabled", code=ErrorCode.FEATURE_DISABLED)
+        if pending is not None:
+            await _require_flag(unscoped, pending, payload.platform)
         issued = await service.claim_pairing_code(
             unscoped,
             code=payload.code,
@@ -183,3 +193,67 @@ async def device_heartbeat(
 
 
 __all__ = ["router"]
+
+
+# ------------------------------------------------------------- extension ---
+
+
+class LinkedExtension(BaseModel):
+    connection_id: str
+    name: str | None
+    state: str
+    app_version: str | None
+    last_heartbeat_at: str | None
+    linked_at: datetime
+
+
+class ExtensionsResponse(BaseModel):
+    extensions: list[LinkedExtension]
+
+
+@router.get("/devices/extensions", response_model=ExtensionsResponse, dependencies=_MANAGE)
+async def linked_extensions(principal: TenantPrincipal, db: DbSession) -> ExtensionsResponse:
+    """The web card's list; health, revoke and the kill switch stay in the hub (L2)."""
+    tenant_id = principal.require_tenant()
+    await _require_flag(db, tenant_id, "extension")
+    rows = (
+        await db.scalars(
+            sa.select(IntegrationConnection)
+            .where(
+                IntegrationConnection.provider == DEVICE_PROVIDER,
+                IntegrationConnection.state == "CONNECTED",
+            )
+            .order_by(IntegrationConnection.created_at.desc())
+        )
+    ).all()
+    return ExtensionsResponse(
+        extensions=[
+            LinkedExtension(
+                connection_id=str(row.id),
+                name=row.account_name,
+                state=row.state,
+                app_version=(row.config or {}).get("app_version"),
+                last_heartbeat_at=(row.config or {}).get("last_heartbeat_at"),
+                linked_at=row.created_at,
+            )
+            for row in rows
+            if (row.config or {}).get("platform") == "extension"
+        ]
+    )
+
+
+class UnlinkResponse(BaseModel):
+    connection_id: str
+    state: str
+
+
+@router.post("/intake/unlink", response_model=UnlinkResponse)
+async def unlink_self(device: IngestCapture, db: DbSession) -> UnlinkResponse:
+    """Unpair: the key's own link is disconnected and every key of it revoked."""
+    from app.integrations import service as integrations
+
+    conn = await db.get(IntegrationConnection, device.connection_id)
+    assert conn is not None  # noqa: S101 - resolved by require_ingest_key
+    await integrations.disconnect(db, conn, remote=False)
+    await db.flush()
+    return UnlinkResponse(connection_id=str(conn.id), state=conn.state)

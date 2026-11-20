@@ -2,13 +2,26 @@
 Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 
 ## Now
-WP: INTEGRATION CHECKPOINT (Phases 0–4; operator: do NOT start WP5)   Step: done except the PostgreSQL suite (killed: low memory) — waiting on operator. Result: compose up OK; `a44001` round trip + full V4 round trip to `a39001` green on PostgreSQL 16; `docs/build/V4_RELEASE_PR.md` written. Plan was:
-1. `docker compose up -d` (Postgres 16 + Redis 7 only; the app services are behind `--profile app`).
-2. PostgreSQL suite: `TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_test python -m pytest -q` (full suite, operator-asked; background run).
-3. `alembic upgrade head && alembic downgrade -1 && alembic upgrade head` (head `a44001`) against the compose database.
-4. Fix what fails, commit on `v4/phase-4`, push the branch (never `main`).
-5. `docs/build/V4_RELEASE_PR.md`: what Phases 0–4 add, every migration, every new flag (all default off), every new env var, the staging turn-on order.
-6. Ledger + report ≤ 10 lines, stop.
+QUEUE (operator, 2026-11-20 run 3 — fixed order; every later session follows it with plain Prompt B):
+- Q1 WP4 finish — DONE (420eb86, e77288b).
+- Q2 INTEGRATION CHECKPOINT — PARTIAL: compose up, `a44001` round trip + full V4 round trip to `a39001` green on PostgreSQL 16, `V4_RELEASE_PR.md` written; PostgreSQL suite killed for low memory (operator action below).
+- Q3 WP5 Chrome extension (branch `v4/phase-5` from `v4/phase-4` head 395e891) — IN_PROGRESS.
+- Q4 WP6 Official Meta path on (branch `v4/phase-6` from `v4/phase-5` head).
+- Q5 WP7.3 Own API domain (branch `v4/phase-7` from `v4/phase-6` head).
+- Q6 WP7.4 Referral (same branch).
+- Q7 WP7.1 + WP7.2: mark BLOCKED (SMS_PROVIDER_CONTRACT_REQUIRED, CARRYBEE_CONTRACT_REQUIRED, PAPERFLY_CONTRACT_REQUIRED) + operator actions; nothing provider-specific, no placeholder adapters.
+- Q8 FINAL: `docs/build/V4_RELEASE_PR.md` for Phases 0–7, final summary at the top of this file, `docs/IMPLEMENTATION_STATUS.md`, push every v4 branch, stop.
+Rules: each branch starts from the previous phase's head (nothing merged to main); push each branch at WP end; never push or merge main.
+
+WP: Q3 WP5 Chrome extension   Step: backend slice. Plan:
+1. Flag `extension_enabled` (default off); pairing claim / link with platform `extension` and every extension ingest call need it (plus `intake_device_enabled`).
+2. `POST /v1/intake/captures/extension` (ingest key, `Idempotency-Key`): host ∈ the three hosts, source `EXTENSION`, read at once (seller tapped Capture, L4). Answer = draft id, status, missing fields, `open_url` only — no shop data (customer, CRM address) goes back to an ingest key. `/intake/captures` keeps refusing extension links.
+3. `POST /v1/intake/unlink` (ingest key): the extension's Unpair revokes its own key and disconnects the link.
+4. Tests `test_intake_extension.py` + touched suites.
+5. Web: Settings "Browser extension" card (pairing code, flag-gated) and `/quick-order?draft=<id>` opening the order composer with the draft; EN + BN; web tests.
+6. `apps/extension`: MV3 + TypeScript, plain `tsc`; three hosts only; content script reads only the open conversation via `/v1/intake/rules` selectors (none verified in the seed → selection fallback with the Bangla notice), MutationObserver phone highlight; side panel pair / capture / open; unpair.
+7. Unit tests (node --test) for the phone extractor (against the real v1 rules fixture) and the selector reader; `STORE_LISTING.md` EN + BN; CI job `extension`.
+8. Ledger, `IMPLEMENTATION_STATUS.md`, `V4_RELEASE_PR.md`, runbook; push `v4/phase-5`.
 WP4 DONE (ceb2ee1, d6703b0, 38b3018, 420eb86, e77288b): backend gates + convert + recipe + pause, web Settings + Home card, Flutter Settings + Home card, and the eight operator decisions of 2026-11-20 (session 2) applied. Phase 4 code complete; G4 = operator pilot.
 Phase 3 code complete (WP3.1–3.4). WP3.4 done (a202f25, 735664f): plan allowance → oldest pack, Free Launch daily caps, `NO_VOICE_CREDIT`, admin credits + pack grant + report. Phase-end PostgreSQL suite + `a43001` round trip need a machine with PostgreSQL; G3 needs a provider contract and 200 real calls (operator actions below).
 WP3.3 done as far as it can go (2769867, 57c4042): intro versions + operator upload + seller listen/turn-on (web) + rename retire + provider upload in the call worker; TTS generation `BLOCKED: TTS_PROVIDER_REQUIRED` (operator action below). Voice can now be on for a shop with the mock; real calls still need a provider contract.

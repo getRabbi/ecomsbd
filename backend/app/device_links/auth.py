@@ -86,6 +86,14 @@ def require_ingest_key(scope: str) -> Callable[..., Any]:
                 FlagKey.INTAKE_DEVICE_ENABLED, tenant_id=key.tenant_id
             ):
                 raise AppError("Linked devices are not enabled", code=ErrorCode.FEATURE_DISABLED)
+            if (conn.config or {}).get("platform") == "extension" and not await FeatureFlagService(
+                db
+            ).is_enabled(FlagKey.EXTENSION_ENABLED, tenant_id=key.tenant_id):
+                # V4 Phase 5: `extension_enabled` off stops every linked
+                # extension at once (rules, heartbeat, capture, unlink).
+                raise AppError(
+                    "The browser extension is not enabled", code=ErrorCode.FEATURE_DISABLED
+                )
             now = utc_now()
             if key.last_used_at is None or now - key.last_used_at >= timedelta(minutes=1):
                 key.last_used_at = now

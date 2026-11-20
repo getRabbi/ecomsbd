@@ -72,6 +72,8 @@ class FlagKey(StrEnum):
     #: V4 Phase 4: Autopilot turns ready chat drafts into orders. Off is the
     #: global kill switch; a shop's own row off is that shop's.
     AUTOPILOT_ENABLED = "autopilot_enabled"
+    #: V4 Phase 5: the Chrome extension captures from Messenger / WhatsApp Web.
+    EXTENSION_ENABLED = "extension_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -109,6 +111,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.MANUAL_PAYMENTS_ENABLED: False,
     FlagKey.VOICE_CONFIRMATION_ENABLED: False,
     FlagKey.AUTOPILOT_ENABLED: False,
+    FlagKey.EXTENSION_ENABLED: False,
 }
 
 

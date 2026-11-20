@@ -10,6 +10,9 @@
   order-like messages from a linked phone, for the chat-order worker.
 * ``POST /v1/intake/captures/manual`` — seller session (``order.write``): a
   shared or pasted message, or a tapped notification; read into a draft at once.
+* ``POST /v1/intake/captures/extension`` — ingest key of a linked browser
+  extension (V4 Phase 5, ``extension_enabled``): the open chat or the selected
+  text, read into a draft at once; the answer carries ids and field names only.
 
 All behind ``intake_device_enabled`` (the ingest-key dependency checks it too).
 """
@@ -37,6 +40,7 @@ from app.chat_orders import service as chat_orders
 from app.chat_orders.models import (
     DEVICE,
     DEVICE_NOTIFICATION,
+    EXTENSION,
     OPEN_STATES,
     ChatMessage,
     ChatOrderDraft,
@@ -292,9 +296,11 @@ async def capture_batch(
     if conn is None:
         raise NotFoundError()
     if (conn.config or {}).get("platform") == "extension":
-        # Phase 5 turns this on behind `extension_enabled`.
-        raise AppError(
-            "The browser extension is not available yet", code=ErrorCode.FEATURE_DISABLED
+        # V4 Phase 5: the extension captures only after a tap, through
+        # `/intake/captures/extension`; this route is the phone's buffer upload.
+        raise ForbiddenError(
+            "A browser extension captures through its own route",
+            details={"reason": "USE_EXTENSION_CAPTURE"},
         )
     rule_set = await rules.active_rule_set(db)
     enabled = {
@@ -346,6 +352,149 @@ async def capture_batch(
     body = {"batch_id": batch_id, "accepted": len(result.stored), "duplicates": result.duplicates}
     await complete_idempotent(db, claim.record, status_code=200, body=body)
     return CaptureResponse(**body)
+
+
+# ------------------------------------------------------------- extension ---
+
+
+class ExtensionCapture(BaseModel):
+    """What the seller captured in Messenger / WhatsApp Web (V4 Phase 5).
+
+    ``CONVERSATION``: the open chat's messages, read with the rule set's
+    verified selectors. ``SELECTION``: the text the seller selected (no
+    selectors, or they no longer match the page).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    host: Literal["business.facebook.com", "www.messenger.com", "web.whatsapp.com"]
+    origin: Literal["CONVERSATION", "SELECTION"]
+    #: The open chat as the page names it. Omitted (a selection) = its own sender.
+    conversation_key: str | None = Field(default=None, min_length=1, max_length=200)
+    sender_display: str | None = Field(default=None, max_length=120)
+    messages: list[CaptureMessageIn] = Field(min_length=1, max_length=MAX_BATCH)
+
+    @model_validator(mode="after")
+    def _conversation_has_its_chat(self) -> ExtensionCapture:
+        if self.origin == "CONVERSATION" and self.conversation_key is None:
+            raise ValueError("a conversation capture needs conversation_key")
+        return self
+
+
+class ExtensionCaptureResponse(BaseModel):
+    """Ids and field names only: an ingest key reads nothing of the shop's.
+
+    The draft's values (and anything filled from the shop's customers) are
+    shown on ``open_path`` — the web quick-order page, under the seller's own
+    session — never to the key.
+    """
+
+    draft_id: str | None
+    status: str | None
+    missing_fields: list[str]
+    accepted: int
+    duplicates: int
+    open_path: str | None
+    replayed: bool = False
+
+
+async def _extension_result(
+    db: DbSession, message_id: uuid.UUID | None, *, accepted: int, duplicates: int, replayed: bool
+) -> ExtensionCaptureResponse:
+    row = await db.get(ChatMessage, message_id) if message_id is not None else None
+    draft = (
+        await db.get(ChatOrderDraft, row.linked_draft_id)
+        if row is not None and row.linked_draft_id is not None
+        else None
+    )
+    return ExtensionCaptureResponse(
+        draft_id=str(draft.id) if draft is not None else None,
+        status=draft.status if draft is not None else None,
+        missing_fields=[str(name) for name in (draft.missing_fields or [])] if draft else [],
+        accepted=accepted,
+        duplicates=duplicates,
+        open_path=f"/quick-order?draft={draft.id}" if draft is not None else None,
+        replayed=replayed,
+    )
+
+
+@router.post(
+    "/captures/extension",
+    response_model=ExtensionCaptureResponse,
+    summary="Capture the open chat (or the selected text) from the browser extension",
+)
+async def capture_extension(
+    payload: ExtensionCapture,
+    device: IngestCapture,
+    db: DbSession,
+    capture_id: BatchKey,
+) -> ExtensionCaptureResponse:
+    limited = await RateLimiter().hit(
+        "intake-capture",
+        str(device.connection_id),
+        limit=CAPTURES_PER_MINUTE,
+        window_seconds=60,
+    )
+    if not limited.allowed:
+        raise RateLimitedError(retry_after_seconds=limited.retry_after_seconds)
+    conn = await db.get(IntegrationConnection, device.connection_id)
+    if conn is None:
+        raise NotFoundError()
+    if (conn.config or {}).get("platform") != "extension":
+        # A phone uploads through `/intake/captures`; this route is the
+        # extension's (its flag is checked with the key).
+        raise ForbiddenError(
+            "This device is not a browser extension", details={"reason": "NOT_AN_EXTENSION"}
+        )
+    claim = await begin_idempotent(
+        db,
+        key=capture_id,
+        endpoint=f"intake.captures.extension:{conn.id}",
+        payload=payload.model_dump(mode="json"),
+    )
+    stored_body = claim.record.response_body
+    if claim.replayed and stored_body is not None:
+        last = stored_body.get("message_id")
+        return await _extension_result(
+            db,
+            uuid.UUID(last) if last else None,
+            accepted=int(stored_body["accepted"]),
+            duplicates=int(stored_body["duplicates"]),
+            replayed=True,
+        )
+    result = await intake.capture(
+        db,
+        tenant_id=device.tenant_id,
+        connection=conn,
+        source=EXTENSION,
+        provider=DEVICE,
+        account_ref=payload.host,
+        conversation_key=payload.conversation_key or f"capture:{uuid.uuid4().hex}",
+        sender_display=payload.sender_display,
+        messages=_messages(payload.messages),
+    )
+    # The seller tapped Capture and waits on the side panel (rule L4): read it
+    # now with the built-in parser. The model re-read, the customer match and
+    # the order itself happen on the web quick-order page, signed in.
+    for message_id in [*result.existing, *result.stored]:
+        await chat_orders.process_message(db, message_id)
+    ids = result.stored or result.existing
+    last = ids[-1] if ids else None
+    await db.flush()
+    conn.last_success_at = utc_now()
+    await complete_idempotent(
+        db,
+        claim.record,
+        status_code=200,
+        body={
+            "accepted": len(result.stored),
+            "duplicates": result.duplicates,
+            "message_id": str(last) if last else None,
+        },
+    )
+    return await _extension_result(
+        db, last, accepted=len(result.stored), duplicates=result.duplicates, replayed=False
+    )
 
 
 async def _manual_connection(
