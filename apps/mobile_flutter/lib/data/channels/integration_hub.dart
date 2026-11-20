@@ -105,6 +105,7 @@ class IntegrationRow {
     required this.state,
     this.connection,
     this.blocker,
+    this.serverComingSoon,
   });
 
   /// The server's provider code (`SHOPIFY`), or `INSTAGRAM`, which the server
@@ -117,6 +118,11 @@ class IntegrationRow {
 
   /// The server's reason a provider is unavailable, when it gave one.
   final String? blocker;
+
+  /// V4 Phase 6: the server's launch gate for the provider (`coming_soon`),
+  /// or null when it did not say. Only Messenger / WhatsApp can be opened
+  /// by it; see `isLaunchGated`.
+  final bool? serverComingSoon;
 }
 
 /// Instagram has no connector on the server. It is listed so a seller sees
@@ -145,6 +151,7 @@ List<IntegrationRow> integrationRowsFromHub(Map<String, dynamic> hub) {
           provider: provider,
           state: providerSetupState(availability),
           blocker: availability['blocker'] as String?,
+          serverComingSoon: availability['coming_soon'] as bool?,
         ),
       );
     } else {
@@ -154,6 +161,7 @@ List<IntegrationRow> integrationRowsFromHub(Map<String, dynamic> hub) {
             provider: provider,
             state: connectionSetupState(connection),
             connection: connection,
+            serverComingSoon: availability['coming_soon'] as bool?,
           ),
         );
       }
