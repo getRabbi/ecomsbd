@@ -1,7 +1,7 @@
-# V4 release (Phases 0–4) — pull request notes
+# V4 release (Phases 0–5) — pull request notes
 
-Branch chain: `v4/phase-0` → `v4/phase-1` → `v4/phase-2` → `v4/phase-3` → `v4/phase-4`
-(each cut from the one before; none merged to `main`). This PR is `v4/phase-4` → `main`.
+Branch chain: `v4/phase-0` → `v4/phase-1` → `v4/phase-2` → `v4/phase-3` → `v4/phase-4` → `v4/phase-5`
+(each cut from the one before; none merged to `main`). This PR is the newest branch → `main`.
 Spec: `docs/V4_MASTER_BUILD_SPEC.md`. Ledger (per-WP commits, tests, decisions):
 `docs/build/PROGRESS.md`.
 
@@ -10,7 +10,7 @@ new provider is disabled until its contract and credentials exist, and the migra
 only add tables/columns (no data is rewritten except the `chat_order_drafts.capture_source`
 backfill to `META_WEBHOOK`). With every flag off, the app behaves as V3.
 
-## What Phases 0–4 add
+## What Phases 0–5 add
 
 **Phase 0 — make the core loop real**
 - WP0.1 docs truth. WP0.2 crash + funnel visibility: `product_events` + admin funnel
@@ -62,6 +62,18 @@ VOICE_PROVIDER_CONTRACT_REQUIRED**)
 - Recipe "Autopilot" installed disabled; kill switches: flag, per-shop toggle, Pause 1 hour.
 - Web + mobile: Settings → Autopilot, Home "Autopilot today".
 
+**Phase 5 — Chrome extension** (`apps/extension`, MV3, TypeScript, plain `tsc`)
+- Pairs with the WP1.1 6-digit code (web Settings → Browser extension); capture-only key in
+  `chrome.storage.local`; Unlink revokes it (`POST /v1/intake/unlink`).
+- Content script on `business.facebook.com`, `www.messenger.com`, `web.whatsapp.com` only; reads the
+  open conversation only after a Capture tap, with verified selectors from `/v1/intake/rules` (none
+  ship: the seed has none verified, so it captures the selection with the spec notice); phone
+  highlight in the open chat via the CSS Highlight API.
+- `POST /v1/intake/captures/extension` → an `EXTENSION` draft; the answer carries ids and field
+  names only. The side panel opens web `/quick-order?draft=<id>` (seller session, order composer).
+- CI job `extension` (typecheck, unit tests, build); store listing + privacy disclosure EN + BN in
+  `apps/extension/STORE_LISTING.md`. No migration.
+
 ## Migrations (single head `a44001`, all portable, downgrade implemented)
 
 | Id | File | Adds |
@@ -90,6 +102,7 @@ see the last section.
 | `manual_payments_enabled` | bKash/Nagad TrxID plan payments | `MANUAL_PAYMENT_ACCOUNTS` |
 | `voice_confirmation_enabled` | IVR calls, intro audio | engine + `VOICE_TRANSPORT` + provider account + intro + credit |
 | `autopilot_enabled` | Autopilot (global kill switch) | the whole checklist per shop |
+| `extension_enabled` | Chrome extension pairing + every extension ingest call | `intake_device_enabled` |
 
 Existing flag now used by V4: `ai_parse_enabled` (the LLM parser; off). New entitlements:
 `voice_calls_monthly` (Free 0 / Starter 50 / Pro 200), `autopilot` (Pro).
@@ -114,6 +127,8 @@ Existing flag now used by V4: `ai_parse_enabled` (the LLM parser; off). New enti
 Existing variables V4 reads: `SMS_TRANSPORT`, `PUBLIC_WEB_URL`, `R2_*` (intro audio),
 `FREE_LAUNCH_MODE`, `DISTRIBUTION_CHANNEL`. Mobile build defines: `ECOMSBD_SENTRY_DSN`
 (`env/production.json`), `ECOMSBD_DIRECT_BUILD` (not used: no direct APK, operator decision).
+Extension build (not server env): `ECOMSBD_API_BASE_URL` (default `https://api.scalemyprints.com`),
+`ECOMSBD_WEB_BASE_URL` (default `https://app.ecomsbd.com`); https origins only.
 
 ## New jobs, topics, routes (runbooks in `docs/runbooks/`)
 
@@ -121,10 +136,12 @@ Existing variables V4 reads: `SMS_TRANSPORT`, `PUBLIC_WEB_URL`, `R2_*` (intro au
   (IVR + reconciler). Runbooks `ORDER_CONFIRMATIONS.md`, `VOICE_CONFIRMATION.md`.
 - Outbox topics (each with a handler): `intake.draft_ready`, `confirmation.*`,
   `confirmation.link_requested`, `billing.manual_payment_reviewed`, `voice.intro_requested`.
+- Extension (ingest key): `POST /v1/intake/captures/extension`, `POST /v1/intake/unlink`; seller:
+  `GET /v1/devices/extensions`; web `/settings/extension`, `/quick-order?draft=<id>`.
 - Public: `GET/POST /v1/public/confirmations/{token}` (+ web `/c/[token]`),
   `POST /v1/webhooks/voice/{provider}` (refuses everything without a verified provider).
 - Runbooks: `AI_PARSE.md`, `INTAKE_RULES.md`, `INTAKE_CAPTURE.md`, `ORDER_CONFIRMATIONS.md`,
-  `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`.
+  `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`, `EXTENSION.md`.
 
 ## Staging turn-on order
 
@@ -152,12 +169,17 @@ widened. Stop at the first step whose check fails; turning a flag off is the rol
 9. `autopilot_enabled` for pilot shops only (Pro, ≥ 20 confirmed, default courier
    live-verified, consent in Settings → Autopilot, the "Autopilot" and "Customer confirmed
    → book courier" workflows on). G4: 5 shops × 14 days, 0 wrong bookings.
+10. `extension_enabled` (with `intake_device_enabled`) → build `apps/extension` for staging, load it
+    unpacked, pair from Settings → Browser extension, capture a selected test message, finish the
+    order on `/quick-order` (runbook `EXTENSION.md` → Verification). Page selectors: verify per host,
+    then publish a rule set with `verified_at`. G5: Chrome Web Store approval.
 
 ## Blocked / operator items (not in this PR)
 
 `EXTERNAL_RISK_CONTRACT_REQUIRED` (WP0.6), `STATEMENT_SAMPLE_REQUIRED` (WP0.7),
 `SMS_PROVIDER_CONTRACT_REQUIRED` (WP2.3), `VOICE_PROVIDER_CONTRACT_REQUIRED` (WP3.1),
-`TTS_PROVIDER_REQUIRED` (WP3.3); iOS Share Extension (Xcode); gates G0–G4 need real-world
+`TTS_PROVIDER_REQUIRED` (WP3.3); iOS Share Extension (Xcode); extension page selectors (operator
+verifies on the live pages) and the Chrome Web Store submission (G5); gates G0–G5 need real-world
 evidence (ledger → "Operator actions waiting").
 
 ## Integration checkpoint (2026-11-20)
