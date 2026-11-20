@@ -75,12 +75,17 @@ attempt). What pays, in order:
 3. None → the confirmation goes to the seller's manual call queue with cause
    `NO_VOICE_CREDIT` (one "needs attention" alert per order); nobody is called.
 
+**Platform-wide ceiling, every mode** (operator decision 2026-11-20):
+`VOICE_DAILY_GLOBAL_CAP` (default 300, platform table `voice_daily_usage`)
+counts every shop's IVR calls per Asia/Dhaka day, paid or Free Launch. It is
+taken before the shop's own credit and given back with it.
+
 **Free Launch Mode** (`FREE_LAUNCH_MODE=true`): the plan is unlimited and packs
-are not spent. Two Asia/Dhaka daily ceilings protect the provider bill instead:
-`VOICE_DAILY_SHOP_CAP` (default 30, counter `voice_calls_daily_safety` in
-`usage_counters`) and `VOICE_DAILY_GLOBAL_CAP` (default 300, platform table
-`voice_daily_usage`). A call past either goes to the manual queue
-(`NO_VOICE_CREDIT`). 0 = no calls.
+are not spent, so `VOICE_DAILY_SHOP_CAP` (default 30, counter
+`voice_calls_daily_safety` in `usage_counters`) also applies per shop. Paid
+shops have no per-shop daily ceiling: their plan allowance + packs limit them.
+A call past a ceiling goes to the manual queue (`NO_VOICE_CREDIT`). 0 = no
+calls.
 
 **Metered per placed call.** `PLACED`, `DUPLICATE`, `UNKNOWN`, a transport
 exception and a stuck `CALLING` row reconciled after 10 minutes stay charged
@@ -173,7 +178,7 @@ its `CALL_QUEUED` rows stay in the seller's manual call queue
 | shop intro `ON` | seller: web Settings → Confirmation call voice | none | calls for the shop play it; without one the shop's rows stay in the manual queue (WP3.3) |
 | `TTS_PROVIDER` | env | `disabled` | `disabled` makes no recordings (`TTS_PROVIDER_REQUIRED`); `fake` is local/test only and refused when deployed |
 | `VOICE_AMOUNT_PREFIX_AUDIO_REF` / `_SUFFIX_` | env | empty | both set + verified `dynamic_audio` → the COD is spoken after the intro |
-| `VOICE_DAILY_SHOP_CAP` / `VOICE_DAILY_GLOBAL_CAP` | env | 30 / 300 | Free Launch Mode only: IVR calls per shop / for all shops per Dhaka day (WP3.4) |
+| `VOICE_DAILY_SHOP_CAP` / `VOICE_DAILY_GLOBAL_CAP` | env | 30 / 300 | IVR calls per shop (Free Launch Mode only) / for all shops, every mode, per Dhaka day (WP3.4, operator decision 2026-11-20) |
 | shop voice credit | plan allowance + packs (`POST /v1/admin/voice/credits/{tenant_id}/packs`) | Free 0 | no credit → `NO_VOICE_CREDIT`, manual queue (WP3.4) |
 
 A connection can be turned on only when its manifest is ready (DTMF capture and
@@ -211,7 +216,7 @@ has credentials **and** a callback secret. Refusals answer
    `voice_confirmation_enabled` off globally. Confirmations then stay in the
    manual call queue (WP2.3); nothing is lost.
 2. For one shop: turn the flag off for that shop.
-3. Spend running away (Free Launch): lower `VOICE_DAILY_GLOBAL_CAP` (0 stops
+3. Spend running away (any mode): lower `VOICE_DAILY_GLOBAL_CAP` (0 stops
    every call) and restart the worker; calls past it go to the manual queue.
 4. Suspected credential leak: rotate at the provider first, then `PUT` the new
    credentials and callback secret (runbook `CREDENTIAL_LEAK.md`).

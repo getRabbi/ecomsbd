@@ -10,7 +10,9 @@ The state machine has no move for a manual call, so the seller's own call is
 recorded as a ``MANUAL_CALL`` attempt and the answer goes through the moves
 the seller already has: a queued row first goes ``CALL_QUEUED → SELLER_REVIEW``
 (``VOICE_UNAVAILABLE``), then ``SELLER_CONFIRM`` / ``SELLER_CANCEL``. A
-"Dhoreni" (no answer) closes the attempt and leaves the row where it is.
+"Dhoreni" (no answer) closes the attempt; when the SMS link is available
+(and none was sent for this confirmation yet) the link goes out
+(``SELLER_REVIEW → SMS_LINK_SENT``, ``SELLER_NO_ANSWER``), else the row stays.
 
 Dialing reveals the customer's number to a staff member, so ``call_now`` only
 answers for an order that is in the queue, honours the shop's quiet hours
@@ -302,6 +304,7 @@ class ManualCallService:
                 )
             self._close(call, AttemptStatus.NO_ANSWER, now)
             await self._db.flush()
+            await self._link_after_no_answer(row, now)
             return row
         method = ConfirmationMethod.MANUAL_CALL if call is not None else ConfirmationMethod.SELLER
         if call is not None:
@@ -317,6 +320,14 @@ class ManualCallService:
         )
 
     # ----------------------------------------------------------- helpers ---
+
+    async def _link_after_no_answer(self, row: OrderConfirmation, now: datetime) -> None:
+        """Operator decision 2026-11-20: a "Dhoreni" may send the SMS link."""
+        from app.api.deps import get_hasher
+        from app.confirmations.links import LinkService
+
+        links = LinkService(self._db, orders=self._orders, hasher=get_hasher())
+        await links.after_seller_no_answer(row, now=now)
 
     async def _queued(self, order: Order) -> OrderConfirmation:
         row = await open_for_order(self._db, order.id, lock=True)

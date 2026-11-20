@@ -43,6 +43,19 @@ const _saved = <CallOutcome, String>{
   CallOutcome.noAnswer: 'cq.noAnswerSaved',
 };
 
+/// The snackbar after an answer. A "Dhoreni" may have sent the customer the
+/// SMS confirm link (operator decision 2026-11-20): the row then reads
+/// `SMS_LINK_SENT` and leaves the queue until the customer answers.
+String savedKey(CallOutcome outcome, Object? reply) {
+  if (outcome == CallOutcome.noAnswer && reply is Map) {
+    final confirmation = reply['confirmation'];
+    if (confirmation is Map && confirmation['state'] == 'SMS_LINK_SENT') {
+      return 'cq.linkSent';
+    }
+  }
+  return _saved[outcome]!;
+}
+
 String callReasonKey(String? code) {
   const known = <String>{
     'CUSTOMER_BLOCKED',
@@ -186,14 +199,14 @@ class _CallQueueScreenState extends ConsumerState<CallQueueScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref
+      final reply = await ref
           .read(apiClientProvider)
           .post(
             '/orders/${order['id']}/confirmation/${_actions[outcome]}',
             body: <String, dynamic>{},
           );
       if (mounted) {
-        _say(context.tr(_saved[outcome]!));
+        _say(context.tr(savedKey(outcome, reply)));
       }
     } catch (error) {
       if (mounted) {

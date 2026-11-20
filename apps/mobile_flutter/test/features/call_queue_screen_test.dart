@@ -292,4 +292,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('cq.banner')), findsNothing);
   });
+
+  test('a Dhoreni that sent the SMS link says so (EN + BN)', () {
+    const sent = {
+      'confirmation': {'state': 'SMS_LINK_SENT'},
+    };
+    const kept = {
+      'confirmation': {'state': 'SELLER_REVIEW'},
+    };
+    expect(savedKey(CallOutcome.noAnswer, sent), 'cq.linkSent');
+    expect(savedKey(CallOutcome.noAnswer, kept), 'cq.noAnswerSaved');
+    expect(savedKey(CallOutcome.confirmed, sent), 'cq.confirmed');
+    expect(callQueueEn['cq.linkSent'], isNotEmpty);
+    expect(callQueueBn['cq.linkSent'], isNotEmpty);
+  });
 }

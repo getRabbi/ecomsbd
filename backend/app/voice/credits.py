@@ -4,10 +4,11 @@ Every IVR call is paid for before the provider is asked:
 
 *   **What pays.** The plan's monthly allowance (``voice_calls_monthly``:
     Free 0, Starter 50, Pro 200) first, then the shop's oldest unexpired
-    :class:`~app.voice.models.VoiceCreditPack`. In Free Launch Mode the plan is
-    unlimited, so two Asia/Dhaka daily ceilings protect the operator's bill
-    instead: ``VOICE_DAILY_SHOP_CAP`` per shop and ``VOICE_DAILY_GLOBAL_CAP``
-    for every shop together; packs are not spent then.
+    :class:`~app.voice.models.VoiceCreditPack`. ``VOICE_DAILY_GLOBAL_CAP``
+    (Asia/Dhaka day, every shop together) applies in every mode (operator
+    decision 2026-11-20). In Free Launch Mode the plan is unlimited, so
+    ``VOICE_DAILY_SHOP_CAP`` per shop protects the operator's bill as well;
+    packs are not spent then.
 *   **Atomic.** Each spend is one conditional ``UPDATE`` whose ``WHERE`` holds
     the check, so two workers dialling at the boundary cannot both take the
     last call. The spend happens in the dispatcher's first transaction, with
@@ -116,7 +117,8 @@ class CreditBalance:
     allowance_period: str
     #: Unexpired packs with calls left, oldest first.
     packs: tuple[VoiceCreditPack, ...]
-    #: Free Launch only: today's counts against the two ceilings.
+    #: Today's counts against the ceilings: the shop's in Free Launch only,
+    #: the platform-wide one in every mode.
     shop_today: int = 0
     shop_cap: int = 0
     global_today: int = 0
@@ -147,6 +149,10 @@ class VoiceCredits:
         day = _day(now)
         if self._settings.free_launch_mode:
             return await self._reserve_free_launch(tenant_id, day)
+        # The platform-wide ceiling first (operator decision 2026-11-20): it
+        # is the cheapest spend to give back when the shop has no credit.
+        if not await self._take_global(day):
+            return None
         period = await EntitlementService(self._db, settings=self._settings).try_consume(
             tenant_id, _PLAN, at=now
         )
@@ -155,6 +161,7 @@ class VoiceCredits:
         pack_id = await self._spend_pack(tenant_id, now)
         if pack_id is not None:
             return Reservation(tenant_id, ChargeSource.PACK, day, pack_id=pack_id)
+        await self._give_global(day)
         return None
 
     async def undo(self, reservation: Reservation) -> None:
@@ -187,12 +194,30 @@ class VoiceCredits:
                 period_key=reservation.day,
                 amount=1,
             )
-            await self._db.execute(
-                sa.update(VoiceDailyUsage)
-                .where(VoiceDailyUsage.day == reservation.day, VoiceDailyUsage.used >= 1)
-                .values(used=VoiceDailyUsage.used - 1, updated_at=utc_now())
-                .execution_options(synchronize_session=False)
-            )
+        # Every source took one off the day's platform-wide count.
+        await self._give_global(reservation.day)
+
+    async def _take_global(self, day: str) -> bool:
+        """One call off ``VOICE_DAILY_GLOBAL_CAP`` for the day (0 = no calls)."""
+        global_cap = self._settings.voice_daily_global_cap
+        if global_cap <= 0:
+            return False
+        await self._ensure_global_row(day)
+        spent = await self._db.execute(
+            sa.update(VoiceDailyUsage)
+            .where(VoiceDailyUsage.day == day, VoiceDailyUsage.used + 1 <= global_cap)
+            .values(used=VoiceDailyUsage.used + 1, updated_at=utc_now())
+            .execution_options(synchronize_session=False)
+        )
+        return bool(_rowcount(spent))
+
+    async def _give_global(self, day: str) -> None:
+        await self._db.execute(
+            sa.update(VoiceDailyUsage)
+            .where(VoiceDailyUsage.day == day, VoiceDailyUsage.used >= 1)
+            .values(used=VoiceDailyUsage.used - 1, updated_at=utc_now())
+            .execution_options(synchronize_session=False)
+        )
 
     async def charge(
         self, reservation: Reservation, *, attempt_id: uuid.UUID, provider: str
@@ -254,14 +279,7 @@ class VoiceCredits:
             limit_value=shop_cap,
         ):
             return None
-        await self._ensure_global_row(day)
-        spent = await self._db.execute(
-            sa.update(VoiceDailyUsage)
-            .where(VoiceDailyUsage.day == day, VoiceDailyUsage.used + 1 <= global_cap)
-            .values(used=VoiceDailyUsage.used + 1, updated_at=utc_now())
-            .execution_options(synchronize_session=False)
-        )
-        if not _rowcount(spent):
+        if not await self._take_global(day):
             await decrement_atomically(
                 self._db, tenant_id=tenant_id, entitlement=SHOP_DAILY_KEY, period_key=day, amount=1
             )
@@ -373,20 +391,20 @@ class VoiceCredits:
                 )
             ).all()
         )
+        day = _day(now)
+        global_today = int(
+            await self._db.scalar(
+                sa.select(VoiceDailyUsage.used)
+                .where(VoiceDailyUsage.day == day)
+                .execution_options(populate_existing=True)
+            )
+            or 0
+        )
+        global_cap = self._settings.voice_daily_global_cap
         if self._settings.free_launch_mode:
-            day = _day(now)
             shop = await self._shop_counter(tenant_id, day)
             shop_today = shop.used if shop is not None else 0
-            global_today = int(
-                await self._db.scalar(
-                    sa.select(VoiceDailyUsage.used)
-                    .where(VoiceDailyUsage.day == day)
-                    .execution_options(populate_existing=True)
-                )
-                or 0
-            )
             shop_cap = self._settings.voice_daily_shop_cap
-            global_cap = self._settings.voice_daily_global_cap
             return CreditBalance(
                 free_launch=True,
                 has_credit=shop_today < shop_cap and global_today < global_cap,
@@ -402,11 +420,13 @@ class VoiceCredits:
         allowance_left = limit == UNLIMITED or (limit > 0 and int(used or 0) < limit)
         return CreditBalance(
             free_launch=False,
-            has_credit=allowance_left or bool(packs),
+            has_credit=(allowance_left or bool(packs)) and global_today < global_cap,
             allowance_limit=limit,
             allowance_used=int(used or 0),
             allowance_period=period,
             packs=packs,
+            global_today=global_today,
+            global_cap=global_cap,
         )
 
     # --------------------------------------------------------- grant ---

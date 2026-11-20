@@ -305,6 +305,55 @@ async def test_free_launch_spends_no_pack_and_stops_at_the_shop_and_global_daily
     assert await VoiceCredits(system_db, settings=none_left).reserve(b, now=now) is None
 
 
+async def test_the_global_daily_cap_also_stops_paid_shops(
+    system_db: AsyncSession, settings: Any
+) -> None:
+    """Operator decision 2026-11-20: ``VOICE_DAILY_GLOBAL_CAP`` applies in every
+    mode; a paid shop still pays from its allowance and packs, and has no
+    per-shop daily ceiling."""
+    now = utc_now()
+    day = business_date(None, at=now).isoformat()
+    before = await _global(system_db, day)
+    paid = settings.model_copy(
+        update={
+            "free_launch_mode": False,
+            "voice_daily_shop_cap": 1,  # Free Launch only: not applied here
+            "voice_daily_global_cap": before + 2,
+        }
+    )
+    shop = await _tenant(system_db, "Voice Paid Global Cap")
+    await _starter(system_db, shop)
+    pack = await _pack(system_db, shop, 3)
+    credits = VoiceCredits(system_db, settings=paid)
+
+    spent = [await credits.reserve(shop, now=now) for _ in range(3)]
+    assert [r.source if r else None for r in spent] == [
+        ChargeSource.PLAN_ALLOWANCE,
+        ChargeSource.PLAN_ALLOWANCE,
+        None,  # every shop together: the global cap, though credit is left
+    ]
+    assert await _used(system_db, shop, str(_VOICE)) == 2, "the refused call spent nothing"
+    assert await _packs(system_db, shop) == {pack.id: 3}
+    assert await _used(system_db, shop, SHOP_DAILY_KEY) == 0
+    assert await _global(system_db, day) == before + 2
+    balance = await credits.balance(shop, now=now)
+    assert (balance.free_launch, balance.has_credit) == (False, False)
+    assert (balance.global_today, balance.global_cap) == (before + 2, before + 2)
+
+    assert spent[0] is not None
+    await credits.undo(spent[0])  # a call never placed gives both back
+    assert await _used(system_db, shop, str(_VOICE)) == 1
+    assert await _global(system_db, day) == before + 1
+    assert (await credits.balance(shop, now=now)).has_credit is True
+
+    # No allowance and no pack left: the global count taken is given back.
+    broke = await _tenant(system_db, "Voice Paid No Credit")
+    assert await credits.reserve(broke, now=now) is None
+    assert await _global(system_db, day) == before + 1
+    zero = paid.model_copy(update={"voice_daily_global_cap": 0})
+    assert await VoiceCredits(system_db, settings=zero).reserve(shop, now=now) is None
+
+
 # --------------------------------------------------------------- grant ---
 
 

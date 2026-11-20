@@ -8,7 +8,9 @@ one Banglish SMS with a link to a page where they confirm or cancel:
 
 The token is 22 url-safe characters derived from the link row's random id
 (:meth:`SecretHasher.confirmation_link_token`); only its SHA-256 is stored.
-The row moves ``NO_ANSWER → SMS_LINK_SENT`` in the sweep's transaction and the
+The row moves ``NO_ANSWER → SMS_LINK_SENT`` in the sweep's transaction (or
+``SELLER_REVIEW → SMS_LINK_SENT`` when the seller's own call went unanswered,
+once per confirmation, operator decision 2026-11-20) and the
 SMS itself goes out from the ``confirmation.link_requested`` outbox handler,
 so a retried send carries the same link. A link is good for six hours
 (``LINK_TTL``); then the sweep moves the row to ``SELLER_REVIEW``.
@@ -189,7 +191,34 @@ class LinkService:
         order = await self._db.get(Order, row.order_id)
         return order is not None and order.customer_id is not None
 
-    async def _create_link(self, row: OrderConfirmation, now: datetime) -> ConfirmationLink:
+    async def after_seller_no_answer(self, row: OrderConfirmation, *, now: datetime) -> bool:
+        """The seller's own call went unanswered ("Dhoreni", operator decision
+        2026-11-20): send the link once per confirmation, under the same rules
+        as after the IVR's last call (flag, transport, ``PUBLIC_WEB_URL``, a
+        customer, outside quiet hours). ``False`` leaves the row with the
+        seller."""
+        from app.delivery_rules.service import DeliveryRulesService
+
+        if row.confirmation_state is not S.SELLER_REVIEW:
+            return False
+        sent_before = await self._db.scalar(
+            sa.select(ConfirmationLink.id)
+            .where(ConfirmationLink.confirmation_id == row.id)
+            .limit(1)
+        )
+        if sent_before is not None or not await self._has_customer(row):
+            return False
+        if not await links_on(self._db, row.tenant_id):
+            return False
+        rules = await DeliveryRulesService(self._db).get(row.tenant_id)
+        if QuietHours.from_rules(rules).active(now):
+            return False  # no SMS at night; the seller can call again later
+        await self._create_link(row, now, cause=Cause.SELLER_NO_ANSWER)
+        return True
+
+    async def _create_link(
+        self, row: OrderConfirmation, now: datetime, *, cause: Cause = Cause.LINK_SENT
+    ) -> ConfirmationLink:
         transport = sms_transport()
         attempt = await self._confirmations.add_attempt(
             row, AttemptChannel.SMS_LINK, provider=transport.name, now=now
@@ -203,7 +232,7 @@ class LinkService:
         )
         self._db.add(link)
         await self._db.flush()
-        await self._confirmations.transition(row, S.SMS_LINK_SENT, Cause.LINK_SENT, now=now)
+        await self._confirmations.transition(row, S.SMS_LINK_SENT, cause, now=now)
         await enqueue(
             self._db,
             OutboxTopic.CONFIRMATION_LINK_REQUESTED,

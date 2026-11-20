@@ -30,8 +30,12 @@ from app.db.session import session_scope, system_session
 from app.delivery_rules.models import ShopDeliveryRules
 from app.orders.models import Order
 from tests.conftest_commerce import create_order, create_product, signed_in_shop
+from tests.test_ai_parse import ai_parse_on
 from tests.test_auth_flow import auth_header
 from tests.test_automation_workflows import action, count, detail, run, runs, workflow
+from tests.test_intake_capture import intake_on
+
+__all__ = ["ai_parse_on", "intake_on"]  # fixtures used by name below
 
 E164 = "+8801700000011"
 ADDRESS = "House 12, Road 3, Mirpur 10, Dhaka"
@@ -451,6 +455,86 @@ async def test_the_heartbeat_tells_phones_to_upload_only_with_consent_and_no_pau
     assert await beat() is False
 
 
+async def test_an_autopilot_shops_automatic_upload_is_read_with_the_model(
+    client: AsyncClient,
+    ready: dict,
+    intake_on: None,
+    ai_parse_on: None,
+    unique_phone: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Operator decision 2026-11-20 (1): automatic uploads of an Autopilot shop
+    go through the LLM merge path, once per batch, metered by
+    ``ai_parse_monthly``; other shops (and a paused one) stay deterministic."""
+    from app.chat_orders.models import ChatMessage
+    from app.core.errors import EntitlementRequiredError
+    from app.entitlements.service import EntitlementService
+    from app.orders.parser.ai_client import FakeAiParseClient
+    from tests.test_ai_parse import LOOSE_TEXT, answer
+    from tests.test_device_links import LINK, _device
+    from tests.test_intake_capture import _batch, _upload
+
+    fake = FakeAiParseClient(answer())
+    monkeypatch.setattr("app.api.v1.intake.build_ai_parse_client", lambda settings: fake)
+    shop = ready["shop"]
+    key = (await client.post(LINK, json=_device(), headers=auth_header(shop))).json()["ingest_key"]
+
+    async def drafts(tenant: uuid.UUID) -> list[ChatOrderDraft]:
+        async with system_session("test: drafts") as db:
+            rows = await db.scalars(
+                sa.select(ChatOrderDraft).where(
+                    ChatOrderDraft.tenant_id == tenant, ChatOrderDraft.status != "IGNORED"
+                )
+            )
+            return list(rows)
+
+    async def received(tenant: uuid.UUID) -> int:
+        return await count(
+            ChatMessage,
+            ChatMessage.tenant_id == tenant,
+            ChatMessage.processing_status == "RECEIVED",
+        )
+
+    sent = await _upload(client, key, _batch([LOOSE_TEXT, "taratari diben"], chat="Sakib"))
+    assert sent.status_code == 200, sent.text
+    assert len(fake.calls) == 1  # one read for the whole batch
+    [draft] = await drafts(_tenant(shop))
+    assert draft.customer_name == "sakib" and draft.address == "chandpur sadar"
+    assert await received(_tenant(shop)) == 0  # read now, not left for the worker
+
+    # Over the monthly limit: the deterministic read stands, nothing is called.
+    async def exhausted(_self: Any, _tenant_id: Any, entitlement: Any, **_: Any) -> None:
+        raise EntitlementRequiredError(str(entitlement))
+
+    monkeypatch.setattr(EntitlementService, "consume", exhausted)
+    other_text = LOOSE_TEXT.replace("01700000012", "01700000013")  # not merged with Sakib's
+    sent = await _upload(client, key, _batch([other_text], chat="Karim"))
+    assert sent.status_code == 200, sent.text
+    assert len(fake.calls) == 1
+    karim = [d for d in await drafts(_tenant(shop)) if d.id != draft.id]
+    assert len(karim) == 1 and karim[0].customer_name != "sakib"
+    monkeypatch.undo()
+    monkeypatch.setattr("app.api.v1.intake.build_ai_parse_client", lambda settings: fake)
+
+    # Paused: uploads are left to the worker's deterministic read.
+    await client.post("/v1/autopilot/pause", headers=auth_header(shop))
+    sent = await _upload(client, key, _batch([LOOSE_TEXT], chat="Rafiq"))
+    assert sent.status_code == 200, sent.text
+    assert len(fake.calls) == 1 and await received(_tenant(shop)) == 1
+
+    # A shop without Autopilot: deterministic only.
+    other = await signed_in_shop(client, unique_phone[:-2] + "77", plan="pro")
+    other_key = (await client.post(LINK, json=_device(), headers=auth_header(other))).json()
+    sent = await _upload(client, other_key["ingest_key"], _batch([LOOSE_TEXT], chat="Sakib"))
+    assert sent.status_code == 200, sent.text
+    assert len(fake.calls) == 1 and await received(_tenant(other)) == 1
+    from app.chat_orders import jobs as chat_jobs
+
+    for _ in range(5):  # leave no RECEIVED rows for other tests' worker runs
+        if (await chat_jobs.process_chat_messages())["processed"] == 0:
+            break
+
+
 # ------------------------------------------------------------- conversion ---
 
 
@@ -553,7 +637,7 @@ async def test_a_held_draft_ends_its_run_with_the_reason_and_no_order(
 
 
 async def test_each_order_gate_failure_keeps_the_draft_with_its_reason(
-    client: AsyncClient, ready: dict
+    client: AsyncClient, ready: dict, monkeypatch: pytest.MonkeyPatch
 ):
     shop, product = ready["shop"], ready["product"]
     out_of_stock = await create_product(
@@ -601,12 +685,26 @@ async def test_each_order_gate_failure_keeps_the_draft_with_its_reason(
     assert (await _convert(shop, draft_id)).reason == "DUPLICATE_RECENT"
     assert await count(Order, Order.tenant_id == _tenant(shop)) == orders_before
 
-    # Whatever default courier the shop chose is used (operator decision):
-    # a Pathao shop converts like a Steadfast one.
+    # The shop's default courier is always used (operator decision 2), but a
+    # Pathao / RedX order whose location ids are not resolved is held.
+    resolved: list[bool] = [False]
+
+    async def fake_pathao(_db: Any, _tenant_id: uuid.UUID, address: str) -> bool:
+        assert address == ADDRESS
+        return resolved[0]
+
+    monkeypatch.setattr(autopilot, "_resolve_pathao", fake_pathao)
     await _connect(shop, "pathao")
+    await _connect(shop, "redx")
     await _set(shop, default_courier="pathao")
-    made = await _convert(shop, await _new_draft(client, ready, "+8801700000050"))
+    held = await _convert(shop, await _new_draft(client, ready, "+8801700000050"))
+    assert (held.outcome, held.reason) == ("HELD", "LOCATION_UNRESOLVED")
+    resolved[0] = True
+    made = await _convert(shop, await _new_draft(client, ready, "+8801700000053"))
     assert made.outcome == "CONVERTED"
+    await _set(shop, default_courier="redx")
+    held = await _convert(shop, await _new_draft(client, ready, "+8801700000054"))
+    assert (held.outcome, held.reason) == ("HELD", "LOCATION_UNRESOLVED")
     await _set(shop, default_courier="steadfast")
     # The cap counts today's conversions: two made, a cap of 2 holds the next.
     made = await _convert(shop, await _new_draft(client, ready, "+8801700000051"))
@@ -614,6 +712,52 @@ async def test_each_order_gate_failure_keeps_the_draft_with_its_reason(
     await _set(shop, autopilot_daily_cap=2)
     held = await _convert(shop, await _new_draft(client, ready, "+8801700000052"))
     assert held.reason == "DAILY_CAP_REACHED"
+
+
+async def test_the_pathao_location_check_uses_the_shops_own_pathao_lists(
+    db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.couriers.accounts import CourierAccountService
+    from app.couriers.registry import CourierAdapterRegistry, set_courier_registry
+    from tests.test_pathao_locations import FakePathao
+    from tests.test_quick_order import _tenant as new_tenant
+
+    tenant = await new_tenant(db)
+    # No Pathao account: not resolved.
+    assert not await autopilot._resolve_pathao(db, tenant.id, ADDRESS)
+    db.add(
+        CourierAccount(
+            tenant_id=tenant.id,
+            provider="pathao",
+            status="CONNECTED",
+            api_key_encrypted="enc-key",
+            secret_key_encrypted="enc-secret",
+        )
+    )
+    await db.flush()
+    monkeypatch.setattr(CourierAccountService, "credentials_for", lambda _self, _account: "creds")
+    fake = FakePathao()
+    adapter = type("FakeAdapter", (), {"client": fake})()
+    set_courier_registry(CourierAdapterRegistry({"pathao": lambda: adapter}))
+    assert await autopilot._resolve_pathao(db, tenant.id, ADDRESS)  # Dhaka / Mirpur 10
+    assert not await autopilot._resolve_pathao(db, tenant.id, "Near the big tree, Dhaka")
+
+    async def broken(_creds: Any) -> Any:
+        raise RuntimeError("pathao down")
+
+    other = await new_tenant(db)  # a fresh cache key, so the lists are fetched
+    db.add(
+        CourierAccount(
+            tenant_id=other.id,
+            provider="pathao",
+            status="CONNECTED",
+            api_key_encrypted="enc-key",
+            secret_key_encrypted="enc-secret",
+        )
+    )
+    await db.flush()
+    fake.list_cities = broken  # type: ignore[method-assign]
+    assert not await autopilot._resolve_pathao(db, other.id, ADDRESS)
 
 
 async def test_a_refused_order_create_keeps_the_draft(

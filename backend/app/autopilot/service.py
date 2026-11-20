@@ -19,6 +19,7 @@ Only ids and machine codes are stored or logged: no phone, name or text.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -54,6 +55,8 @@ MIN_CONFIRMED_ORDERS = 20
 PAUSE_FOR = timedelta(hours=1)
 #: The recipe key of the Autopilot workflow.
 RECIPE_KEY = "autopilot"
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -390,6 +393,53 @@ async def _converted_today(db: AsyncSession, tenant_id: uuid.UUID) -> int:
     )
 
 
+async def _resolve_pathao(db: AsyncSession, tenant_id: uuid.UUID, address: str) -> bool:
+    """Pathao city + zone for the address from the shop's own Pathao lists
+    (the WP0.7 strict resolver). Any failure to look them up reads as not
+    resolved: a person decides."""
+    from app.api.deps import get_vault
+    from app.common.cache import get_cache
+    from app.couriers.accounts import CourierAccountService
+    from app.couriers.pathao.locations import PathaoLocationResolver
+    from app.couriers.registry import get_courier_registry
+
+    accounts = CourierAccountService(db, vault=get_vault())
+    account = await accounts.usable_account("pathao")
+    adapter = get_courier_registry().get("pathao")
+    client = getattr(adapter, "client", None)
+    if account is None or client is None:
+        return False
+    try:
+        resolver = PathaoLocationResolver(
+            client,
+            get_cache(),
+            tenant_id=tenant_id,
+            sandbox=bool((account.metadata_json or {}).get("sandbox")),
+        )
+        return await resolver.resolve(accounts.credentials_for(account), address) is not None
+    except Exception as exc:  # a provider or credential problem: hold, never guess
+        _log.warning(
+            "autopilot.pathao_location_lookup_failed",
+            extra={"tenant_id": str(tenant_id), "error": type(exc).__name__},
+        )
+        return False
+
+
+async def _location_resolved(
+    db: AsyncSession, tenant_id: uuid.UUID, courier: str | None, address: str
+) -> bool:
+    """Whether the default courier's location ids are known for the address.
+
+    Steadfast books by the free-text address. Pathao needs its city / zone
+    resolved. RedX needs the delivery area the seller picks from RedX's list on
+    every create, and an automatic booking cannot send one (no resolver: the
+    adapter forbids guessing an area), so a RedX shop's orders are always held.
+    """
+    if courier == "pathao":
+        return await _resolve_pathao(db, tenant_id, address)
+    return courier != "redx"
+
+
 async def _order_gate(
     db: AsyncSession, draft: Any, row: ShopDeliveryRules
 ) -> tuple[str | None, _Payload | None]:
@@ -426,6 +476,11 @@ async def _order_gate(
     zone = resolve_zone(draft.address)
     if zone is None:
         return "ZONE_UNRESOLVED", None
+    if not await _location_resolved(db, draft.tenant_id, row.default_courier, draft.address):
+        # Operator decision 2026-11-20 (2): the shop's default courier is
+        # always used, but a Pathao / RedX order whose location ids are not
+        # resolved is held, never booked on a guessed area.
+        return "LOCATION_UNRESOLVED", None
     rules = await DeliveryRulesService(db).get(draft.tenant_id)
     charge = rules.zone_charge(zone)
     calculated = (

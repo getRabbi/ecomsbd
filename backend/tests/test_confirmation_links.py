@@ -281,6 +281,51 @@ async def test_after_the_last_unanswered_call_the_customer_confirms_by_link(
     assert (await client.post(_page(token), json={"result": "maybe"})).status_code == 422
 
 
+async def test_the_sellers_dhoreni_sends_the_link_once(
+    client: AsyncClient,
+    unique_phone: str,
+    link_on: None,
+    sms: MockSmsTransport,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Operator decision 2026-11-20 (WP2.3): an unanswered call of the seller's
+    own sends the link (``SELLER_REVIEW → SMS_LINK_SENT``, ``SELLER_NO_ANSWER``),
+    once per confirmation; after it expires a second "Dhoreni" keeps the row."""
+    from app.confirmations import manual
+
+    monkeypatch.setattr(manual, "utc_now", lambda: NOON)
+    shop = await signed_in_shop(client, unique_phone)
+    order = (await create_order(client, shop, phone="01700000058"))["order"]
+    started = await client.post(
+        f"/v1/orders/{order['id']}/confirmation",
+        json={"mode": "REQUEST"},
+        headers=auth_header(shop),
+    )
+    assert started.json()["confirmation"]["state"] == "CALL_QUEUED", started.text
+    act = f"/v1/orders/{order['id']}/confirmation"
+    assert (await client.post(f"{act}/call_now", headers=auth_header(shop))).status_code == 200
+    answered = await client.post(f"{act}/mark_no_answer", headers=auth_header(shop))
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["confirmation"]["state"] == "SMS_LINK_SENT"
+    confirmation_id = uuid.UUID(answered.json()["confirmation"]["id"])
+    (row,) = await _row(shop, OrderConfirmation, OrderConfirmation.id == confirmation_id)
+    assert row.next_action_at == NOON + timedelta(hours=6)
+    queue = (await client.get("/v1/confirmations/queue", headers=auth_header(shop))).json()
+    assert order["id"] not in {item["order_id"] for item in queue["items"]}
+    await _send(shop, confirmation_id)
+    (message,) = sms.sent
+    assert message.phone_e164.endswith("1700000058")
+
+    # Expired back to the seller: the next "Dhoreni" sends nothing more.
+    assert await _follow(shop, confirmation_id, NOON + timedelta(hours=7)) is FollowUp.EXPIRED
+    later = NOON + timedelta(hours=8)
+    monkeypatch.setattr(manual, "utc_now", lambda: later)
+    assert (await client.post(f"{act}/call_now", headers=auth_header(shop))).status_code == 200
+    again = await client.post(f"{act}/mark_no_answer", headers=auth_header(shop))
+    assert again.json()["confirmation"]["state"] == "SELLER_REVIEW"
+    assert len(await _events(shop, OutboxTopic.CONFIRMATION_LINK_REQUESTED, confirmation_id)) == 1
+
+
 async def test_a_cancel_by_link_cancels_the_order_as_the_customer(
     client: AsyncClient, unique_phone: str, link_on: None, sms: MockSmsTransport
 ):

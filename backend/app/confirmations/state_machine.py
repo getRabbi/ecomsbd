@@ -58,6 +58,9 @@ class Cause(StrEnum):
     # After no answer.
     RETRY = "RETRY"
     LINK_SENT = "LINK_SENT"
+    #: The seller's own call went unanswered ("Dhoreni"): the link goes out
+    #: (operator decision 2026-11-20, WP2.3).
+    SELLER_NO_ANSWER = "SELLER_NO_ANSWER"
     ATTEMPTS_EXHAUSTED = "ATTEMPTS_EXHAUSTED"
     # The SMS link (WP2.3).
     LINK_CONFIRM = "LINK_CONFIRM"
@@ -94,6 +97,7 @@ def _table() -> dict[tuple[ConfirmationState, ConfirmationState], frozenset[Caus
         (S.SMS_LINK_SENT, S.SELLER_REVIEW): {Cause.LINK_EXPIRED},
         (S.SELLER_REVIEW, S.CONFIRMED): {Cause.SELLER_CONFIRM},
         (S.SELLER_REVIEW, S.CANCELLED): {Cause.SELLER_CANCEL},
+        (S.SELLER_REVIEW, S.SMS_LINK_SENT): {Cause.SELLER_NO_ANSWER},
     }
     for state in OPEN_STATES:
         table.setdefault((state, S.SUPERSEDED), set()).add(Cause.ORDER_EDITED)

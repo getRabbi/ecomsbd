@@ -464,7 +464,7 @@ Migration `a42001`. Branch `v4/phase-2`. Flags: `confirmation_engine_enabled`,
   - `CALLING → CONFIRMED` (dtmf 1) | `CANCELLED` (dtmf 2) | `SELLER_REVIEW` (dtmf 3, or ambiguous result `UNKNOWN`) | `NO_ANSWER`
   - `NO_ANSWER → CALL_QUEUED` (attempts < max, after 30 min) | `SMS_LINK_SENT` (link enabled) | `SELLER_REVIEW`
   - `SMS_LINK_SENT → CONFIRMED | CANCELLED` (link) | `SELLER_REVIEW` (expired, 6 h)
-  - `SELLER_REVIEW → CONFIRMED | CANCELLED` (seller)
+  - `SELLER_REVIEW → CONFIRMED | CANCELLED` (seller) | `SMS_LINK_SENT` (cause `SELLER_NO_ANSWER`: the seller's own call unanswered, link enabled, once per confirmation — operator decision 2026-11-20)
   - any non-terminal → `SUPERSEDED` (order edited: items changed or COD changed > 10%; a new
     confirmation starts) | `CANCELLED` (order cancelled)
 - A state machine class with an explicit transition table; a test enumerates every illegal transition.
@@ -596,8 +596,9 @@ Migration `a43001`. Branch `v4/phase-3`. Flag `voice_confirmation_enabled`.
 - Table `voice_credit_packs` (`tenant_id`, `calls`, `remaining`, `expires_at` 90 days,
   `source` = admin grant / payment submission). Consumption order: monthly allowance, then
   oldest pack.
-- Free Launch Mode: unlimited plan, but a **global** daily cap `VOICE_DAILY_GLOBAL_CAP`
-  (default 300) and per-shop cap `VOICE_DAILY_SHOP_CAP` (default 30) protect the operator's bill.
+- A **global** daily cap `VOICE_DAILY_GLOBAL_CAP` (default 300) applies in every mode (operator
+  decision 2026-11-20). Free Launch Mode: unlimited plan, so a per-shop cap `VOICE_DAILY_SHOP_CAP`
+  (default 30) also protects the operator's bill; paid shops stay limited by allowance + packs.
 - No credit → confirmation goes to the manual queue with reason `NO_VOICE_CREDIT`.
 - Admin report: calls, answer rate, confirm rate, cost per shop per day.
 

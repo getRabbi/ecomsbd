@@ -26,6 +26,8 @@ const callQueueEn = <String, String>{
   'cq.confirmed': 'Order confirmed.',
   'cq.cancelled': 'Order cancelled.',
   'cq.noAnswerSaved': 'Saved: no answer. Try again later.',
+  'cq.linkSent':
+      'Saved: no answer. The customer got an SMS link to confirm or cancel.',
   'cq.quietTitle': 'Quiet hours',
   'cq.quietBody':
       'Your shop does not call between {start} and {end}. Call anyway?',
@@ -63,6 +65,8 @@ const callQueueBn = <String, String>{
   'cq.confirmed': 'অর্ডার কনফার্ম হয়েছে।',
   'cq.cancelled': 'অর্ডার বাতিল হয়েছে।',
   'cq.noAnswerSaved': 'সেভ হয়েছে: ধরেনি। পরে আবার চেষ্টা করুন।',
+  'cq.linkSent':
+      'সেভ হয়েছে: ধরেনি। কাস্টমারকে কনফার্ম বা বাতিলের SMS লিংক পাঠানো হয়েছে।',
   'cq.quietTitle': 'কল না করার সময়',
   'cq.quietBody':
       'আপনার দোকান {start} থেকে {end} পর্যন্ত কল করে না। তবুও কল করবেন?',

@@ -32,6 +32,7 @@ from app.api.deps import (
     get_vault,
     require_permission,
 )
+from app.autopilot import service as autopilot
 from app.chat_orders import service as chat_orders
 from app.chat_orders.models import (
     DEVICE,
@@ -273,7 +274,11 @@ def _messages(items: list[CaptureMessageIn]) -> list[intake.CapturedMessage]:
     summary="Upload one conversation's order-like messages from a linked device",
 )
 async def capture_batch(
-    payload: CaptureBatch, device: IngestCapture, db: DbSession, batch_id: BatchKey
+    payload: CaptureBatch,
+    device: IngestCapture,
+    db: DbSession,
+    batch_id: BatchKey,
+    settings: SettingsDep,
 ) -> CaptureResponse:
     limited = await RateLimiter().hit(
         "intake-capture",
@@ -324,6 +329,19 @@ async def capture_batch(
         sender_display=payload.sender_display,
         messages=_messages(payload.messages),
     )
+    if await autopilot.device_upload_allowed(db, device.tenant_id):
+        # Operator decision 2026-11-20 (1): an Autopilot shop's automatic
+        # upload is read now, once per batch, through the same LLM merge path
+        # as the quick-order sheet (`ai_parse_enabled`, metered by
+        # `ai_parse_monthly`; over the limit the deterministic read stands and
+        # the order gate decides). The `intake.draft_ready` event is written in
+        # this transaction, so the Autopilot run sees the merged fields. Other
+        # shops keep the deterministic read in the worker.
+        for message_id in [*result.existing, *result.stored]:
+            await chat_orders.process_message(db, message_id)
+        ids = result.stored or result.existing
+        await _read_with_model(db, settings, ids[-1] if ids else None)
+        await db.flush()
     conn.last_success_at = utc_now()
     body = {"batch_id": batch_id, "accepted": len(result.stored), "duplicates": result.duplicates}
     await complete_idempotent(db, claim.record, status_code=200, body=body)

@@ -29,17 +29,29 @@ manual-queue mode), `NOT_ENOUGH_CONFIRMED` (< 20 CONFIRMED confirmations),
 `CONSENT_MISSING`.
 
 Order gate, in order: `DRAFT_NOT_READY`, `FIELDS_UNCERTAIN`, `PHONE_NOT_SINGLE`,
-`ITEM_NOT_MATCHED`, `COD_NOT_CALCULATED`, `ZONE_UNRESOLVED`, `COD_MISMATCH` (the draft's COD must equal the shop's own calculation),
+`ITEM_NOT_MATCHED`, `COD_NOT_CALCULATED`, `ZONE_UNRESOLVED`, `LOCATION_UNRESOLVED`
+(default courier Pathao: city + zone not found in the shop's own Pathao lists by the
+WP0.7 strict resolver, or the lookup failed; RedX: always — its booking needs the area
+the seller picks, and an automatic booking cannot send one), `COD_MISMATCH` (the draft's COD must equal the shop's own calculation),
 `OUT_OF_STOCK`, `DUPLICATE_RECENT` (draft linked to an order, another open draft or an
 order for the phone in 24 h), `POLICY_SELLER_REVIEW` (the WP2.2 policy on the same
 facts), `DAILY_CAP_REACHED` (`shop_delivery_rules.autopilot_daily_cap`, Dhaka day),
 then `ORDER_REFUSED` if the order service refuses (a plan limit, a changed product).
 
 Courier: whatever default courier the shop chose (Steadfast, Pathao or RedX) is the one
-used. `GET /v1/autopilot` → `courier_comparison` shows, below it, the shop's three best
-couriers by its own delivered rate over 180 days (≥ 3 finished parcels each) — a
-suggestion only. A trusted repeat buyer (policy `AUTO_CONFIRM`) counts as confirmed and
-is booked without a call. Auto uploads use the free built-in parser (no LLM call).
+used; a Pathao / RedX order whose location ids are not resolved is held
+(`LOCATION_UNRESOLVED`, operator decision 2026-11-20). `GET /v1/autopilot` →
+`courier_comparison` shows, below it, the shop's three best couriers by its own delivered
+rate over 180 days (≥ 3 finished parcels each) — a suggestion only. A trusted repeat buyer
+(policy `AUTO_CONFIRM`) counts as confirmed and is booked without a call.
+
+Parsing (operator decision 2026-11-20): while the shop's phones may upload without a tap
+(heartbeat `autopilot_on`), every automatic upload (`POST /v1/intake/captures`) is read
+in the request, once per batch, through the same LLM merge path as the quick-order sheet
+(`ai_parse_enabled` on, one `ai_parse_monthly` unit per model call, 24 h answer cache).
+Over the monthly limit, or with the model unavailable, the deterministic read stands and
+the order gate decides as for any draft (it holds anything not fully matched). Other
+shops' automatic uploads stay deterministic, read by the `process_chat_messages` worker.
 
 ## Detection
 

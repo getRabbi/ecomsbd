@@ -77,8 +77,13 @@ queue (else `409 CONFIRMATION_NOT_IN_QUEUE`):
 - `mark_confirmed` / `mark_cancelled` — `SELLER_CONFIRM` / `SELLER_CANCEL`; method
   `MANUAL_CALL` when an open manual call exists, else `SELLER`. A repeated tap after
   the answer landed returns the same row.
-- `mark_no_answer` ("Dhoreni") — closes the manual call `NO_ANSWER`; the row stays
-  in review (the state machine has no move for it; no `confirmation.no_answer`).
+- `mark_no_answer` ("Dhoreni") — closes the manual call `NO_ANSWER`. When the SMS
+  link is available (flag `confirmation_sms_link_enabled`, an SMS transport,
+  `PUBLIC_WEB_URL`, a customer, outside quiet hours) and no link was sent for this
+  confirmation yet, the link goes out: `SELLER_REVIEW → SMS_LINK_SENT` (cause
+  `SELLER_NO_ANSWER`, operator decision 2026-11-20) and the row leaves the queue until
+  the customer answers or the link expires (6 h → `SELLER_REVIEW`). Otherwise the row
+  stays in review. No `confirmation.no_answer` either way.
 
 A `CALL_QUEUED` row the seller acts on goes `CALL_QUEUED → SELLER_REVIEW`
 (`VOICE_UNAVAILABLE`) first, with **no** seller alert (the seller is the one acting).

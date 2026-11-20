@@ -92,6 +92,8 @@ def test_the_transition_table_is_exactly_the_spec():
         (S.SMS_LINK_SENT, S.SELLER_REVIEW): {C.LINK_EXPIRED},
         (S.SELLER_REVIEW, S.CONFIRMED): {C.SELLER_CONFIRM},
         (S.SELLER_REVIEW, S.CANCELLED): {C.SELLER_CANCEL},
+        # Operator decision 2026-11-20: the seller's "Dhoreni" sends the link.
+        (S.SELLER_REVIEW, S.SMS_LINK_SENT): {C.SELLER_NO_ANSWER},
     }
     for state in OPEN_STATES:
         expected.setdefault((state, S.SUPERSEDED), set()).add(C.ORDER_EDITED)
