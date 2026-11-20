@@ -19,6 +19,7 @@ from arq.connections import RedisSettings
 
 import app.billing.jobs  # registers the billing outbox handlers
 import app.confirmations.jobs  # registers the confirmation outbox handlers
+import app.referrals.jobs  # registers the referral outbox handler
 import app.voice.jobs  # noqa: F401  (registers the voice outbox handlers)
 from app import __version__
 from app.analytics.network import build_network_benchmarks

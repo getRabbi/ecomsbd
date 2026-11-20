@@ -48,6 +48,7 @@ from app.api.v1.admin_schemas import (
     ManualPaymentReviewResponse,
     OpsCountsResponse,
     ProviderHealthResponse,
+    ReferralAdminResponse,
     RepairActionResponse,
     RepairRequestPayload,
     RepairResultResponse,
@@ -80,6 +81,8 @@ from app.core.errors import ValidationError
 from app.db.session import system_session
 from app.intake import rules as intake_rules
 from app.product_events.service import ProductEventService
+from app.referrals.models import ReferralCreditState, ReferralState
+from app.referrals.service import list_referrals
 from app.voice.manifest import available_voice_manifests
 from app.voice.service import VoiceConnectionService, VoiceConnectionUpdate, connection_view
 
@@ -749,6 +752,38 @@ async def reject_manual_payment(
         submission_id, reason=payload.reason
     )
     return ManualPaymentReviewResponse.model_validate(row)
+
+
+# --------------------------------------------------------------------------- #
+# Referrals (V4 WP7.4)
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/referrals",
+    response_model=list[ReferralAdminResponse],
+    summary="Shop referrals and their credits",
+)
+async def list_shop_referrals(
+    admin: CurrentAdmin,
+    db: AdminDb,
+    referral_state: Annotated[ReferralState | None, Query(alias="state")] = None,
+    referrer_credit: Annotated[ReferralCreditState | None, Query()] = None,
+    tenant_id: Annotated[uuid.UUID | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[ReferralAdminResponse]:
+    """``?referrer_credit=HELD`` is the work queue: referrers whose 30 days were
+    not added automatically (a billing-provider subscription, or a shop that is
+    not active); grant them by hand with the support-credit repair if right."""
+    admin.require(AdminPermission.BILLING_READ)
+    rows = await list_referrals(
+        db,
+        state=referral_state,
+        referrer_credit_state=referrer_credit,
+        tenant_id=tenant_id,
+        limit=limit,
+    )
+    return [ReferralAdminResponse.model_validate(row) for row in rows]
 
 
 # --------------------------------------------------------------------------- #

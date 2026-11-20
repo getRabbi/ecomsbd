@@ -137,6 +137,9 @@ class OutboxTopic(StrEnum):
     # V4 WP2.5: an operator approved or rejected a seller's TrxID payment.
     # Handled in app.billing.jobs (the seller's notification).
     BILLING_MANUAL_PAYMENT_REVIEWED = "billing.manual_payment_reviewed"
+    # V4 WP7.4: a TrxID payment was approved; reward the paying shop's
+    # referral once (ids only). Handled in app.referrals.jobs.
+    REFERRAL_PAYMENT_APPROVED = "referral.payment_approved"
 
     # V4 WP3.3: make the shop's confirmation-call intro with the TTS port, for
     # the shop name in the payload. Handled in app.voice.jobs.

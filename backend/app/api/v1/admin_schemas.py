@@ -230,6 +230,25 @@ class ManualPaymentReviewResponse(BaseModel):
     created_at: datetime
 
 
+class ReferralAdminResponse(BaseModel):
+    """A referral (V4 WP7.4): ids, states and dates only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    #: The referrer (the code's shop).
+    tenant_id: uuid.UUID
+    referred_tenant_id: uuid.UUID
+    state: str
+    void_reason: str | None = None
+    referred_credit_state: str
+    referrer_credit_state: str
+    referrer_hold_reason: str | None = None
+    qualifying_submission_id: uuid.UUID | None = None
+    rewarded_at: datetime | None = None
+    created_at: datetime
+
+
 class ManualPaymentApprovePayload(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 

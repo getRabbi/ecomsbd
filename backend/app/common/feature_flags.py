@@ -77,6 +77,9 @@ class FlagKey(StrEnum):
     #: V4 Phase 6: Messenger / WhatsApp official connections cover the matching
     #: phone apps and may leave "Coming soon" (with META_APP_REVIEW_APPROVED).
     META_OFFICIAL_PATH_ENABLED = "meta_official_path_enabled"
+    #: V4 WP7.4: shop referral codes and the 30-day credit for both shops
+    #: after the referred shop's first approved TrxID payment.
+    REFERRALS_ENABLED = "referrals_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -116,6 +119,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.AUTOPILOT_ENABLED: False,
     FlagKey.EXTENSION_ENABLED: False,
     FlagKey.META_OFFICIAL_PATH_ENABLED: False,
+    FlagKey.REFERRALS_ENABLED: False,
 }
 
 

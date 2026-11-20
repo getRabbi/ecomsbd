@@ -445,6 +445,15 @@ class ManualPaymentReview:
         row.period_end = period_end
         row.subscription_id = subscription.id
         await self._reviewed(row, AuditAction.BILLING_MANUAL_PAYMENT_APPROVED)
+        # V4 WP7.4: the shop's referral (if any) is rewarded by its handler,
+        # after this commit, so a referral problem never undoes the payment.
+        await enqueue(
+            self._db,
+            OutboxTopic.REFERRAL_PAYMENT_APPROVED,
+            {"submission_id": str(row.id)},
+            tenant_id=row.tenant_id,
+            dedupe_key=f"referral_payment:{row.id}",
+        )
         return row, True
 
     async def reject(

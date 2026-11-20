@@ -114,6 +114,9 @@ TABLE_TOPICS: dict[str, RealtimeTopic] = {
     "shop_intake_settings": T.SHOP,
     # V4 manual TrxID payments: the Plans card lists the shop's submissions
     "billing_payment_submissions": T.SHOP,
+    # V4 referrals: the Plans card shows the shop's code and its referrals
+    "referral_codes": T.SHOP,
+    "referrals": T.SHOP,
 }
 
 #: The table whose row *is* the topic's entity. A commit that changed exactly

@@ -52,6 +52,7 @@ from app.api.v1 import (
     providers,
     realtime,
     reconciliation,
+    referrals,
     rto,
     sync,
     team,
@@ -120,6 +121,8 @@ api_router.include_router(voice_webhooks.router)
 # V4 WP3.3: the shop's confirmation-call intro (settings.manage).
 api_router.include_router(voice.router)
 api_router.include_router(billing.router)
+# V4 WP7.4: shop referral code + 30-day credit after the first TrxID payment.
+api_router.include_router(referrals.router)
 api_router.include_router(analytics.router)
 api_router.include_router(rto.router)
 api_router.include_router(insights.router)

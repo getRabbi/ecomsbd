@@ -227,6 +227,11 @@ class AuditAction(StrEnum):
     AUTOPILOT_PAUSED = "autopilot.paused"
     AUTOPILOT_RESUMED = "autopilot.resumed"
 
+    # V4 WP7.4 referrals: a shop joined with a code; the referral was
+    # rewarded (or made void). The grants themselves are billing.manual_grant.
+    REFERRAL_APPLIED = "referral.applied"
+    REFERRAL_REWARDED = "referral.rewarded"
+
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"
     PURCHASE_ORDER_SAVED = "procurement.po_saved"
