@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ecomsbd order capture</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icon-128.png" alt="" width="24" height="24" />
+      <h1 data-t="title">ecomsbd order capture</h1>
+      <button id="language" type="button" class="link" data-t="language">বাংলা</button>
+    </header>
+
+    <section id="pair-view" hidden>
+      <h2 data-t="pairTitle">Link this browser to your shop</h2>
+      <p class="hint" data-t="pairHint"></p>
+      <form id="pair-form" autocomplete="off">
+        <label for="code" data-t="codeLabel">6-digit code</label>
+        <input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required />
+        <button id="pair" type="submit" class="primary" data-t="pair">Link</button>
+      </form>
+    </section>
+
+    <section id="capture-view" hidden>
+      <p id="linked" class="hint"></p>
+      <button id="capture" type="button" class="primary big" data-t="capture">Capture</button>
+      <button id="retry" type="button" hidden data-t="again">Try again</button>
+      <div id="result" hidden></div>
+      <p class="hint" data-t="privacy"></p>
+      <button id="unpair" type="button" class="link danger" data-t="unpair">Unlink this browser</button>
+    </section>
+
+    <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

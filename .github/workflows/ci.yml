@@ -163,6 +163,34 @@ jobs:
           PY
           flutter build apk --debug
 
+  extension:
+    name: Chrome extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (phone extractor, selector reader, API, manifest)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
   secrets-scan:
     name: Secret scan
     runs-on: ubuntu-latest
