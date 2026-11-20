@@ -1,7 +1,7 @@
-# V4 release (Phases 0–5) — pull request notes
+# V4 release (Phases 0–7) — pull request notes
 
 Branch chain: `v4/phase-0` → `v4/phase-1` → `v4/phase-2` → `v4/phase-3` → `v4/phase-4` → `v4/phase-5`
-(each cut from the one before; none merged to `main`). This PR is the newest branch → `main`.
+→ `v4/phase-6` → `v4/phase-7` (each cut from the one before; none merged to `main`). This PR is the newest branch → `main`.
 Spec: `docs/V4_MASTER_BUILD_SPEC.md`. Ledger (per-WP commits, tests, decisions):
 `docs/build/PROGRESS.md`.
 
@@ -10,7 +10,7 @@ new provider is disabled until its contract and credentials exist, and the migra
 only add tables/columns (no data is rewritten except the `chat_order_drafts.capture_source`
 backfill to `META_WEBHOOK`). With every flag off, the app behaves as V3.
 
-## What Phases 0–5 add
+## What Phases 0–7 add
 
 **Phase 0 — make the core loop real**
 - WP0.1 docs truth. WP0.2 crash + funnel visibility: `product_events` + admin funnel
@@ -74,7 +74,29 @@ VOICE_PROVIDER_CONTRACT_REQUIRED**)
 - CI job `extension` (typecheck, unit tests, build); store listing + privacy disclosure EN + BN in
   `apps/extension/STORE_LISTING.md`. No migration.
 
-## Migrations (single head `a44001`, all portable, downgrade implemented)
+**Phase 6 — official Meta path on** (no migration)
+- A delivering Messenger connection (a Page) covers Meta Business Suite and a delivering WhatsApp
+  Cloud API number covers WhatsApp Business in `shop_intake_settings.covered_packages`; phones drop
+  covered apps on the next rules refresh, so a Page order arrives once (webhook), not twice.
+  Personal Messenger / WhatsApp are never covered. Recomputed on every connection change, health
+  check and hourly.
+- Messenger / WhatsApp leave "Coming soon" (web + mobile hub) only with
+  `META_APP_REVIEW_APPROVED=true`, the Meta app configured, the shop's `meta_official_path_enabled`
+  and a passing health check. Runbook `META_OFFICIAL_PATH.md`; G6 = Meta App Review.
+
+**Phase 7 — more reach**
+- WP7.3 own API domain: every URL from `PUBLIC_BASE_URL`; `PUBLIC_BASE_URL_ALIASES` keeps earlier
+  origins served during a move (their hosts join `TRUSTED_HOSTS`); `python -m app.core.public_urls`
+  prints every externally registered URL; Codemagic guard accepts both production API origins.
+  Runbook `API_DOMAIN_MIGRATION.md` (the move itself is an operator step).
+- WP7.4 referrals: one code per shop; another shop enters it before its first payment; when that
+  shop's first TrxID payment is approved, both get 30 days of plan through the admin-manual grant,
+  once (outbox `referral.payment_approved`, unique billing keys). Held for support when the
+  referrer pays through Play / bKash web. Web Plans card; runbook `REFERRALS.md`.
+- WP7.1 SMS gateway (**BLOCKED: SMS_PROVIDER_CONTRACT_REQUIRED**) and WP7.2 Carrybee / Paperfly
+  (**BLOCKED: CARRYBEE_CONTRACT_REQUIRED, PAPERFLY_CONTRACT_REQUIRED**): nothing built.
+
+## Migrations (single head `a47001`, all portable, downgrade implemented)
 
 | Id | File | Adds |
 |---|---|---|
@@ -83,6 +105,7 @@ VOICE_PROVIDER_CONTRACT_REQUIRED**)
 | `a42001` | `20261119_0100_a42001_v4_phase2.py` | `order_confirmations`, `confirmation_attempts` (+ `segments`), `confirmation_links`, `billing_payment_submissions` |
 | `a43001` | `20261119_0100_a43001_v4_phase3.py` | `voice_provider_connections`, `voice_callback_deliveries`, `voice_call_events` (platform tables), `voice_intro_audio`, `voice_credit_packs`, `voice_call_charges`, `voice_daily_usage` |
 | `a44001` | `20261120_0100_a44001_v4_phase4.py` | `shop_delivery_rules`: `autopilot_on`, `autopilot_consent_at/_by`, `autopilot_paused_until`, `autopilot_manual_queue`; `autopilot_decisions` |
+| `a47001` | `20261121_0100_a47001_v4_phase7.py` | `referral_codes`, `referrals` (phases 5 and 6 add no migration) |
 
 Every new business table is tenant-owned with RLS on and client-role grants revoked
 (pattern of `a39001`); platform tables (voice account, callbacks, daily usage) have RLS on
@@ -103,6 +126,8 @@ see the last section.
 | `voice_confirmation_enabled` | IVR calls, intro audio | engine + `VOICE_TRANSPORT` + provider account + intro + credit |
 | `autopilot_enabled` | Autopilot (global kill switch) | the whole checklist per shop |
 | `extension_enabled` | Chrome extension pairing + every extension ingest call | `intake_device_enabled` |
+| `meta_official_path_enabled` | Meta coverage of the phone's business apps + Messenger / WhatsApp out of Coming soon | `META_APP_REVIEW_APPROVED` + a passing health check |
+| `referrals_enabled` | referral codes + 30-day credit for both shops | `manual_payments_enabled` (the credit follows a TrxID payment) |
 
 Existing flag now used by V4: `ai_parse_enabled` (the LLM parser; off). New entitlements:
 `voice_calls_monthly` (Free 0 / Starter 50 / Pro 200), `autopilot` (Pro).
@@ -123,6 +148,8 @@ Existing flag now used by V4: `ai_parse_enabled` (the LLM parser; off). New enti
 | `VOICE_AMOUNT_PREFIX_AUDIO_REF` / `_SUFFIX_` | empty | optional, both or neither (spoken COD) |
 | `VOICE_DAILY_GLOBAL_CAP` | `300` | every mode; 0 = no calls |
 | `VOICE_DAILY_SHOP_CAP` | `30` | Free Launch Mode only; 0 = no calls |
+| `META_APP_REVIEW_APPROVED` | `false` | set `true` only after Meta App Review approval (WP6) |
+| `PUBLIC_BASE_URL_ALIASES` | empty | during an API domain move (WP7.3); https in production |
 
 Existing variables V4 reads: `SMS_TRANSPORT`, `PUBLIC_WEB_URL`, `R2_*` (intro audio),
 `FREE_LAUNCH_MODE`, `DISTRIBUTION_CHANNEL`. Mobile build defines: `ECOMSBD_SENTRY_DSN`
@@ -135,20 +162,24 @@ Extension build (not server env): `ECOMSBD_API_BASE_URL` (default `https://api.s
 - Worker: `follow_up_confirmations` (SMS link / retries / expiry), `dispatch_confirmation_calls`
   (IVR + reconciler). Runbooks `ORDER_CONFIRMATIONS.md`, `VOICE_CONFIRMATION.md`.
 - Outbox topics (each with a handler): `intake.draft_ready`, `confirmation.*`,
-  `confirmation.link_requested`, `billing.manual_payment_reviewed`, `voice.intro_requested`.
+  `confirmation.link_requested`, `billing.manual_payment_reviewed`, `voice.intro_requested`,
+  `referral.payment_approved`.
+- Referrals: `GET /v1/referrals`, `POST /v1/referrals/code`, `POST /v1/referrals/apply`; admin
+  `GET /v1/admin/referrals`. Operator CLI: `python -m app.core.public_urls`.
 - Extension (ingest key): `POST /v1/intake/captures/extension`, `POST /v1/intake/unlink`; seller:
   `GET /v1/devices/extensions`; web `/settings/extension`, `/quick-order?draft=<id>`.
 - Public: `GET/POST /v1/public/confirmations/{token}` (+ web `/c/[token]`),
   `POST /v1/webhooks/voice/{provider}` (refuses everything without a verified provider).
 - Runbooks: `AI_PARSE.md`, `INTAKE_RULES.md`, `INTAKE_CAPTURE.md`, `ORDER_CONFIRMATIONS.md`,
-  `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`, `EXTENSION.md`.
+  `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`, `EXTENSION.md`,
+  `META_OFFICIAL_PATH.md`, `API_DOMAIN_MIGRATION.md`, `REFERRALS.md`.
 
 ## Staging turn-on order
 
 Each step is a flag on for one test shop first (admin console, tenant row), checked, then
 widened. Stop at the first step whose check fails; turning a flag off is the rollback.
 
-1. Deploy; `alembic upgrade head` (→ `a44001`, one head). Nothing visible changes.
+1. Deploy; `alembic upgrade head` (→ `a47001`, one head). Nothing visible changes.
 2. `product_events_enabled` (global) → `GET /v1/admin/ops/funnel` shows events. Ship the
    mobile build with `ECOMSBD_SENTRY_DSN`; one test event arrives with the phone masked.
 3. `delivery_rules_enabled` → set three zone charges + default courier; a new order's COD
@@ -173,13 +204,20 @@ widened. Stop at the first step whose check fails; turning a flag off is the rol
     unpacked, pair from Settings → Browser extension, capture a selected test message, finish the
     order on `/quick-order` (runbook `EXTENSION.md` → Verification). Page selectors: verify per host,
     then publish a rule set with `verified_at`. G5: Chrome Web Store approval.
+11. After Meta App Review: `META_APP_REVIEW_APPROVED=true`, `meta_official_path_enabled` for the test
+    shop, connect the test Page, one Page order end to end (runbook `META_OFFICIAL_PATH.md`). G6.
+12. `referrals_enabled` (needs step 7's TrxID payments) → two test shops, one approved payment, both
+    plans +30 days (runbook `REFERRALS.md` → Verification).
+13. API domain move, when wanted: runbook `API_DOMAIN_MIGRATION.md` (`PUBLIC_BASE_URL_ALIASES`).
 
 ## Blocked / operator items (not in this PR)
 
 `EXTERNAL_RISK_CONTRACT_REQUIRED` (WP0.6), `STATEMENT_SAMPLE_REQUIRED` (WP0.7),
 `SMS_PROVIDER_CONTRACT_REQUIRED` (WP2.3), `VOICE_PROVIDER_CONTRACT_REQUIRED` (WP3.1),
-`TTS_PROVIDER_REQUIRED` (WP3.3); iOS Share Extension (Xcode); extension page selectors (operator
-verifies on the live pages) and the Chrome Web Store submission (G5); gates G0–G5 need real-world
+`TTS_PROVIDER_REQUIRED` (WP3.3), `SMS_PROVIDER_CONTRACT_REQUIRED` (WP7.1),
+`CARRYBEE_CONTRACT_REQUIRED` + `PAPERFLY_CONTRACT_REQUIRED` (WP7.2); iOS Share Extension (Xcode); extension page selectors (operator
+verifies on the live pages) and the Chrome Web Store submission (G5); Meta App Review (G6); the API
+domain move (WP7.3); gates G0–G6 need real-world
 evidence (ledger → "Operator actions waiting").
 
 ## Integration checkpoint (2026-11-20)
@@ -196,3 +234,18 @@ against the compose database with an explicit local `DATABASE_URL`:
   test failure). Its session setup did migrate `ecomsbd_test` to `a44001` through the
   suite's own Alembic path before it stopped. No test result exists yet; run it on a
   machine with more memory or in CI before merging (operator action in the ledger).
+
+## Test runs after the checkpoint (2026-11-21)
+
+- Operator, elsewhere, PostgreSQL suite on `v4/phase-4` @ 395e891: 2439 passed, 3 failed, 1 skipped.
+  The 3 failures were fixed on `v4/phase-5` (realtime table coverage for `autopilot_decisions` /
+  `billing_payment_submissions` / the voice tables; `migrations/env.py` keeps existing loggers;
+  the dispatcher test drains) and their tests are green.
+- Every WP since was verified with targeted suites (ledger Status table: WP5, WP6, WP7.3, WP7.4).
+- **Still to run before merging (operator):** the full SQLite suite and the PostgreSQL suite once
+  on `v4/phase-7` head, and the `a47001` round trip on PostgreSQL
+  (`alembic upgrade head && alembic downgrade -1 && alembic upgrade head`). Paste the summary
+  lines here:
+  - SQLite: _pending_
+  - PostgreSQL: _pending_
+  - `a47001` round trip: _pending_
