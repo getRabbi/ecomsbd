@@ -23,6 +23,7 @@ from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any, Self
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -186,6 +187,11 @@ class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.LOCAL
     app_name: str = "ecomsbd"
     public_base_url: str = "http://localhost:8000"
+    #: V4 WP7.3: earlier API origins this deployment still serves while it
+    #: moves to a new domain (``https://api.scalemyprints.com`` during the move
+    #: to ``api.ecomsbd.com``). Old app builds, provider webhooks and courier
+    #: callbacks keep calling them; runbook ``API_DOMAIN_MIGRATION.md``.
+    public_base_url_aliases: Annotated[list[str], NoDecode] = Field(default_factory=list)
     api_v1_prefix: str = "/v1"
     debug: bool = False
 
@@ -383,6 +389,29 @@ class Settings(BaseSettings):
     @property
     def purchases_enabled(self) -> bool:
         return self.billing_enabled and not self.free_launch_mode
+
+    @property
+    def api_hosts(self) -> list[str]:
+        """The hosts of ``PUBLIC_BASE_URL`` and every alias, primary first."""
+        hosts: list[str] = []
+        for url in (self.public_base_url, *self.public_base_url_aliases):
+            host = urlsplit(url).hostname
+            if host and host not in hosts:
+                hosts.append(host)
+        return hosts
+
+    @property
+    def effective_trusted_hosts(self) -> list[str]:
+        """The ``Host`` allow-list: ``TRUSTED_HOSTS`` plus the API's own hosts.
+
+        V4 WP7.3: during a domain move the API answers on the new host and on
+        every alias, so a forgotten ``TRUSTED_HOSTS`` entry cannot cut off old
+        app builds or provider callbacks. Empty stays empty (a proxy in front
+        checks ``Host``).
+        """
+        if not self.trusted_hosts:
+            return []
+        return [*self.trusted_hosts, *(h for h in self.api_hosts if h not in self.trusted_hosts)]
 
     # Plan pricing and entitlement values are product-validation data, not
     # technical constants (master spec section 26), so both are overridable
@@ -685,7 +714,13 @@ class Settings(BaseSettings):
             return _DEV_SECRET_DEFAULTS[str(info.field_name)]
         return value
 
-    @field_validator("cors_allow_origins", "trusted_hosts", "admin_api_tokens", mode="before")
+    @field_validator(
+        "cors_allow_origins",
+        "trusted_hosts",
+        "admin_api_tokens",
+        "public_base_url_aliases",
+        mode="before",
+    )
     @classmethod
     def _decode_list(cls, value: Any) -> Any:
         return _parse_env_list(value)
@@ -860,6 +895,10 @@ class Settings(BaseSettings):
                 problems.append("SQLite is not a supported production database")
             if "*" in self.trusted_hosts:
                 problems.append("TRUSTED_HOSTS must not be '*' in production")
+            for alias in self.public_base_url_aliases:
+                if not alias.startswith("https://"):
+                    problems.append("PUBLIC_BASE_URL_ALIASES must use https in production")
+                    break
 
         # Only when OTP sign-in is actually on. A deployment with
         # PHONE_OTP_LOGIN_ENABLED=false may still name a gateway it intends to

@@ -136,7 +136,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # and wrong the moment the app is reachable directly, which is why
     # production refuses the wildcard rather than the empty list.
     if settings.trusted_hosts:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
+        # Plus PUBLIC_BASE_URL's host and every alias (V4 WP7.3: both domains
+        # answer during a move).
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.effective_trusted_hosts)
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.request_body_limit_bytes)
     app.add_middleware(RequestContextMiddleware, settings=settings)
 
