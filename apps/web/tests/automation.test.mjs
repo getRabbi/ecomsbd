@@ -92,7 +92,7 @@ test('V4 confirmation hooks: draft subject, empty configs and every outcome have
   const keys = [
     'auto.cfg.confirmNote',
     'auto.cfg.convertNote',
-    ...['CONFIRMATION_ENGINE_DISABLED', 'ORDER_NOT_DRAFT', 'ALREADY_REQUESTED', 'AUTOPILOT_DISABLED', 'CALL', 'AUTO_CONFIRM', 'SELLER_REVIEW'].map((code) => `auto.reason.${code}`),
+    ...['CONFIRMATION_ENGINE_DISABLED', 'ORDER_NOT_DRAFT', 'ALREADY_REQUESTED', 'AUTOPILOT_DISABLED', 'CALL', 'AUTO_CONFIRM', 'SELLER_REVIEW', 'CONVERTED', 'DRAFT_NOT_CONVERTED'].map((code) => `auto.reason.${code}`),
   ];
   for (const key of keys) {
     assert.ok(automationEn[key], `missing English: ${key}`);

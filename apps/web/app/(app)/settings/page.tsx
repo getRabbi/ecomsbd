@@ -29,6 +29,7 @@ const WORKSPACE_LINKS: WorkspaceLink[] = [
   { href: '/settings/risk-provider', labelKey: 'nav.riskProvider', icon: 'network' },
   { href: '/settings/delivery', labelKey: 'nav.deliveryRules', icon: 'couriers', permission: 'settings.manage' },
   { href: '/settings/voice', labelKey: 'nav.callVoice', icon: 'bell', permission: 'settings.manage' },
+  { href: '/settings/autopilot', labelKey: 'nav.autopilot', icon: 'connections', permission: 'settings.manage' },
   { href: '/developers', labelKey: 'nav.developers', icon: 'developers', permission: 'settings.manage' },
 ];
 

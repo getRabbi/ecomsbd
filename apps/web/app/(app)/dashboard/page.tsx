@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { AutopilotCard } from '@/components/AutopilotCard';
 import { Icon, type IconName } from '@/components/icons';
 import { PageHeader } from '@/components/shell';
 import { Card, Chip, EmptyState, ErrorState, type Tone } from '@/components/ui';
@@ -248,6 +249,10 @@ export default function DashboardPage() {
               <Pulse buckets={buckets} peak={peak} />
             </Card>
           )}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <AutopilotCard />
         </div>
 
         <div className="grid2" style={{ marginTop: 14 }}>
