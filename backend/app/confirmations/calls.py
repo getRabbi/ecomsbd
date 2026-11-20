@@ -13,6 +13,10 @@ callbacks then say what happened. Three rules shape everything here:
     callback after :data:`~app.confirmations.service.CALL_TIMEOUT`, goes to
     ``SELLER_REVIEW``. Only a certain no-answer is called again (30 minutes
     later, by :func:`app.confirmations.jobs.follow_up_confirmations`).
+*   **Paid before ringing** (WP3.4). The call's credit is spent in that same
+    first transaction (:mod:`app.voice.credits`); a shop with none goes to the
+    seller (``NO_VOICE_CREDIT``). Only a call the provider certainly never
+    placed gets its credit back.
 *   **The customer is protected first.** No call in the shop's quiet hours, at
     most :data:`CALLS_PER_CUSTOMER_PER_DAY` calls to one customer per Dhaka day
     across all of the shop's orders (the seller's own calls count), and no call
@@ -175,8 +179,12 @@ async def intro_audio_ref(db: AsyncSession, tenant_id: uuid.UUID, *, provider: s
 
 
 async def has_voice_credit(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
-    """WP3.4 meters calls per shop. Until it does, a shop with voice on may call."""
-    return True
+    """Whether the shop has a call's credit left (WP3.4), read-only. The
+    dispatcher does not ask this: it spends the credit atomically in
+    :meth:`IvrCalls.prepare`."""
+    from app.voice.credits import VoiceCredits
+
+    return (await VoiceCredits(db).balance(tenant_id, now=utc_now())).has_credit
 
 
 # --------------------------------------------------------------------------- #
@@ -265,7 +273,7 @@ class Skip(StrEnum):
     ORDER_NOT_DRAFT = "ORDER_NOT_DRAFT"  # stays queued; never called
     BREAKER_OPEN = "BREAKER_OPEN"  # stays queued; the shop's queue shows it
     NO_NUMBER = "NO_NUMBER"  # → SELLER_REVIEW
-    NO_CREDIT = "NO_CREDIT"  # → SELLER_REVIEW
+    NO_CREDIT = "NO_CREDIT"  # → SELLER_REVIEW (NO_VOICE_CREDIT)
     CALL_LIMIT = "CALL_LIMIT"  # → SELLER_REVIEW
 
 
@@ -303,6 +311,7 @@ class IvrCalls:
         attempt and move to ``CALLING``. The caller commits before placing."""
         from app.common.provider_health import ProviderHealthService
         from app.customers.models import Customer
+        from app.voice.credits import VoiceCredits
         from app.voice.service import CALL_CAPABILITY
 
         row = await self._db.scalar(
@@ -339,19 +348,25 @@ class IvrCalls:
         if await self.calls_today(order.customer_id, now) >= CALLS_PER_CUSTOMER_PER_DAY:
             await self._to_seller(row, Cause.CALL_LIMIT, now)
             return Skip.CALL_LIMIT
-        if not await has_voice_credit(self._db, row.tenant_id):
-            await self._to_seller(row, Cause.VOICE_UNAVAILABLE, now)
+        if gate.audio_ref is None:  # the gate is on only with audio
+            raise RuntimeError("voice gate on without intro audio")
+        # WP3.4: the call's credit is spent here, in the same transaction as
+        # the attempt, so two workers can never both spend the last one.
+        credits = VoiceCredits(self._db)
+        reservation = await credits.reserve(row.tenant_id, now=now)
+        if reservation is None:
+            await self._to_seller(row, Cause.NO_VOICE_CREDIT, now)
             return Skip.NO_CREDIT
         if not await ProviderHealthService(self._db).allows(
             gate.provider, capability=CALL_CAPABILITY
         ):
+            await credits.undo(reservation)
             return Skip.BREAKER_OPEN
-        if gate.audio_ref is None:  # the gate is on only with audio
-            raise RuntimeError("voice gate on without intro audio")
 
         attempt = await self._confirmations.add_attempt(
             row, AttemptChannel.IVR, provider=gate.provider, now=now
         )
+        await credits.charge(reservation, attempt_id=attempt.id, provider=gate.provider)
         await self._confirmations.transition(row, S.CALLING, Cause.DIALING, now=now)
         from app.voice.intro import call_audio
 
@@ -421,6 +436,12 @@ class IvrCalls:
             return
         attempt.ended_at = attempt.ended_at or now
         current = attempt.status in _LIVE
+        if outcome is not VoiceCallOutcome.UNKNOWN and attempt.status == IvrStatus.STARTED:
+            # WP3.4: certainly never placed, and no callback says otherwise:
+            # the call's credit goes back. A call that may have rung keeps it.
+            from app.voice.credits import VoiceCredits
+
+            await VoiceCredits(self._db).release(attempt.id, now=now)
         if outcome is VoiceCallOutcome.UNKNOWN:
             if current:
                 attempt.status = str(IvrStatus.UNKNOWN)

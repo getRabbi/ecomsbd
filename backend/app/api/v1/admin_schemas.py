@@ -292,6 +292,83 @@ class VoiceIntrosAdminResponse(BaseModel):
     versions: list[VoiceIntroAdminView]
 
 
+class VoicePackGrantPayload(BaseModel):
+    """Grant a shop a voice call pack (V4 WP3.4). ``idempotency_key`` makes a
+    retried grant return the first pack instead of granting twice."""
+
+    calls: int = Field(ge=1, le=10_000)
+    reason: str = Field(min_length=8, max_length=400)
+    idempotency_key: str = Field(min_length=8, max_length=80)
+    #: Grant against this approved bKash / Nagad payment (one pack per payment).
+    payment_submission_id: uuid.UUID | None = None
+
+
+class VoicePackView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    calls: int
+    remaining: int
+    expires_at: datetime
+    source: str
+    payment_submission_id: uuid.UUID | None
+    granted_by: str
+    reason: str
+    created_at: datetime
+
+
+class VoicePackGrantResponse(BaseModel):
+    pack: VoicePackView
+    #: ``False`` when the idempotency key had already granted this pack.
+    created: bool
+
+
+class VoiceCreditsResponse(BaseModel):
+    """What a shop can still call with. ``allowance_limit`` -1 = unlimited."""
+
+    tenant_id: uuid.UUID
+    free_launch: bool
+    has_credit: bool
+    allowance_period: str
+    allowance_limit: int
+    allowance_used: int
+    allowance_remaining: int | None
+    pack_calls_remaining: int
+    packs: list[VoicePackView]
+    #: Free Launch Mode only: today's calls against the two daily ceilings.
+    shop_today: int
+    shop_cap: int
+    global_today: int
+    global_cap: int
+
+
+class VoiceReportRow(BaseModel):
+    """One shop's IVR calls on one Asia/Dhaka day. Calls = charged (reached
+    the provider or may have). Rates in basis points of calls. ``cost_paisa``
+    is ``None`` when no call's cost is known; ``cost_estimated`` = at least
+    part of it is the manifest price, not what the provider reported."""
+
+    tenant_id: uuid.UUID
+    shop_name: str
+    day: date
+    calls: int
+    answered: int
+    confirmed: int
+    answer_rate_bps: int
+    confirm_rate_bps: int
+    cost_paisa: int | None
+    cost_per_call_paisa: int | None
+    cost_estimated: bool
+    calls_without_cost: int
+    providers: list[str]
+
+
+class VoiceReportResponse(BaseModel):
+    day_from: date
+    day_to: date
+    rows: list[VoiceReportRow]
+
+
 class VoiceProviderUpdatePayload(BaseModel):
     """Connect, rotate or switch. An omitted secret keeps the stored one."""
 

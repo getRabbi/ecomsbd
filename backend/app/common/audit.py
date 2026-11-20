@@ -192,6 +192,8 @@ class AuditAction(StrEnum):
     ADMIN_VOICE_PROVIDER_UPDATED = "admin.voice_provider_updated"
     #: V4 WP3.3: the operator uploaded a shop's intro recording.
     ADMIN_VOICE_INTRO_UPLOADED = "admin.voice_intro_uploaded"
+    #: V4 WP3.4: the operator granted a shop a voice call pack.
+    ADMIN_VOICE_PACK_GRANTED = "admin.voice_pack_granted"
     #: V4 WP3.3: a shop intro made by TTS, turned on (confirmation calls start
     #: playing it) or turned off by the seller.
     VOICE_INTRO_CREATED = "voice.intro_created"

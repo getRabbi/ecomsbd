@@ -57,11 +57,17 @@ from app.api.v1.admin_schemas import (
     SupportCaseResponse,
     SupportCaseUpdatePayload,
     TenantSummaryResponse,
+    VoiceCreditsResponse,
     VoiceIntroAdminView,
     VoiceIntrosAdminResponse,
+    VoicePackGrantPayload,
+    VoicePackGrantResponse,
+    VoicePackView,
     VoiceProviderConnectionView,
     VoiceProviderResponse,
     VoiceProviderUpdatePayload,
+    VoiceReportResponse,
+    VoiceReportRow,
 )
 from app.billing.manual_payments import ManualPaymentReview
 from app.billing.models import ManualPaymentState
@@ -69,6 +75,7 @@ from app.billing.providers.registry import PROVIDER_FLAGS
 from app.common.audit import AuditAction, record_audit
 from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.provider_health import ProviderHealthService, ProviderKind
+from app.core.clock import utc_now
 from app.core.errors import ValidationError
 from app.db.session import system_session
 from app.intake import rules as intake_rules
@@ -535,6 +542,133 @@ async def upload_voice_intro(
         },
     )
     return await _voice_intros(db, tenant_id)
+
+
+# --------------------------------------------------------------------------- #
+# Voice call credits (V4 WP3.4)
+# --------------------------------------------------------------------------- #
+
+
+async def _shop_or_404(db: AsyncSession, tenant_id: uuid.UUID) -> Any:
+    from app.core.errors import NotFoundError
+    from app.tenants.models import Tenant
+
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None or tenant.deleted_at is not None:
+        raise NotFoundError("Shop not found")
+    return tenant
+
+
+@router.get(
+    "/voice/credits/{tenant_id}",
+    response_model=VoiceCreditsResponse,
+    summary="A shop's voice call allowance and packs",
+)
+async def get_voice_credits(
+    tenant_id: uuid.UUID, admin: CurrentAdmin, db: AdminDb, settings: SettingsDep
+) -> VoiceCreditsResponse:
+    from app.voice.credits import VoiceCredits
+
+    admin.require(AdminPermission.BILLING_READ)
+    await _shop_or_404(db, tenant_id)
+    balance = await VoiceCredits(db, settings=settings).balance(tenant_id, now=utc_now())
+    return VoiceCreditsResponse(
+        tenant_id=tenant_id,
+        free_launch=balance.free_launch,
+        has_credit=balance.has_credit,
+        allowance_period=balance.allowance_period,
+        allowance_limit=balance.allowance_limit,
+        allowance_used=balance.allowance_used,
+        allowance_remaining=balance.allowance_remaining,
+        pack_calls_remaining=balance.pack_calls_remaining,
+        packs=[VoicePackView.model_validate(pack) for pack in balance.packs],
+        shop_today=balance.shop_today,
+        shop_cap=balance.shop_cap,
+        global_today=balance.global_today,
+        global_cap=balance.global_cap,
+    )
+
+
+@router.post(
+    "/voice/credits/{tenant_id}/packs",
+    response_model=VoicePackGrantResponse,
+    summary="Grant a shop a voice call pack (90 days)",
+)
+async def grant_voice_pack(
+    tenant_id: uuid.UUID,
+    payload: VoicePackGrantPayload,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+) -> VoicePackGrantResponse:
+    """Calls on top of the plan's monthly allowance, spent after it, oldest
+    pack first. A repeated idempotency key returns the first pack."""
+    from app.voice.credits import VoiceCredits
+
+    admin.require(AdminPermission.BILLING_GRANT)
+    await _shop_or_404(db, tenant_id)
+    pack, created = await VoiceCredits(db, settings=settings).grant_pack(
+        tenant_id,
+        calls=payload.calls,
+        grant_key=payload.idempotency_key,
+        reason=payload.reason,
+        granted_by=admin.label,
+        payment_submission_id=payload.payment_submission_id,
+    )
+    if created:
+        await record_audit(
+            db,
+            AuditAction.ADMIN_VOICE_PACK_GRANTED,
+            entity_type="voice_credit_pack",
+            entity_id=pack.id,
+            tenant_id=tenant_id,
+            context={
+                "calls": pack.calls,
+                "source": pack.source,
+                "expires_at": pack.expires_at.isoformat(),
+                "payment_submission_id": (
+                    str(pack.payment_submission_id) if pack.payment_submission_id else None
+                ),
+                "admin": admin.label,
+            },
+        )
+    return VoicePackGrantResponse(pack=VoicePackView.model_validate(pack), created=created)
+
+
+@router.get(
+    "/voice/report",
+    response_model=VoiceReportResponse,
+    summary="IVR calls, answer rate, confirm rate and cost per shop per day",
+)
+async def voice_call_report(
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+    day_from: Annotated[date, Query(alias="from")],
+    day_to: Annotated[date, Query(alias="to")],
+    tenant_id: uuid.UUID | None = None,
+) -> VoiceReportResponse:
+    """Asia/Dhaka days, at most 31. Cost is what the provider reported, else
+    the manifest's price marked estimated, else unknown."""
+    from app.voice.credits import voice_report
+    from app.voice.manifest import VoiceFact
+
+    admin.require(AdminPermission.OPS_READ)
+    prices = {
+        name: (
+            manifest.fact(VoiceFact.PRICE_PER_CALL_PAISA),
+            manifest.fact(VoiceFact.PRICE_PER_MINUTE_PAISA),
+        )
+        for name, manifest in available_voice_manifests(settings).items()
+    }
+    rows = await voice_report(
+        db, day_from=day_from, day_to=day_to, tenant_id=tenant_id, prices=prices
+    )
+    return VoiceReportResponse(
+        day_from=day_from,
+        day_to=day_to,
+        rows=[VoiceReportRow.model_validate(row.as_dict()) for row in rows],
+    )
 
 
 # --------------------------------------------------------------------------- #

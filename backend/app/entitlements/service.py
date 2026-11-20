@@ -363,6 +363,41 @@ class EntitlementService:
         assert counter is not None  # noqa: S101 - just updated it
         return _view(counter)
 
+    async def try_consume(
+        self,
+        tenant_id: uuid.UUID,
+        entitlement: Entitlement,
+        *,
+        amount: int = 1,
+        at: datetime | None = None,
+    ) -> str | None:
+        """Spend ``amount`` if the quota allows it: the period key it came out
+        of, or ``None`` (a plan with none of it included).
+
+        Same atomic spend as :meth:`consume`, but it neither raises nor audits
+        a denial: it is for a caller with another source to fall back on
+        (V4 WP3.4: a voice call spends the monthly allowance, then a pack).
+        """
+        if entitlement not in METERED_ENTITLEMENTS:
+            raise ValueError(f"{entitlement} is not metered")
+        if amount <= 0:
+            raise ValueError("usage amount must be positive")
+        plan = await self.plan_for(tenant_id)
+        cap = plan.limit(entitlement)
+        if cap == 0:
+            return None
+        period_key = period_key_for(entitlement, timezone_name=self._timezone, at=at)
+        await self._ensure_counter(tenant_id, entitlement, period_key, cap, str(plan.code))
+        granted = await increment_atomically(
+            self._db,
+            tenant_id=tenant_id,
+            entitlement=entitlement,
+            period_key=period_key,
+            amount=amount,
+            limit_value=cap,
+        )
+        return period_key if granted else None
+
     async def _ensure_counter(
         self,
         tenant_id: uuid.UUID,

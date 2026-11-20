@@ -490,6 +490,11 @@ class Settings(BaseSettings):
     #: when the provider's manifest verifies ``dynamic_audio``; both or neither.
     voice_amount_prefix_audio_ref: str | None = None
     voice_amount_suffix_audio_ref: str | None = None
+    #: V4 WP3.4: Free Launch Mode gives every shop unlimited calls, so these
+    #: Asia/Dhaka daily ceilings protect the operator's provider bill: every
+    #: shop together, and one shop. Not a plan allowance; unused outside it.
+    voice_daily_global_cap: int = Field(default=300, ge=0)
+    voice_daily_shop_cap: int = Field(default=30, ge=0)
 
     # -------------------------------------------------------------- email ---
     #: TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED. Provider-neutral, like push and

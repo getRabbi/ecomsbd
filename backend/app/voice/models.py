@@ -21,11 +21,18 @@ from app.db.types import GUID, JSONColumn, TZDateTime
 
 __all__ = [
     "INTRO_ON_PREDICATE",
+    "PACK_TTL_DAYS",
     "CallbackState",
+    "ChargeSource",
+    "ChargeState",
     "IntroSource",
     "IntroState",
+    "PackSource",
+    "VoiceCallCharge",
     "VoiceCallEvent",
     "VoiceCallbackDelivery",
+    "VoiceCreditPack",
+    "VoiceDailyUsage",
     "VoiceEventResult",
     "VoiceIntroAudio",
     "VoiceProviderConnection",
@@ -236,3 +243,113 @@ class VoiceIntroAudio(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     #: The provider's own id for the uploaded recording, per provider, where its
     #: manifest says recordings are uploaded before a call.
     provider_refs: Mapped[dict[str, Any]] = mapped_column(JSONColumn, nullable=False, default=dict)
+
+
+# --------------------------------------------------------------------------- #
+# Credits (V4 WP3.4)
+# --------------------------------------------------------------------------- #
+
+
+class PackSource(StrEnum):
+    """Where a voice credit pack came from."""
+
+    ADMIN_GRANT = "ADMIN_GRANT"
+    #: Granted against one approved bKash / Nagad payment (WP2.5).
+    PAYMENT_SUBMISSION = "PAYMENT_SUBMISSION"
+
+
+class ChargeSource(StrEnum):
+    """What one call was paid from."""
+
+    PLAN_ALLOWANCE = "PLAN_ALLOWANCE"
+    PACK = "PACK"
+    #: Free Launch Mode: no allowance spent; the daily safety caps counted it.
+    FREE_LAUNCH = "FREE_LAUNCH"
+
+
+class ChargeState(StrEnum):
+    CHARGED = "CHARGED"
+    #: The provider certainly never placed the call: the credit went back.
+    RELEASED = "RELEASED"
+
+
+#: A pack's life from its grant.
+PACK_TTL_DAYS = 90
+
+
+class VoiceCreditPack(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """Calls bought or granted on top of the plan's monthly allowance.
+
+    Spent oldest first, after the allowance, by one conditional ``UPDATE``
+    (``remaining >= 1``), so two workers can never spend its last call twice.
+    """
+
+    __tablename__ = "voice_credit_packs"
+    __table_args__ = (
+        sa.UniqueConstraint("tenant_id", "grant_key", name="uq_voice_credit_packs_grant_key"),
+        sa.UniqueConstraint("payment_submission_id", name="uq_voice_credit_packs_payment"),
+        sa.Index("ix_voice_credit_packs_tenant_expires", "tenant_id", "expires_at"),
+        sa.CheckConstraint("calls > 0", name="calls_positive"),
+        sa.CheckConstraint("remaining >= 0 AND remaining <= calls", name="remaining_in_range"),
+    )
+
+    calls: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    remaining: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False)
+    source: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    #: The operator's idempotency key: a repeated grant returns the first pack.
+    grant_key: Mapped[str] = mapped_column(sa.String(80), nullable=False)
+    #: ``PAYMENT_SUBMISSION`` only: the approved payment; one pack per payment.
+    payment_submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("billing_payment_submissions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    #: The admin's label.
+    granted_by: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    reason: Mapped[str] = mapped_column(sa.String(400), nullable=False)
+
+
+class VoiceCallCharge(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """What one IVR attempt was paid from (one row per attempt).
+
+    Written in the dispatcher's first transaction, before the provider is
+    asked, so a crash can never leave a call that spent nothing. Released only
+    when the provider certainly did not place the call.
+    """
+
+    __tablename__ = "voice_call_charges"
+    __table_args__ = (
+        sa.UniqueConstraint("attempt_id", name="uq_voice_call_charges_attempt_id"),
+        sa.Index("ix_voice_call_charges_day", "day", "tenant_id"),
+    )
+
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, sa.ForeignKey("confirmation_attempts.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+    source: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    pack_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("voice_credit_packs.id", ondelete="RESTRICT"), nullable=True
+    )
+    #: The usage counter's period: the allowance month, or the Free Launch day.
+    period_key: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    #: Asia/Dhaka business day of the call (the admin report's day).
+    day: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    state: Mapped[str] = mapped_column(sa.String(12), nullable=False, default=ChargeState.CHARGED)
+    released_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+
+
+class VoiceDailyUsage(Base, PrimaryKeyMixin, TimestampMixin):
+    """Platform-wide IVR calls per Asia/Dhaka day: the Free Launch global cap
+    (``VOICE_DAILY_GLOBAL_CAP``) protecting the operator's provider bill.
+    Platform-level: one row per day, spent by a conditional ``UPDATE``."""
+
+    __tablename__ = "voice_daily_usage"
+    __table_args__ = (
+        sa.UniqueConstraint("day", name="uq_voice_daily_usage_day"),
+        sa.CheckConstraint("used >= 0", name="used_non_negative"),
+    )
+
+    day: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    used: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)

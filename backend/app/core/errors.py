@@ -140,6 +140,9 @@ class ErrorCode(StrEnum):
     TTS_PROVIDER_REQUIRED = "TTS_PROVIDER_REQUIRED"
     #: V4 WP3.3: recordings need R2, which this deployment has not configured.
     AUDIO_STORAGE_NOT_CONFIGURED = "AUDIO_STORAGE_NOT_CONFIGURED"
+    #: V4 WP3.4: a call pack can only be granted against an approved payment of
+    #: the shop that no other pack used.
+    VOICE_PACK_PAYMENT_INVALID = "VOICE_PACK_PAYMENT_INVALID"
     PAYOUT_IMPORT_INVALID = "PAYOUT_IMPORT_INVALID"
     RECONCILIATION_MISMATCH = "RECONCILIATION_MISMATCH"
     SYNC_CONFLICT = "SYNC_CONFLICT"
@@ -428,6 +431,12 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         503,
         "রেকর্ডিং রাখার জায়গা এখনো চালু হয়নি।",
         "Recording storage is not configured.",
+        False,
+    ),
+    ErrorCode.VOICE_PACK_PAYMENT_INVALID: (
+        409,
+        "এই পেমেন্টে কল প্যাক দেওয়া যাবে না।",
+        "A call pack cannot be granted for this payment.",
         False,
     ),
     ErrorCode.PAYOUT_IMPORT_INVALID: (

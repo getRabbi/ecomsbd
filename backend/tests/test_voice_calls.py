@@ -154,6 +154,17 @@ async def _shop(client: AsyncClient, phone: str) -> dict[str, Any]:
                 rollout_percentage=100,
             )
         )
+    # WP3.4: a call needs credit; a Free shop has no allowance, so one pack.
+    from app.voice.credits import VoiceCredits
+
+    async with system_session("test: voice credit") as db:
+        await VoiceCredits(db).grant_pack(
+            uuid.UUID(shop["tenant_id"]),
+            calls=100,
+            grant_key="test-shop",
+            reason="test",
+            granted_by="test",
+        )
     return shop
 
 

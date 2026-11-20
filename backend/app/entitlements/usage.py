@@ -64,6 +64,7 @@ METERED_ENTITLEMENTS: dict[Entitlement, UsagePeriod] = {
     Entitlement.RISK_CHECKS_DAILY: UsagePeriod.DAILY,
     Entitlement.SMS_SEGMENTS_MONTHLY: UsagePeriod.MONTHLY,
     Entitlement.AI_PARSE_MONTHLY: UsagePeriod.MONTHLY,
+    Entitlement.VOICE_CALLS_MONTHLY: UsagePeriod.MONTHLY,
 }
 
 
@@ -155,12 +156,15 @@ async def increment_atomically(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,
-    entitlement: Entitlement,
+    entitlement: Entitlement | str,
     period_key: str,
     amount: int,
     limit_value: int,
 ) -> bool:
     """Add ``amount`` to a counter if the quota allows it. Returns whether it did.
+
+    ``entitlement`` is a plan entitlement, or the key of an operational safety
+    counter kept in the same table (V4 WP3.4's per-shop daily voice cap).
 
     The whole check lives in the ``WHERE`` clause:
 
@@ -197,4 +201,32 @@ async def increment_atomically(
     # ``rowcount`` is on CursorResult; the async wrapper's return type is the
     # wider Result, so the cast keeps mypy --strict honest without loosening
     # the signature. Zero rows updated means the quota predicate failed.
+    return bool(cast("CursorResult[Any]", result).rowcount)
+
+
+async def decrement_atomically(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    entitlement: Entitlement | str,
+    period_key: str,
+    amount: int,
+) -> bool:
+    """Give back ``amount`` spent on something that did not happen (V4 WP3.4: a
+    call the provider certainly never placed). Never below zero; returns
+    whether a counter moved."""
+    if amount <= 0:
+        raise ValueError("usage amount must be positive")
+    statement = (
+        sa.update(UsageCounter)
+        .where(
+            UsageCounter.tenant_id == tenant_id,
+            UsageCounter.entitlement_key == str(entitlement),
+            UsageCounter.period_key == period_key,
+            UsageCounter.used >= amount,
+        )
+        .values(used=UsageCounter.used - amount, last_used_at=utc_now())
+        .execution_options(synchronize_session=False)
+    )
+    result = await session.execute(statement)
     return bool(cast("CursorResult[Any]", result).rowcount)

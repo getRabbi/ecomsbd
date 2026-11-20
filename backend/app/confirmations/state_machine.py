@@ -45,6 +45,8 @@ class Cause(StrEnum):
     VOICE_UNAVAILABLE = "VOICE_UNAVAILABLE"
     #: The customer's number already had its calls for the day (WP3.2).
     CALL_LIMIT = "CALL_LIMIT"
+    #: The shop has no voice call credit left (WP3.4).
+    NO_VOICE_CREDIT = "NO_VOICE_CREDIT"
     # What a call returned.
     DTMF_CONFIRM = "DTMF_CONFIRM"
     DTMF_CANCEL = "DTMF_CANCEL"
@@ -75,7 +77,11 @@ def _table() -> dict[tuple[ConfirmationState, ConfirmationState], frozenset[Caus
         (S.PENDING, S.CALL_QUEUED): {Cause.DECIDED_CALL},
         (S.PENDING, S.SELLER_REVIEW): {Cause.DECIDED_REVIEW},
         (S.CALL_QUEUED, S.CALLING): {Cause.DIALING},
-        (S.CALL_QUEUED, S.SELLER_REVIEW): {Cause.VOICE_UNAVAILABLE, Cause.CALL_LIMIT},
+        (S.CALL_QUEUED, S.SELLER_REVIEW): {
+            Cause.VOICE_UNAVAILABLE,
+            Cause.CALL_LIMIT,
+            Cause.NO_VOICE_CREDIT,
+        },
         (S.CALLING, S.CONFIRMED): {Cause.DTMF_CONFIRM},
         (S.CALLING, S.CANCELLED): {Cause.DTMF_CANCEL},
         (S.CALLING, S.SELLER_REVIEW): {Cause.DTMF_CALLBACK, Cause.CALL_UNKNOWN, Cause.CALL_FAILED},

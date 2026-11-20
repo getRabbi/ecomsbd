@@ -1,5 +1,5 @@
-"""V4 phase 3: the platform's voice provider accounts (WP3.1), call callbacks (WP3.2) and
-each shop's intro recordings (WP3.3)."""
+"""V4 phase 3: the platform's voice provider accounts (WP3.1), call callbacks (WP3.2),
+each shop's intro recordings (WP3.3) and voice call credits (WP3.4)."""
 
 from alembic import op
 import sqlalchemy as sa
@@ -16,6 +16,9 @@ _TABLES = [
     "voice_callback_deliveries",
     "voice_call_events",
     "voice_intro_audio",
+    "voice_credit_packs",
+    "voice_call_charges",
+    "voice_daily_usage",
 ]
 
 # WP3.3: one recording in use per shop. Partial unique index on PostgreSQL and SQLite.
@@ -142,6 +145,85 @@ def upgrade():
         postgresql_where=sa.text(_INTRO_ON_PREDICATE),
         sqlite_where=sa.text(_INTRO_ON_PREDICATE),
     )
+
+    # WP3.4: calls granted on top of a shop's monthly allowance.
+    op.create_table(
+        "voice_credit_packs",
+        sa.Column("id", GUID, primary_key=True),
+        sa.Column(
+            "tenant_id", GUID, sa.ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+        ),
+        sa.Column("created_at", TZDateTime(), nullable=False),
+        sa.Column("updated_at", TZDateTime(), nullable=False),
+        sa.Column("calls", sa.Integer(), nullable=False),
+        sa.Column("remaining", sa.Integer(), nullable=False),
+        sa.Column("expires_at", TZDateTime(), nullable=False),
+        sa.Column("source", sa.String(20), nullable=False),
+        sa.Column("grant_key", sa.String(80), nullable=False),
+        sa.Column(
+            "payment_submission_id",
+            GUID,
+            sa.ForeignKey("billing_payment_submissions.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+        sa.Column("granted_by", sa.String(120), nullable=False),
+        sa.Column("reason", sa.String(400), nullable=False),
+        sa.UniqueConstraint("tenant_id", "grant_key", name="uq_voice_credit_packs_grant_key"),
+        sa.UniqueConstraint("payment_submission_id", name="uq_voice_credit_packs_payment"),
+        sa.CheckConstraint("calls > 0", name="calls_positive"),
+        sa.CheckConstraint("remaining >= 0 AND remaining <= calls", name="remaining_in_range"),
+    )
+    op.create_index("ix_voice_credit_packs_tenant_id", "voice_credit_packs", ["tenant_id"])
+    op.create_index("ix_voice_credit_packs_created_at", "voice_credit_packs", ["created_at"])
+    op.create_index(
+        "ix_voice_credit_packs_tenant_expires", "voice_credit_packs", ["tenant_id", "expires_at"]
+    )
+
+    # WP3.4: what each IVR attempt was paid from.
+    op.create_table(
+        "voice_call_charges",
+        sa.Column("id", GUID, primary_key=True),
+        sa.Column(
+            "tenant_id", GUID, sa.ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+        ),
+        sa.Column("created_at", TZDateTime(), nullable=False),
+        sa.Column("updated_at", TZDateTime(), nullable=False),
+        sa.Column(
+            "attempt_id",
+            GUID,
+            sa.ForeignKey("confirmation_attempts.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("provider", sa.String(40), nullable=False),
+        sa.Column("source", sa.String(16), nullable=False),
+        sa.Column(
+            "pack_id",
+            GUID,
+            sa.ForeignKey("voice_credit_packs.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+        sa.Column("period_key", sa.String(10), nullable=True),
+        sa.Column("day", sa.String(10), nullable=False),
+        sa.Column("state", sa.String(12), nullable=False),
+        sa.Column("released_at", TZDateTime(), nullable=True),
+        sa.UniqueConstraint("attempt_id", name="uq_voice_call_charges_attempt_id"),
+    )
+    op.create_index("ix_voice_call_charges_tenant_id", "voice_call_charges", ["tenant_id"])
+    op.create_index("ix_voice_call_charges_created_at", "voice_call_charges", ["created_at"])
+    op.create_index("ix_voice_call_charges_day", "voice_call_charges", ["day", "tenant_id"])
+
+    # WP3.4: platform-level, the Free Launch global daily cap.
+    op.create_table(
+        "voice_daily_usage",
+        sa.Column("id", GUID, primary_key=True),
+        sa.Column("created_at", TZDateTime(), nullable=False),
+        sa.Column("updated_at", TZDateTime(), nullable=False),
+        sa.Column("day", sa.String(10), nullable=False),
+        sa.Column("used", sa.Integer(), nullable=False),
+        sa.UniqueConstraint("day", name="uq_voice_daily_usage_day"),
+        sa.CheckConstraint("used >= 0", name="used_non_negative"),
+    )
+    op.create_index("ix_voice_daily_usage_created_at", "voice_daily_usage", ["created_at"])
 
     db = op.get_bind()
     if db.dialect.name == "postgresql":

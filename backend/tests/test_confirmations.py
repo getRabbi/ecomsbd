@@ -79,7 +79,7 @@ def test_the_transition_table_is_exactly_the_spec():
         (S.CALL_QUEUED, S.CALLING): {C.DIALING},
         # WP3.2 adds CALL_LIMIT (per-customer daily cap) and CALL_FAILED
         # (certainly not placed) on moves the spec already has.
-        (S.CALL_QUEUED, S.SELLER_REVIEW): {C.VOICE_UNAVAILABLE, C.CALL_LIMIT},
+        (S.CALL_QUEUED, S.SELLER_REVIEW): {C.VOICE_UNAVAILABLE, C.CALL_LIMIT, C.NO_VOICE_CREDIT},
         (S.CALLING, S.CONFIRMED): {C.DTMF_CONFIRM},
         (S.CALLING, S.CANCELLED): {C.DTMF_CANCEL},
         (S.CALLING, S.SELLER_REVIEW): {C.DTMF_CALLBACK, C.CALL_UNKNOWN, C.CALL_FAILED},

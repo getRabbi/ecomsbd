@@ -61,6 +61,57 @@ The call opens with: "আসসালামু আলাইকুম। আপ�
   put at the provider), and the COD is whole taka above zero. Otherwise the call
   says no amount (the SMS link carries it).
 
+## Call credits (WP3.4)
+
+Every IVR call is paid for in the dispatcher's first transaction, with the
+attempt and before the provider is asked (`voice_call_charges`, one row per
+attempt). What pays, in order:
+
+1. The plan's `voice_calls_monthly` allowance (Free 0, Starter 50, Pro 200 a
+   month, Asia/Dhaka month), a `usage_counters` row spent by a conditional
+   `UPDATE`.
+2. The shop's **oldest** unexpired `voice_credit_packs` row with calls left
+   (packs last 90 days from the grant).
+3. None → the confirmation goes to the seller's manual call queue with cause
+   `NO_VOICE_CREDIT` (one "needs attention" alert per order); nobody is called.
+
+**Free Launch Mode** (`FREE_LAUNCH_MODE=true`): the plan is unlimited and packs
+are not spent. Two Asia/Dhaka daily ceilings protect the provider bill instead:
+`VOICE_DAILY_SHOP_CAP` (default 30, counter `voice_calls_daily_safety` in
+`usage_counters`) and `VOICE_DAILY_GLOBAL_CAP` (default 300, platform table
+`voice_daily_usage`). A call past either goes to the manual queue
+(`NO_VOICE_CREDIT`). 0 = no calls.
+
+**Metered per placed call.** `PLACED`, `DUPLICATE`, `UNKNOWN`, a transport
+exception and a stuck `CALLING` row reconciled after 10 minutes stay charged
+(the provider may bill them). Only `FAILED` / `REJECTED` / `NOT_CONFIGURED`
+with no callback seen give the credit back (`state = RELEASED`, back to the
+same month, pack or day). A call held because the breaker opened mid-tick
+spends nothing.
+
+Console (all audited reads/writes go through the admin session):
+
+- `GET /v1/admin/voice/credits/{tenant_id}` (`admin.billing_read`): this
+  month's allowance (limit / used / remaining), unexpired packs oldest first,
+  and in Free Launch today's shop and global counts against the caps.
+- `POST /v1/admin/voice/credits/{tenant_id}/packs` (`admin.billing_grant`,
+  SUPERADMIN): `{"calls": 1-10000, "reason": "...", "idempotency_key": "...",
+  "payment_submission_id": null}`. The same key with the same terms returns the
+  first pack (`created: false`); different terms → `409
+  IDEMPOTENCY_KEY_CONFLICT`. With `payment_submission_id` the payment must be
+  the shop's and `APPROVED`, and carries at most one pack (`409
+  VOICE_PACK_PAYMENT_INVALID`). Audit `admin.voice_pack_granted`.
+- `GET /v1/admin/voice/report?from=YYYY-MM-DD&to=YYYY-MM-DD[&tenant_id=]`
+  (`admin.ops_read`, at most 31 Dhaka days): per shop per day `calls`
+  (charged), `answered`, `confirmed`, `answer_rate_bps`, `confirm_rate_bps`,
+  `cost_paisa`. Cost = the provider's reported `cost_paisa` on the attempt,
+  else the manifest price (per call, or per started minute of a known length)
+  with `cost_estimated: true`, else unknown (`calls_without_cost`; `cost_paisa`
+  is `null` when no call's cost is known).
+
+Pack prices and a seller-facing "buy calls" offer are not built: G3 sets the
+pack price at 2 × the measured cost per call (operator decision).
+
 ## How a call runs (WP3.2)
 
 1. The policy queues `CALL_QUEUED` with `next_action_at` = start + 2 min.
@@ -122,6 +173,8 @@ its `CALL_QUEUED` rows stay in the seller's manual call queue
 | shop intro `ON` | seller: web Settings → Confirmation call voice | none | calls for the shop play it; without one the shop's rows stay in the manual queue (WP3.3) |
 | `TTS_PROVIDER` | env | `disabled` | `disabled` makes no recordings (`TTS_PROVIDER_REQUIRED`); `fake` is local/test only and refused when deployed |
 | `VOICE_AMOUNT_PREFIX_AUDIO_REF` / `_SUFFIX_` | env | empty | both set + verified `dynamic_audio` → the COD is spoken after the intro |
+| `VOICE_DAILY_SHOP_CAP` / `VOICE_DAILY_GLOBAL_CAP` | env | 30 / 300 | Free Launch Mode only: IVR calls per shop / for all shops per Dhaka day (WP3.4) |
+| shop voice credit | plan allowance + packs (`POST /v1/admin/voice/credits/{tenant_id}/packs`) | Free 0 | no credit → `NO_VOICE_CREDIT`, manual queue (WP3.4) |
 
 A connection can be turned on only when its manifest is ready (DTMF capture and
 callback signature verified with a date and evidence, max call length and a
@@ -144,6 +197,10 @@ has credentials **and** a callback secret. Refusals answer
   `reconciled`, `failed`). A rising `reconciled` count means callbacks are not
   arriving: check `voice_callback_deliveries` for `REJECTED` rows (wrong
   callback secret) or none at all (callback URL not set at the provider).
+- WP3.4: `NO_CREDIT` in the worker counts, or `NO_VOICE_CREDIT` reviews, mean
+  shops ran out: `GET /v1/admin/voice/credits/{tenant_id}`. In Free Launch a
+  global count at the cap stops every shop until the Dhaka day ends.
+  `GET /v1/admin/voice/report` shows calls, rates and cost per shop per day.
 - Rows stuck in `CALL_QUEUED` for a shop: `voice_available` in its queue
   response says whether voice is on; if it is off they are in the manual queue.
 
@@ -154,7 +211,9 @@ has credentials **and** a callback secret. Refusals answer
    `voice_confirmation_enabled` off globally. Confirmations then stay in the
    manual call queue (WP2.3); nothing is lost.
 2. For one shop: turn the flag off for that shop.
-3. Suspected credential leak: rotate at the provider first, then `PUT` the new
+3. Spend running away (Free Launch): lower `VOICE_DAILY_GLOBAL_CAP` (0 stops
+   every call) and restart the worker; calls past it go to the manual queue.
+4. Suspected credential leak: rotate at the provider first, then `PUT` the new
    credentials and callback secret (runbook `CREDENTIAL_LEAK.md`).
 
 ## Recovery
@@ -166,6 +225,9 @@ has credentials **and** a callback secret. Refusals answer
   success closes it. Do not reset by hand while the provider is still failing.
 - An ambiguous answer (`UNKNOWN`) is never re-called automatically (WP3.2): the
   confirmation goes to the seller.
+- A shop out of credit: grant a pack (above); rows already sent to the seller
+  with `NO_VOICE_CREDIT` stay in the manual queue (a confirmation never
+  returns from `SELLER_REVIEW` to the IVR); new confirmations are called.
 
 ## Verification
 
@@ -175,7 +237,11 @@ has credentials **and** a callback secret. Refusals answer
    answers 200 with `masked_identifier` and no secret.
 2. Staging/production: `GET /v1/admin/voice/providers` is `[]` until a contract
    and its manifest ship; `PUT` answers `404 VOICE_PROVIDER_UNKNOWN`.
-3. Tests: `python -m pytest tests/test_voice_transport.py tests/test_voice_calls.py tests/test_voice_intro.py -q`.
+3. Tests: `python -m pytest tests/test_voice_transport.py tests/test_voice_calls.py tests/test_voice_intro.py tests/test_voice_credits.py -q`.
+   WP3.4 local check: grant a shop 2 calls (`POST .../packs`), queue three
+   confirmations; two are called, the third lands in the manual queue with
+   `NO_VOICE_CREDIT`; `GET .../credits/{tenant_id}` shows 0 left and the report
+   shows 2 calls.
    WP3.3 local check: `VOICE_TRANSPORT=mock`, R2 configured, flag on for a test
    shop; upload a WAV with `PUT /v1/admin/voice/intros/{tenant_id}`; in web
    Settings → Confirmation call voice press Listen, then Turn on; the next
