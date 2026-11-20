@@ -25,14 +25,18 @@ Strict Mode for redirect URIs, and Login with the JavaScript SDK. Configure:
 
 - Allowed SDK domain: `https://scalemyprints.com`.
 - Valid redirect URI: `https://scalemyprints.com/ecomsbd/whatsapp-connect`.
-- Retain Messenger redirect `https://api.scalemyprints.com/v1/integration-callbacks/meta`.
+- Retain Messenger redirect `<PUBLIC_BASE_URL>/v1/integration-callbacks/meta`
+  (today `https://api.scalemyprints.com/v1/integration-callbacks/meta`; during an API
+  domain move list it for the new origin and every `PUBLIC_BASE_URL_ALIASES` origin —
+  `docs/runbooks/API_DOMAIN_MIGRATION.md`).
 
 Keep `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` on the backend.
 Use `PUBLIC_WEB_URL=https://scalemyprints.com` and include that origin in
 `CORS_ALLOW_ORIGINS` without removing existing authorized origins. The existing
 `META_GRAPH_API_VERSION` (v26.0) is used throughout. On the WhatsApp Business
 Account webhook object, subscribe **messages** and **account_update** using
-`https://api.scalemyprints.com/v1/webhooks/integrations/meta` and the existing
+`<PUBLIC_BASE_URL>/v1/webhooks/integrations/meta` (today
+`https://api.scalemyprints.com/v1/webhooks/integrations/meta`) and the existing
 verify token. Account updates are acknowledged; assets are resolved via Graph.
 The existing message receiver and signature verification are unchanged.
 

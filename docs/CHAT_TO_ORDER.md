@@ -53,16 +53,21 @@ customer until the seller confirms. Two different customers → `AMBIGUOUS`.
 
 Production config needed on the API and worker (Northflank secret group):
 `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, and
-`PUBLIC_BASE_URL=https://api.scalemyprints.com`. Missing technical configuration
-is shown as temporarily unavailable, separately from Meta approval.
+`PUBLIC_BASE_URL` (today `https://api.scalemyprints.com`). Missing technical configuration
+is shown as temporarily unavailable, separately from Meta approval. Every URL below is
+`<PUBLIC_BASE_URL>/…`: `python -m app.core.public_urls` prints the exact list for the
+deployment (and for each `PUBLIC_BASE_URL_ALIASES` origin during a domain move, runbook
+`docs/runbooks/API_DOMAIN_MIGRATION.md`).
 
 ### Messenger (development mode)
 
 1. developers.facebook.com → create an app (type *Business*), add **Messenger**
    and **Facebook Login for Business**.
 2. Facebook Login → Valid OAuth Redirect URIs:
-   `https://api.scalemyprints.com/v1/integration-callbacks/meta`.
-3. Webhooks → Page → callback `https://api.scalemyprints.com/v1/webhooks/integrations/meta`,
+   `<PUBLIC_BASE_URL>/v1/integration-callbacks/meta`
+   (today `https://api.scalemyprints.com/v1/integration-callbacks/meta`).
+3. Webhooks → Page → callback `<PUBLIC_BASE_URL>/v1/webhooks/integrations/meta`
+   (today `https://api.scalemyprints.com/v1/webhooks/integrations/meta`),
    verify token = `META_WEBHOOK_VERIFY_TOKEN`; subscribe the `messages` field.
 4. App roles: the Page admin and the test customer account must be app
    admins/developers/testers while the app is in development mode.
