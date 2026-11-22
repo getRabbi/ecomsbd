@@ -14,7 +14,15 @@ QUEUE (operator, 2026-11-23 run 5 — fixed order; resume prompt: "Continue the 
 - F0 — DONE (f5fa000) (on `v4/phase-7`, one commit, push): (a) `ci.yml` restore-drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (`docker run --rm --network host -v /tmp:/tmp`), nothing else; (b) `IMPLEMENTATION_STATUS.md` header date, Phases 0–7 code complete, Alembic head `a47001`.
 - P1 WP7.1 Alpha SMS behind `SmsGatewayTransport` (turns on the WP2.3 link + tracking SMS). — PARTIAL: confirm link done; tracking SMS needs a messaging SMS channel (see Status).
 - P2 WP0.6 BD Courier adapter on `app/risk_providers/contract.py`. — BLOCKED: docs page client-rendered, nothing verbatim fetchable; operator adds `docs/providers/bdcourier/BD Courier API.html` (operator actions).
-- P3 WP7.2 Carrybee adapter, Steadfast pattern (counts as 2 WPs). — NEXT (checkpoint before it). Source: `docs/providers/carrybee/Carry Bee.html` = saved https://merchant.carrybee.com/webhook/documentation (merchant panel); write `docs/providers/carrybee/CONTRACT.md` from it first.
+- P3 WP7.2 Carrybee adapter, Steadfast pattern (counts as 2 WPs). — IN_PROGRESS: `docs/providers/carrybee/CONTRACT.md` written (from the saved https://merchant.carrybee.com/webhook/documentation, 2026-11-23); read only CONTRACT.md from now on. Plan (next session):
+  1. `app/couriers/carrybee/` modelled on `app/couriers/redx/` (shared `HttpxProviderTransport`, adapter + client + contract + mapping + webhooks); provider `carrybee`.
+  2. Credentials Client-ID / Client-Secret / Client-Context (+ sandbox switch) in the existing courier account flow; webhook secret per shop; no env keys.
+  3. validate_credentials = `GET /api/v2/stores` (store list doubles as `list_stores`); 401/403-style refusal = rejected, anything else inconclusive.
+  4. create = `POST /api/v2/orders` (delivery_type 1, product_type 1, whole-Taka COD + residual, item_weight required → refuse locally when unknown unless a shop default exists); timeout / 5xx / unreadable = UNKNOWN, resolved via `GET /orders/{merchant_order_id}/details`.
+  5. get_status = details (raw `transfer_status`, normalized None); cancel = `POST /orders/{id}/cancel`; bulk/quote/balance/payouts/customer_stats/returns Unavailable.
+  6. Webhook: constant-time `X-CB-Webhook-Integration-Header` compare, refuse when no secret, 202 + echo header; map the 25 documented events in `status_maps`.
+  7. Manifest `app/couriers/manifests/carrybee.yaml` (true only with evidence; transfer_status values / rate limits / retries unknown); flag `carrybee_enabled` default off in `COURIER_PROVIDER_FLAGS`.
+  8. Tests with fake HTTP + 017000000xx; runbook `COURIER_CARRYBEE.md`; ruff/format/mypy on changed files; commit + push `v4/phase-8`; then FINISH.
 - P4 WP0.7 statement profiles, only for providers with a file in `backend/tests/fixtures/statements/<p>/`; else skip. — SKIPPED (2026-11-23): `backend/tests/fixtures/statements/` does not exist.
 - P1–P4 on `v4/phase-8` from `v4/phase-7` head (PR #42 still open 2026-11-23). New migration if needed: `a48001`, down_revision `a47001`.
 - FINISH: final summary here + `IMPLEMENTATION_STATUS.md`, Phase 8 section in `V4_RELEASE_PR.md`, full-suite commands under operator actions, push, report ≤ 10 lines with head sha. Checkpoint after 2 WPs.
@@ -326,6 +334,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-23 run 5 P3 WP7.2 started: Carrybee CONTRACT.md from the operator's saved merchant-panel page; checkpoint before the adapter build (context). Operator note: an Alpha SMS key sits in `backend/.env` as `ALPHA_SMS_API` (git-ignored; settings ignore unknown keys) — not read by design: the key goes in through the admin console.
 - 2026-11-23 run 5 checkpoint after P1 (9a33125) + P2 BLOCKED + P4 SKIPPED; next: P3 WP7.2 Carrybee on `v4/phase-8`.
 - 2026-11-23 run 5 P4 WP0.7 SKIPPED: no `backend/tests/fixtures/statements/<provider>/` file exists.
 - 2026-11-23 run 5 P2 WP0.6 still BLOCKED: EXTERNAL_RISK_CONTRACT_REQUIRED — bdcourier.com/api-docs renders by JavaScript; WebFetch got titles only (search index confirms the page exists, but a search summary is not a contract); operator saves the page (operator actions).
