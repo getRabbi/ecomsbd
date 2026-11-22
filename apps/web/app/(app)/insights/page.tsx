@@ -17,7 +17,7 @@ const BASE = '/analytics/insights';
 const PAGE = 20;
 type Range = { days: number; since?: never; until?: never } | { days?: never; since: string; until: string };
 type Translate = ReturnType<typeof useSession>['t'];
-const courier = (name: string) => ({ steadfast: 'Steadfast', pathao: 'Pathao', redx: 'RedX' })[name] ?? name;
+const courier = (name: string) => ({ steadfast: 'Steadfast', pathao: 'Pathao', redx: 'RedX', carrybee: 'Carrybee' })[name] ?? name;
 const pct = (bps: number | null | undefined) => bps == null ? '—' : `${(bps / 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
 const change = (t: Translate, value: Comparison) => value.change_basis_points === null
   ? t('ins.noCompare') : t('ins.vsPrev', { change: `${value.change_basis_points > 0 ? '+' : ''}${pct(value.change_basis_points)}` });

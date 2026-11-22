@@ -956,6 +956,7 @@ String courierLabel(String provider) => switch (provider) {
   'steadfast' => 'Steadfast',
   'pathao' => 'Pathao',
   'redx' => 'RedX',
+  'carrybee' => 'Carrybee',
   'manual' => _t('rcv.ownDelivery'),
   _ => provider,
 };

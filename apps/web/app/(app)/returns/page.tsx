@@ -118,6 +118,7 @@ const COURIER_NAMES: Record<string, string> = {
   steadfast: 'Steadfast',
   pathao: 'Pathao',
   redx: 'RedX',
+  carrybee: 'Carrybee',
   manual: 'Manual',
 };
 const OBSERVATIONS: Record<string, StringKey> = {

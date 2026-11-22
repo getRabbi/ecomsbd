@@ -15,6 +15,8 @@ export function courierName(provider: string | null | undefined, manualLabel = '
       return 'Pathao';
     case 'redx':
       return 'RedX';
+    case 'carrybee':
+      return 'Carrybee';
     case 'manual':
       return manualLabel;
     case null:
@@ -24,6 +26,38 @@ export function courierName(provider: string | null | undefined, manualLabel = '
     default:
       return provider;
   }
+}
+
+/**
+ * Couriers a shop can pick as its default: the three long-standing ones, any
+ * other courier the server reports switched on for this shop (V4 WP7.2:
+ * Carrybee behind `carrybee_enabled`), and the saved value even when it is no
+ * longer offered, so a saved choice is always shown rather than lost.
+ */
+export function defaultCourierOptions(
+  providers: readonly Pick<ProviderInfo, 'provider' | 'enabled' | 'connect_form'>[] | null | undefined,
+  current: string | null | undefined,
+): string[] {
+  const options: string[] = [...LIVE_COURIERS];
+  for (const row of providers ?? []) {
+    if (row.enabled && row.connect_form && row.provider !== 'manual' && !options.includes(row.provider)) {
+      options.push(row.provider);
+    }
+  }
+  if (current && !options.includes(current)) options.push(current);
+  return options;
+}
+
+/**
+ * Couriers a workflow's BOOK_COURIER step can name: the shop's connected ones
+ * (Carrybee among them once connected), else the long-standing three, plus the
+ * step's saved value so it is never silently swapped.
+ */
+export function bookingCouriers(connected: readonly string[] | null | undefined, current: string): string[] {
+  const live = (connected ?? []).filter((c) => c !== 'manual');
+  const options = live.length ? [...live] : [...LIVE_COURIERS];
+  if (current && !options.includes(current)) options.push(current);
+  return options;
 }
 
 /** A field on a provider's connect form, exactly as `GET /couriers/providers` declares it. */

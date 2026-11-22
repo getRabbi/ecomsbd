@@ -25,6 +25,7 @@ import {
   type Step,
 } from '@/lib/automation';
 import { strings, type StringKey } from '@/lib/i18n';
+import { bookingCouriers, courierName } from '@/lib/couriers';
 import { smsText } from '@/lib/messaging-sms';
 import { useSession } from '@/lib/session';
 
@@ -402,8 +403,8 @@ function ActionConfig({
         <>
           <Field label={t('auto.cfg.provider')}>
             <select className="select" value={String(config.provider ?? '')} disabled={disabled} onChange={(e) => set('provider', e.target.value)}>
-              {['steadfast', 'pathao', 'redx'].map((p) => (
-                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              {bookingCouriers(catalog.couriers, String(config.provider ?? '')).map((p) => (
+                <option key={p} value={p}>{courierName(p)}</option>
               ))}
             </select>
           </Field>

@@ -268,6 +268,7 @@ String courierName(String provider) => switch (provider) {
   'steadfast' => 'Steadfast',
   'pathao' => 'Pathao',
   'redx' => 'RedX',
+  'carrybee' => 'Carrybee',
   'manual' => 'Manual',
   _ => provider,
 };

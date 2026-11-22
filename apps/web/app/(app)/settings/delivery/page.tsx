@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/shell';
 import { Card, ErrorState } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
-import { LIVE_COURIERS, courierName } from '@/lib/couriers';
+import { type ProviderInfo, courierName, defaultCourierOptions } from '@/lib/couriers';
 import {
   setCallSwitch,
   toForm,
@@ -87,6 +87,8 @@ export default function DeliveryRulesPage() {
 function RulesEditor({ initial, onSaved }: { initial: DeliveryRules; onSaved: () => void }) {
   const { t } = useSession();
   const [form, setForm] = useState<RulesForm>(() => toForm(initial));
+  // Couriers switched on for this shop (Carrybee behind its flag) join the default-courier list.
+  const providers = useApi<ProviderInfo[]>('/couriers/providers');
   const [invalid, setInvalid] = useState<RuleField[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -166,7 +168,7 @@ function RulesEditor({ initial, onSaved }: { initial: DeliveryRules; onSaved: ()
             onChange={(e) => setForm({ ...form, default_courier: e.target.value || null })}
           >
             <option value="">{t('dr.courierNone')}</option>
-            {LIVE_COURIERS.map((courier) => (
+            {defaultCourierOptions(providers.data, form.default_courier).map((courier) => (
               <option key={courier} value={courier}>
                 {courierName(courier)}
               </option>

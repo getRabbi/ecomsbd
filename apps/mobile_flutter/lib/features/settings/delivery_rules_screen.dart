@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/api/api_error.dart';
 import '../../core/money.dart';
+import '../../data/couriers/courier_providers.dart';
+import '../../data/couriers/models.dart';
 import '../../l10n/app_locale.dart';
 import '../../l10n/app_strings.dart';
 
@@ -20,6 +22,29 @@ const deliveryRuleCouriers = <String, String>{
   'pathao': 'Pathao',
   'redx': 'RedX',
 };
+
+/// The default-courier choices: the three above, any courier the server
+/// reports switched on for this shop (V4 WP7.2: Carrybee behind
+/// `carrybee_enabled`), and the saved value even when it is no longer offered,
+/// so the picker always shows what is stored.
+Map<String, String> defaultCourierChoices(
+  List<CourierProviderInfo> providers,
+  String? current,
+) {
+  final choices = Map<String, String>.of(deliveryRuleCouriers);
+  for (final info in providers) {
+    if (info.enabled &&
+        info.connectForm != null &&
+        info.provider != 'manual' &&
+        !choices.containsKey(info.provider)) {
+      choices[info.provider] = info.displayName;
+    }
+  }
+  if (current != null && !choices.containsKey(current)) {
+    choices[current] = current;
+  }
+  return choices;
+}
 
 /// Taka text to paisa without a `double` (see ProductFormScreen._paisa).
 int? takaToPaisa(String raw) {
@@ -275,7 +300,11 @@ class _DeliveryRulesFormState extends ConsumerState<_DeliveryRulesForm> {
                 value: null,
                 child: Text(context.tr('dr.courierNone')),
               ),
-              for (final entry in deliveryRuleCouriers.entries)
+              for (final entry in defaultCourierChoices(
+                ref.watch(courierProvidersProvider).valueOrNull ??
+                    const <CourierProviderInfo>[],
+                _courier,
+              ).entries)
                 DropdownMenuItem<String?>(
                   value: entry.key,
                   child: Text(entry.value),

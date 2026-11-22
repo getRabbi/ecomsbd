@@ -1,5 +1,7 @@
 import 'package:ecomsbd/app/providers.dart';
 import 'package:ecomsbd/core/api/api_client.dart';
+import 'package:ecomsbd/data/couriers/models.dart';
+import 'package:ecomsbd/data/money/models.dart';
 import 'package:ecomsbd/features/settings/delivery_rules_screen.dart';
 import 'package:ecomsbd/l10n/app_locale.dart';
 import 'package:ecomsbd/l10n/app_strings.dart';
@@ -184,5 +186,63 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('dr.save')));
     await tester.pumpAndSettle();
     expect(fake.adapter.to('PATCH', '/shop/delivery-rules'), isEmpty);
+  });
+
+  CourierProviderInfo provider(String key, {bool enabled = true}) =>
+      CourierProviderInfo.fromJson(<String, dynamic>{
+        'provider': key,
+        'display_name': key == 'carrybee' ? 'Carrybee' : key,
+        'enabled': enabled,
+        'connect_form': <String, dynamic>{
+          'provider': key,
+          'fields': const <dynamic>[],
+        },
+      });
+
+  test('Carrybee joins the default couriers only when switched on', () {
+    expect(defaultCourierChoices(const [], null).keys, [
+      'steadfast',
+      'pathao',
+      'redx',
+    ]);
+    expect(defaultCourierChoices([provider('carrybee')], null), {
+      ...deliveryRuleCouriers,
+      'carrybee': 'Carrybee',
+    });
+    expect(
+      defaultCourierChoices([provider('carrybee', enabled: false)], null).keys,
+      ['steadfast', 'pathao', 'redx'],
+    );
+    // A saved value stays visible even when it is no longer offered.
+    expect(
+      defaultCourierChoices(const [], 'carrybee').keys,
+      contains('carrybee'),
+    );
+    expect(courierLabel('carrybee'), 'Carrybee');
+  });
+
+  testWidgets('a saved Carrybee default shows with its name', (tester) async {
+    final fake = buildFakeApi();
+    fake.adapter.onJson('GET', '/shop/delivery-rules', {
+      ..._rules(),
+      'default_courier': 'carrybee',
+    });
+    fake.adapter.onJson('GET', '/couriers/providers', [
+      {
+        'provider': 'carrybee',
+        'display_name': 'Carrybee',
+        'enabled': true,
+        'connect_form': {'provider': 'carrybee', 'fields': []},
+      },
+    ]);
+    await tester.pumpWidget(_app(fake, 'en'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('dr.default_courier')),
+      200,
+      scrollable: _list,
+    );
+    expect(find.text('Carrybee'), findsOneWidget);
   });
 }

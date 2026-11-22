@@ -41,6 +41,7 @@ COURIER_NAMES = {
     "steadfast": "Steadfast",
     "pathao": "Pathao",
     "redx": "RedX",
+    "carrybee": "Carrybee",
     MANUAL_PROVIDER: "Own delivery",
 }
 
