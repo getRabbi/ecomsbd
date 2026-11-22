@@ -1,0 +1,129 @@
+# Carrybee courier — provider integration manifest (V4 WP7.2)
+#
+# STATUS: implemented against Carrybee's own developer reference; not yet
+# verified with a live call.
+#
+# Every `true` names an endpoint the reference describes and the ecomsbd code
+# path that calls it. Every `false` means the reference has no such endpoint.
+# Every `unknown` means the reference is silent — or documents it but ecomsbd
+# does not use it yet (noted per line) — and is never used.
+
+provider: carrybee
+display_name: Carrybee
+verified_at: 2026-11-23
+documentation_source: >
+  Carrybee Delivery API reference, https://merchant.carrybee.com/webhook/documentation
+  (merchant panel → Developer → API Documentation), saved by the operator and read
+  2026-11-23. Normalized reading committed at docs/providers/carrybee/CONTRACT.md.
+documentation_version: "API v2 (/api/v2)"
+base_url: https://developers.carrybee.com
+auth_model: >
+  Three values per business and per environment — Client-ID, Client-Secret,
+  Client-Context — sent as headers on every request. Sandbox host
+  https://sandbox.carrybee.com takes its own credentials; the environment is
+  chosen per courier account. No token exchange or expiry is described.
+
+capabilities:
+  credential_validation: true
+  create_single: true
+  status_lookup: true
+  cancel: true
+  list_stores: true
+  webhook: true
+
+  # Documented, not used by ecomsbd yet (never offered):
+  create_bulk: unknown       # async, results only by webhook (CONTRACT.md §6.2)
+  location_lookup: unknown   # cities / zones / areas (CONTRACT.md §4); create takes free text
+  returns: unknown           # reverse pickup / exchange (CONTRACT.md §7)
+
+  # The reference names no such endpoint.
+  price_quote: false
+  balance: false
+  payouts: false
+  payments: false
+  payment_consignments: false
+  customer_stats: false
+  auto_address: unknown
+
+endpoints:
+  credential_validation:
+    endpoint: /api/v2/stores
+    method: GET
+    request_model: Client-ID, Client-Secret, Client-Context headers only
+    response_model: "{error: false, data: {stores: [{id, name, address, city_id, zone_id, area_id, is_active, is_approved, is_default_pickup_store, ...}]}}"
+    live_credentials_required: false
+    notes: >
+      An authenticated read that changes nothing; no parcel is created to test
+      credentials. The same list is the pickup-store picker (store_id is required
+      on every create).
+
+  create_single:
+    endpoint: /api/v2/orders
+    method: POST
+    request_model: >
+      store_id*, merchant_order_id (<50), delivery_type* (1 Normal), product_type*
+      (1 Parcel), recipient_phone*, recipient_secendary_phone, recipient_name* (2-99),
+      recipient_address* (10-200), special_instruction, product_description,
+      item_weight* (grams 1-25000), item_quantity (1-200), collectable_amount (whole
+      Taka 0-100000). city_id / zone_id / area_id, is_closed_box and is_exchange are
+      never sent.
+    response_model: "{data: {order: {consignment_id, store_id, merchant_order_id, collectable_amount, cod_fee, delivery_fee}}}"
+    live_credentials_required: true
+    notes: >
+      Sent once. Timeout, 5xx, an unreadable body or a success without a
+      consignment id is BOOKING_UNKNOWN, never re-sent. The details lookup
+      accepts the merchant order id, but automatic recovery is Steadfast-only,
+      so a person resolves it in Carrybee's panel.
+
+  status_lookup:
+    endpoint: /api/v2/orders/{consignment_id}/details
+    method: GET
+    request_model: consignment id or merchant tracking id in the path
+    response_model: "{data: {transfer_status, consignment_id, merchant_order_id, collected_amount, attempt, reason, payment_status, updated_at, ...}}"
+    live_credentials_required: true
+    notes: >
+      transfer_status has no published value list: stored verbatim, no state
+      claim unless it is a documented event name.
+
+  cancel:
+    endpoint: /api/v2/orders/{consignment_id}/cancel
+    method: POST
+    request_model: "{cancellation_reason (<200)}"
+    response_model: "202 {error: false, message: Cancellation confirmed}"
+    live_credentials_required: true
+
+  webhook:
+    endpoint: /v1/webhooks/couriers/carrybee/{routing_token}
+    method: POST
+    request_model: >
+      Header X-CB-Webhook-Integration-Header = the shop's secret (static shared
+      secret, no HMAC). Body {event, store_id, consignment_id, merchant_order_id,
+      timestamptz, ...} for the 25 documented events.
+    response_model: "202 with X-CB-Webhook-Integration-Header echoed (CONTRACT.md §8)"
+    live_credentials_required: true
+    notes: >
+      Constant-time compare with the shop's stored secret; no secret → every
+      request refused. Verified deliveries are stored and deduped by body hash
+      (no event id is published).
+
+unknowns:
+  PROVIDER_CREATE_IDEMPOTENCY: unknown
+  TRANSFER_STATUS_VALUES: unknown
+  PAYMENT_STATUS_VALUES: unknown
+  CREDENTIAL_ERROR_STATUS: unknown
+  RATE_LIMIT_CONTRACT: unknown
+  WEBHOOK_RETRY_CONTRACT: unknown
+  WEBHOOK_INTEGRATION_EVENT_BODY: unknown
+  CANCELLABLE_STATES: unknown
+
+blockers:
+  - CARRYBEE_LIVE_CREATE_UNVERIFIED
+
+manual_fallback: >
+  Manual courier mode. The seller records the parcel and tracking code by hand
+  and uploads the Carrybee payout statement; manual mode stays available whether
+  or not a Carrybee account is connected.
+
+notes:
+  - "PROVIDER_CREATE_IDEMPOTENCY = UNKNOWN: a stable merchant_order_id is persisted
+     before the call, any ambiguous create is BOOKING_UNKNOWN and never re-sent."

@@ -782,11 +782,13 @@ class CourierAccountService:
         # Generous bounds. The point is to refuse an obviously pasted-wrong
         # value (a whole email, an empty string) without guessing the
         # provider's key format, which no provider states.
-        for name, value in (
-            (primary_label, request.api_key),
-            (secondary_label, request.secret_key),
+        # A packed second slot (Carrybee) holds several secrets as one JSON value.
+        packed = len(spec.packed_secondary) if spec is not None else 0
+        for name, value, limit in (
+            (primary_label, request.api_key, 300),
+            (secondary_label, request.secret_key, 300 * packed + 40 if packed else 300),
         ):
-            if len(value) > 300:
+            if len(value) > limit:
                 raise ValidationError(f"That {name} is too long to be a credential")
         if request.webhook_secret and len(request.webhook_secret) > 300:
             raise ValidationError("That webhook secret is too long")

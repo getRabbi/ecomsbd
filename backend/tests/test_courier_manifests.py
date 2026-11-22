@@ -24,7 +24,7 @@ import app
 from app.couriers.capabilities import MANIFEST_DIR, load_all_manifests
 
 #: Every courier the product knows about, including the ones it cannot yet use.
-EXPECTED_PROVIDERS = {"manual", "pathao", "redx", "steadfast"}
+EXPECTED_PROVIDERS = {"carrybee", "manual", "pathao", "redx", "steadfast"}
 
 
 def test_manifests_ship_inside_the_app_package() -> None:

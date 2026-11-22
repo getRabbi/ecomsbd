@@ -17,6 +17,8 @@ from collections.abc import Callable
 from typing import Protocol
 
 from app.consignments.models import ConsignmentStatus
+from app.couriers.carrybee.contract import PROVIDER as CARRYBEE
+from app.couriers.carrybee.mapping import map_carrybee_status
 from app.couriers.redx.contract import PROVIDER as REDX
 from app.couriers.redx.mapping import map_parcel_status
 from app.couriers.steadfast.mapping import map_delivery_status
@@ -51,6 +53,7 @@ def _redx(raw_status: str | None, detail: str | None) -> CourierStatusMapping:
 #: qualifier for a status, when it has one — RedX's delivery type.
 _MAPPERS: dict[str, Callable[[str | None, str | None], CourierStatusMapping]] = {
     REDX: _redx,
+    CARRYBEE: map_carrybee_status,
 }
 
 

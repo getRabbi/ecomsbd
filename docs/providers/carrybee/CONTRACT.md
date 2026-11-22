@@ -164,8 +164,8 @@ webhook retries, event ids, idempotency on create.
 ## 10. ecomsbd reading (decisions, not provider facts)
 
 - Create timeouts, dropped connections, 5xx and unreadable bodies are **UNKNOWN** (the parcel may
-  exist; no idempotency key) and are resolved by looking the order up by `merchant_order_id`
-  (§6.3 accepts it), never by creating again.
+  exist; no idempotency key) and are never created again. §6.3 accepts `merchant_order_id`, but
+  ecomsbd's automatic recovery is Steadfast-only, so a person resolves them for now.
 - Status comes from webhooks (§8, enumerated). A §6.3 lookup keeps `transfer_status` verbatim
   with no normalized status until its values are documented or observed.
 - Webhook check: constant-time compare of `X-CB-Webhook-Integration-Header` with the shop's

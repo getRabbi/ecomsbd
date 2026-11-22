@@ -75,7 +75,7 @@ REPEAT_LIMIT = 5
 #: Enabled workflows a shop can have.
 MAX_WORKFLOWS = 50
 
-COURIERS = ("steadfast", "pathao", "redx", "manual")
+COURIERS = ("steadfast", "pathao", "redx", "carrybee", "manual")
 STORE_PROVIDERS = ("SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "API", "NONE")
 
 #: Kept for V2 callers and tests: >0 while a run's step is executing.

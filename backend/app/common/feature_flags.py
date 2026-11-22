@@ -45,6 +45,8 @@ class FlagKey(StrEnum):
     STEADFAST_ENABLED = "steadfast_enabled"
     PATHAO_ENABLED = "pathao_enabled"
     REDX_ENABLED = "redx_enabled"
+    #: V4 WP7.2: the Carrybee courier integration.
+    CARRYBEE_ENABLED = "carrybee_enabled"
     PROVIDER_AUTO_ADDRESS = "provider_auto_address"
     RISK_AGGREGATOR_FALLBACK = "risk_aggregator_fallback"
     AI_PARSE_ENABLED = "ai_parse_enabled"
@@ -93,6 +95,7 @@ COURIER_PROVIDER_FLAGS: dict[str, str] = {
     "steadfast": FlagKey.STEADFAST_ENABLED,
     "pathao": FlagKey.PATHAO_ENABLED,
     "redx": FlagKey.REDX_ENABLED,
+    "carrybee": FlagKey.CARRYBEE_ENABLED,
 }
 
 
@@ -103,6 +106,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.STEADFAST_ENABLED: False,
     FlagKey.PATHAO_ENABLED: False,
     FlagKey.REDX_ENABLED: False,
+    FlagKey.CARRYBEE_ENABLED: False,
     FlagKey.PROVIDER_AUTO_ADDRESS: True,
     FlagKey.RISK_AGGREGATOR_FALLBACK: False,
     FlagKey.AI_PARSE_ENABLED: False,

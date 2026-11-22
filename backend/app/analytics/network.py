@@ -147,7 +147,7 @@ async def build_network_benchmarks(ctx: dict[str, Any] | None = None) -> dict[st
                     Consignment.status.in_(COMPLETED_STATUSES),
                     settled >= start,
                     settled < end,
-                    Consignment.provider != "redx",
+                    Consignment.provider.notin_(("redx", "carrybee")),
                 )
                 .group_by(TenantUser.user_id)
             )

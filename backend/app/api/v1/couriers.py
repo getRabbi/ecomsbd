@@ -39,7 +39,7 @@ from app.core.errors import NotFoundError, ValidationError
 from app.couriers.accounts import ConnectRequest, ensure_provider_enabled
 from app.couriers.adapter import Unavailable
 from app.couriers.capabilities import load_manifest
-from app.couriers.credentials import spec_for
+from app.couriers.credentials import pack_secondary, spec_for
 from app.couriers.events import recent_events_for
 from app.couriers.http import ProviderError, to_app_error
 from app.tenants.roles import Permission
@@ -232,6 +232,18 @@ def _resolve_credential_slots(provider: str, payload: CourierConnectPayload) -> 
                 details={"provider": provider},
             )
         return primary, ""
+    if spec is not None and spec.packed_secondary and payload.credentials:
+        # More than two secrets (Carrybee): every field is required, and the
+        # secondary ones are sealed together in the second slot.
+        values = {
+            item.name: (payload.credentials.get(item.name) or "").strip() for item in spec.fields
+        }
+        missing = [item.label_en for item in spec.fields if not values[item.name]]
+        if missing:
+            raise ValidationError(
+                f"{provider} needs " + ", ".join(missing), details={"provider": provider}
+            )
+        return values[spec.primary], pack_secondary(spec, values)
     if spec is not None and spec.secondary is not None and payload.credentials:
         primary = (payload.credentials.get(spec.primary) or "").strip()
         secondary = (payload.credentials.get(spec.secondary) or "").strip()
