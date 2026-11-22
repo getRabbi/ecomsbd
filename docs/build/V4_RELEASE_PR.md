@@ -272,3 +272,52 @@ against the compose database with an explicit local `DATABASE_URL`:
     `migrations/env.py` stopped disabling existing loggers (F2). `tests/conftest.py` sets the
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
+
+## Phase 8 (run 5, branch `v4/phase-8`, 2026-11-23)
+
+Branched from `v4/phase-7`; merge after (or with) PR #42.
+
+**Adds**
+- WP7.1 Alpha SMS (`sms.net.bd`) behind the existing `SmsTransport` port, used by the WP2.3
+  confirm link. Contract `docs/providers/alpha_sms/CONTRACT.md` (the provider's own API page).
+  POST form fields (key never in a URL), every documented error code mapped; a send that may
+  have reached the provider is the new `DeliveryOutcome.UNKNOWN` and is never re-sent (the API
+  has no idempotency key). Credentials only through the admin console
+  (`GET/PUT /v1/admin/sms/providers`, vault-sealed, audited `admin.sms_provider_updated`).
+  **Not built:** tracking SMS (messaging templates have no SMS channel; the web and Flutter
+  screens hard-code EMAIL / WHATSAPP).
+- WP7.2 Carrybee courier (`app/couriers/carrybee/`), from Carrybee's own developer reference
+  (`docs/providers/carrybee/CONTRACT.md`): credentials check (store list), pickup stores,
+  single create sent once (ambiguous -> `BOOKING_UNKNOWN`), status lookup (raw
+  `transfer_status`, no state claim: values unpublished), cancel, shared-secret webhook
+  (`/v1/webhooks/couriers/carrybee/{token}`, 202 + header echo after verification). Three
+  credentials fit the two sealed slots (Client-Secret + Client-Context packed together).
+- CI restore drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (on `v4/phase-7`).
+
+**Migration** `a48001` (`20261123_0100_a48001_v4_phase8.py`, down_revision `a47001`):
+`sms_provider_connections` (platform table, RLS on, client roles revoked). Single head `a48001`.
+
+**Flags (default off):** `alpha_sms_enabled`, `carrybee_enabled`.
+**Environment variables:** none new (Carrybee hosts come from its reference; the SMS key only
+from the admin console).
+**Runbooks:** `SMS_ALPHA.md`, `COURIER_CARRYBEE.md`.
+
+**Still blocked / deferred:** WP0.6 BD Courier (`EXTERNAL_RISK_CONTRACT_REQUIRED`:
+bdcourier.com/api-docs renders by JavaScript; the operator saves it as
+`docs/providers/bdcourier/BD Courier API.html`), WP0.7 statement profiles (no fixtures),
+voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
+are operator checks (runbooks).
+
+**Tests run in run 5 (targeted only, operator rule):** `test_sms_alpha` 40,
+`test_confirmation_links` + `test_transports` + `test_realtime` 74, `test_migrations` 11,
+voice admin 4, `test_courier_carrybee` 29, courier manifests / multi / redx / pathao / accounts /
+security, `test_rto`, `test_risk_network_v37`, `test_automation`; ruff + format + mypy on changed
+files. **Pending (operator):**
+
+```
+cd backend
+python -m pytest -q -p no:cacheprovider
+TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_test python -m pytest -q -p no:cacheprovider
+DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+python -m ruff check app tests migrations && python -m ruff format --check app tests migrations && python -m mypy
+```
