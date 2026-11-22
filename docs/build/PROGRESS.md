@@ -311,6 +311,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-23 CI: the backup restore drill runs pg_dump / pg_restore inside the PostgreSQL 16 service container (the runner moved to ubuntu-26.04, whose newer client writes `transaction_timeout` that 16 refuses); same commands on local postgres:16-alpine: restore OK, verify_restore PASSED; pushed
 - 2026-11-21 run 4 end: operator suites on 43b1090 recorded (SQLite 2 failed / 2484 passed / 6 skipped; PostgreSQL 16 2 failed / 2489 passed / 1 skipped; `a47001` migrations OK); the 2 failures fixed test-only, the 2 tests pass; pushed
 - 2026-11-21 run 4 WP7.4 DONE (b7f4e63 backend, 49fcad7 web + docs); Q7 WP7.1 / WP7.2 BLOCKED on contracts; Q8: full SQLite run refused by the permission classifier → operator; release notes, final summary, status, pushes
 - 2026-11-21 run 4 WP7.3 DONE: v4/phase-7 cut from v4/phase-6 185cbcc; df55dc1 + docs; checkpoint (2 WPs: WP6, WP7.3); next Q6 WP7.4
