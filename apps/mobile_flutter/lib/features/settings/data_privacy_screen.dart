@@ -45,7 +45,7 @@ class DataPrivacyScreen extends ConsumerWidget {
     var opened = false;
     try {
       opened = await launchUrl(
-        Uri.https('scalemyprints.com', localizedPath),
+        Uri.https('ecomsbd.com', localizedPath),
         mode: LaunchMode.externalApplication,
       );
     } catch (_) {
@@ -56,7 +56,7 @@ class DataPrivacyScreen extends ConsumerWidget {
         SnackBar(
           content: Text(
             context.tr('priv.legalOpenError', <String, Object?>{
-              'url': 'https://scalemyprints.com$localizedPath',
+              'url': 'https://ecomsbd.com$localizedPath',
             }),
           ),
         ),
@@ -106,7 +106,7 @@ class DataPrivacyScreen extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.policy_outlined),
                       title: Text(context.tr('priv.policy')),
-                      subtitle: const Text('scalemyprints.com/privacy-policy'),
+                      subtitle: const Text('ecomsbd.com/privacy-policy'),
                       trailing: const Icon(Icons.open_in_new_rounded),
                       onTap: () => _openLegalPage(context, '/privacy-policy'),
                     ),

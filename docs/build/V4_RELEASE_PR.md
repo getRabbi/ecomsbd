@@ -174,6 +174,21 @@ Extension build (not server env): `ECOMSBD_API_BASE_URL` (default `https://api.s
   `MANUAL_PAYMENTS.md`, `VOICE_CONFIRMATION.md`, `AUTOPILOT.md`, `EXTENSION.md`,
   `META_OFFICIAL_PATH.md`, `API_DOMAIN_MIGRATION.md`, `REFERRALS.md`.
 
+## Production deploy order (after the merge)
+
+1. `alembic upgrade head` on the production database **first** (→ `a47001`). The API image
+   runs no migration on boot (`infra/northflank/README.md`), and the new models read columns
+   the old schema lacks (e.g. `chat_order_drafts.capture_source`). Every column V4 adds to an
+   existing table is nullable or has a server default, so the running V3 API keeps working
+   on the migrated schema.
+2. Then let Northflank roll out `main` (API + worker).
+3. Web: `cd apps/web && npm run cf:deploy` from a clean checkout of `main`. Nothing deploys
+   the Cloudflare Worker (`ecomsbd.com`, `app.ecomsbd.com`) automatically
+   (`apps/web/CLOUDFLARE.md`). The failing "Vercel" status on this PR is the disabled old
+   Vercel project; it deploys nothing and blocks nothing.
+4. Mobile: the next build's privacy policy and account deletion links open `ecomsbd.com`
+   (they opened `scalemyprints.com`, which is down).
+
 ## Staging turn-on order
 
 Each step is a flag on for one test shop first (admin console, tenant row), checked, then

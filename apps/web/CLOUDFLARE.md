@@ -1,9 +1,16 @@
 # Cloudflare Workers deployment
 
 The web dashboard runs as one Worker, `ecomsbd-web`, built with the OpenNext
-adapter (`@opennextjs/cloudflare`). Vercel (`ecomsbd-web.vercel.app`, and the
-scalemyprints.com pages) keeps building the same app from `main` as the
-fallback.
+adapter (`@opennextjs/cloudflare`). It is the only live web host.
+
+The old Vercel project is no fallback any more: since November 2026 the Vercel
+account is blocked, and `ecomsbd-web.vercel.app` and `scalemyprints.com` answer
+402 `DEPLOYMENT_DISABLED` (checked 2026-11-23). Vercel's GitHub app still posts a
+failing "Vercel" status on pull requests; it deploys nothing and blocks nothing
+(`main` has no required checks).
+
+Nothing deploys the Worker automatically: no Cloudflare build is connected to the
+repository. After a merge to `main`, deploy from a clean checkout of `main` (below).
 
 | Host | Serves |
 | --- | --- |
@@ -52,4 +59,4 @@ pages come from the read-only static-assets cache with cache interception, so
 they skip loading the Next.js server. The bundle is about 1.5 MiB gzipped, under
 the 3 MiB free-plan limit.
 
-Rollback: `npx wrangler rollback`, or send users back to the Vercel URL.
+Rollback: `npx wrangler rollback` (the Vercel URL no longer serves anything).
