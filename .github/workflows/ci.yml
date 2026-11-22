@@ -278,21 +278,20 @@ jobs:
       # Master spec section 48: "do not claim backup safety unless restore has
       # been tested." Running the drill on every build is the only way that
       # claim stays true as the schema changes.
-      # pg_dump / pg_restore run inside the service container, so their major
-      # version is the server's: the runner's newer client writes settings
-      # (transaction_timeout) that PostgreSQL 16 refuses on restore.
+      # pg_dump / pg_restore / psql run from the postgres:16-alpine image, so
+      # their major version is the server's: the runner's newer client writes
+      # settings (transaction_timeout) that PostgreSQL 16 refuses on restore.
       - name: Dump
         run: |
-          docker exec ${{ job.services.postgres.id }} pg_dump \
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine pg_dump \
             --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_source \
             --format=custom --compress=9 --no-owner --no-acl --file=/tmp/ecomsbd-ci.dump
-          docker cp ${{ job.services.postgres.id }}:/tmp/ecomsbd-ci.dump /tmp/ecomsbd-ci.dump
           test "$(wc -c < /tmp/ecomsbd-ci.dump)" -gt 4096
 
       - name: Restore into a separate database
         run: |
-          psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres             -c "CREATE DATABASE ecomsbd_restore_ci"
-          docker exec ${{ job.services.postgres.id }} pg_restore \
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres             -c "CREATE DATABASE ecomsbd_restore_ci"
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine pg_restore \
             --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_restore_ci \
             --no-owner --no-acl /tmp/ecomsbd-ci.dump
 

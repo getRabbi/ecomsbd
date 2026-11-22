@@ -9,6 +9,16 @@ Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 - **End run (operator, elsewhere, `v4/phase-7` @ 43b1090):** SQLite "2 failed, 2484 passed, 6 skipped in 1115.27s"; PostgreSQL 16 "2 failed, 2489 passed, 1 skipped in 1162.50s"; PostgreSQL migrations single head `a47001`, base → head, head → `a39001` → head, `-1` → head OK. The same 2 failures on both, fixed test-only (no app change): the Shopify hub test expects WP6's `coming_soon`; `tests/conftest.py` quiets the test client's `httpx` / `httpcore` request lines. Then the operator actions list: provider docs, pilots, store submissions, the API domain move when wanted.
 
 ## Now
+QUEUE (operator, 2026-11-23 run 5 — fixed order; resume prompt: "Continue the V4 run 5 queue."):
+- OPERATOR DECISIONS (final, 2026-11-23): SMS = Alpha SMS (sms.net.bd), risk = BD Courier (bdcourier.com), courier = Carrybee (`docs/providers/carrybee/`). Voice, TTS and Paperfly deferred (no code). Official public docs only, from the provider's own domain, saved as `docs/providers/<p>/CONTRACT.md` (source URL + fetch date per section); behind a login / not found → BLOCKED naming the exact file the operator must add. Unknown = `unknown` in the manifest; "may have happened" = UNKNOWN, never retried. One flag per provider, default off; credentials only via the admin console. Targeted tests + ruff/format/mypy on changed files only; no full suite, no PostgreSQL, no docker.
+- F0 (on `v4/phase-7`, one commit, push): (a) `ci.yml` restore-drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (`docker run --rm --network host -v /tmp:/tmp`), nothing else; (b) `IMPLEMENTATION_STATUS.md` header date, Phases 0–7 code complete, Alembic head `a47001`.
+- P1 WP7.1 Alpha SMS behind `SmsGatewayTransport` (turns on the WP2.3 link + tracking SMS).
+- P2 WP0.6 BD Courier adapter on `app/risk_providers/contract.py`.
+- P3 WP7.2 Carrybee adapter, Steadfast pattern (counts as 2 WPs).
+- P4 WP0.7 statement profiles, only for providers with a file in `backend/tests/fixtures/statements/<p>/`; else skip.
+- P1–P4 on `v4/phase-8` from `v4/phase-7` head (PR #42 still open 2026-11-23). New migration if needed: `a48001`, down_revision `a47001`.
+- FINISH: final summary here + `IMPLEMENTATION_STATUS.md`, Phase 8 section in `V4_RELEASE_PR.md`, full-suite commands under operator actions, push, report ≤ 10 lines with head sha. Checkpoint after 2 WPs.
+
 QUEUE (operator, 2026-11-21 run 4 — fixed order; every later session follows it with plain Prompt B):
 - OPERATOR NOTES (run 4): the operator ran the PostgreSQL suite elsewhere on `v4/phase-4` @ 395e891: "2439 passed, 3 failed, 1 skipped"; `main` @ 711f917: 1810 passed. Tests stay targeted per WP; ONE full SQLite suite run, only in Q8. No PostgreSQL and no docker in this run — the operator runs PostgreSQL once at the end.
 - F1–F3 FIXES (on `v4/phase-5`, one commit) — DONE: F1 realtime table coverage (`autopilot_decisions` → orders topic for the Home card, `billing_payment_submissions` → shop topic for the Plans card, the 7 voice tables silent); F2 `migrations/env.py` `fileConfig(..., disable_existing_loggers=False)` + the logger re-enable workaround in `test_intake_capture.py` removed; F3 the dispatcher test drains (≤ 50 passes) — job and assertions unchanged.
