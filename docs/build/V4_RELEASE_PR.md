@@ -273,7 +273,7 @@ against the compose database with an explicit local `DATABASE_URL`:
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
 
-## Phase 8 (run 5, branch `v4/phase-8`, 2026-11-23)
+## Phase 8 (runs 5–6, branch `v4/phase-8`, 2026-11-23)
 
 Branched from `v4/phase-7`; merge after (or with) PR #42.
 
@@ -284,14 +284,26 @@ Branched from `v4/phase-7`; merge after (or with) PR #42.
   have reached the provider is the new `DeliveryOutcome.UNKNOWN` and is never re-sent (the API
   has no idempotency key). Credentials only through the admin console
   (`GET/PUT /v1/admin/sms/providers`, vault-sealed, audited `admin.sms_provider_updated`).
-  **Not built:** tracking SMS (messaging templates have no SMS channel; the web and Flutter
-  screens hard-code EMAIL / WHATSAPP).
+  **Run 6 — tracking SMS:** order updates (the recipes' tracking step, any `SEND_TEMPLATE`
+  step, a manual send) can go by SMS through the same gateway. Messaging channel `SMS` is
+  available only while the gateway sends (flag + console account); each shop switches its own
+  SMS channel on (`messaging_channels`, default off; no migration). SMS contacts = a BD mobile
+  or the customer's saved phone; SMS templates = order updates only, no subject, ≤ 3 parts per
+  language. A lost answer or a crash mid-send is `UNKNOWN`, never resent; only a provable
+  non-send (no connection, 417) is retried. Web: Customer messaging contact + template forms,
+  recipe channel, workflow step channel; Flutter: contact form Email / SMS.
 - WP7.2 Carrybee courier (`app/couriers/carrybee/`), from Carrybee's own developer reference
   (`docs/providers/carrybee/CONTRACT.md`): credentials check (store list), pickup stores,
   single create sent once (ambiguous -> `BOOKING_UNKNOWN`), status lookup (raw
   `transfer_status`, no state claim: values unpublished), cancel, shared-secret webhook
   (`/v1/webhooks/couriers/carrybee/{token}`, 202 + header echo after verification). Three
   credentials fit the two sealed slots (Client-Secret + Client-Context packed together).
+  **Run 6 — display check:** connect / store / webhook were already server-driven; fixed the
+  hard-coded names (Carrybee, not `carrybee`, on web orders / money / returns / reconciliation /
+  insights, mobile accounts / order courier card / receivables / RTO, and the printed invoice /
+  label), the default-courier pickers (web + mobile offer Carrybee when the server reports it on
+  for the shop; a saved value always shows) and the web workflow BOOK_COURIER picker (connected
+  couriers).
 - CI restore drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (on `v4/phase-7`).
 
 **Migration** `a48001` (`20261123_0100_a48001_v4_phase8.py`, down_revision `a47001`):
@@ -307,6 +319,14 @@ bdcourier.com/api-docs renders by JavaScript; the operator saves it as
 `docs/providers/bdcourier/BD Courier API.html`), WP0.7 statement profiles (no fixtures),
 voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
 are operator checks (runbooks).
+
+**Tests run in run 6 (targeted only):** backend `test_messaging_sms` 10 (new) + `test_messaging`,
+`test_campaigns`, `test_automation`, `test_automation_workflows`, `test_sms_alpha`,
+`test_automation_confirmation_hooks` = 106, `test_documents` 23 (1 new: every manifest courier
+prints by name); web typecheck + lint, 111 tests (3 new `messaging-sms.test.mjs`, Carrybee cases
+in `ops.test.mjs`); Flutter `messaging_screen_test` 5 (3 new), `delivery_rules_screen_test` 11
+(2 new), courier / RTO / insights / courier-history suites 47; ruff + format + mypy and
+`flutter analyze` + `dart format` on changed files.
 
 **Tests run in run 5 (targeted only, operator rule):** `test_sms_alpha` 40,
 `test_confirmation_links` + `test_transports` + `test_realtime` 74, `test_migrations` 11,
