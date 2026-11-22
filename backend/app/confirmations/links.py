@@ -62,6 +62,7 @@ __all__ = [
     "FollowUp",
     "LinkService",
     "LinkStatus",
+    "current_sms_transport",
     "format_taka",
     "hash_token",
     "link_text",
@@ -102,6 +103,14 @@ def sms_transport() -> SmsTransport:
     return build_sms_transport(get_settings())
 
 
+async def current_sms_transport(db: AsyncSession) -> SmsTransport:
+    """The Alpha SMS gateway when its flag and admin-console account are on
+    (V4 WP7.1), else the deployment's settings transport."""
+    from app.sms_providers.service import active_sms_transport
+
+    return await active_sms_transport(db) or sms_transport()
+
+
 def public_base() -> str | None:
     base = (get_settings().public_web_url or "").strip().rstrip("/")
     return base or None
@@ -131,10 +140,10 @@ async def links_on(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
 
     return (
         public_base() is not None
-        and sms_transport().is_configured
         and await FeatureFlagService(db).is_enabled(
             FlagKey.CONFIRMATION_SMS_LINK_ENABLED, tenant_id=tenant_id
         )
+        and (await current_sms_transport(db)).is_configured
     )
 
 
@@ -219,7 +228,7 @@ class LinkService:
     async def _create_link(
         self, row: OrderConfirmation, now: datetime, *, cause: Cause = Cause.LINK_SENT
     ) -> ConfirmationLink:
-        transport = sms_transport()
+        transport = await current_sms_transport(self._db)
         attempt = await self._confirmations.add_attempt(
             row, AttemptChannel.SMS_LINK, provider=transport.name, now=now
         )
@@ -301,7 +310,7 @@ class LinkService:
         text = link_text(
             tenant.name if tenant else "", row.cod_paisa_snapshot, link_url(base, token)
         )
-        result = await sms_transport().send(
+        result = await (await current_sms_transport(self._db)).send(
             SmsMessage(
                 phone_e164=customers.phone_number(customer).e164,
                 body=text,
@@ -315,6 +324,11 @@ class LinkService:
         attempt.segments = result.provider_segments or count_sms_segments(text)
         if result.outcome in (DeliveryOutcome.SENT, DeliveryOutcome.DUPLICATE):
             attempt.status = str(LinkStatus.SENT)
+            await self._db.flush()
+        elif result.outcome is DeliveryOutcome.UNKNOWN:
+            # It may have reached the customer: the link stays good until the
+            # sweep ends it (LINK_TTL), and it is never sent again.
+            attempt.status = str(DeliveryOutcome.UNKNOWN)
             await self._db.flush()
         else:
             await self._undelivered(row, link, attempt, str(result.outcome), now)

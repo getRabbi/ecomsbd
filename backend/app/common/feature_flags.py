@@ -80,6 +80,9 @@ class FlagKey(StrEnum):
     #: V4 WP7.4: shop referral codes and the 30-day credit for both shops
     #: after the referred shop's first approved TrxID payment.
     REFERRALS_ENABLED = "referrals_enabled"
+    #: V4 WP7.1: the Alpha SMS gateway (sms.net.bd) sends customer SMS (the
+    #: confirm link, tracking SMS) once its admin-console account is on too.
+    ALPHA_SMS_ENABLED = "alpha_sms_enabled"
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -120,6 +123,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.EXTENSION_ENABLED: False,
     FlagKey.META_OFFICIAL_PATH_ENABLED: False,
     FlagKey.REFERRALS_ENABLED: False,
+    FlagKey.ALPHA_SMS_ENABLED: False,
 }
 
 

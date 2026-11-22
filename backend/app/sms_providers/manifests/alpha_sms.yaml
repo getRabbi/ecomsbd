@@ -1,0 +1,44 @@
+# Alpha SMS (sms.net.bd) — SMS gateway capability manifest (V4 WP7.1)
+#
+# A capability is `true` only with a dated source: each entry carries its own
+# `verified_at` and `evidence`. An entry missing either reads as `unknown`, and
+# `unknown` is never used. Contract: docs/providers/alpha_sms/CONTRACT.md, read
+# from the provider's own API page on 2026-11-23.
+
+provider: alpha_sms
+display_name: Alpha SMS
+base_url: https://api.sms.net.bd
+documentation_source: https://portal.sms.net.bd/api
+credential_fields: [api_key]
+
+capabilities:
+  send:
+    state: true
+    verified_at: 2026-11-23
+    evidence: "https://portal.sms.net.bd/api — Send SMS: POST /sendsms (api_key, msg, to); CONTRACT.md §2"
+  sender_id:
+    state: true
+    verified_at: 2026-11-23
+    evidence: "https://portal.sms.net.bd/api — Send SMS: optional sender_id (approved Sender ID); CONTRACT.md §2"
+  error_codes:
+    state: true
+    verified_at: 2026-11-23
+    evidence: "https://portal.sms.net.bd/api — Error Codes table 0, 400-421; CONTRACT.md §5"
+  delivery_report:
+    # Documented (GET /report/request/{id}/), statuses not listed; not used yet.
+    state: true
+    verified_at: 2026-11-23
+    evidence: "https://portal.sms.net.bd/api — Report; CONTRACT.md §3"
+  balance:
+    # Documented with the key in the query string only; not used.
+    state: true
+    verified_at: 2026-11-23
+    evidence: "https://portal.sms.net.bd/api — Balance; CONTRACT.md §4"
+  # Not stated by the provider's page: unknown, never used.
+  idempotency_key: unknown
+  delivery_callback: unknown
+  unicode_bangla: unknown
+  segment_count: unknown
+  segment_price: unknown
+  max_length: unknown
+  rate_limit: unknown

@@ -61,6 +61,7 @@ include = ["app*"]
 "app.documents" = ["fonts/*.ttf", "fonts/OFL.txt"]
 "app.payouts" = ["profiles/*.yaml"]
 "app.voice" = ["manifests/*.yaml"]
+"app.sms_providers" = ["manifests/*.yaml"]
 
 [tool.ruff]
 line-length = 100
