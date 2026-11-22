@@ -109,8 +109,8 @@ VOICE_PROVIDER_CONTRACT_REQUIRED**)
 
 Every new business table is tenant-owned with RLS on and client-role grants revoked
 (pattern of `a39001`); platform tables (voice account, callbacks, daily usage) have RLS on
-and client roles revoked. Integration checkpoint result (PostgreSQL suite + round trip):
-see the last section.
+and client roles revoked. Integration checkpoint and end-run results (PostgreSQL suite +
+round trips): see the last two sections.
 
 ## New feature flags (all default **off**, `app/common/feature_flags.py`)
 
@@ -242,10 +242,18 @@ against the compose database with an explicit local `DATABASE_URL`:
   `billing_payment_submissions` / the voice tables; `migrations/env.py` keeps existing loggers;
   the dispatcher test drains) and their tests are green.
 - Every WP since was verified with targeted suites (ledger Status table: WP5, WP6, WP7.3, WP7.4).
-- **Still to run before merging (operator):** the full SQLite suite and the PostgreSQL suite once
-  on `v4/phase-7` head, and the `a47001` round trip on PostgreSQL
-  (`alembic upgrade head && alembic downgrade -1 && alembic upgrade head`). Paste the summary
-  lines here:
-  - SQLite: _pending_
-  - PostgreSQL: _pending_
-  - `a47001` round trip: _pending_
+- Operator, elsewhere, end run on `v4/phase-7` @ 43b1090:
+  - SQLite: "2 failed, 2484 passed, 6 skipped in 1115.27s"
+  - PostgreSQL 16: "2 failed, 2489 passed, 1 skipped in 1162.50s"
+  - PostgreSQL migrations: single head `a47001`; base → head, head → `a39001` → head,
+    `-1` → head: OK.
+- The same 2 tests failed on both databases; both are test-side and fixed with no app change
+  (the two tests pass):
+  - `test_integrations_shopify.py::test_shopify_is_gated_until_the_platform_app_exists`: the
+    expected SHOPIFY hub entry now includes `"coming_soon": True` (field added by WP6, 60d8a0e).
+  - `test_rto.py::TestIsolationAndPrivacy::test_the_phone_never_reaches_the_logs`: the only record
+    with the phone was the test client's own `httpx` request line
+    (`HTTP Request: GET http://testserver/v1/customers/risk-check?phone=… 200 OK`), visible since
+    `migrations/env.py` stopped disabling existing loggers (F2). `tests/conftest.py` sets the
+    `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
+    `JsonFormatter`. The test is unchanged.

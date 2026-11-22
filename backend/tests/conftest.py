@@ -10,6 +10,7 @@ one would not notice.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
@@ -23,6 +24,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+# The test client's own request lines ("HTTP Request: GET http://testserver/...?phone=...")
+# are not application logs; production lines go through the redacting JsonFormatter.
+for _client_logger in ("httpx", "httpcore"):
+    logging.getLogger(_client_logger).setLevel(logging.WARNING)
 
 
 def _test_database_url(tmp_path: Path) -> str:
