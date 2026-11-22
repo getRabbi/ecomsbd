@@ -5,15 +5,16 @@ import { PageHeader } from '@/components/shell';
 import { Chip, ErrorState } from '@/components/ui';
 import { api } from '@/lib/api';
 import { isComingSoon } from '@/lib/integrations';
+import { type MessagingChannel, smsOptionLabel, smsState, smsText, usesPhone } from '@/lib/messaging-sms';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
 
 type Contact = {
-  id: string; customer_id: string; channel: 'EMAIL' | 'WHATSAPP'; recipient_masked: string; consent: boolean;
+  id: string; customer_id: string; channel: MessagingChannel; recipient_masked: string; consent: boolean;
   marketing_consent: boolean; marketing_opted_out_at: string | null; undeliverable_reason: string | null;
 };
 type Template = {
-  key: string; purpose: 'TRANSACTIONAL' | 'MARKETING'; channel: 'EMAIL' | 'WHATSAPP';
+  key: string; purpose: 'TRANSACTIONAL' | 'MARKETING'; channel: MessagingChannel;
   subject_en: string; subject_bn: string; body_en: string; body_bn: string;
   provider_status: string | null; builtin: boolean; archived: boolean;
 };
@@ -31,12 +32,13 @@ export default function MessagingPage() {
   const templates = useApi<{ items: Template[] }>('/messaging/templates');
   const [contact, setContact] = useState<Contact | null>(null);
   const [customer, setCustomer] = useState('');
-  const [channel, setChannel] = useState<'EMAIL' | 'WHATSAPP'>('EMAIL');
+  const [channel, setChannel] = useState<MessagingChannel>('EMAIL');
   const [useCustomerPhone, setUseCustomerPhone] = useState(true);
   const [template, setTemplate] = useState('order_update');
   const [order, setOrder] = useState('');
   const [newPurpose, setNewPurpose] = useState<'TRANSACTIONAL' | 'MARKETING'>('MARKETING');
-  const [newChannel, setNewChannel] = useState<'EMAIL' | 'WHATSAPP'>('EMAIL');
+  const [newChannel, setNewChannel] = useState<MessagingChannel>('EMAIL');
+  const sms = smsState(channels.data?.items);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const key = useRef<string | null>(null);
@@ -84,15 +86,15 @@ export default function MessagingPage() {
         <form onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); void run(async () => {
           const saved = await api.post<Contact>('/messaging/conversations', {
             customer_id: customer, channel,
-            ...(channel === 'WHATSAPP' && useCustomerPhone ? { use_customer_phone: true } : { recipient: data.get('recipient') }),
+            ...(usesPhone(channel) && useCustomerPhone ? { use_customer_phone: true } : { recipient: data.get('recipient') }),
             consent: data.get('consent') === 'on', marketing_consent: data.get('marketing') === 'on', evidence: data.get('evidence'),
           });
           setContact(saved);
         }); }}>
           <label className="field">{tx('Customer', 'গ্রাহক')}<select className="select" required value={customer} onChange={e => setCustomer(e.target.value)}><option value="">{tx('Select customer', 'গ্রাহক বাছুন')}</option>{customers.data?.items.map(c => <option key={c.id} value={c.id}>{c.name || c.phone_masked}</option>)}</select></label>
-          <label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" value={channel} onChange={e => setChannel(e.target.value as 'EMAIL' | 'WHATSAPP')}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP" disabled>WhatsApp — {tx('Coming soon', 'শীঘ্রই আসছে')}</option></select></label>
-          {channel === 'WHATSAPP' ? <label><input type="checkbox" checked={useCustomerPhone} onChange={e => setUseCustomerPhone(e.target.checked)} /> {tx('Use the customer’s saved phone number', 'গ্রাহকের সংরক্ষিত ফোন নম্বর ব্যবহার করুন')}</label> : null}
-          {channel === 'EMAIL' || !useCustomerPhone ? <label className="field">{channel === 'EMAIL' ? tx('Email', 'ইমেইল') : tx('WhatsApp number', 'WhatsApp নম্বর')}<input className="input" name="recipient" type={channel === 'EMAIL' ? 'email' : 'tel'} required maxLength={254} /></label> : null}
+          <label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" value={channel} onChange={e => setChannel(e.target.value as MessagingChannel)}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP" disabled>WhatsApp — {tx('Coming soon', 'শীঘ্রই আসছে')}</option><option value="SMS" disabled={sms === 'off'}>{smsOptionLabel(locale, sms, false)}</option></select></label>
+          {usesPhone(channel) ? <label><input type="checkbox" checked={useCustomerPhone} onChange={e => setUseCustomerPhone(e.target.checked)} /> {tx('Use the customer’s saved phone number', 'গ্রাহকের সংরক্ষিত ফোন নম্বর ব্যবহার করুন')}</label> : null}
+          {channel === 'EMAIL' || !useCustomerPhone ? <label className="field">{channel === 'EMAIL' ? tx('Email', 'ইমেইল') : channel === 'SMS' ? smsText(locale, 'sms.number') : tx('WhatsApp number', 'WhatsApp নম্বর')}<input className="input" name="recipient" type={channel === 'EMAIL' ? 'email' : 'tel'} required maxLength={254} /></label> : null}
           <label className="field">{tx('Consent evidence / reason', 'সম্মতির প্রমাণ / কারণ')}<input className="input" name="evidence" minLength={3} maxLength={500} required /></label>
           <label><input name="consent" type="checkbox" /> {tx('Customer agreed to order updates', 'গ্রাহক অর্ডারের আপডেট পেতে সম্মত')}</label><br />
           <label><input name="marketing" type="checkbox" /> {tx('Customer separately agreed to receive offers', 'গ্রাহক আলাদাভাবে অফার পেতে সম্মত')}</label>
@@ -129,12 +131,13 @@ export default function MessagingPage() {
         {templates.data?.items.map(t => <p key={t.key}><strong>{t.key}</strong> · {t.purpose === 'MARKETING' ? tx('Offer', 'অফার') : tx('Order update', 'অর্ডার আপডেট')} · {t.channel}{t.channel === 'WHATSAPP' ? ` · Meta: ${t.provider_status ?? '—'}` : ''}{!t.builtin ? <> {' '}<button className="btn btn--sm" disabled={busy} onClick={() => void run(() => api.patch(`/messaging/templates/${t.key}`, { archived: true }))}>{tx('Archive', 'আর্কাইভ')}</button></> : null}</p>)}
         <details><summary>{tx('Create template', 'টেমপ্লেট তৈরি')}</summary>
           <p className="card__hint">{newPurpose === 'MARKETING' ? tx('Offers may use {customer_name} and {shop_name}. Emails get an unsubscribe line automatically.', 'অফারে {customer_name} ও {shop_name} ব্যবহার করা যায়। ইমেইলে আনসাবস্ক্রাইব লাইন নিজে থেকেই যুক্ত হয়।') : tx('Order updates may use {customer_name}, {order_number} and {shop_name}.', 'অর্ডার আপডেটে {customer_name}, {order_number} ও {shop_name} ব্যবহার করা যায়।')}</p>
+          {newChannel === 'SMS' ? <p className="card__hint">{smsText(locale, 'sms.templateHint')}</p> : null}
           {newChannel === 'WHATSAPP' ? <p className="card__hint">{tx('WhatsApp sends only templates Meta approved. Create it in WhatsApp Manager first, then enter its exact name and languages here; the text below is your preview. Include a way to opt out (for example “Reply STOP”).', 'WhatsApp-এ শুধু Meta-অনুমোদিত টেমপ্লেট যায়। আগে WhatsApp Manager-এ তৈরি করুন, তারপর এখানে হুবহু নাম ও ভাষা দিন; নিচের লেখা শুধু প্রিভিউ। বন্ধ করার উপায় রাখুন (যেমন “STOP লিখুন”)।')}</p> : null}
           <form onSubmit={e => { e.preventDefault(); const form = e.currentTarget; const data = Object.fromEntries(new FormData(form)) as Record<string, string>; const variables = (data.variables ?? '').split(',').map(v => v.trim()).filter(Boolean); delete data.variables; for (const k of Object.keys(data)) if (data[k] === '') delete data[k]; void run(async () => { await api.post('/messaging/templates', { ...data, purpose: newPurpose, channel: newChannel, ...(newChannel === 'WHATSAPP' ? { variables } : {}) }); form.reset(); }); }}>
-            <label className="field">{tx('Purpose', 'উদ্দেশ্য')}<select className="select" value={newPurpose} onChange={e => setNewPurpose(e.target.value as 'TRANSACTIONAL' | 'MARKETING')}><option value="MARKETING">{tx('Offer (marketing)', 'অফার (মার্কেটিং)')}</option><option value="TRANSACTIONAL">{tx('Order update', 'অর্ডার আপডেট')}</option></select></label>
-            <label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" value={newChannel} onChange={e => setNewChannel(e.target.value as 'EMAIL' | 'WHATSAPP')}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP" disabled>WhatsApp — {tx('Coming soon', 'শীঘ্রই আসছে')}</option></select></label>
+            <label className="field">{tx('Purpose', 'উদ্দেশ্য')}<select className="select" value={newPurpose} onChange={e => setNewPurpose(e.target.value as 'TRANSACTIONAL' | 'MARKETING')}><option value="MARKETING" disabled={newChannel === 'SMS'}>{tx('Offer (marketing)', 'অফার (মার্কেটিং)')}</option><option value="TRANSACTIONAL">{tx('Order update', 'অর্ডার আপডেট')}</option></select></label>
+            <label className="field">{tx('Channel', 'মাধ্যম')}<select className="select" value={newChannel} onChange={e => { const next = e.target.value as MessagingChannel; setNewChannel(next); if (next === 'SMS') setNewPurpose('TRANSACTIONAL'); }}><option value="EMAIL">{tx('Email', 'ইমেইল')}</option><option value="WHATSAPP" disabled>WhatsApp — {tx('Coming soon', 'শীঘ্রই আসছে')}</option><option value="SMS" disabled={sms === 'off'}>{smsOptionLabel(locale, sms, false)}</option></select></label>
             <label className="field">{tx('Template key', 'টেমপ্লেট কী')}<input className="input" name="key" required pattern="[a-z][a-z0-9_]{2,79}" /></label>
-            {newChannel === 'EMAIL' ? <>
+            {newChannel === 'SMS' ? null : newChannel === 'EMAIL' ? <>
               <label className="field">{tx('English subject', 'ইংরেজি বিষয়')}<input className="input" name="subject_en" required maxLength={160} /></label>
               <label className="field">{tx('Bangla subject', 'বাংলা বিষয়')}<input className="input" name="subject_bn" required maxLength={160} /></label>
             </> : <>

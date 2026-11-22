@@ -25,6 +25,7 @@ import {
   type Step,
 } from '@/lib/automation';
 import { strings, type StringKey } from '@/lib/i18n';
+import { smsText } from '@/lib/messaging-sms';
 import { useSession } from '@/lib/session';
 
 function known(key: string): key is StringKey {
@@ -330,6 +331,7 @@ function ActionConfig({
             <select className="select" value={channel} disabled={disabled} onChange={(e) => onChange({ ...step, config: { ...config, channel: e.target.value, template_key: catalog.templates.find((tp) => tp.channel === e.target.value)?.key ?? '' } })}>
               <option value="EMAIL">Email</option>
               <option value="WHATSAPP" disabled>WhatsApp — {t('int.comingSoon')}</option>
+              <option value="SMS">{smsText(labels.locale, 'sms.label')}</option>
             </select>
           </Field>
           <Field label={t('auto.cfg.template')}>

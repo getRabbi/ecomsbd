@@ -8,6 +8,7 @@ import { Card, Chip, Drawer, EmptyState, ErrorState, Row, Tile } from '@/compone
 import { useAutomationLabels } from '@/components/WorkflowBuilder';
 import { api, ApiError } from '@/lib/api';
 import { statusTone, type Catalog, type Metrics, type Recipe, type Run, type RunDetail, type Workflow } from '@/lib/automation';
+import { type ChannelState, smsOptionLabel, smsState } from '@/lib/messaging-sms';
 import { formatDate } from '@/lib/money';
 import { useApi } from '@/lib/useApi';
 
@@ -195,6 +196,9 @@ function Recipes({
   const recipes = useApi<{ items: Recipe[] }>('/automation/recipes');
   const [provider, setProvider] = useState('');
   const [channel, setChannel] = useState('EMAIL');
+  // V4 WP7.1: SMS is offered once the gateway is on and the shop switched SMS on.
+  const channels = useApi<{ items: ChannelState[] }>('/messaging/channels');
+  const sms = smsState(channels.data?.items);
   const couriers = (catalog?.couriers ?? []).filter((c) => c !== 'manual');
   return (
     <Card title={t('auto.tab.recipes')}>
@@ -219,6 +223,7 @@ function Recipes({
                 <select className="select" aria-label={t('auto.recipe.channel')} value={channel} onChange={(e) => setChannel(e.target.value)}>
                   <option value="EMAIL">Email</option>
                   <option value="WHATSAPP" disabled>WhatsApp — {t('int.comingSoon')}</option>
+                  <option value="SMS" disabled={sms !== 'ready'}>{smsOptionLabel(locale, sms, true)}</option>
                 </select>
               ) : null}
               <button

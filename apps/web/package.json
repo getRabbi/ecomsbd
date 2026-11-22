@@ -12,7 +12,7 @@
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs tests/access.test.mjs tests/whatsapp-signup.test.mjs tests/shell.test.mjs tests/ops.test.mjs tests/site.test.mjs tests/parity.test.mjs tests/revalidate.test.mjs tests/realtime.test.mjs tests/email-code.test.mjs tests/delivery.test.mjs tests/courier-history.test.mjs tests/confirm-link.test.mjs tests/manual-payment.test.mjs tests/referral.test.mjs tests/voice-intro.test.mjs tests/autopilot.test.mjs tests/extension.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs tests/access.test.mjs tests/whatsapp-signup.test.mjs tests/shell.test.mjs tests/ops.test.mjs tests/site.test.mjs tests/parity.test.mjs tests/revalidate.test.mjs tests/realtime.test.mjs tests/email-code.test.mjs tests/delivery.test.mjs tests/courier-history.test.mjs tests/confirm-link.test.mjs tests/manual-payment.test.mjs tests/referral.test.mjs tests/voice-intro.test.mjs tests/autopilot.test.mjs tests/extension.test.mjs tests/messaging-sms.test.mjs"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.12",
