@@ -46,11 +46,15 @@ class Env {
     'GOOGLE_CLIENT_ID_IOS',
   );
 
-  /// Host of the ecomsbd web dashboard (also serves the legal pages).
+  /// Host of the ecomsbd web workspace.
   ///
   /// Store and channel setup — a sign-in at Shopify or Meta, WooCommerce or
-  /// website keys — is done there, and the app links to its real pages.
-  static const String webDashboardHost = 'scalemyprints.com';
+  /// website keys — is done there, and the app links to its real pages. The
+  /// public host redirects workspace paths here (`apps/web/next.config.ts`).
+  static const String webDashboardHost = 'app.ecomsbd.com';
+
+  /// Host of the public site: privacy policy, account deletion and support.
+  static const String legalPagesHost = 'ecomsbd.com';
 
   /// Only a directly distributed APK sets
   /// `--dart-define=ECOMSBD_DIRECT_BUILD=true`. Every other build (Google

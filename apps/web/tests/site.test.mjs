@@ -86,4 +86,8 @@ test('support and legal pages name ecomsbd.com as canonical', async () => {
     for (const url of urls) assert.ok(source.includes(`'${url}'`), `${file} links ${url}`);
     assert.doesNotMatch(source, /scalemyprints\.com/, file);
   }
+  // scalemyprints.com web pages are gone (402); the policy names the live hosts.
+  const policy = await readFile(new URL('../app/privacy-policy/content.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(policy, /scalemyprints\.com/);
+  assert.match(policy, /web platform at ecomsbd\.com \(workspace at app\.ecomsbd\.com\)/);
 });

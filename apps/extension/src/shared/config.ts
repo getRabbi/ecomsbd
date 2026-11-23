@@ -5,5 +5,5 @@
  * `host_permissions`.
  */
 
-export const API_BASE_URL = 'https://api.scalemyprints.com';
+export const API_BASE_URL = 'https://api.ecomsbd.com';
 export const WEB_BASE_URL = 'https://app.ecomsbd.com';

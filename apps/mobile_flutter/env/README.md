@@ -1,8 +1,11 @@
 # Flutter authentication configuration
 
 Only public configuration belongs in `production.json` (ignored):
-`ECOMSBD_API_BASE_URL=https://api.scalemyprints.com`, `SUPABASE_URL`,
+`ECOMSBD_API_BASE_URL=https://api.ecomsbd.com`, `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID_WEB`, and the optional native iOS client ID.
+Ship a build on `api.ecomsbd.com` only once that host serves the API (runbook
+[API domain move](../../../docs/runbooks/API_DOMAIN_MIGRATION.md) steps 1–2); the
+Codemagic guard accepts it and the old `https://api.scalemyprints.com`.
 Build with `flutter build appbundle --release --dart-define-from-file=env/production.json`.
 
 Supabase owns all seller credentials and sessions. Encrypted storage persists
@@ -11,7 +14,7 @@ FastAPI and never reads business tables using Supabase. Existing shop/onboarding
 routing uses `/v1/me`; shop changes never replace Supabase credentials.
 
 Allow `com.ecomsbd.app://auth/callback` in Supabase's redirect configuration and set
-Site URL `https://scalemyprints.com`. The Android intent filter handles both cold
+Site URL `https://app.ecomsbd.com`. The Android intent filter handles both cold
 and warm callbacks. Reset UI opens only after the SDK validates a recovery code.
 Email confirmation requires the real Supabase SMTP/provider settings.
 

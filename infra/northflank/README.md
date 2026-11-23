@@ -49,6 +49,11 @@ is healthy, the custom domain is assigned to its HTTP port, and HTTPS succeeds.
 Domain ownership is already registered with Northflank. Leave root/www,
 staging and crawler resources unchanged.
 
+The API's new host is `api.ecomsbd.com` (2026-11 move): a second custom domain on
+`ecomsbd-api`'s HTTP port next to `api.scalemyprints.com`, which keeps serving as
+`PUBLIC_BASE_URL_ALIASES`. Steps and exact values:
+[API_DOMAIN_MIGRATION.md](../../docs/runbooks/API_DOMAIN_MIGRATION.md).
+
 R2 bucket `ecomsbd-production` is private: managed public URL disabled, no custom
 domains. `R2_BUCKET`, `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID` and
 `R2_SECRET_ACCESS_KEY` are already in the secret group. The previous temporary

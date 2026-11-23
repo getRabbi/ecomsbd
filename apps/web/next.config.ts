@@ -5,8 +5,8 @@ import type { NextConfig } from 'next';
 
 /**
  * Hostnames of the Cloudflare deployment (see `wrangler.jsonc`). The rules
- * below match these hosts only, so the Vercel deployment and the
- * scalemyprints.com pages behave exactly as before.
+ * below match these hosts only, so any other host (a preview or local build)
+ * behaves exactly as before.
  *
  * The public site lives on the apex and the workspace on `app.`, because the
  * Supabase session is stored per origin: signing in on the apex would leave
