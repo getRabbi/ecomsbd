@@ -15,10 +15,10 @@
     "test": "node --experimental-strip-types --no-warnings --test tests/automation.test.mjs tests/access.test.mjs tests/whatsapp-signup.test.mjs tests/shell.test.mjs tests/ops.test.mjs tests/site.test.mjs tests/parity.test.mjs tests/revalidate.test.mjs tests/realtime.test.mjs tests/email-code.test.mjs tests/delivery.test.mjs tests/courier-history.test.mjs tests/confirm-link.test.mjs tests/manual-payment.test.mjs tests/referral.test.mjs tests/voice-intro.test.mjs tests/autopilot.test.mjs tests/extension.test.mjs tests/messaging-sms.test.mjs tests/bdcourier.test.mjs"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.20.12",
+    "@opennextjs/cloudflare": "^1.20.18",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.116.0",
-    "next": "^16.4.2",
+    "next": "^16.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -27,8 +27,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "eslint": "^9.17.0",
-    "eslint-config-next": "^16.4.2",
+    "eslint-config-next": "^16.4.6",
     "typescript": "^5.7.0",
-    "wrangler": "^4.151.0"
+    "wrangler": "^4.166.0"
   }
 }
