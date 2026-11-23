@@ -320,6 +320,14 @@ bdcourier.com/api-docs renders by JavaScript; the operator saves it as
 voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
 are operator checks (runbooks).
 
+**CI on PR #43 (`v4/phase-8` @ 4cd0a5e, 2026-11-23):** green. Backend SQLite "2566 passed,
+6 skipped in 748.71s"; PostgreSQL 16 "2571 passed, 1 skipped in 905.53s"; migrations on an empty
+PostgreSQL base → head (`a48001`) → base; lint, format, mypy, SDK checks, dependency scan; Flutter,
+backup restore drill, backend image, Chrome extension, secret scan. Two fixes on the way, no
+behaviour change: whole-tree ruff (`app/models.py` import order) and a stale `test_insights`
+expectation (Carrybee not-live). The Vercel check fails with "Account is blocked" (account, not
+code). The commands below remain for a local run.
+
 **Tests run in run 6 (targeted only):** backend `test_messaging_sms` 10 (new) + `test_messaging`,
 `test_campaigns`, `test_automation`, `test_automation_workflows`, `test_sms_alpha`,
 `test_automation_confirmation_hooks` = 106, `test_documents` 23 (1 new: every manifest courier
