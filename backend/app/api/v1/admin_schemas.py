@@ -9,13 +9,21 @@ Every response here is operator-facing. Two rules:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.intake.rules_schema import IntakeRulesV1
+
 __all__ = [
     "AdminIdentityResponse",
+    "IntakeRuleSetResponse",
+    "IntakeRulesActivatePayload",
+    "IntakeRulesCreatePayload",
+    "ManualPaymentApprovePayload",
+    "ManualPaymentRejectPayload",
+    "ManualPaymentReviewResponse",
     "OpsCountsResponse",
     "ProviderHealthResponse",
     "RepairActionResponse",
@@ -48,6 +56,17 @@ class TenantSummaryResponse(BaseModel):
     #: ``*******78``. The console never lists a dialable number.
     owner_masked_phone: str | None
     order_count: int
+
+
+class FunnelStepResponse(BaseModel):
+    name: str
+    shops: int
+
+
+class FunnelResponse(BaseModel):
+    from_date: date = Field(serialization_alias="from")
+    to_date: date = Field(serialization_alias="to")
+    steps: list[FunnelStepResponse]
 
 
 class OpsCountsResponse(BaseModel):
@@ -158,3 +177,253 @@ class RepairResultResponse(BaseModel):
     reason: str
     admin_label: str
     created_at: datetime
+
+
+class IntakeRulesCreatePayload(BaseModel):
+    """V4 WP1.2: a new rules version. It is stored inactive."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payload: IntakeRulesV1
+    note: str | None = Field(default=None, max_length=200)
+
+
+class IntakeRulesActivatePayload(BaseModel):
+    """Every device of every shop follows the active version, so say why."""
+
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+class IntakeRuleSetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    schema_version: int
+    active: bool
+    payload: dict[str, Any]
+    created_by: str
+    note: str | None
+    created_at: datetime
+    activated_at: datetime | None
+    activated_by: str | None
+
+
+class ManualPaymentReviewResponse(BaseModel):
+    """A seller's bKash / Nagad TrxID submission (V4 WP2.5). Payer number masked."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    plan_code: str
+    months: int
+    amount_paisa: int
+    method: str
+    payer_number_masked: str
+    trx_id: str
+    state: str
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    reason: str | None = None
+    period_end: datetime | None = None
+    subscription_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class ReferralAdminResponse(BaseModel):
+    """A referral (V4 WP7.4): ids, states and dates only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    #: The referrer (the code's shop).
+    tenant_id: uuid.UUID
+    referred_tenant_id: uuid.UUID
+    state: str
+    void_reason: str | None = None
+    referred_credit_state: str
+    referrer_credit_state: str
+    referrer_hold_reason: str | None = None
+    qualifying_submission_id: uuid.UUID | None = None
+    rewarded_at: datetime | None = None
+    created_at: datetime
+
+
+class ManualPaymentApprovePayload(BaseModel):
+    note: str | None = Field(default=None, max_length=300)
+
+
+class ManualPaymentRejectPayload(BaseModel):
+    """Shown to the seller, so write it for them."""
+
+    reason: str = Field(min_length=3, max_length=400)
+
+
+class VoiceProviderConnectionView(BaseModel):
+    """The platform's voice account as the console sees it (V4 WP3.1). No secrets."""
+
+    enabled: bool
+    has_credentials: bool
+    has_callback_secret: bool
+    masked_identifier: str | None
+    caller_id: str | None
+    credentials_rotated_at: datetime | None
+    updated_at: datetime | None
+    updated_by: str
+
+
+class VoiceProviderResponse(BaseModel):
+    provider: str
+    #: ``None`` when a connection outlived its manifest (contract withdrawn).
+    manifest: dict[str, Any] | None
+    connection: VoiceProviderConnectionView | None
+    health: list[ProviderHealthResponse]
+
+
+class VoiceIntroAdminView(BaseModel):
+    """One version of a shop's call intro (V4 WP3.3). No audio, no secrets."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    state: str
+    source: str
+    shop_name: str
+    content_type: str
+    byte_size: int
+    sha256: str
+    duration_ms: int | None
+    created_by: str
+    created_at: datetime
+    previewed_at: datetime | None
+    approved_at: datetime | None
+    retired_at: datetime | None
+    retired_reason: str | None
+    #: Providers that already hold this recording (names only).
+    uploaded_to: list[str]
+
+
+class VoiceIntrosAdminResponse(BaseModel):
+    tenant_id: uuid.UUID
+    shop_name: str
+    #: What to record for the shop's current name.
+    script: str
+    versions: list[VoiceIntroAdminView]
+
+
+class VoicePackGrantPayload(BaseModel):
+    """Grant a shop a voice call pack (V4 WP3.4). ``idempotency_key`` makes a
+    retried grant return the first pack instead of granting twice."""
+
+    calls: int = Field(ge=1, le=10_000)
+    reason: str = Field(min_length=8, max_length=400)
+    idempotency_key: str = Field(min_length=8, max_length=80)
+    #: Grant against this approved bKash / Nagad payment (one pack per payment).
+    payment_submission_id: uuid.UUID | None = None
+
+
+class VoicePackView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    calls: int
+    remaining: int
+    expires_at: datetime
+    source: str
+    payment_submission_id: uuid.UUID | None
+    granted_by: str
+    reason: str
+    created_at: datetime
+
+
+class VoicePackGrantResponse(BaseModel):
+    pack: VoicePackView
+    #: ``False`` when the idempotency key had already granted this pack.
+    created: bool
+
+
+class VoiceCreditsResponse(BaseModel):
+    """What a shop can still call with. ``allowance_limit`` -1 = unlimited."""
+
+    tenant_id: uuid.UUID
+    free_launch: bool
+    has_credit: bool
+    allowance_period: str
+    allowance_limit: int
+    allowance_used: int
+    allowance_remaining: int | None
+    pack_calls_remaining: int
+    packs: list[VoicePackView]
+    #: Free Launch Mode only: today's calls against the two daily ceilings.
+    shop_today: int
+    shop_cap: int
+    global_today: int
+    global_cap: int
+
+
+class VoiceReportRow(BaseModel):
+    """One shop's IVR calls on one Asia/Dhaka day. Calls = charged (reached
+    the provider or may have). Rates in basis points of calls. ``cost_paisa``
+    is ``None`` when no call's cost is known; ``cost_estimated`` = at least
+    part of it is the manifest price, not what the provider reported."""
+
+    tenant_id: uuid.UUID
+    shop_name: str
+    day: date
+    calls: int
+    answered: int
+    confirmed: int
+    answer_rate_bps: int
+    confirm_rate_bps: int
+    cost_paisa: int | None
+    cost_per_call_paisa: int | None
+    cost_estimated: bool
+    calls_without_cost: int
+    providers: list[str]
+
+
+class VoiceReportResponse(BaseModel):
+    day_from: date
+    day_to: date
+    rows: list[VoiceReportRow]
+
+
+class SmsProviderConnectionView(BaseModel):
+    """The platform SMS gateway account as the console sees it (V4 WP7.1). No secrets."""
+
+    enabled: bool
+    has_credentials: bool
+    masked_identifier: str | None
+    sender_id: str | None
+    credentials_rotated_at: datetime | None
+    updated_at: datetime | None
+    updated_by: str
+
+
+class SmsProviderResponse(BaseModel):
+    provider: str
+    #: ``None`` when a connection outlived its manifest (contract withdrawn).
+    manifest: dict[str, Any] | None
+    connection: SmsProviderConnectionView | None
+    #: The provider's own flag (default off); both it and ``connection.enabled`` send.
+    flag_enabled: bool
+
+
+class SmsProviderUpdatePayload(BaseModel):
+    """Connect, rotate or switch. Omitted credentials keep the stored ones;
+    an empty ``sender_id`` clears it."""
+
+    credentials: dict[str, str] | None = None
+    sender_id: str | None = Field(default=None, max_length=20)
+    enabled: bool = False
+    reason: str = Field(min_length=8, max_length=400)
+
+
+class VoiceProviderUpdatePayload(BaseModel):
+    """Connect, rotate or switch. An omitted secret keeps the stored one."""
+
+    credentials: dict[str, str] | None = None
+    callback_secret: str | None = Field(default=None, min_length=16, max_length=4096)
+    caller_id: str | None = Field(default=None, max_length=20)
+    enabled: bool = False
+    reason: str = Field(min_length=8, max_length=400)

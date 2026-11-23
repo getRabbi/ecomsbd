@@ -25,6 +25,8 @@ import {
   type Step,
 } from '@/lib/automation';
 import { strings, type StringKey } from '@/lib/i18n';
+import { bookingCouriers, courierName } from '@/lib/couriers';
+import { smsText } from '@/lib/messaging-sms';
 import { useSession } from '@/lib/session';
 
 function known(key: string): key is StringKey {
@@ -330,6 +332,7 @@ function ActionConfig({
             <select className="select" value={channel} disabled={disabled} onChange={(e) => onChange({ ...step, config: { ...config, channel: e.target.value, template_key: catalog.templates.find((tp) => tp.channel === e.target.value)?.key ?? '' } })}>
               <option value="EMAIL">Email</option>
               <option value="WHATSAPP" disabled>WhatsApp — {t('int.comingSoon')}</option>
+              <option value="SMS">{smsText(labels.locale, 'sms.label')}</option>
             </select>
           </Field>
           <Field label={t('auto.cfg.template')}>
@@ -400,8 +403,8 @@ function ActionConfig({
         <>
           <Field label={t('auto.cfg.provider')}>
             <select className="select" value={String(config.provider ?? '')} disabled={disabled} onChange={(e) => set('provider', e.target.value)}>
-              {['steadfast', 'pathao', 'redx'].map((p) => (
-                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              {bookingCouriers(catalog.couriers, String(config.provider ?? '')).map((p) => (
+                <option key={p} value={p}>{courierName(p)}</option>
               ))}
             </select>
           </Field>
@@ -447,6 +450,10 @@ function ActionConfig({
       );
     case 'PUSH_STORE_STATUS':
       return <p className="card__hint">{t('auto.cfg.storeNote')}</p>;
+    case 'REQUEST_CONFIRMATION':
+      return <p className="card__hint">{t('auto.cfg.confirmNote')}</p>;
+    case 'CONVERT_DRAFT_TO_ORDER':
+      return <p className="card__hint">{t('auto.cfg.convertNote')}</p>;
     case 'SET_ORDER_LABEL':
     case 'TRIGGER_WEBHOOK':
       return text('label', t('auto.cfg.label'), 40);

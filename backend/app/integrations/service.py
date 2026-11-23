@@ -97,6 +97,24 @@ def availability(provider: str, user_id: uuid.UUID | None = None) -> dict[str, A
     return result
 
 
+async def provider_view(
+    db: AsyncSession, provider: str, tenant_id: uuid.UUID, user_id: uuid.UUID | None
+) -> dict[str, Any]:
+    """:func:`availability` plus the launch gate: ``coming_soon`` is what the
+    hub shows instead of a Connect button."""
+    from app.intake.coverage import META_PROVIDERS, launch_open
+
+    result = availability(provider, user_id)
+    if provider in META_PROVIDERS:
+        # V4 Phase 6: App Review attested, the shop's flag, a passing check.
+        opened = await launch_open(db, tenant_id, provider, available=result["available"])
+        result["coming_soon"] = not opened
+    else:
+        # The store and website paths stay behind the clients' launch gate.
+        result["coming_soon"] = True
+    return result
+
+
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -673,6 +691,9 @@ def health(conn: IntegrationConnection, open_issues: int) -> str:
         return "SETUP_INCOMPLETE"
     if conn.state in {"DISABLED", "DISCONNECTED", "AUTH_EXPIRED"}:
         return conn.state
+    if conn.provider == "DEVICE" and (conn.config or {}).get("health") == "NEEDS_ATTENTION":
+        # No heartbeat for a day (app.intake.jobs.scan_device_health).
+        return "NEEDS_ATTENTION"
     if conn.webhook_state == "FAILING":
         return "WEBHOOK_FAILING"
     if conn.sync_state == "FAILING":
@@ -841,6 +862,16 @@ async def went_live(db: AsyncSession, conn: IntegrationConnection) -> None:
     ).all()
     for row in rows:
         row.status, row.resolved_at = "RESOLVED", utc_now()
+    await refresh_meta_coverage(db, conn)
+
+
+async def refresh_meta_coverage(db: AsyncSession, conn: IntegrationConnection) -> None:
+    """V4 Phase 6: a Messenger / WhatsApp connection that starts or stops
+    delivering changes which phone apps the shop's devices skip."""
+    from app.intake.coverage import META_PROVIDERS, refresh_coverage
+
+    if conn.provider in META_PROVIDERS:
+        await refresh_coverage(db, conn.tenant_id)
 
 
 async def register_webhooks(
@@ -972,6 +1003,7 @@ async def health_check(db: AsyncSession, conn: IntegrationConnection) -> dict[st
             await record_issue(db, conn, kind="AUTH", topic="auth.check", code=exc.code)
         checks.append({"key": "AUTH", "ok": False, "code": exc.code})
     conn.config = {**conn.config, "checked_at": utc_now().isoformat()}
+    await refresh_meta_coverage(db, conn)
     return {
         "ok": all(check["ok"] for check in checks) if checks else True,
         "checks": checks,
@@ -999,6 +1031,12 @@ async def disconnect(db: AsyncSession, conn: IntegrationConnection, *, remote: b
     conn.config = {k: v for k, v in conn.config.items() if k not in {"webhook_ids", "pages"}}
     await set_source_enabled(db, conn, False)
     await cancel_runs(db, conn)
+    if conn.provider == "DEVICE":
+        # V4 WP1.1: an unlinked phone's ingest key stops working at once.
+        from app.device_links.service import revoke_connection_keys
+
+        await revoke_connection_keys(db, conn.id)
+    await refresh_meta_coverage(db, conn)
     await audit(db, AuditAction.INTEGRATION_DISCONNECTED, conn)
 
 

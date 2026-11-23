@@ -173,6 +173,56 @@ void main() {
     },
   );
 
+  for (final locale in const [Locale('en'), Locale('bn')]) {
+    testWidgets('a provider that needs a new order says why nothing was checked '
+        '(${locale.languageCode}, V4 WP0.6)', (tester) async {
+      final fake = buildFakeApi();
+      fake.adapter.onJson(
+        'GET',
+        '/customers/c1/risk-profile',
+        _profile(status: 'AVAILABLE', providers: [_section()]),
+      );
+      fake.adapter.onJson('POST', '/external-risk/customers/c1/lookup', {
+        'status': 'AVAILABLE',
+        'providers': [_section()],
+        'outcomes': [
+          {
+            'provider_id': 'bdcourier',
+            'outcome': 'SKIPPED',
+            'error_code': 'NEW_ORDER_REQUIRED',
+          },
+        ],
+      });
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          fake.client,
+          const ExternalRiskCard(customerId: 'c1'),
+          locale: locale,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.text(
+          locale.languageCode == 'bn'
+              ? 'প্রোভাইডারে দেখুন'
+              : 'Check with provider',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          locale.languageCode == 'bn'
+              ? 'দেখা হয়নি: এই প্রোভাইডার শুধু নতুন অর্ডার (গত ৩ দিনের খসড়া বা কনফার্ম) থাকা গ্রাহককে চেক করে।'
+              : 'Not checked: this provider checks only a customer with a new order (draft or confirmed, last 3 days).',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('a gated provider offers no lookup', (tester) async {
     final fake = buildFakeApi();
     fake.adapter.onJson(

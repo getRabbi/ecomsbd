@@ -297,6 +297,10 @@ async def get_optional_principal(
     if token is None:
         yield None
         return
+    if token.startswith("edk_"):
+        # V4 WP1.1: a linked device's ingest key is valid on intake routes
+        # only (``require_ingest_key``), never as a seller session.
+        raise AuthenticationError("Device keys only work on intake routes")
 
     principal = await authenticate_access_token(db, settings, token)
     user, session_row = principal.user, principal.session

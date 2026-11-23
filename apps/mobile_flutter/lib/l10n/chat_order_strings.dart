@@ -22,6 +22,7 @@ const chatOrderEn = <String, String>{
       'When a customer orders in Messenger or WhatsApp, the order appears here to review.',
   'cho.provider.MESSENGER': 'Messenger',
   'cho.provider.WHATSAPP': 'WhatsApp',
+  'cho.provider.DEVICE': 'Phone',
   'cho.newFrom': 'New order from {channel}',
   'cho.ready': 'Ready to review',
   'cho.needsInfo': 'Needs info',
@@ -31,6 +32,7 @@ const chatOrderEn = <String, String>{
   'cho.ignored': 'Ignored. The chat stays in Messenger or WhatsApp.',
   'cho.phonesToChoose': '{count} numbers — choose one',
   'cho.codEstimate': '{amount} (from your prices)',
+  'cho.codMismatch': '{amount} (differs from your prices — check)',
   'cho.missing': 'Missing: {fields}',
   'cho.field.phone': 'phone',
   'cho.field.address': 'address',
@@ -45,6 +47,12 @@ const chatOrderEn = <String, String>{
       'The numbers belong to different customers — check before confirming.',
   'cho.warn.CUSTOMER_BLOCKED': 'You blocked this customer.',
   'cho.warn.SESSION_FULL': 'A long chat — later messages were not read.',
+  'cho.warn.DUPLICATE_ORDER':
+      'This number already has an order from the last 24 hours — check it is not the same order.',
+  'cho.warn.COD_MISMATCH':
+      'The amount in the chat is far from your prices plus delivery — check the COD.',
+  'cho.warn.ZONE_UNKNOWN':
+      'Delivery area not recognised — no delivery charge was added.',
   'cho.attachment': 'The customer sent an attachment — see it in {channel}.',
   'cho.customerAmbiguous':
       'This could be one of several customers. Check the phone number.',
@@ -230,6 +238,7 @@ const chatOrderBn = <String, String>{
       'কাস্টমার Messenger বা WhatsApp-এ অর্ডার দিলে তা এখানে দেখে নিশ্চিত করতে পারবেন।',
   'cho.provider.MESSENGER': 'Messenger',
   'cho.provider.WHATSAPP': 'WhatsApp',
+  'cho.provider.DEVICE': 'ফোন',
   'cho.newFrom': '{channel} থেকে নতুন অর্ডার',
   'cho.ready': 'দেখার জন্য প্রস্তুত',
   'cho.needsInfo': 'তথ্য বাকি',
@@ -239,6 +248,7 @@ const chatOrderBn = <String, String>{
   'cho.ignored': 'বাদ দেওয়া হয়েছে। চ্যাট Messenger বা WhatsApp-এই থাকবে।',
   'cho.phonesToChoose': '{count}টি নম্বর — একটি বেছে নিন',
   'cho.codEstimate': '{amount} (আপনার দাম অনুযায়ী)',
+  'cho.codMismatch': '{amount} (আপনার দামের সাথে মেলে না — যাচাই করুন)',
   'cho.missing': 'বাকি: {fields}',
   'cho.field.phone': 'ফোন',
   'cho.field.address': 'ঠিকানা',
@@ -252,6 +262,12 @@ const chatOrderBn = <String, String>{
       'নম্বরগুলো ভিন্ন কাস্টমারের — নিশ্চিত করার আগে দেখে নিন।',
   'cho.warn.CUSTOMER_BLOCKED': 'এই কাস্টমারকে আপনি ব্লক করেছেন।',
   'cho.warn.SESSION_FULL': 'লম্বা চ্যাট — পরের মেসেজগুলো পড়া হয়নি।',
+  'cho.warn.DUPLICATE_ORDER':
+      'এই নম্বরে গত ২৪ ঘণ্টায় একটি অর্ডার আছে — একই অর্ডার কিনা দেখে নিন।',
+  'cho.warn.COD_MISMATCH':
+      'চ্যাটের টাকার অঙ্ক আপনার দাম ও ডেলিভারি চার্জ থেকে অনেক আলাদা — COD যাচাই করুন।',
+  'cho.warn.ZONE_UNKNOWN':
+      'ডেলিভারি এলাকা চেনা যায়নি — ডেলিভারি চার্জ যোগ করা হয়নি।',
   'cho.attachment': 'কাস্টমার একটি ফাইল/ছবি পাঠিয়েছেন — {channel}-এ দেখুন।',
   'cho.customerAmbiguous':
       'এটি একাধিক কাস্টমারের একজন হতে পারেন। ফোন নম্বরটি দেখে নিন।',

@@ -120,6 +120,31 @@ class OutboxTopic(StrEnum):
     EXTERNAL_RISK_LOOKUP_COMPLETED = "external_risk.lookup_completed"
     EXTERNAL_RISK_UNAVAILABLE = "external_risk.provider_unavailable"
 
+    # V4 Intake (WP1.3): a chat-order draft became ready for review, once per
+    # draft. Handled in app.intake.jobs; Phase 4 (Autopilot) builds on it.
+    INTAKE_DRAFT_READY = "intake.draft_ready"
+
+    # V4 customer confirmation (WP2.1). Handled in app.confirmations.jobs;
+    # WP2.4 makes them automation triggers.
+    CONFIRMATION_CONFIRMED = "confirmation.confirmed"
+    CONFIRMATION_CANCELLED = "confirmation.cancelled"
+    CONFIRMATION_NO_ANSWER = "confirmation.no_answer"
+    CONFIRMATION_CALLBACK_REQUESTED = "confirmation.callback_requested"
+    CONFIRMATION_REVIEW_NEEDED = "confirmation.review_needed"
+    # WP2.3: send the SMS confirm link that was just created (ids only).
+    CONFIRMATION_LINK_REQUESTED = "confirmation.link_requested"
+
+    # V4 WP2.5: an operator approved or rejected a seller's TrxID payment.
+    # Handled in app.billing.jobs (the seller's notification).
+    BILLING_MANUAL_PAYMENT_REVIEWED = "billing.manual_payment_reviewed"
+    # V4 WP7.4: a TrxID payment was approved; reward the paying shop's
+    # referral once (ids only). Handled in app.referrals.jobs.
+    REFERRAL_PAYMENT_APPROVED = "referral.payment_approved"
+
+    # V4 WP3.3: make the shop's confirmation-call intro with the TTS port, for
+    # the shop name in the payload. Handled in app.voice.jobs.
+    VOICE_INTRO_REQUESTED = "voice.intro_requested"
+
 
 class OutboxEvent(Base):
     """One durable side effect awaiting delivery.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -46,6 +47,9 @@ class ApiClient {
       headers: <String, String>{
         'accept': 'application/json',
         if (appVersion != null) 'x-app-version': appVersion,
+        // Narrows the server's billing channel: a store build is never
+        // offered an out-of-app payment (master spec §27.1, V4 WP2.5).
+        if (!Env.directBuild) 'x-distribution-channel': 'PLAY',
       },
       // Non-2xx responses are handled by the error interceptor, which turns
       // them into ApiError; Dio must not throw first.
@@ -152,6 +156,43 @@ class ApiClient {
 
   Future<Map<String, dynamic>> patch(String path, {Object? body}) =>
       _send(() => _dio.patch<dynamic>(path, data: body));
+
+  /// PUT a whole setting (V4 Phase 4: `PUT /autopilot`).
+  Future<Map<String, dynamic>> put(String path, {Object? body}) =>
+      _send(() => _dio.put<dynamic>(path, data: body));
+
+  /// GET a document the server renders as text (V4 WP0.5 invoices and
+  /// labels are HTML). Errors still arrive as the API's JSON error shape.
+  Future<String> getText(String path, {Map<String, dynamic>? query}) async {
+    final response = await _sendRaw(
+      () => _dio.get<dynamic>(
+        path,
+        queryParameters: query,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: <String, String>{'Accept': 'text/html'},
+        ),
+      ),
+    );
+    final data = response.data;
+    return data is String ? data : '';
+  }
+
+  /// POST for a rendered text document (bulk invoices and labels).
+  Future<String> postText(String path, {Object? body}) async {
+    final response = await _sendRaw(
+      () => _dio.post<dynamic>(
+        path,
+        data: body,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: <String, String>{'Accept': 'text/html'},
+        ),
+      ),
+    );
+    final data = response.data;
+    return data is String ? data : '';
+  }
 
   /// Delete a resource.
   ///
@@ -264,7 +305,15 @@ class ApiClient {
   }
 
   ApiError _translateResponse(Response<dynamic> response) {
-    final data = response.data;
+    var data = response.data;
+    // A text request (getText/postText) receives its error body unparsed.
+    if (data is String && data.startsWith('{')) {
+      try {
+        data = jsonDecode(data);
+      } on FormatException {
+        // Not JSON after all: fall through to the generic error.
+      }
+    }
     if (data is Map<String, dynamic> && data['code'] is String) {
       return ApiError.fromJson(data, statusCode: response.statusCode);
     }

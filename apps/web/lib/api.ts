@@ -59,6 +59,16 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Language for the API's own error copy. */
   locale?: string;
+  /**
+   * `html`: send `Accept: text/html` and return the body as text.
+   * `blob`: return the body as a Blob (V4 WP3.3 call-intro playback).
+   */
+  responseType?: 'json' | 'html' | 'blob';
+  /**
+   * No seller session: the customer's confirm page (V4 WP2.3) calls the API's
+   * public routes. No token is read or sent, and a 401 signs nobody out.
+   */
+  anonymous?: boolean;
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -97,16 +107,19 @@ async function parseError(response: Response): Promise<ApiError> {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = await getAccessToken();
-  if (!token) {
+  const token = options.anonymous ? null : await getAccessToken();
+  if (!token && !options.anonymous) {
     throw new ApiError(401, 'NOT_AUTHENTICATED', 'Please sign in again.');
   }
 
+  const accept = { html: 'text/html', blob: '*/*', json: 'application/json' };
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/json',
+    Accept: accept[options.responseType ?? 'json'],
     'Accept-Language': options.locale ?? 'en',
   };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -122,7 +135,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     cache: 'no-store',
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.anonymous) {
     // The session is gone or rejected. Clearing it locally stops every other
     // panel on the page from retrying with the same dead token.
     await signOutHere();
@@ -137,8 +150,23 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     return undefined as T;
   }
 
+  if (options.responseType === 'html') {
+    return (await response.text()) as T;
+  }
+  if (options.responseType === 'blob') {
+    return (await response.blob()) as T;
+  }
+
   return (await response.json()) as T;
 }
+
+/** The API's unauthenticated routes (V4 WP2.3 confirm page). Same fetch path. */
+export const publicApi = {
+  get: <T>(path: string, signal?: AbortSignal) =>
+    request<T>(path, { anonymous: true, signal }),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, { anonymous: true, method: 'POST', body }),
+};
 
 export const api = {
   get: <T>(path: string, query?: Query, signal?: AbortSignal) =>
@@ -180,6 +208,24 @@ export async function upload<T>(path: string, form: FormData, signal?: AbortSign
     throw await parseError(response);
   }
   return (await response.json()) as T;
+}
+
+/**
+ * Fetch an HTML document the API renders (V4 WP0.5 invoices and labels).
+ *
+ * Goes through {@link request} (same base URL, token and error handling) and
+ * returns the body as text instead of parsing JSON.
+ */
+export function fetchHtml(
+  path: string,
+  options: { method?: 'GET' | 'POST'; body?: unknown; query?: Query } = {},
+): Promise<string> {
+  return request<string>(path, { ...options, responseType: 'html' });
+}
+
+/** Fetch a file the API serves to play in the page (V4 WP3.3 intro audio). */
+export function fetchBlob(path: string): Promise<Blob> {
+  return request<Blob>(path, { responseType: 'blob' });
 }
 
 /**

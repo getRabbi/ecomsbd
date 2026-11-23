@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { api } from '@/lib/api';
+import { courierHistoryChip } from '@/lib/courier-history';
 import type { StringKey } from '@/lib/i18n';
 import { cellValue, when, type ProviderSection, type RiskProfile } from '@/lib/risk';
 import { useSession } from '@/lib/session';
@@ -122,6 +123,17 @@ function ProviderFacts({ section }: { section: ProviderSection }) {
       {result ? (
         <>
           <p>{result.status === 'FOUND' ? t('risk.ext.found') : t('risk.ext.notFound')}</p>
+          {result.courier_history ? (
+            <Row
+              label={t('risk.ext.history')}
+              value={
+                <Chip
+                  label={courierHistoryChip(result.courier_history, t('risk.ext.komData'), t('risk.ext.allCouriers')) ?? ''}
+                  tone={result.courier_history.state === 'OK' ? 'neutral' : 'warn'}
+                />
+              }
+            />
+          ) : null}
           {result.facts.map((fact) => (
             <Row
               key={fact.code}

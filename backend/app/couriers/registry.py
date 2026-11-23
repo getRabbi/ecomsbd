@@ -16,6 +16,9 @@ from typing import Protocol
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.couriers.adapter import CourierAdapter
+from app.couriers.carrybee.adapter import PROVIDER as CARRYBEE
+from app.couriers.carrybee.adapter import CarrybeeAdapter
+from app.couriers.carrybee.client import CarrybeeClient, CarrybeeConfig
 from app.couriers.http import HttpxProviderTransport, ProviderTransport
 from app.couriers.http import TransportTimeouts as ProviderTimeouts
 from app.couriers.pathao.adapter import PROVIDER as PATHAO
@@ -155,6 +158,25 @@ def _redx_factory(settings: Settings) -> AdapterFactory:
     return build
 
 
+def _carrybee_factory(settings: Settings) -> AdapterFactory:
+    def build() -> CourierAdapter:
+        transport: ProviderTransport = HttpxProviderTransport(
+            provider=CARRYBEE,
+            timeouts=ProviderTimeouts(
+                connect=settings.courier_connect_timeout_seconds,
+                read=settings.courier_read_timeout_seconds,
+                write=settings.courier_write_timeout_seconds,
+                pool=settings.courier_pool_timeout_seconds,
+            ),
+            max_connections=settings.courier_max_connections,
+        )
+        # Hosts from Carrybee's own reference (CONTRACT.md §1); no env override.
+        config = CarrybeeConfig(max_read_retries=settings.courier_read_retries)
+        return CarrybeeAdapter(CarrybeeClient(transport, config=config))
+
+    return build
+
+
 def build_registry(settings: Settings | None = None) -> CourierAdapterRegistry:
     resolved = settings or get_settings()
     return CourierAdapterRegistry(
@@ -162,6 +184,7 @@ def build_registry(settings: Settings | None = None) -> CourierAdapterRegistry:
             STEADFAST: _steadfast_factory(resolved),
             PATHAO: _pathao_factory(resolved),
             REDX: _redx_factory(resolved),
+            CARRYBEE: _carrybee_factory(resolved),
         }
     )
 

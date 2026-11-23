@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Any, Self
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -184,6 +187,11 @@ class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.LOCAL
     app_name: str = "ecomsbd"
     public_base_url: str = "http://localhost:8000"
+    #: V4 WP7.3: earlier API origins this deployment still serves while it
+    #: moves to a new domain (``https://api.scalemyprints.com`` during the move
+    #: to ``api.ecomsbd.com``). Old app builds, provider webhooks and courier
+    #: callbacks keep calling them; runbook ``API_DOMAIN_MIGRATION.md``.
+    public_base_url_aliases: Annotated[list[str], NoDecode] = Field(default_factory=list)
     api_v1_prefix: str = "/v1"
     debug: bool = False
 
@@ -333,6 +341,19 @@ class Settings(BaseSettings):
     #: deployed commit sha.
     sentry_release: str | None = None
 
+    # ---------------------------------------------------- ai order parse ---
+    # V4 WP0.3. Off unless the ``ai_parse_enabled`` flag is on *and* a key and
+    # model are set; without them order parsing is deterministic only.
+    ai_parse_provider: str = "anthropic"
+    ai_parse_api_key: SecretStr | None = None
+    ai_parse_model: str | None = None
+    ai_parse_timeout_seconds: float = Field(default=8.0, gt=0, le=60)
+    ai_parse_max_input_chars: int = Field(default=6000, ge=100, le=8000)
+    #: USD per million tokens, used for the ``ai_usage.cost_micro_usd``
+    #: estimate. Unset means the cost is recorded as unknown, never as zero.
+    ai_parse_price_input_per_mtok_usd: Decimal | None = Field(default=None, ge=0)
+    ai_parse_price_output_per_mtok_usd: Decimal | None = Field(default=None, ge=0)
+
     # --------------------------------------------------------------- api ---
     cors_allow_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
     #: ``Host`` headers this deployment answers to. Empty disables the check,
@@ -368,6 +389,29 @@ class Settings(BaseSettings):
     @property
     def purchases_enabled(self) -> bool:
         return self.billing_enabled and not self.free_launch_mode
+
+    @property
+    def api_hosts(self) -> list[str]:
+        """The hosts of ``PUBLIC_BASE_URL`` and every alias, primary first."""
+        hosts: list[str] = []
+        for url in (self.public_base_url, *self.public_base_url_aliases):
+            host = urlsplit(url).hostname
+            if host and host not in hosts:
+                hosts.append(host)
+        return hosts
+
+    @property
+    def effective_trusted_hosts(self) -> list[str]:
+        """The ``Host`` allow-list: ``TRUSTED_HOSTS`` plus the API's own hosts.
+
+        V4 WP7.3: during a domain move the API answers on the new host and on
+        every alias, so a forgotten ``TRUSTED_HOSTS`` entry cannot cut off old
+        app builds or provider callbacks. Empty stays empty (a proxy in front
+        checks ``Host``).
+        """
+        if not self.trusted_hosts:
+            return []
+        return [*self.trusted_hosts, *(h for h in self.api_hosts if h not in self.trusted_hosts)]
 
     # Plan pricing and entitlement values are product-validation data, not
     # technical constants (master spec section 26), so both are overridable
@@ -409,6 +453,14 @@ class Settings(BaseSettings):
     bkash_password: SecretStr | None = None
     bkash_webhook_secret: SecretStr | None = None
 
+    #: V4 WP2.5: the operator's own bKash / Nagad receiving numbers, shown to a
+    #: seller who pays by send-money and types the TrxID. JSON list, e.g.
+    #:   MANUAL_PAYMENT_ACCOUNTS='[{"method": "BKASH", "number": "01XXXXXXXXX", "label": "Personal"}]'
+    #: An entry with an unknown method or a number that is not a Bangladeshi
+    #: mobile is ignored (app.billing.manual_payments), so a typo hides that
+    #: account rather than stopping the API.
+    manual_payment_accounts: Annotated[list[Any], NoDecode] = Field(default_factory=list)
+
     # ------------------------------------------------------- integrations ---
     # Shopify public app from the Shopify Dev Dashboard. Until both are set the
     # Integrations Hub reports SHOPIFY_APP_SETUP_REQUIRED and starts no OAuth.
@@ -432,6 +484,10 @@ class Settings(BaseSettings):
     meta_whatsapp_test_user_ids: list[uuid.UUID] = Field(default_factory=list)
     # Local/test environments only. Production requires independent admin auth.
     meta_whatsapp_manual_enabled: bool = False
+    #: V4 WP6: operator attestation that Meta App Review granted the Messenger
+    #: and WhatsApp permissions. Messenger / WhatsApp leave "Coming soon" only
+    #: with this, the `meta_official_path_enabled` flag and a passing check.
+    meta_app_review_approved: bool = False
 
     # ------------------------------------------------------------- admin ---
     # Platform admin is a separate identity from any seller account. Empty by
@@ -452,6 +508,26 @@ class Settings(BaseSettings):
     push_transport: str = "disabled"
     sms_transport: str = "disabled"
     notification_max_attempts: int = 5
+
+    # -------------------------------------------------------------- voice ---
+    #: V4 Phase 3 IVR confirmation calls. ``disabled`` places nothing
+    #: (VOICE_PROVIDER_CONTRACT_REQUIRED); ``mock`` is the local/test double.
+    #: A provider value is added only with its contract-based adapter.
+    voice_transport: str = "disabled"
+    #: V4 WP3.3 text-to-speech for shop intros. ``disabled`` makes nothing
+    #: (TTS_PROVIDER_REQUIRED: the operator uploads a recording); ``fake`` is
+    #: the local/test double. A provider value comes only with its contract.
+    tts_provider: str = "disabled"
+    #: V4 WP3.3: the two platform recordings around a spoken amount ("আপনার
+    #: অর্ডারের মূল্য" … "টাকা।"), as the voice provider knows them. Used only
+    #: when the provider's manifest verifies ``dynamic_audio``; both or neither.
+    voice_amount_prefix_audio_ref: str | None = None
+    voice_amount_suffix_audio_ref: str | None = None
+    #: V4 WP3.4: Free Launch Mode gives every shop unlimited calls, so these
+    #: Asia/Dhaka daily ceilings protect the operator's provider bill: every
+    #: shop together, and one shop. Not a plan allowance; unused outside it.
+    voice_daily_global_cap: int = Field(default=300, ge=0)
+    voice_daily_shop_cap: int = Field(default=30, ge=0)
 
     # -------------------------------------------------------------- email ---
     #: TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED. Provider-neutral, like push and
@@ -638,7 +714,13 @@ class Settings(BaseSettings):
             return _DEV_SECRET_DEFAULTS[str(info.field_name)]
         return value
 
-    @field_validator("cors_allow_origins", "trusted_hosts", "admin_api_tokens", mode="before")
+    @field_validator(
+        "cors_allow_origins",
+        "trusted_hosts",
+        "admin_api_tokens",
+        "public_base_url_aliases",
+        mode="before",
+    )
     @classmethod
     def _decode_list(cls, value: Any) -> Any:
         return _parse_env_list(value)
@@ -652,6 +734,15 @@ class Settings(BaseSettings):
     @classmethod
     def _decode_mapping(cls, value: Any) -> Any:
         return _parse_env_mapping(value)
+
+    @field_validator("manual_payment_accounts", mode="before")
+    @classmethod
+    def _decode_json_list(cls, value: Any) -> Any:
+        """Blank is empty; anything else must be a JSON list."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        return json.loads(text) if text else []
 
     @field_validator("log_level")
     @classmethod
@@ -679,6 +770,33 @@ class Settings(BaseSettings):
         if lowered not in allowed:
             raise ValueError(f"transport must be one of {sorted(allowed)}")
         return lowered
+
+    @field_validator("voice_transport")
+    @classmethod
+    def _validate_voice_transport(cls, value: str) -> str:
+        allowed = {"disabled", "mock"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"VOICE_TRANSPORT must be one of {sorted(allowed)}")
+        return lowered
+
+    @field_validator("tts_provider")
+    @classmethod
+    def _validate_tts_provider(cls, value: str) -> str:
+        allowed = {"disabled", "fake"}
+        lowered = value.lower()
+        if lowered not in allowed:
+            raise ValueError(f"TTS_PROVIDER must be one of {sorted(allowed)}")
+        return lowered
+
+    @field_validator("voice_amount_prefix_audio_ref", "voice_amount_suffix_audio_ref")
+    @classmethod
+    def _validate_amount_audio_ref(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9:_./\-]{1,200}", value.strip()):
+            raise ValueError("an amount audio ref is 1-200 letters, digits or : _ . / -")
+        return value.strip()
 
     @field_validator("email_transport")
     @classmethod
@@ -777,6 +895,10 @@ class Settings(BaseSettings):
                 problems.append("SQLite is not a supported production database")
             if "*" in self.trusted_hosts:
                 problems.append("TRUSTED_HOSTS must not be '*' in production")
+            for alias in self.public_base_url_aliases:
+                if not alias.startswith("https://"):
+                    problems.append("PUBLIC_BASE_URL_ALIASES must use https in production")
+                    break
 
         # Only when OTP sign-in is actually on. A deployment with
         # PHONE_OTP_LOGIN_ENABLED=false may still name a gateway it intends to
@@ -805,6 +927,18 @@ class Settings(BaseSettings):
             problems.append("a gateway secret is required when SMS_TRANSPORT=sms_gateway")
         if self.app_env.is_deployed and "mock" in (self.push_transport, self.sms_transport):
             problems.append("mock notification transports are forbidden outside local/test")
+        if self.app_env.is_deployed and self.voice_transport == "mock":
+            # A mock "placed" call would let confirmations look answered.
+            problems.append("VOICE_TRANSPORT=mock is forbidden outside local/test")
+        if self.app_env.is_deployed and self.tts_provider == "fake":
+            # A fake intro is silence: calls would ring customers and say nothing.
+            problems.append("TTS_PROVIDER=fake is forbidden outside local/test")
+        if (self.voice_amount_prefix_audio_ref is None) != (
+            self.voice_amount_suffix_audio_ref is None
+        ):
+            problems.append(
+                "VOICE_AMOUNT_PREFIX_AUDIO_REF and VOICE_AMOUNT_SUFFIX_AUDIO_REF go together"
+            )
 
         # Admin tokens are compared in constant time but are still bearer
         # credentials: a short one is guessable, and a placeholder one is a

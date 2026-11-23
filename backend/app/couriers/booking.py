@@ -80,6 +80,8 @@ from app.couriers.models import (
 from app.customers.models import Customer
 from app.customers.service import CUSTOMER_PHONE_CONTEXT
 from app.orders.models import Order, OrderItem, OrderStatus
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 from app.products.service import StockService
 
 __all__ = [
@@ -686,6 +688,11 @@ class CourierBookingService:
             },
         )
         record_metric(CourierMetric.CREATE_SUCCESS, provider=provider)
+        await ProductEventService(self._db).core_action(
+            ProductEventName.FIRST_BOOKING,
+            tenant_id=consignment.tenant_id,
+            props={"provider": provider},
+        )
         return ItemBookingReport(
             order_id=prepared.order.id,
             consignment_id=consignment.id,

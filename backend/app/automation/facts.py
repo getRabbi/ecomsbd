@@ -30,7 +30,7 @@ from app.order_sources.models import ExternalOrder
 from app.orders.models import Order, OrderItem
 from app.products.models import Product, ProductVariant
 from app.risk_providers.models import ExternalRiskLookup
-from app.risk_providers.service import external_data_state
+from app.risk_providers.service import external_data_state, external_success_bps
 
 __all__ = ["Facts", "evaluate"]
 
@@ -223,6 +223,10 @@ class Facts:
             if self.customer_id is None:
                 return None
             return await external_data_state(self.db, self.customer_id)
+        if field == "external_success_bps":
+            if self.customer_id is None:
+                return None
+            return await external_success_bps(self.db, self.customer_id)
         if field == "external_found":
             if self.customer_id is None:
                 return None

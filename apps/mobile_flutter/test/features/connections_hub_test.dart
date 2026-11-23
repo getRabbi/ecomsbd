@@ -176,11 +176,12 @@ CommerceHarness _server({
   bool owner = true,
   bool canRetry = true,
   List<Override> extraOverrides = const <Override>[],
+  List<Map<String, dynamic>>? providers,
 }) {
   final harness = CommerceHarness(extraOverrides: extraOverrides);
   harness.adapter
     ..onJson('GET', '/integrations', <String, dynamic>{
-      'providers': _availability(),
+      'providers': providers ?? _availability(),
       'items': items,
       'can_manage': owner,
       'can_retry': canRetry,
@@ -332,6 +333,66 @@ void main() {
       expect(find.text('Connected: 0'), findsOneWidget);
       expect(find.text('Needs attention: 0'), findsOneWidget);
       expect(find.byKey(const Key('hub-attention')), findsNothing);
+      expectNoOverflow(tester);
+    });
+
+    test('only the server opens Messenger / WhatsApp; stores stay gated', () {
+      IntegrationRow row(String provider, bool? comingSoon) => IntegrationRow(
+        provider: provider,
+        state: IntegrationSetupState.canConnect,
+        serverComingSoon: comingSoon,
+      );
+      for (final provider in _launchProviders) {
+        expect(isLaunchGated(row(provider, null)), isTrue, reason: provider);
+        expect(isLaunchGated(row(provider, true)), isTrue, reason: provider);
+      }
+      expect(isLaunchGated(row('MESSENGER', false)), isFalse);
+      expect(isLaunchGated(row('WHATSAPP', false)), isFalse);
+      for (final provider in <String>[
+        'SHOPIFY',
+        'WOOCOMMERCE',
+        'CUSTOM_WEBSITE',
+      ]) {
+        expect(isLaunchGated(row(provider, false)), isTrue, reason: provider);
+      }
+      expect(isLaunchGated(row('INSTAGRAM', null)), isFalse);
+    });
+
+    testWidgets('the server gate opens Messenger alone (Phase 6)', (
+      tester,
+    ) async {
+      final providers = <Map<String, dynamic>>[
+        for (final availability in _availability())
+          <String, dynamic>{
+            ...availability,
+            'coming_soon': true,
+            if (availability['provider'] == 'MESSENGER') ...<String, dynamic>{
+              'available': true,
+              'blocker': null,
+              'coming_soon': false,
+            },
+          },
+      ];
+      final harness = _server(providers: providers);
+      await pumpCommerceScreen(
+        tester,
+        const ConnectionsScreen(),
+        harness: harness,
+        size: _tall,
+      );
+
+      expect(find.text('Coming soon'), findsNWidgets(4));
+      final messenger = find.byKey(const ValueKey('hub-provider-MESSENGER'));
+      expect(messenger, findsOneWidget);
+      expect(
+        find.descendant(of: messenger, matching: find.text('Coming soon')),
+        findsNothing,
+      );
+      final whatsapp = find.byKey(const ValueKey('hub-provider-WHATSAPP'));
+      expect(
+        find.descendant(of: whatsapp, matching: find.text('Coming soon')),
+        findsOneWidget,
+      );
       expectNoOverflow(tester);
     });
 

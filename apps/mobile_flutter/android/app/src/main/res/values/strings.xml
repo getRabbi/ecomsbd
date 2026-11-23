@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- V4 WP1.4 order auto-detect. The heads-up copy is the spec's Banglish, the
+     same in both languages; system-settings labels follow the phone language. -->
+<resources>
+    <string name="intake_listener_label">ecomsbd order detect</string>
+    <string name="intake_channel_name">Order detect</string>
+    <string name="intake_channel_description">A chat that looks like an order, with Create and Ignore.</string>
+    <string name="intake_heads_up_title" translatable="false">%1$s — order mone hocche</string>
+    <string name="intake_public_title" translatable="false">ecomsbd — order mone hocche</string>
+    <string name="intake_action_create" translatable="false">Create</string>
+    <string name="intake_action_ignore" translatable="false">Ignore</string>
+    <string name="intake_action_block" translatable="false">Ei sender ke ar na</string>
+    <!-- V4 WP1.5: the name in the system share sheet. -->
+    <string name="share_target_label">ecomsbd order</string>
+</resources>

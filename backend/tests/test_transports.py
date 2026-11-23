@@ -560,17 +560,21 @@ class TestMaintenanceJobs:
         counts = await dispatch_notifications()
         assert counts["dispatched"] >= 1
 
-        rows = (
-            (
-                await system_db.execute(
-                    sa.select(NotificationDelivery).where(
-                        NotificationDelivery.tenant_id == tenant_id
-                    )
-                )
+        async def deliveries() -> list[NotificationDelivery]:
+            result = await system_db.execute(
+                sa.select(NotificationDelivery).where(NotificationDelivery.tenant_id == tenant_id)
             )
-            .scalars()
-            .all()
-        )
+            return list(result.scalars().all())
+
+        # A pass takes a bounded batch, oldest first. A shared database (the
+        # PostgreSQL run) holds other tests' pending notifications that can fill
+        # it, so drain until this tenant's turn comes or nothing is left.
+        rows = await deliveries()
+        passes = 1
+        while not rows and counts["dispatched"] > 0 and passes < 50:
+            counts = await dispatch_notifications()
+            passes += 1
+            rows = await deliveries()
         assert rows
         assert all(row.channel == str(Channel.PUSH) for row in rows)
         # Nothing is configured, so nothing was sent — and that is recorded.

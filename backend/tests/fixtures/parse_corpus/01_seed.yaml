@@ -1,0 +1,99 @@
+# Order-parse corpus (V4 WP0.3). Each case: `text`, `expect` (graded fields;
+# a field left out is not graded) and `llm` — the extraction-tool input the
+# fake AI client returns for this text. The `llm` blocks are authored fixtures
+# in the exact tool schema, not captures from the live API; live accuracy is
+# measured by the operator with `python -m app.orders.parser.eval --live`.
+# Phones in authored cases use the 017000000xx test range.
+
+- id: seed-01
+  text: "নাম: রহিম উদ্দিন\nফোন: 01712345678\nঠিকানা: বাড়ি ১২, রোড ৫, মিরপুর ১০, ঢাকা\nকালো পাঞ্জাবি XL ২টা\nমোট: ২৪৫০ টাকা"
+  expect:
+    customer_name: রহিম উদ্দিন
+    phones: ["+8801712345678"]
+    address: "বাড়ি 12, রোড 5, মিরপুর 10, ঢাকা"
+    items: [{name: কালো পাঞ্জাবি, quantity: 2, size: XL}]
+    cod_amount_paisa: 245000
+  llm:
+    customer_name: রহিম উদ্দিন
+    phones: ["01712345678"]
+    address: "বাড়ি ১২, রোড ৫, মিরপুর ১০, ঢাকা"
+    district: Dhaka
+    thana: Mirpur
+    items: [{name: কালো পাঞ্জাবি, quantity: 2, size: XL, color: কালো, unit_price_paisa: null}]
+    cod_amount_paisa: 245000
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.95}
+
+- id: seed-02
+  text: "Rahim 01812345678 Mirpur 10 Dhaka. Black panjabi XL 2 pcs. total 2450tk"
+  expect:
+    customer_name: Rahim
+    phones: ["+8801812345678"]
+    address: Mirpur 10 Dhaka
+    items: [{name: Black panjabi, quantity: 2, size: XL}]
+    cod_amount_paisa: 245000
+  llm:
+    customer_name: Rahim
+    phones: ["01812345678"]
+    address: Mirpur 10 Dhaka
+    district: Dhaka
+    thana: Mirpur
+    items: [{name: Black panjabi, quantity: 2, size: XL, color: Black, unit_price_paisa: null}]
+    cod_amount_paisa: 245000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.85, items: 0.9, cod_amount_paisa: 0.9}
+
+- id: seed-03
+  text: "আপু আমার নাম সুমি, ০১৯১২৩৪৫৬৭৮, ঠিকানা: আগ্রাবাদ, চট্টগ্রাম। লাল থ্রিপিস M সাইজ একটা দিয়েন। ডেলিভারি চার্জ সহ কত?"
+  expect:
+    customer_name: সুমি
+    phones: ["+8801912345678"]
+    address: আগ্রাবাদ, চট্টগ্রাম
+    items: [{name: লাল থ্রিপিস, quantity: 1, size: M}]
+    cod_amount_paisa: null
+  llm:
+    customer_name: সুমি
+    phones: ["০১৯১২৩৪৫৬৭৮"]
+    address: আগ্রাবাদ, চট্টগ্রাম
+    district: Chattogram
+    thana: Double Mooring
+    items: [{name: লাল থ্রিপিস, quantity: 1, size: M, color: লাল, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: Customer asks the total including delivery charge
+    field_confidence: {customer_name: 0.9, phones: 0.99, address: 0.9, items: 0.85, cod_amount_paisa: 0.0}
+
+- id: seed-04
+  text: "name- karim\nnumber 01611223344 / 01711223344\naddress- kushtia sadar, kushtia\nproduct: watch 1 ta 1200"
+  expect:
+    customer_name: karim
+    phones: ["+8801611223344", "+8801711223344"]
+    address: kushtia sadar, kushtia
+    items: [{name: watch, quantity: 1, size: null, unit_price_paisa: 120000}]
+  llm:
+    customer_name: karim
+    phones: ["01611223344", "01711223344"]
+    address: kushtia sadar, kushtia
+    district: Kushtia
+    thana: Kushtia Sadar
+    items: [{name: watch, quantity: 1, size: null, color: null, unit_price_paisa: 120000}]
+    cod_amount_paisa: 120000
+    notes: null
+    field_confidence: {customer_name: 0.95, phones: 0.95, address: 0.95, items: 0.9, cod_amount_paisa: 0.6}
+
+- id: seed-05
+  text: "01712345678\nTangail\n2ta tshirt L"
+  expect:
+    customer_name: null
+    phones: ["+8801712345678"]
+    address: Tangail
+    items: [{name: tshirt, quantity: 2, size: L}]
+  llm:
+    customer_name: null
+    phones: ["01712345678"]
+    address: Tangail
+    district: Tangail
+    thana: null
+    items: [{name: tshirt, quantity: 2, size: L, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.4, items: 0.85, cod_amount_paisa: 0.0}

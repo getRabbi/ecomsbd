@@ -746,6 +746,14 @@ class TestPushAndWording:
             NotificationKind.SUPPLIER_PAYMENT_OVERDUE: {"count": 1, "amount_paisa": 250_000},
             NotificationKind.STOCKOUT_PREDICTED: {"count": 2, "names": ["Borka (L)", "Hijab"]},
             NotificationKind.CHAT_ORDER_READY: {"provider": "MESSENGER"},
+            NotificationKind.DEVICE_NEEDS_ATTENTION: {"platform": "android"},
+            NotificationKind.CONFIRMATION_NEEDS_ATTENTION: {"reason": "REVIEW_NEEDED"},
+            NotificationKind.CHAT_CALLBACK_REQUESTED: {"digit": "3"},
+            NotificationKind.BILLING_PAYMENT_REVIEWED: {
+                "state": "APPROVED",
+                "plan": "starter",
+                "valid_until": "2027-02-17",
+            },
         }
         assert set(samples) == set(rules.ALERT_RULES)
         for kind, params in samples.items():

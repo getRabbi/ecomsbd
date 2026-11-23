@@ -68,7 +68,7 @@ class RuleInput(Input):
 class TemplateAction(Input):
     template_key: str = Field(min_length=1, max_length=80)
     locale: Literal["en", "bn"] = "bn"
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
 
 
 class FollowupAction(Input):
@@ -98,7 +98,7 @@ class NoticeAction(Input):
 
 class CourierAction(Input):
     #: A courier connected to the shop; booked through the V2 booking service.
-    provider: Literal["steadfast", "pathao", "redx"]
+    provider: Literal["steadfast", "pathao", "redx", "carrybee"]
 
 
 class EmptyAction(Input):
@@ -159,6 +159,10 @@ CONFIGS: dict[str, type[Input]] = {
     "CREATE_TEAM_TASK": TeamTaskAction,
     "CREATE_DRAFT_PO": DraftPurchaseOrderAction,
     "HOLD_FOR_REVIEW": ReviewHoldAction,
+    # V4 WP2.4: start the customer confirmation (the WP2.2 policy decides who
+    # is called); turn a ready chat draft into an order (Autopilot, Phase 4).
+    "REQUEST_CONFIRMATION": EmptyAction,
+    "CONVERT_DRAFT_TO_ORDER": EmptyAction,
 }
 WORKFLOW_ACTIONS = tuple(CONFIGS)
 
@@ -197,6 +201,13 @@ TRIGGER_SUBJECTS: dict[str, str] = {
     "risk.repeated_rto": "order",
     "risk.external_lookup_completed": "customer",
     "risk.external_provider_unavailable": "customer",
+    # V4 WP2.4: customer confirmation and order intake. ``confirmed`` and
+    # ``cancelled`` start only when the answer moved the order.
+    "confirmation.confirmed": "order",
+    "confirmation.cancelled": "order",
+    "confirmation.no_answer": "order",
+    "confirmation.callback_requested": "order",
+    "intake.draft_ready": "draft",
 }
 WORKFLOW_TRIGGERS = tuple(TRIGGER_SUBJECTS)
 
@@ -207,6 +218,8 @@ SUBJECT_PROVIDES: dict[str, frozenset[str]] = {
     "product": frozenset({"product"}),
     "integration": frozenset({"integration"}),
     "purchase_order": frozenset({"purchase_order"}),
+    #: A chat-order draft (V4 Intake): no order or customer exists yet.
+    "draft": frozenset({"draft"}),
     "shop": frozenset(),
 }
 
@@ -226,6 +239,8 @@ ACTION_NEEDS: dict[str, str | None] = {
     "CREATE_TEAM_TASK": None,
     "CREATE_DRAFT_PO": "product",
     "HOLD_FOR_REVIEW": "order",
+    "REQUEST_CONFIRMATION": "order",
+    "CONVERT_DRAFT_TO_ORDER": "draft",
 }
 
 #: Events a run can wait for, and the subject they are matched on.
@@ -265,6 +280,9 @@ FIELDS: dict[str, tuple[str | None, str, frozenset[str]]] = {
     "risk_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "external_data_state": ("customer", "enum", frozenset({"eq", "ne", "in", "not_in"})),
     "external_found": ("customer", "bool", frozenset({"is_true", "is_false"})),
+    #: V4 WP0.6: delivered share across couriers, in basis points; unset under
+    #: the 3-parcel floor, so a condition on it never matches thin data.
+    "external_success_bps": ("customer", "int", frozenset({"gte", "lte"})),
     #: The latest published anonymous network RTO rate (rounded percent).
     "network_rto_percent": (None, "int", frozenset({"gte", "lte"})),
     #: Facts of the event itself.
@@ -423,8 +441,8 @@ class TestRunInput(PreviewInput):
 
 class RecipeInput(Input):
     locale: Literal["en", "bn"] = "bn"
-    provider: Literal["steadfast", "pathao", "redx"] | None = None
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    provider: Literal["steadfast", "pathao", "redx", "carrybee"] | None = None
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
     enable: bool = True
 
 
@@ -541,6 +559,15 @@ def _always_before(plan: dict[str, Any], target: str) -> set[str]:
     for trail in paths[1:]:
         common &= set(trail)
     return common
+
+
+def converted_before(plan: dict[str, Any], target: str) -> bool:
+    """Whether a ``CONVERT_DRAFT_TO_ORDER`` step runs before ``target`` on every
+    path (V4 Phase 4): only then may a draft-triggered step use the order."""
+    return any(
+        plan["steps"][step].get("action") == "CONVERT_DRAFT_TO_ORDER"
+        for step in _always_before(plan, target)
+    )
 
 
 def is_acyclic(plan: dict[str, Any]) -> bool:

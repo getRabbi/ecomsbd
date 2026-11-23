@@ -57,6 +57,8 @@ from app.couriers.models import (
 )
 from app.couriers.registry import CourierAdapterRegistry, get_courier_registry
 from app.db.tenancy import allow_cross_tenant
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 
 __all__ = [
     "BookableCourier",
@@ -308,6 +310,12 @@ class CourierAccountService:
             provider=account.provider,
             result=str(outcome.result),
         )
+        if outcome.is_valid:
+            await ProductEventService(self._db).core_action(
+                ProductEventName.FIRST_COURIER_CONNECTED,
+                tenant_id=account.tenant_id,
+                props={"provider": account.provider},
+            )
         return account, outcome
 
     async def disconnect(self, provider: str, *, reason: str | None = None) -> CourierAccount:
@@ -774,11 +782,13 @@ class CourierAccountService:
         # Generous bounds. The point is to refuse an obviously pasted-wrong
         # value (a whole email, an empty string) without guessing the
         # provider's key format, which no provider states.
-        for name, value in (
-            (primary_label, request.api_key),
-            (secondary_label, request.secret_key),
+        # A packed second slot (Carrybee) holds several secrets as one JSON value.
+        packed = len(spec.packed_secondary) if spec is not None else 0
+        for name, value, limit in (
+            (primary_label, request.api_key, 300),
+            (secondary_label, request.secret_key, 300 * packed + 40 if packed else 300),
         ):
-            if len(value) > 300:
+            if len(value) > limit:
                 raise ValidationError(f"That {name} is too long to be a credential")
         if request.webhook_secret and len(request.webhook_secret) > 300:
             raise ValidationError("That webhook secret is too long")

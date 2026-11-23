@@ -18,7 +18,7 @@ import { Card, Chip, ErrorState, Row } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
 import {
-  isComingSoon,
+  isComingSoonFor,
   MAX_DAYS,
   SNIPPET_LANGS,
   snippet,
@@ -69,7 +69,7 @@ function IntegrationDetail({ id }: { id: string }) {
   const conn = data?.connection;
   const manage = !!data?.can_manage;
   const reload = detail.reload;
-  const gated = !!conn && isComingSoon(conn.provider);
+  const gated = !!conn && isComingSoonFor(conn.provider, data ? [data.availability] : null);
   const working =
     !gated &&
     (!!data?.runs.some((r) => r.status === 'QUEUED' || r.status === 'RUNNING') ||

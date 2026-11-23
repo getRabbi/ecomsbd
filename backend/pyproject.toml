@@ -57,6 +57,11 @@ include = ["app*"]
 # package needs them as much as the source tree does.
 [tool.setuptools.package-data]
 "app.couriers" = ["manifests/*.yaml"]
+"app.orders" = ["data/*.yaml"]
+"app.documents" = ["fonts/*.ttf", "fonts/OFL.txt"]
+"app.payouts" = ["profiles/*.yaml"]
+"app.voice" = ["manifests/*.yaml"]
+"app.sms_providers" = ["manifests/*.yaml"]
 
 [tool.ruff]
 line-length = 100

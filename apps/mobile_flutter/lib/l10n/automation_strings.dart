@@ -73,6 +73,14 @@ const automationEn = <String, String>{
   'auto.trigger.purchase_order.overdue': 'When a purchase order is late',
   'auto.trigger.supplier_payment.due': 'When a supplier payment is overdue',
   'auto.trigger.transfer.completed': 'When stock moves between locations',
+  'auto.trigger.confirmation.confirmed': 'When the customer confirms',
+  'auto.trigger.confirmation.cancelled':
+      'When an order is cancelled at confirmation',
+  'auto.trigger.confirmation.no_answer':
+      'When a confirmation call is not answered',
+  'auto.trigger.confirmation.callback_requested':
+      'When the customer asks for a call back',
+  'auto.trigger.intake.draft_ready': 'When a chat order draft is ready',
   'auto.reason.NO_PREFERRED_SUPPLIER': 'No preferred supplier for this item',
   'auto.reason.ALREADY_ON_ORDER': 'Already on an open purchase order',
   'auto.reason.CONDITIONS_NOT_MET': 'Conditions did not match',
@@ -95,6 +103,18 @@ const automationEn = <String, String>{
   'auto.reason.NO_CONNECTED_STORE': 'Order is not from a connected store',
   'auto.reason.CANCELLED_BY_SELLER': 'Cancelled by a team member',
   'auto.reason.TRANSIENT': 'Temporary problem',
+  'auto.reason.CONFIRMATION_ENGINE_DISABLED':
+      'Customer confirmation is not on for this shop',
+  'auto.reason.ORDER_NOT_DRAFT': 'Order was already confirmed or moved on',
+  'auto.reason.ALREADY_REQUESTED': 'Confirmation was already requested',
+  'auto.reason.CONVERTED': 'Autopilot made the order',
+  'auto.reason.DRAFT_NOT_CONVERTED':
+      'Skipped: Autopilot left the chat order for you',
+  'auto.reason.AUTOPILOT_DISABLED':
+      'Autopilot is not on yet; the draft waits for you',
+  'auto.reason.CALL': 'Queued for a confirmation call',
+  'auto.reason.AUTO_CONFIRM': 'Trusted buyer: confirmed without a call',
+  'auto.reason.SELLER_REVIEW': 'Sent to you to review',
   'auto.reason.OTHER': 'Something went wrong ({code})',
 };
 
@@ -165,6 +185,11 @@ const automationBn = <String, String>{
   'auto.trigger.purchase_order.overdue': 'ক্রয় আদেশের মাল দেরি হলে',
   'auto.trigger.supplier_payment.due': 'সরবরাহকারীর পরিশোধ বকেয়া হলে',
   'auto.trigger.transfer.completed': 'এক জায়গা থেকে অন্য জায়গায় স্টক সরালে',
+  'auto.trigger.confirmation.confirmed': 'গ্রাহক অর্ডার নিশ্চিত করলে',
+  'auto.trigger.confirmation.cancelled': 'নিশ্চিতকরণে অর্ডার বাতিল হলে',
+  'auto.trigger.confirmation.no_answer': 'নিশ্চিতকরণের কল কেউ না ধরলে',
+  'auto.trigger.confirmation.callback_requested': 'গ্রাহক পরে কল করতে বললে',
+  'auto.trigger.intake.draft_ready': 'চ্যাট অর্ডারের খসড়া তৈরি হলে',
   'auto.reason.NO_PREFERRED_SUPPLIER': 'এই পণ্যের পছন্দের সরবরাহকারী নেই',
   'auto.reason.ALREADY_ON_ORDER': 'আগেই চলমান ক্রয় আদেশে আছে',
   'auto.reason.CONDITIONS_NOT_MET': 'শর্ত মেলেনি',
@@ -187,5 +212,17 @@ const automationBn = <String, String>{
   'auto.reason.NO_CONNECTED_STORE': 'অর্ডারটি যুক্ত স্টোর থেকে আসেনি',
   'auto.reason.CANCELLED_BY_SELLER': 'টিমের একজন বাতিল করেছেন',
   'auto.reason.TRANSIENT': 'সাময়িক সমস্যা',
+  'auto.reason.CONFIRMATION_ENGINE_DISABLED':
+      'এই শপে গ্রাহক নিশ্চিতকরণ চালু নেই',
+  'auto.reason.ORDER_NOT_DRAFT': 'অর্ডারটি আগেই নিশ্চিত হয়েছে বা এগিয়ে গেছে',
+  'auto.reason.ALREADY_REQUESTED': 'নিশ্চিতকরণ আগেই চাওয়া হয়েছে',
+  'auto.reason.CONVERTED': 'অটোপাইলট অর্ডারটি তৈরি করেছে',
+  'auto.reason.DRAFT_NOT_CONVERTED':
+      'বাদ: অটোপাইলট চ্যাট অর্ডারটি আপনার জন্য রেখে দিয়েছে',
+  'auto.reason.AUTOPILOT_DISABLED':
+      'অটোপাইলট এখনো চালু নয়; খসড়াটি আপনার অপেক্ষায়',
+  'auto.reason.CALL': 'নিশ্চিতকরণ কলের সারিতে রাখা হয়েছে',
+  'auto.reason.AUTO_CONFIRM': 'বিশ্বস্ত ক্রেতা: কল ছাড়াই নিশ্চিত',
+  'auto.reason.SELLER_REVIEW': 'রিভিউয়ের জন্য আপনার কাছে পাঠানো হয়েছে',
   'auto.reason.OTHER': 'সমস্যা হয়েছে ({code})',
 };

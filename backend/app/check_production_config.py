@@ -367,11 +367,18 @@ def _check_urls(settings: Settings) -> CheckResult:
             Status.MISSING,
             "TRUSTED_HOSTS is empty - only safe behind a proxy that checks the Host header",
         )
+    if settings.public_base_url in settings.public_base_url_aliases:
+        return CheckResult(
+            "URLS / CORS",
+            Status.BLOCKING,
+            "PUBLIC_BASE_URL_ALIASES repeats PUBLIC_BASE_URL - list only the earlier origins",
+        )
     return CheckResult(
         "URLS / CORS",
         Status.OK,
         f"{len(settings.cors_allow_origins)} CORS origin(s), "
-        f"{len(settings.trusted_hosts)} trusted host(s)",
+        f"{len(settings.trusted_hosts)} trusted host(s), "
+        f"{len(settings.api_hosts)} API host(s) incl. aliases",
     )
 
 

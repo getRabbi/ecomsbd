@@ -1,15 +1,15 @@
 // Paired translations keep the public, server-rendered policies in sync.
 export type PolicyLocale = 'en' | 'bn';
-export const updated = '2026-09-29';
+export const updated = '2026-11-23';
 export const policySections = [
   {
     id: 'scope',
     en: { title: '1. About this policy', paragraphs: [
-      'ecomsbd is a Bangladesh-first seller operations and commerce management platform. This Privacy Policy explains how we collect, use, store and share information through the ecomsbd Android app (com.ecomsbd.app) and the web platform at scalemyprints.com. “We”, “us” and “our” refer to the operation of ecomsbd.',
+      'ecomsbd is a Bangladesh-first seller operations and commerce management platform. This Privacy Policy explains how we collect, use, store and share information through the ecomsbd Android app (com.ecomsbd.app) and the web platform at ecomsbd.com (workspace at app.ecomsbd.com). “We”, “us” and “our” refer to the operation of ecomsbd.',
       'This policy applies to sellers, shop owners, their team members and visitors to our website. It also describes how we process information about customers and suppliers that sellers enter, import or sync into the service. Sellers are responsible for their own customer notices, permissions and lawful use of that information.'
     ] },
     bn: { title: '১. এই নীতি সম্পর্কে', paragraphs: [
-      'ecomsbd বাংলাদেশের বিক্রেতাদের জন্য তৈরি বিক্রয় কার্যক্রম ও বাণিজ্য ব্যবস্থাপনা প্ল্যাটফর্ম। ecomsbd Android অ্যাপ (com.ecomsbd.app) এবং scalemyprints.com ওয়েব প্ল্যাটফর্মের মাধ্যমে আমরা কীভাবে তথ্য সংগ্রহ, ব্যবহার, সংরক্ষণ ও শেয়ার করি, তা এই গোপনীয়তা নীতিতে বলা হয়েছে। “আমরা” ও “আমাদের” বলতে ecomsbd-এর পরিচালনাকে বোঝানো হয়েছে।',
+      'ecomsbd বাংলাদেশের বিক্রেতাদের জন্য তৈরি বিক্রয় কার্যক্রম ও বাণিজ্য ব্যবস্থাপনা প্ল্যাটফর্ম। ecomsbd Android অ্যাপ (com.ecomsbd.app) এবং ecomsbd.com ওয়েব প্ল্যাটফর্মের (ওয়ার্কস্পেস app.ecomsbd.com) মাধ্যমে আমরা কীভাবে তথ্য সংগ্রহ, ব্যবহার, সংরক্ষণ ও শেয়ার করি, তা এই গোপনীয়তা নীতিতে বলা হয়েছে। “আমরা” ও “আমাদের” বলতে ecomsbd-এর পরিচালনাকে বোঝানো হয়েছে।',
       'এই নীতি বিক্রেতা, দোকানের মালিক, তাঁদের দলের সদস্য এবং আমাদের ওয়েবসাইটের দর্শকদের জন্য প্রযোজ্য। বিক্রেতারা সেবায় যে ক্রেতা ও সরবরাহকারীর তথ্য লেখেন, আমদানি করেন বা সিঙ্ক করেন, তা কীভাবে প্রক্রিয়া করা হয়, সেটিও এতে বলা হয়েছে। ক্রেতাদের প্রয়োজনীয় নোটিশ দেওয়া, অনুমতি নেওয়া এবং সেই তথ্য আইনসম্মতভাবে ব্যবহার করার দায়িত্ব বিক্রেতার।'
     ] }
   },
@@ -95,13 +95,13 @@ export const policySections = [
     id: 'providers',
     en: { title: '8. Sharing and service providers', paragraphs: [
       'Information is available to authorised members of the relevant shop according to their roles. Restricted platform support/administration access is used for service operation and support; customer phone details are masked by default, with specially authorised, reason-recorded access for supported investigations.',
-      'Supabase provides account authentication and the hosted PostgreSQL business database. Google provides Google Sign-In when chosen, and Firebase Cloud Messaging provides push delivery. Cloudflare R2 stores private uploaded import/payout files and export files. Northflank hosts the backend API, background processing and Redis infrastructure. Vercel hosts the web application, and Cloudflare provides domain/network infrastructure. These services process the information needed for those functions, including relevant connection metadata.',
+      'Supabase provides account authentication and the hosted PostgreSQL business database. Google provides Google Sign-In when chosen, and Firebase Cloud Messaging provides push delivery. Cloudflare R2 stores private uploaded import/payout files and export files. Northflank hosts the backend API, background processing and Redis infrastructure. Cloudflare hosts the web application and provides domain/network infrastructure. These services process the information needed for those functions, including relevant connection metadata.',
       'Couriers, commerce platforms, messaging providers and seller-designated API/webhook destinations receive information only in the circumstances described in section 6. Their handling of information in their own services is also governed by their own terms and privacy policies.',
       'We do not sell personal information or share it with advertisers for advertising. Information may be disclosed where required by an applicable legal obligation or valid legal request, or as necessary to investigate abuse, protect security and resolve disputes.'
     ] },
     bn: { title: '৮. তথ্য শেয়ার ও সেবাদাতা', paragraphs: [
       'সংশ্লিষ্ট দোকানের অনুমোদিত সদস্যরা তাঁদের ভূমিকা অনুযায়ী তথ্য পান। সেবা পরিচালনা ও সহায়তার জন্য প্ল্যাটফর্মের সহায়তা/প্রশাসনিক অ্যাক্সেস সীমিত থাকে; ক্রেতার ফোন সাধারণত আংশিক আড়াল করা থাকে, এবং প্রয়োজনীয় তদন্তে বিশেষ অনুমোদন ও নথিভুক্ত কারণের ভিত্তিতে তা দেখার ব্যবস্থা আছে।',
-      'Supabase অ্যাকাউন্টের পরিচয় যাচাই এবং হোস্ট করা PostgreSQL ব্যবসায়িক ডেটাবেস সরবরাহ করে। বেছে নেওয়া হলে Google, Google Sign-In দেয় এবং Firebase Cloud Messaging পুশ পৌঁছে দেয়। Cloudflare R2 ব্যক্তিগত আপলোড করা আমদানি/পেআউট ফাইল এবং এক্সপোর্ট ফাইল রাখে। Northflank ব্যাকএন্ড API, পটভূমির কাজ ও Redis অবকাঠামো হোস্ট করে। Vercel ওয়েব অ্যাপ্লিকেশন হোস্ট করে এবং Cloudflare ডোমেইন/নেটওয়ার্ক অবকাঠামো দেয়। এসব কাজের জন্য প্রয়োজনীয় তথ্য, প্রাসঙ্গিক সংযোগের মেটাডেটাসহ, এই সেবাগুলো প্রক্রিয়া করে।',
+      'Supabase অ্যাকাউন্টের পরিচয় যাচাই এবং হোস্ট করা PostgreSQL ব্যবসায়িক ডেটাবেস সরবরাহ করে। বেছে নেওয়া হলে Google, Google Sign-In দেয় এবং Firebase Cloud Messaging পুশ পৌঁছে দেয়। Cloudflare R2 ব্যক্তিগত আপলোড করা আমদানি/পেআউট ফাইল এবং এক্সপোর্ট ফাইল রাখে। Northflank ব্যাকএন্ড API, পটভূমির কাজ ও Redis অবকাঠামো হোস্ট করে। Cloudflare ওয়েব অ্যাপ্লিকেশন হোস্ট করে এবং ডোমেইন/নেটওয়ার্ক অবকাঠামো দেয়। এসব কাজের জন্য প্রয়োজনীয় তথ্য, প্রাসঙ্গিক সংযোগের মেটাডেটাসহ, এই সেবাগুলো প্রক্রিয়া করে।',
       'কুরিয়ার, বাণিজ্য প্ল্যাটফর্ম, বার্তা সেবাদাতা এবং বিক্রেতার নির্ধারিত API/webhook গন্তব্য কেবল ৬ নম্বর অংশে বর্ণিত পরিস্থিতিতে তথ্য পায়। তাঁদের নিজস্ব সেবায় তথ্য ব্যবহারের ক্ষেত্রে তাঁদের নিজস্ব শর্ত ও গোপনীয়তা নীতিও প্রযোজ্য।',
       'আমরা ব্যক্তিগত তথ্য বিক্রি করি না বা বিজ্ঞাপনের জন্য বিজ্ঞাপনদাতাকে দিই না। প্রযোজ্য আইনি বাধ্যবাধকতা বা বৈধ আইনি অনুরোধে, অথবা অপব্যবহার তদন্ত, নিরাপত্তা রক্ষা ও বিরোধ মেটাতে প্রয়োজন হলে তথ্য প্রকাশ করা হতে পারে।'
     ] }

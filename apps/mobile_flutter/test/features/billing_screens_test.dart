@@ -1,3 +1,4 @@
+import 'package:ecomsbd/core/env.dart';
 import 'package:ecomsbd/data/account/apple_deletion_authorization.dart';
 import 'package:ecomsbd/features/billing/plans_screen.dart';
 import 'package:ecomsbd/features/settings/account_security_screen.dart';
@@ -340,6 +341,28 @@ void main() {
       expect(find.text('Kept, with names and numbers removed'), findsOneWidget);
       expect(find.textContaining('Customer names'), findsOneWidget);
       expect(find.textContaining('financial ledger'), findsOneWidget);
+    });
+
+    testWidgets('the privacy policy link names the public host', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson('GET', '/account/privacy', _privacyJson())
+        ..adapter.onJson('GET', '/exports', <Map<String, dynamic>>[]);
+      await pumpCommerceScreen(
+        tester,
+        const DataPrivacyScreen(),
+        harness: harness,
+      );
+
+      // Legal pages live on the apex, the workspace on app. (2026-11 move);
+      // the old scalemyprints.com pages are gone.
+      expect(Env.legalPagesHost, 'ecomsbd.com');
+      expect(Env.webDashboardHost, 'app.ecomsbd.com');
+      expect(
+        find.text('ecomsbd.com/privacy-policy', skipOffstage: false),
+        findsOneWidget,
+      );
     });
 
     testWidgets('closing the account needs the word typed', (tester) async {

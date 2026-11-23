@@ -48,6 +48,8 @@ from app.payouts.statements import (
     parse_statement,
     sha256_of,
 )
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 
 __all__ = ["MAX_STATEMENT_BYTES", "MAX_STATEMENT_ROWS", "PayoutService"]
 
@@ -289,6 +291,11 @@ class PayoutService:
                 "row_count": len(parsed.rows),
                 "total_paisa": parsed.total_paisa,
             },
+        )
+        await ProductEventService(self._db).core_action(
+            ProductEventName.FIRST_PAYOUT_IMPORT,
+            tenant_id=payout.tenant_id,
+            props={"provider": provider},
         )
         return payout
 

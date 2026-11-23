@@ -14,6 +14,9 @@ Master spec section 39's billing routes, completed in Phase F::
     POST /v1/billing/web/confirm
     POST /v1/billing/cancel
     POST /v1/billing/webhooks/{provider}
+    GET  /v1/billing/manual-payments/options   (V4 WP2.5)
+    GET  /v1/billing/manual-payments
+    POST /v1/billing/manual-payments
 
 Three rules are visible in the routing itself:
 
@@ -40,6 +43,7 @@ from app.api.deps import (
     EntitlementsDep,
     FeatureFlagsDep,
     ProviderRegistryDep,
+    SettingsDep,
     TenantPrincipal,
     require_permission,
 )
@@ -51,6 +55,12 @@ from app.api.v1.billing_schemas import (
     CheckoutPayload,
     CheckoutResponse,
     ConfirmCheckoutPayload,
+    ManualPaymentAccountResponse,
+    ManualPaymentOptionsResponse,
+    ManualPaymentPlanResponse,
+    ManualPaymentQuoteResponse,
+    ManualPaymentSubmissionResponse,
+    ManualPaymentSubmitPayload,
     PlayVerifyPayload,
     PurchaseResultResponse,
     RestorePurchasesPayload,
@@ -61,10 +71,21 @@ from app.api.v1.billing_schemas import (
     UsageView,
 )
 from app.api.v1.schemas import EntitlementsResponse, MoneyAmount, PlanResponse
+from app.billing.manual_payments import (
+    MAX_MONTHS,
+    MIN_MONTHS,
+    MONTH_CHOICES,
+    PAID_PLANS,
+    ManualPaymentService,
+    amount_for,
+)
 from app.billing.models import (
+    BillingPaymentSubmission,
     BillingProviderKind,
     BillingTransaction,
+    ManualPaymentState,
     SubscriptionEvent,
+    TransactionKind,
 )
 from app.billing.providers.registry import PROVIDER_FLAGS
 from app.billing.service import PurchaseOutcome
@@ -152,6 +173,7 @@ async def get_usage(principal: TenantPrincipal, entitlements: EntitlementsDep) -
 )
 async def get_subscription(
     principal: TenantPrincipal,
+    db: DbSession,
     billing: BillingServiceDep,
     entitlements: EntitlementsDep,
 ) -> SubscriptionResponse | None:
@@ -160,7 +182,27 @@ async def get_subscription(
     if subscription is None:
         return None
     snapshot = await entitlements.snapshot(tenant_id)
-    return _subscription_response(subscription, in_grace=snapshot.in_grace)
+    return _subscription_response(
+        subscription,
+        in_grace=snapshot.in_grace,
+        support_credit=await _is_support_credit(db, subscription),
+    )
+
+
+async def _is_support_credit(db: DbSession, subscription: Subscription) -> bool:
+    """A manual grant is support credit unless its latest grant was paid for."""
+    if subscription.source != str(BillingProviderKind.MANUAL_ADMIN):
+        return False
+    latest = await db.scalar(
+        sa.select(BillingTransaction.kind)
+        .where(
+            BillingTransaction.tenant_id == subscription.tenant_id,
+            BillingTransaction.provider == str(BillingProviderKind.MANUAL_ADMIN),
+        )
+        .order_by(BillingTransaction.occurred_at.desc())
+        .limit(1)
+    )
+    return latest != str(TransactionKind.PURCHASE)
 
 
 @router.get(
@@ -453,6 +495,127 @@ async def cancel_subscription(
 
 
 # --------------------------------------------------------------------------- #
+# Manual bKash / Nagad payment (V4 WP2.5)
+# --------------------------------------------------------------------------- #
+
+
+def _manual_payments(db: DbSession, settings: SettingsDep) -> ManualPaymentService:
+    return ManualPaymentService(db, settings=settings)
+
+
+ManualPaymentsDep = Annotated[ManualPaymentService, Depends(_manual_payments)]
+
+
+@router.get(
+    "/manual-payments/options",
+    response_model=ManualPaymentOptionsResponse,
+    summary="Where to send a bKash / Nagad payment, and how much",
+)
+async def manual_payment_options(
+    principal: TenantPrincipal,
+    _: BillingManager,
+    service: ManualPaymentsDep,
+    channel: DistributionChannelDep,
+) -> ManualPaymentOptionsResponse:
+    """Off unless the flag is on, Free Launch Mode is off, the build may show an
+    external payment option (never Play) and a receiving number is configured."""
+    availability = await service.availability(principal.require_tenant(), channel)
+    catalog = plan_catalog()
+    return ManualPaymentOptionsResponse(
+        available=availability.available,
+        unavailable_reason=str(availability.reason) if availability.reason else None,
+        accounts=[
+            ManualPaymentAccountResponse(**account.as_dict()) for account in availability.accounts
+        ],
+        plans=(
+            [
+                ManualPaymentPlanResponse(
+                    code=str(code),
+                    name=catalog[code].name,
+                    monthly_price=MoneyAmount(amount_paisa=catalog[code].price_paisa),
+                    amounts=[
+                        ManualPaymentQuoteResponse(
+                            months=months,
+                            amount=MoneyAmount(amount_paisa=amount_for(code, months)),
+                        )
+                        for months in MONTH_CHOICES
+                    ],
+                )
+                for code in PAID_PLANS
+            ]
+            if availability.available
+            else []
+        ),
+        min_months=MIN_MONTHS,
+        max_months=MAX_MONTHS,
+    )
+
+
+@router.get(
+    "/manual-payments",
+    response_model=list[ManualPaymentSubmissionResponse],
+    summary="This shop's bKash / Nagad payment submissions",
+)
+async def list_manual_payments(
+    principal: TenantPrincipal, _: BillingManager, service: ManualPaymentsDep
+) -> list[ManualPaymentSubmissionResponse]:
+    rows = await service.list_mine(principal.require_tenant())
+    return [manual_payment_response(row) for row in rows]
+
+
+@router.post(
+    "/manual-payments",
+    response_model=ManualPaymentSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a bKash / Nagad TrxID",
+)
+async def submit_manual_payment(
+    payload: ManualPaymentSubmitPayload,
+    response: Response,
+    principal: TenantPrincipal,
+    _: BillingManager,
+    service: ManualPaymentsDep,
+    channel: DistributionChannelDep,
+) -> ManualPaymentSubmissionResponse:
+    """Nothing is granted here: an operator checks the TrxID first.
+
+    The same TrxID sent again for the same plan returns the first submission
+    (200); a TrxID used before for anything else is refused (409
+    ``TRX_ID_ALREADY_USED``).
+    """
+    row, created = await service.submit(
+        tenant_id=principal.require_tenant(),
+        actor_id=principal.user_id,
+        channel=channel,
+        plan_code=payload.plan_code,
+        months=payload.months,
+        method=payload.method,
+        payer_number=payload.payer_number,
+        trx_id=payload.trx_id,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return manual_payment_response(row)
+
+
+def manual_payment_response(row: BillingPaymentSubmission) -> ManualPaymentSubmissionResponse:
+    return ManualPaymentSubmissionResponse(
+        id=row.id,
+        plan=row.plan_code,
+        months=row.months,
+        amount=MoneyAmount(amount_paisa=row.amount_paisa),
+        method=row.method,
+        payer_number_masked=row.payer_number_masked,
+        trx_id=row.trx_id,
+        state=row.state,
+        reason=row.reason if row.state == ManualPaymentState.REJECTED else None,
+        period_end=row.period_end,
+        reviewed_at=row.reviewed_at,
+        created_at=row.created_at,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Webhooks
 # --------------------------------------------------------------------------- #
 
@@ -519,7 +682,10 @@ def _provider_or_400(value: str | None, *, default: BillingProviderKind) -> Bill
 
 
 def _subscription_response(
-    subscription: Subscription, *, in_grace: bool | None = None
+    subscription: Subscription,
+    *,
+    in_grace: bool | None = None,
+    support_credit: bool | None = None,
 ) -> SubscriptionResponse:
     grace = (
         in_grace
@@ -543,6 +709,11 @@ def _subscription_response(
         verified_at=subscription.verified_at,
         last_synced_at=subscription.last_synced_at,
         provider_reference_suffix=reference[-4:] if reference else None,
+        support_credit=(
+            support_credit
+            if support_credit is not None
+            else subscription.source == str(BillingProviderKind.MANUAL_ADMIN)
+        ),
     )
 
 

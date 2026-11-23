@@ -82,6 +82,12 @@ class AdminPermission(StrEnum):
     BILLING_GRANT = "admin.billing_grant"
     #: Reveal a masked phone number, with a reason and an audit entry.
     PII_REVEAL = "admin.pii_reveal"
+    #: V4 WP3.1: set the platform's own provider credentials (voice). They
+    #: spend the operator's money, so SUPERADMIN only.
+    PROVIDER_CREDENTIALS_WRITE = "admin.provider_credentials_write"
+    #: V4 WP3.3: upload a shop's confirmation-call intro recording (it is
+    #: played to that shop's customers; the seller must still turn it on).
+    VOICE_AUDIO_WRITE = "admin.voice_audio_write"
 
 
 _MATRIX: dict[PlatformAdminRole, frozenset[AdminPermission]] = {
@@ -103,6 +109,7 @@ _MATRIX: dict[PlatformAdminRole, frozenset[AdminPermission]] = {
             AdminPermission.SUPPORT_BUNDLE_EXPORT,
             AdminPermission.REPAIR_RUN,
             AdminPermission.FEATURE_FLAG_WRITE,
+            AdminPermission.VOICE_AUDIO_WRITE,
         }
     ),
     PlatformAdminRole.SUPERADMIN: frozenset(AdminPermission),

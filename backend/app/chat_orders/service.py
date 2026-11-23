@@ -10,8 +10,11 @@ The flow for one message, run by the worker inside the message's shop:
 3.  read it with the same deterministic parser as the Inbox's "paste a
     message" (:class:`DeterministicOrderParser`), never a second parser;
 4.  match the items to the catalogue and the sender to a customer;
-5.  set the draft's state, and raise one notification the first time it
-    becomes ready for review.
+5.  for a draft that did not come from a Meta webhook (V4 WP1.3): when its
+    phone first appears, attach it to an open draft or a recent order for the
+    same phone instead of keeping a second candidate order;
+6.  set the draft's state, and raise one notification (and one
+    ``intake.draft_ready`` event) the first time it becomes ready for review.
 
 Nothing here creates an order. :func:`confirm` does, through
 ``OrderService.create`` (the same path as ``POST /v1/orders``) with the draft's
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -38,9 +42,11 @@ from app.chat_orders import capture, matching
 from app.chat_orders.models import (
     COLLECTING,
     CONFIRMED,
+    DEVICE,
     EXPIRED,
     FINAL_STATES,
     IGNORED,
+    META_WEBHOOK,
     NEEDS_INFO,
     OPEN_STATES,
     READY_FOR_REVIEW,
@@ -50,15 +56,19 @@ from app.chat_orders.models import (
     ChatOrderDraft,
 )
 from app.common.audit import AuditAction, record_audit
+from app.common.feature_flags import FeatureFlagService, FlagKey
 from app.common.phone import try_normalize_bd_phone
 from app.core.clock import utc_now
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.customers.models import Customer
 from app.customers.service import CustomerService
+from app.delivery_rules.service import DeliveryRulesService
 from app.integrations.models import IntegrationConnection
+from app.orders.cod import CodLine, calculate_cod, is_chat_mismatch
 from app.orders.models import Order, OrderChannel, OrderStatus
 from app.orders.parser import DeterministicOrderParser, ParsedOrder
 from app.orders.parser.base import CONFIDENCE_CONFIRM_THRESHOLD
+from app.orders.zones import resolve_zone
 
 #: Messages further apart than this start a new order session.
 SESSION_WINDOW = timedelta(minutes=25)
@@ -79,6 +89,11 @@ CLOSED_DRAFT_RETENTION = timedelta(days=30)
 FOLLOW_UP_WINDOW = timedelta(days=30)
 MAX_ATTEMPTS = 5
 REQUIRED = ("phone", "address", "items")
+#: A draft whose phone has an order this recent is about that order.
+DUPLICATE_ORDER_WINDOW = timedelta(hours=24)
+#: Apps whose conversations are WhatsApp chats (for the order's channel).
+_WHATSAPP_APPS = frozenset({"com.whatsapp", "com.whatsapp.w4b"})
+_MESSENGER_APPS = frozenset({"com.facebook.orca"})
 
 _parser = DeterministicOrderParser()
 
@@ -211,6 +226,7 @@ async def process_message(db: AsyncSession, message_id: uuid.UUID) -> str:
             connection_id=conn.id,
             identity_id=identity.id,
             provider=message.provider,
+            capture_source=message.capture_source,
             status=COLLECTING,
             customer_match="NONE",
             customer_candidates=[],
@@ -240,9 +256,54 @@ async def process_message(db: AsyncSession, message_id: uuid.UUID) -> str:
     if message.message_type != "TEXT":
         draft.attachment_count += max(1, message.attachment_count)
     await db.flush()
-    await rebuild(db, draft, identity)
+    # A draft another sender's messages were merged into is read as its own
+    # sender's; for Meta the owner is always this message's sender.
+    owner = identity
+    if draft.identity_id != identity.id:
+        owner = await db.get(ChatIdentity, draft.identity_id) or identity
+    phone_before = draft.selected_phone
+    await rebuild(db, draft, owner)
     message.processing_status = "PROCESSED"
+    draft = await _settle(db, draft, phone_before)
+    message.linked_draft_id = draft.id
     return draft.status
+
+
+async def _settle(
+    db: AsyncSession, draft: ChatOrderDraft, phone_before: str | None
+) -> ChatOrderDraft:
+    """After a rebuild: duplicate merge when the phone changed, then announce."""
+    if (
+        draft.capture_source != META_WEBHOOK
+        and draft.selected_phone
+        and draft.selected_phone != phone_before
+    ):
+        draft = await _attach_duplicate(db, draft)
+    await _announce_if_ready(db, draft)
+    return draft
+
+
+async def reparse(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    read: Callable[[str], Awaitable[ParsedOrder]],
+) -> ChatOrderDraft:
+    """Read an open phone, share or paste draft once more with ``read`` (V4 WP1.5).
+
+    The quick-order sheet's route passes the enhanced parser (the LLM path,
+    ``ai_parse_enabled``), which only fills fields into the strict schema
+    (rule L12). Meta drafts keep the deterministic parser. Returns the draft
+    the messages now belong to (a duplicate merge may move them).
+    """
+    if draft.capture_source == META_WEBHOOK or draft.status not in OPEN_STATES:
+        return draft
+    owner = await db.get(ChatIdentity, draft.identity_id)
+    if owner is None:
+        return draft
+    parsed = await read(await transcript(db, draft))
+    phone_before = draft.selected_phone
+    await rebuild(db, draft, owner, parsed=parsed)
+    return await _settle(db, draft, phone_before)
 
 
 async def _link_whatsapp_sender(db: AsyncSession, identity: ChatIdentity) -> None:
@@ -266,13 +327,18 @@ async def _link_whatsapp_sender(db: AsyncSession, identity: ChatIdentity) -> Non
 async def _open_session(
     db: AsyncSession, identity: ChatIdentity, at: datetime
 ) -> ChatOrderDraft | None:
+    mine: Any = ChatOrderDraft.identity_id == identity.id
+    if identity.provider == DEVICE:
+        # A device conversation merged into another sender's draft keeps
+        # adding to it (duplicate merge, V4 WP1.3). Meta drafts never move.
+        held = sa.select(ChatMessage.linked_draft_id).where(
+            ChatMessage.identity_id == identity.id, ChatMessage.linked_draft_id.is_not(None)
+        )
+        mine = sa.or_(mine, ChatOrderDraft.id.in_(held))
     drafts = (
         await db.scalars(
             sa.select(ChatOrderDraft)
-            .where(
-                ChatOrderDraft.identity_id == identity.id,
-                ChatOrderDraft.status.in_(OPEN_STATES),
-            )
+            .where(mine, ChatOrderDraft.status.in_(OPEN_STATES))
             .order_by(ChatOrderDraft.last_message_at.desc())
             .with_for_update()
         )
@@ -341,10 +407,19 @@ async def transcript(db: AsyncSession, draft: ChatOrderDraft) -> str:
     return joined[:MAX_TRANSCRIPT_CHARS]
 
 
-async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentity) -> None:
-    """Re-read the whole session and refresh every machine-filled field."""
-    text = await transcript(db, draft)
-    parsed = _parser.parse(text)
+async def rebuild(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    identity: ChatIdentity,
+    *,
+    parsed: ParsedOrder | None = None,
+) -> None:
+    """Re-read the whole session and refresh every machine-filled field.
+
+    ``parsed`` is the session already read by another parser (:func:`reparse`).
+    """
+    if parsed is None:
+        parsed = _parser.parse(await transcript(db, draft))
     warnings: set[str] = set()
 
     sender_phone: str | None = None
@@ -385,12 +460,20 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
         if parsed.confidence.get(key, 0.0) < CONFIDENCE_CONFIRM_THRESHOLD
         and _present(parsed, field)
     }
+    # The enhanced parser's own flags: a label the model read differently, an
+    # address filled from the customer's last order.
+    uncertain.update(
+        field
+        for field in parsed.uncertain_fields
+        if field in ("name", "phone", "address", "items", "amount")
+    )
     if parsed.needs_phone_selection:
         uncertain.add("phone")
         warnings.add("MULTIPLE_PHONES")
     if draft.customer_name and not parsed.customer_name:
         uncertain.add("name")
-    if draft.cod_source == "CATALOG":
+    await _apply_delivery_rules(db, draft, parsed, uncertain, warnings)
+    if draft.cod_source in ("CATALOG", "CHAT_MISMATCH"):
         uncertain.add("amount")
     for item in draft.items:
         status = (item.get("match") or {}).get("status")
@@ -407,6 +490,8 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
         warnings.add("ATTACHMENT")
     if draft.message_count >= MAX_SESSION_MESSAGES:
         warnings.add("SESSION_FULL")
+    if draft.duplicate_of_order_id is not None:
+        warnings.add("DUPLICATE_ORDER")
 
     await _match_customer(db, draft, identity, phones, sender_phone)
     if draft.customer_match == "AMBIGUOUS":
@@ -441,8 +526,6 @@ async def rebuild(db: AsyncSession, draft: ChatOrderDraft, identity: ChatIdentit
     draft.status = after
     if after == READY_FOR_REVIEW and draft.ready_at is None:
         draft.ready_at = utc_now()
-    if after == READY_FOR_REVIEW and draft.notified_at is None:
-        await _announce(db, draft)
     await db.flush()
 
 
@@ -454,6 +537,49 @@ def _present(parsed: ParsedOrder, field: str) -> bool:
         "items": bool(parsed.items),
         "amount": parsed.cod_amount_paisa is not None,
     }[field]
+
+
+async def _apply_delivery_rules(
+    db: AsyncSession,
+    draft: ChatOrderDraft,
+    parsed: ParsedOrder,
+    uncertain: set[str],
+    warnings: set[str],
+) -> None:
+    """Zone-aware COD (V4 WP0.4), only with the flag on and rules saved.
+
+    A catalogue COD gets the zone charge added. A COD stated in chat is never
+    replaced: when it is further from the calculation than the zone charge, it
+    is marked ``CHAT_MISMATCH`` for the seller to resolve.
+    """
+    if not await FeatureFlagService(db).is_enabled(
+        FlagKey.DELIVERY_RULES_ENABLED, tenant_id=draft.tenant_id
+    ):
+        return
+    rules = await DeliveryRulesService(db).get(draft.tenant_id)
+    if not rules.configured:
+        return
+    zone = resolve_zone(parsed.address, parsed.district)
+    if zone is None:
+        if parsed.address:
+            warnings.add("ZONE_UNKNOWN")
+        return
+    charge = rules.zone_charge(zone) or 0
+    lines = []
+    for item in draft.items:
+        price = (item.get("match") or {}).get("unit_price_paisa")
+        if not isinstance(price, int):
+            return
+        lines.append(CodLine(unit_price_paisa=price, quantity=int(item.get("quantity") or 1)))
+    calculated = calculate_cod(lines, zone_charge_paisa=charge)
+    if calculated is None:
+        return
+    if draft.cod_source == "PARSED" and draft.cod_amount_paisa is not None:
+        if is_chat_mismatch(draft.cod_amount_paisa, calculated, zone_charge_paisa=charge):
+            draft.cod_source = "CHAT_MISMATCH"
+            warnings.add("COD_MISMATCH")
+        return
+    draft.cod_amount_paisa, draft.cod_source = calculated, "CATALOG"
 
 
 def _catalogue_total(items: list[dict[str, Any]]) -> int | None:
@@ -494,6 +620,109 @@ async def _match_customer(
     draft.customer_candidates = [str(only)]
     sender_owned = sender_phone is not None and found.get(only) == sender_phone
     draft.customer_match = "MATCHED" if only == linked or sender_owned else "SUGGESTED"
+
+
+async def _recent_order(db: AsyncSession, phone: str) -> uuid.UUID | None:
+    customer = await _customers(db).find_by_phone(phone)
+    if customer is None:
+        return None
+    return await db.scalar(
+        sa.select(Order.id)
+        .where(
+            Order.customer_id == customer.id,
+            Order.deleted_at.is_(None),
+            Order.created_at >= utc_now() - DUPLICATE_ORDER_WINDOW,
+            Order.status != str(OrderStatus.CANCELLED),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+
+
+async def _attach_duplicate(db: AsyncSession, draft: ChatOrderDraft) -> ChatOrderDraft:
+    """Duplicate merge (V4 WP1.3) for a draft whose phone just appeared.
+
+    *   an open draft with the same phone: this one is merged into it (its
+        messages move over) and the merged draft is returned;
+    *   else an order for that phone made in the last 24 hours: the draft is
+        linked to it (``DUPLICATE_ORDER``) and is never announced as new.
+
+    A draft the seller was already told about is not merged away. Nothing is
+    closed or confirmed here.
+    """
+    phone = draft.selected_phone
+    if phone is None:
+        return draft
+    if draft.notified_at is None:
+        other = await db.scalar(
+            sa.select(ChatOrderDraft)
+            .where(
+                ChatOrderDraft.id != draft.id,
+                ChatOrderDraft.status.in_(OPEN_STATES),
+                ChatOrderDraft.selected_phone == phone,
+            )
+            .order_by(ChatOrderDraft.first_message_at, ChatOrderDraft.id)
+            .limit(1)
+            .with_for_update()
+        )
+        if other is not None:
+            await _merge(db, draft, other)
+            return other
+    draft.duplicate_of_order_id = await _recent_order(db, phone)
+    warnings = set(draft.warnings) - {"DUPLICATE_ORDER"}
+    if draft.duplicate_of_order_id is not None:
+        warnings.add("DUPLICATE_ORDER")
+    draft.warnings = sorted(warnings)
+    await db.flush()
+    return draft
+
+
+async def _merge(db: AsyncSession, draft: ChatOrderDraft, target: ChatOrderDraft) -> None:
+    rows = (
+        await db.scalars(sa.select(ChatMessage).where(ChatMessage.linked_draft_id == draft.id))
+    ).all()
+    for row in rows:
+        row.linked_draft_id = target.id
+    known = set(target.source_message_ids)
+    target.source_message_ids = [
+        *target.source_message_ids,
+        *(mid for mid in draft.source_message_ids if mid not in known),
+    ]
+    target.message_count += draft.message_count
+    target.attachment_count += draft.attachment_count
+    target.first_message_at = min(target.first_message_at, draft.first_message_at)
+    target.last_message_at = max(target.last_message_at, draft.last_message_at)
+    await db.delete(draft)
+    await db.flush()
+    owner = await db.get(ChatIdentity, target.identity_id)
+    if owner is not None:
+        await rebuild(db, target, owner)
+
+
+async def _announce_if_ready(db: AsyncSession, draft: ChatOrderDraft) -> None:
+    """The first time a draft is ready: one push and one ``intake.draft_ready``.
+
+    A draft about an order made in the last 24 hours is never announced.
+    """
+    if draft.status != READY_FOR_REVIEW or draft.notified_at is not None:
+        return
+    if draft.duplicate_of_order_id is not None:
+        return
+    from app.common.outbox import OutboxTopic, enqueue
+
+    await _announce(db, draft)
+    await enqueue(
+        db,
+        OutboxTopic.INTAKE_DRAFT_READY,
+        {
+            "draft_id": str(draft.id),
+            "connection_id": str(draft.connection_id),
+            "provider": draft.provider,
+            "capture_source": draft.capture_source,
+        },
+        tenant_id=draft.tenant_id,
+        dedupe_key=f"intake.draft_ready:{draft.id}",
+    )
 
 
 async def _announce(db: AsyncSession, draft: ChatOrderDraft) -> None:
@@ -547,6 +776,24 @@ async def ignore(db: AsyncSession, draft: ChatOrderDraft, actor_id: uuid.UUID) -
     await db.flush()
 
 
+def order_channel(draft: ChatOrderDraft, identity: ChatIdentity | None) -> OrderChannel:
+    """The order's channel: the Meta provider, or the app a device read it in.
+
+    A shared or pasted message, or an app that carries more than one kind of
+    chat (Business Suite), is a parsed message: ``PASTE_PARSE``.
+    """
+    if draft.provider == "WHATSAPP":
+        return OrderChannel.WHATSAPP
+    if draft.provider != DEVICE:
+        return OrderChannel.MESSENGER
+    app = identity.account_ref if identity is not None else ""
+    if app in _WHATSAPP_APPS:
+        return OrderChannel.WHATSAPP
+    if app in _MESSENGER_APPS:
+        return OrderChannel.MESSENGER
+    return OrderChannel.PASTE_PARSE
+
+
 @dataclass
 class Confirmed:
     order: Order
@@ -579,13 +826,14 @@ async def confirm(
     draft: ChatOrderDraft,
     payload: Any,
     orders: Any,
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
 ) -> Confirmed:
     """Create the order through the canonical order service, exactly once.
 
     ``draft`` must be locked by the caller. A confirmed draft returns its
     order; the draft id is the order's ``client_id``, so even two requests
-    racing past the lock end at the same order.
+    racing past the lock end at the same order. ``actor_id`` is ``None`` for
+    Autopilot (Phase 4): the system made the order from the draft as it stood.
     """
     from app.orders.service import OrderDraft, OrderItemDraft
 
@@ -599,6 +847,7 @@ async def confirm(
             details={"code": "DRAFT_CLOSED"},
         )
     _check_items(draft, payload.items)
+    owner = await db.get(ChatIdentity, draft.identity_id)
     order, duplicates = await orders.create(
         OrderDraft(
             phone=payload.phone,
@@ -626,12 +875,18 @@ async def confirm(
             # The chat itself is not copied onto the order: raw messages have
             # their own, shorter retention.
             source_text=None,
-            channel=OrderChannel.WHATSAPP
-            if draft.provider == "WHATSAPP"
-            else OrderChannel.MESSENGER,
+            channel=order_channel(draft, owner),
             client_id=draft.id,
         )
     )
+    await _mark_confirmed(db, draft, order, actor_id)
+    return Confirmed(order=order, duplicates=duplicates, replayed=False)
+
+
+async def _mark_confirmed(
+    db: AsyncSession, draft: ChatOrderDraft, order: Order, actor_id: uuid.UUID | None
+) -> None:
+    """Close ``draft`` (locked) as confirmed by ``order``."""
     draft.status, draft.confirmed_order_id = CONFIRMED, order.id
     draft.closed_at, draft.closed_by = utc_now(), actor_id
     draft.customer_id = order.customer_id
@@ -643,10 +898,10 @@ async def confirm(
         identity.customer_id = order.customer_id
         identity.customer_link_source = "CONFIRMED_ORDER"
         identity.customer_linked_at = utc_now()
-    order.metadata_json = {
-        **(order.metadata_json or {}),
-        "chat": {"provider": draft.provider, "draft_id": str(draft.id)},
-    }
+    chat: dict[str, Any] = {"provider": draft.provider, "draft_id": str(draft.id)}
+    if draft.capture_source != META_WEBHOOK:
+        chat["capture_source"] = draft.capture_source
+    order.metadata_json = {**(order.metadata_json or {}), "chat": chat}
     await record_audit(
         db,
         AuditAction.CHAT_ORDER_CONFIRMED,
@@ -655,7 +910,31 @@ async def confirm(
         context={"provider": draft.provider, "order_id": str(order.id)},
     )
     await db.flush()
-    return Confirmed(order=order, duplicates=duplicates, replayed=False)
+
+
+async def offline_draft(db: AsyncSession, client_id: uuid.UUID) -> ChatOrderDraft | None:
+    """The open draft an offline order create was queued for (V4 WP1.5), locked.
+
+    The quick-order sheet queues a create with the draft id as its client id,
+    the same id confirming the draft online uses, so the queued create and a
+    later confirm can only ever make one order.
+    """
+    draft = await db.scalar(
+        sa.select(ChatOrderDraft).where(ChatOrderDraft.id == client_id).with_for_update()
+    )
+    return draft if draft is not None and draft.status in OPEN_STATES else None
+
+
+async def offline_channel(db: AsyncSession, draft: ChatOrderDraft) -> OrderChannel:
+    return order_channel(draft, await db.get(ChatIdentity, draft.identity_id))
+
+
+async def adopt_offline_order(
+    db: AsyncSession, draft: ChatOrderDraft, order: Order, actor_id: uuid.UUID | None
+) -> None:
+    """The queued create reached the server: close its draft as confirmed."""
+    if draft.status in OPEN_STATES and order.client_id == draft.id:
+        await _mark_confirmed(db, draft, order, actor_id)
 
 
 async def resolve_attention(
@@ -684,6 +963,10 @@ def draft_view(
     return {
         "id": draft.id,
         "provider": draft.provider,
+        "capture_source": draft.capture_source,
+        # The app a device read it in (None for Meta).
+        "source_app": identity.account_ref if identity and draft.provider == DEVICE else None,
+        "duplicate_of_order_id": draft.duplicate_of_order_id,
         "status": draft.status,
         "connection_id": draft.connection_id,
         "channel_name": connection.account_name if connection else None,
@@ -790,10 +1073,26 @@ async def purge_expired_data(db: AsyncSession, now: datetime | None = None) -> d
         )
         .execution_options(synchronize_session=False)
     )
+    # V4 WP1.3: a device "sender" is a conversation title the phone showed (or
+    # a one-off share). Once nothing of it is left, it goes too.
+    cutoff = moment - MESSAGE_RETENTION
+    identities = await db.execute(
+        sa.delete(ChatIdentity)
+        .where(
+            ChatIdentity.provider == DEVICE,
+            ChatIdentity.created_at < cutoff,
+            sa.or_(ChatIdentity.last_message_at.is_(None), ChatIdentity.last_message_at < cutoff),
+            ~sa.exists().where(ChatMessage.identity_id == ChatIdentity.id),
+            ~sa.exists().where(ChatOrderDraft.identity_id == ChatIdentity.id),
+            ~sa.exists().where(ChatAttention.identity_id == ChatIdentity.id),
+        )
+        .execution_options(synchronize_session=False)
+    )
     return {
         "messages": int(getattr(messages, "rowcount", 0) or 0),
         "attention": int(getattr(attention, "rowcount", 0) or 0),
         "drafts": int(getattr(drafts, "rowcount", 0) or 0),
+        "identities": int(getattr(identities, "rowcount", 0) or 0),
     }
 
 

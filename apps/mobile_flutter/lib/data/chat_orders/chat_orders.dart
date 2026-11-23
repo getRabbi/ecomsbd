@@ -157,6 +157,9 @@ class ChatDraft {
     this.messageCount = 0,
     this.attachmentCount = 0,
     this.confirmedOrderId,
+    this.captureSource,
+    this.sourceApp,
+    this.duplicateOfOrderId,
   });
 
   factory ChatDraft.fromJson(Map<String, dynamic> json) {
@@ -197,6 +200,9 @@ class ChatDraft {
           DateTime.tryParse('${json['last_message_at']}')?.toUtc() ??
           DateTime.now().toUtc(),
       confirmedOrderId: json['confirmed_order_id'] as String?,
+      captureSource: json['capture_source'] as String?,
+      sourceApp: json['source_app'] as String?,
+      duplicateOfOrderId: json['duplicate_of_order_id'] as String?,
     );
   }
 
@@ -219,7 +225,9 @@ class ChatDraft {
   final List<ChatDraftItem> items;
   final int? codAmountPaisa;
 
-  /// PARSED (the customer wrote it) or CATALOG (price x quantity).
+  /// PARSED (the customer wrote it), CATALOG (price x quantity, plus the zone
+  /// charge when delivery rules are on) or CHAT_MISMATCH (written, but far from
+  /// the calculation).
   final String? codSource;
   final String? notes;
   final List<String> warnings;
@@ -229,6 +237,15 @@ class ChatDraft {
   final int attachmentCount;
   final DateTime lastMessageAt;
   final String? confirmedOrderId;
+
+  /// META_WEBHOOK, DEVICE_NOTIFICATION, SHARE, PASTE or EXTENSION.
+  final String? captureSource;
+
+  /// The app a phone read the chat in (`paste`/`share` for those; null for Meta).
+  final String? sourceApp;
+
+  /// An order for the same phone made in the last 24 hours.
+  final String? duplicateOfOrderId;
 
   bool get isReady => status == 'READY_FOR_REVIEW';
   bool get isOpen =>
@@ -268,6 +285,44 @@ class ChatDraft {
     needsPhoneSelection: phones.length > 1 && selectedPhone == null,
     isLowConfidence: false,
   );
+}
+
+/// The courier the quick-order sheet suggests (V4 WP1.5). Display only:
+/// saving an order never contacts a courier.
+@immutable
+class CourierSuggestion {
+  const CourierSuggestion({
+    required this.courier,
+    required this.source,
+    this.zone,
+    this.delivered,
+    this.parcels,
+  });
+
+  static CourierSuggestion? fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final courier = json['courier'];
+    if (courier is! String || courier.isEmpty) return null;
+    return CourierSuggestion(
+      courier: courier,
+      source: json['source'] as String? ?? 'SHOP_DEFAULT',
+      zone: json['zone'] as String?,
+      delivered: json['delivered'] as int?,
+      parcels: json['parcels'] as int?,
+    );
+  }
+
+  /// A courier key: `steadfast`, `pathao`, `redx`, ...
+  final String courier;
+
+  /// SHOP_DEFAULT (the shop's delivery rules) or HISTORY (the shop's own
+  /// delivered rate in [zone]).
+  final String source;
+  final String? zone;
+  final int? delivered;
+  final int? parcels;
+
+  bool get fromHistory => source == 'HISTORY';
 }
 
 @immutable

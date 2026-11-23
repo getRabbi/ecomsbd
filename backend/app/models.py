@@ -10,15 +10,27 @@ and the test suite all import this module rather than individual model files.
 
 from __future__ import annotations
 
+import app.ai_usage.models
 import app.analytics.network_models
 import app.automation.models
+import app.autopilot.models
 import app.chat_orders.models
+import app.confirmations.models
+import app.delivery_rules.models
+import app.device_links.models
+import app.forecasting.models
+import app.intake.models
 import app.integrations.models
 import app.integrations.sync_models
 import app.messaging.models
 import app.order_sources.models
+import app.procurement.models
+import app.product_events.models
 import app.public_api.models
-import app.risk_providers.models  # noqa: F401
+import app.referrals.models
+import app.risk_providers.models
+import app.sms_providers.models
+import app.voice.models  # noqa: F401
 from app.admin.models import PlatformAdmin, RepairActionRecord, SupportCase
 from app.auth.identities import AuthIdentity, AuthToken
 from app.auth.models import AuthSession, Device, OtpChallenge, RefreshToken

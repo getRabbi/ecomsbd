@@ -26,8 +26,9 @@ from app.common.audit import AuditAction, record_audit
 from app.common.outbox import OutboxTopic, enqueue
 from app.common.pagination import Cursor, apply_cursor
 from app.common.phone import normalize_digits, try_normalize_bd_phone
+from app.confirmations.service import ConfirmationService
 from app.core.clock import business_date as business_date_for
-from app.core.context import current_context, current_tenant_id
+from app.core.context import ActorType, current_context, current_tenant_id
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.ids import new_id
 from app.customers.models import Customer
@@ -48,10 +49,28 @@ from app.orders.numbering import (
     allocate_order_number,
     parse_order_number,
 )
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 from app.products.models import Product, ProductVariant
 from app.products.service import StockService
 
 __all__ = ["OrderDraft", "OrderItemDraft", "OrderService"]
+
+
+def _items_signature(items: list[OrderItem]) -> list[tuple[object, ...]]:
+    """What the customer is agreeing to, line by line (for confirmations)."""
+    return [
+        (
+            item.product_id,
+            item.variant_id,
+            item.product_name,
+            item.variant_label,
+            item.quantity,
+            item.unit_price_paisa,
+            item.discount_paisa,
+        )
+        for item in items
+    ]
 
 
 @dataclass(slots=True)
@@ -219,6 +238,9 @@ class OrderService:
             {"order_id": str(order.id), "order_number": order.order_number},
         )
         await self._db.flush()
+        await ProductEventService(self._db).core_action(
+            ProductEventName.FIRST_ORDER, tenant_id=order.tenant_id
+        )
         return order, duplicates
 
     async def _insert_with_number(
@@ -449,10 +471,13 @@ class OrderService:
             )
 
         changed: list[str] = []
+        items_changed = False
 
         if items is not None:
+            before = _items_signature(order.items)
             order.items = await self._build_items(items)
             order.subtotal_paisa = sum(item.line_total_paisa for item in order.items)
+            items_changed = _items_signature(order.items) != before
             changed.append("items")
         if discount_paisa is not None:
             order.discount_paisa = discount_paisa
@@ -496,8 +521,14 @@ class OrderService:
                 OutboxTopic.ORDER_UPDATED,
                 {"order_id": str(order.id), "changed": sorted(changed)},
             )
+            # A material edit means the customer has not agreed to this order
+            # yet: the open confirmation is superseded and a new one starts.
+            await self._confirmations().on_order_edited(order, items_changed=items_changed)
         await self._db.flush()
         return order
+
+    def _confirmations(self) -> ConfirmationService:
+        return ConfirmationService(self._db, orders=self)
 
     async def transition(
         self,
@@ -505,8 +536,15 @@ class OrderService:
         target: OrderStatus,
         *,
         reason: str | None = None,
+        actor_type: ActorType | None = None,
+        actor_id: uuid.UUID | None = None,
+        actor_label: str | None = None,
     ) -> Order:
-        """Move an order to a new status, rejecting illegal jumps."""
+        """Move an order to a new status, rejecting illegal jumps.
+
+        ``actor_*`` name who moved it when that is not the request's user — the
+        customer's own confirmation records ``system:customer_confirmation``.
+        """
         order = await self.get(order_id)
         current = order.order_status
 
@@ -530,7 +568,10 @@ class OrderService:
             entity_type="order",
             entity_id=order.id,
             reason=reason,
-            context={"from": str(current), "to": str(target)},
+            context={"from": str(current), "to": str(target)}
+            | ({"actor": actor_label} if actor_label is not None else {}),
+            actor_type=actor_type,
+            actor_id=actor_id,
         )
         await enqueue(
             self._db,
@@ -541,6 +582,8 @@ class OrderService:
                 "to": str(target),
             },
         )
+        if target is OrderStatus.CANCELLED:
+            await self._confirmations().on_order_cancelled(order)
         await self._db.flush()
         return order
 

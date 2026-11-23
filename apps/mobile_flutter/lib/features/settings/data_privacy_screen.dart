@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/env.dart';
 import '../../data/account/apple_deletion_authorization.dart';
 import '../../data/account/models.dart';
 import '../../data/billing/billing_providers.dart';
@@ -45,7 +46,7 @@ class DataPrivacyScreen extends ConsumerWidget {
     var opened = false;
     try {
       opened = await launchUrl(
-        Uri.https('scalemyprints.com', localizedPath),
+        Uri.https(Env.legalPagesHost, localizedPath),
         mode: LaunchMode.externalApplication,
       );
     } catch (_) {
@@ -56,7 +57,7 @@ class DataPrivacyScreen extends ConsumerWidget {
         SnackBar(
           content: Text(
             context.tr('priv.legalOpenError', <String, Object?>{
-              'url': 'https://scalemyprints.com$localizedPath',
+              'url': 'https://${Env.legalPagesHost}$localizedPath',
             }),
           ),
         ),
@@ -106,7 +107,9 @@ class DataPrivacyScreen extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.policy_outlined),
                       title: Text(context.tr('priv.policy')),
-                      subtitle: const Text('scalemyprints.com/privacy-policy'),
+                      subtitle: const Text(
+                        '${Env.legalPagesHost}/privacy-policy',
+                      ),
                       trailing: const Icon(Icons.open_in_new_rounded),
                       onTap: () => _openLegalPage(context, '/privacy-policy'),
                     ),

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -325,6 +325,10 @@ class OrderCreatePayload(BaseModel):
     channel: OrderChannel = OrderChannel.MANUAL
     #: Device-minted id. Makes an offline create replay-safe.
     client_id: uuid.UUID | None = None
+    #: V4 WP2.1: start a customer confirmation with the order (``REQUEST``), or
+    #: record that the customer already confirmed in the chat (``SELLER_CHAT``).
+    #: Ignored while ``confirmation_engine_enabled`` is off.
+    confirmation: Literal["REQUEST", "SELLER_CHAT"] | None = None
 
     @field_validator("channel", mode="before")
     @classmethod
@@ -477,12 +481,19 @@ class ParseResponse(BaseModel):
     #: chooses (section 8).
     selected_phone: str | None = None
     address: str | None = None
+    #: Canonical district / thana when recognised; hints, never the address.
+    district: str | None = None
+    thana: str | None = None
     items: list[ParsedItemResponse] = Field(default_factory=list)
     cod_amount_paisa: int | None = None
     notes: str | None = None
     confidence: dict[str, float] = Field(default_factory=dict)
     parser: str = "deterministic"
     warnings: list[str] = Field(default_factory=list)
+    #: Confidence keys the seller must check before saving (V4 WP0.3): a
+    #: labelled field the model read differently, or an address prefilled
+    #: from the customer's last order.
+    uncertain_fields: list[str] = Field(default_factory=list)
     needs_phone_selection: bool = False
     is_low_confidence: bool = False
     #: Echoed back so a failed parse never loses what the seller pasted.

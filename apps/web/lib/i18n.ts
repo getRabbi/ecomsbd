@@ -12,6 +12,13 @@ import { riskEn, riskBn } from './risk-strings';
 import { developerEn, developerBn } from './developer-strings';
 import { shellEn, shellBn } from './shell-strings';
 import { opsEn, opsBn } from './ops-strings';
+import { deliveryEn, deliveryBn } from './delivery-strings';
+import { documentsEn, documentsBn } from './documents-strings';
+import { manualPaymentEn, manualPaymentBn } from './manual-payment';
+import { referralEn, referralBn } from './referral';
+import { voiceIntroEn, voiceIntroBn } from './voice-intro';
+import { autopilotEn, autopilotBn } from './autopilot';
+import { extensionEn, extensionBn } from './extension';
 
 /**
  * English and Bangla for the dashboard.
@@ -39,6 +46,13 @@ export const strings = {
     ...developerEn,
     ...shellEn,
     ...opsEn,
+    ...deliveryEn,
+    ...documentsEn,
+    ...manualPaymentEn,
+    ...referralEn,
+    ...voiceIntroEn,
+    ...autopilotEn,
+    ...extensionEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -671,6 +685,13 @@ export const strings = {
     ...developerBn,
     ...shellBn,
     ...opsBn,
+    ...deliveryBn,
+    ...documentsBn,
+    ...manualPaymentBn,
+    ...referralBn,
+    ...voiceIntroBn,
+    ...autopilotBn,
+    ...extensionBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',

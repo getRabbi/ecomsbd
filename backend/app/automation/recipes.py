@@ -280,6 +280,50 @@ def _confirm_then_ship(p: Params) -> dict:
     }
 
 
+def _confirm_customer(p: Params) -> dict:
+    """V4 WP2.4: every new order goes to customer confirmation; the policy
+    decides whether the customer is called, trusted or left to the seller."""
+    return {
+        "trigger": "order.created",
+        "steps": [
+            {"type": "action", "id": "confirm", "action": "REQUEST_CONFIRMATION", "config": {}}
+        ],
+    }
+
+
+def _confirmed_book_track(p: Params) -> dict:
+    """V4 WP2.4: the customer's yes books the courier (L10: the V3.4
+    ``BOOK_COURIER`` path) and sends the tracking update."""
+    return {
+        "trigger": "confirmation.confirmed",
+        "steps": [
+            {
+                "type": "action",
+                "id": "book",
+                "action": "BOOK_COURIER",
+                "config": {"provider": p["provider"]},
+            },
+            _message("tracking", p),
+        ],
+    }
+
+
+def _autopilot(p: Params) -> dict:
+    """V4 Phase 4: a ready chat draft becomes an order when both Autopilot
+    gates pass, and goes to customer confirmation. Booking is the
+    "Customer confirmed -> book courier" recipe's, after the customer's yes."""
+    return {
+        "trigger": "intake.draft_ready",
+        "steps": [
+            {"type": "action", "id": "convert", "action": "CONVERT_DRAFT_TO_ORDER", "config": {}},
+            {"type": "action", "id": "confirm", "action": "REQUEST_CONFIRMATION", "config": {}},
+        ],
+    }
+
+
+#: Recipes that are installed switched off whatever the request says.
+INSTALL_DISABLED = frozenset({"autopilot"})
+
 #: Tag names a recipe creates if the shop does not have them yet.
 TAGS: dict[str, tuple[str, str]] = {
     "returned": ("Returned parcel", "ফেরত পার্সেল"),
@@ -348,6 +392,27 @@ RECIPES: dict[str, dict[str, Any]] = {
         ),
         "build": _confirm_then_ship,
         "needs": ["provider", "channel", "tags:automated"],
+    },
+    "order_confirm_customer": {
+        "name": ("Order → confirm with the customer", "অর্ডার → গ্রাহকের কাছে নিশ্চিত করুন"),
+        "build": _confirm_customer,
+        "needs": [],
+    },
+    "confirmation_book_track": {
+        "name": (
+            "Customer confirmed → book courier → send tracking",
+            "গ্রাহক নিশ্চিত করলে → কুরিয়ার বুক → ট্র্যাকিং পাঠান",
+        ),
+        "build": _confirmed_book_track,
+        "needs": ["provider", "channel"],
+    },
+    "autopilot": {
+        "name": (
+            "Autopilot: chat order → order → confirm with the customer",
+            "অটোপাইলট: চ্যাট অর্ডার → অর্ডার → গ্রাহকের কাছে নিশ্চিত",
+        ),
+        "build": _autopilot,
+        "needs": [],
     },
 }
 

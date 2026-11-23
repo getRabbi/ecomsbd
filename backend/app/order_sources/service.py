@@ -4,7 +4,7 @@ import uuid
 from typing import Any
 
 import sqlalchemy as sa
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 from pydantic import ValidationError as SchemaError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,13 @@ def capability(provider: str) -> dict[str, Any]:
 
 class NativeOrder(OrderCreatePayload):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _no_confirmation(self) -> NativeOrder:
+        # Only the seller may start or claim a customer confirmation (V4 WP2.1).
+        if self.confirmation is not None:
+            raise ValueError("confirmation cannot come from an order source")
+        return self
 
 
 def validate_mapping(mapping: dict[str, str]) -> None:
@@ -105,7 +112,7 @@ async def create_native(
     service = OrderService(
         db, customers=CustomerService(db, hasher=get_hasher(), vault=get_vault())
     )
-    values = payload.model_dump(exclude={"items", "channel", "client_id"})
+    values = payload.model_dump(exclude={"items", "channel", "client_id", "confirmation"})
     order, _ = await service.create(
         OrderDraft(
             **values,

@@ -1,0 +1,183 @@
+# Banglish (Bangla in Latin letters), "ta/ti/pcs" counters. See 01_seed.yaml for the format.
+
+- id: bl-01
+  text: "Nusrat\n01700000031\nMirpur 10, Dhaka\nBlack Abaya XL\n2 pcs\n1250"
+  expect:
+    customer_name: Nusrat
+    phones: ["+8801700000031"]
+    address: Mirpur 10, Dhaka
+    items: [{name: Black Abaya, quantity: 2, size: XL}]
+  llm:
+    customer_name: Nusrat
+    phones: ["01700000031"]
+    address: Mirpur 10, Dhaka
+    district: Dhaka
+    thana: Mirpur
+    items: [{name: Black Abaya, quantity: 2, size: XL, color: Black, unit_price_paisa: null}]
+    cod_amount_paisa: 125000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.85, cod_amount_paisa: 0.6}
+
+- id: bl-02
+  text: "apu amar nam Mitu\n01700000032\nbasa 5, road 2, uttara sector 4\nred kurti M 1ta din"
+  expect:
+    customer_name: Mitu
+    phones: ["+8801700000032"]
+    address: basa 5, road 2, uttara sector 4
+    items: [{name: red kurti, quantity: 1, size: M}]
+  llm:
+    customer_name: Mitu
+    phones: ["01700000032"]
+    address: basa 5, road 2, uttara sector 4
+    district: Dhaka
+    thana: Uttara
+    items: [{name: red kurti, quantity: 1, size: M, color: Red, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.9, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bl-03
+  text: "vai 2ta panjabi lagbe XL\nnumber 01700000033\naddress- gazipur chowrasta"
+  expect:
+    customer_name: null
+    phones: ["+8801700000033"]
+    address: gazipur chowrasta
+    items: [{name: panjabi, quantity: 2, size: XL}]
+  llm:
+    customer_name: null
+    phones: ["01700000033"]
+    address: gazipur chowrasta
+    district: Gazipur
+    thana: null
+    items: [{name: panjabi, quantity: 2, size: XL, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bl-04
+  text: "name- Sharmin\nphone- 01700000034\naddress- Feni sadar, Feni\nwhite borka 52 size 1 ta\ntotal 1650 tk"
+  expect:
+    customer_name: Sharmin
+    phones: ["+8801700000034"]
+    address: Feni sadar, Feni
+    cod_amount_paisa: 165000
+  llm:
+    customer_name: Sharmin
+    phones: ["01700000034"]
+    address: Feni sadar, Feni
+    district: Feni
+    thana: Feni Sadar
+    items: [{name: white borka, quantity: 1, size: "52", color: White, unit_price_paisa: 165000}]
+    cod_amount_paisa: 165000
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.95, items: 0.8, cod_amount_paisa: 0.95}
+
+- id: bl-05
+  text: "Assalamualaikum\nami 3ta hijab nibo\n01700000035\nNarayanganj chashara"
+  expect:
+    customer_name: null
+    phones: ["+8801700000035"]
+    address: Narayanganj chashara
+    items: [{name: hijab, quantity: 3, size: null}]
+  llm:
+    customer_name: null
+    phones: ["01700000035"]
+    address: Narayanganj chashara
+    district: Narayanganj
+    thana: Narayanganj Sadar
+    items: [{name: hijab, quantity: 3, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.85, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bl-06
+  text: "Rakib\n01700000036\nSavar, Dhaka\nsneaker 42 number 1 pair\n2800 taka"
+  expect:
+    customer_name: Rakib
+    phones: ["+8801700000036"]
+    address: Savar, Dhaka
+    cod_amount_paisa: 280000
+  llm:
+    customer_name: Rakib
+    phones: ["01700000036"]
+    address: Savar, Dhaka
+    district: Dhaka
+    thana: Savar
+    items: [{name: sneaker, quantity: 1, size: "42", color: null, unit_price_paisa: 280000}]
+    cod_amount_paisa: 280000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.75, cod_amount_paisa: 0.9}
+
+- id: bl-07
+  text: "amar nam Shuvo\n01700000037\nKhulna, Boyra\ncap 2 ta\nprice koto?"
+  expect:
+    customer_name: Shuvo
+    phones: ["+8801700000037"]
+    address: Khulna, Boyra
+    items: [{name: cap, quantity: 2, size: null}]
+  llm:
+    customer_name: Shuvo
+    phones: ["01700000037"]
+    address: Khulna, Boyra
+    district: Khulna
+    thana: Khalishpur
+    items: [{name: cap, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: Customer asks the price
+    field_confidence: {customer_name: 0.9, phones: 0.99, address: 0.85, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: bl-08
+  text: "Tania 01700000038 Banani road 11 house 4. pink saree 1ta. 3500tk"
+  expect:
+    customer_name: Tania
+    phones: ["+8801700000038"]
+    address: Banani road 11 house 4
+    items: [{name: pink saree, quantity: 1, size: null}]
+    cod_amount_paisa: 350000
+  llm:
+    customer_name: Tania
+    phones: ["01700000038"]
+    address: Banani road 11 house 4
+    district: Dhaka
+    thana: Banani
+    items: [{name: pink saree, quantity: 1, size: null, color: Pink, unit_price_paisa: 350000}]
+    cod_amount_paisa: 350000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.9}
+
+- id: bl-09
+  text: "01700000039\nJessore\nshirt L 2ta, pant 32 1ta"
+  expect:
+    customer_name: null
+    phones: ["+8801700000039"]
+    address: Jessore
+  llm:
+    customer_name: null
+    phones: ["01700000039"]
+    address: Jessore
+    district: Jashore
+    thana: null
+    items:
+      - {name: shirt, quantity: 2, size: L, color: null, unit_price_paisa: null}
+      - {name: pant, quantity: 1, size: "32", color: null, unit_price_paisa: null}
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.4, items: 0.8, cod_amount_paisa: 0.0}
+
+- id: bl-10
+  text: "Mim\n01700000040\nchittagong halishahar\nkurti duita XL"
+  expect:
+    customer_name: Mim
+    phones: ["+8801700000040"]
+    address: chittagong halishahar
+    items: [{name: kurti, quantity: 2, size: XL}]
+  llm:
+    customer_name: Mim
+    phones: ["01700000040"]
+    address: chittagong halishahar
+    district: Chattogram
+    thana: Halishahar
+    items: [{name: kurti, quantity: 2, size: XL, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}

@@ -1,0 +1,16 @@
+{
+  "name": "@ecomsbd/extension",
+  "version": "4.0.0",
+  "private": true,
+  "description": "ecomsbd order capture: a Chrome (MV3) extension that captures an order from the open Messenger / WhatsApp Web chat after the seller taps Capture.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "node --experimental-strip-types --no-warnings --test test/phones.test.mjs test/rules.test.mjs test/conversation.test.mjs test/api.test.mjs test/manifest.test.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.7",
+    "typescript": "^5.9.3"
+  }
+}

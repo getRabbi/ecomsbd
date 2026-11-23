@@ -129,6 +129,16 @@ class NotificationKind(StrEnum):
     # --- Chat-to-order --------------------------------------------------
     #: A Messenger or WhatsApp conversation became an order ready to review.
     CHAT_ORDER_READY = "CHAT_ORDER_READY"
+    #: A linked phone or extension sent no heartbeat for a day (V4 WP1.3).
+    DEVICE_NEEDS_ATTENTION = "DEVICE_NEEDS_ATTENTION"
+    #: A customer confirmation needs the seller: review it, or the customer's
+    #: answer could not move the order because it changed (V4 WP2.1).
+    CONFIRMATION_NEEDS_ATTENTION = "CONFIRMATION_NEEDS_ATTENTION"
+    #: On the confirmation call the customer pressed 3 to talk to the shop
+    #: (V4 WP3.2).
+    CHAT_CALLBACK_REQUESTED = "CHAT_CALLBACK_REQUESTED"
+    #: A bKash / Nagad TrxID payment was approved or rejected (V4 WP2.5).
+    BILLING_PAYMENT_REVIEWED = "BILLING_PAYMENT_REVIEWED"
 
 
 class NotificationCategory(StrEnum):

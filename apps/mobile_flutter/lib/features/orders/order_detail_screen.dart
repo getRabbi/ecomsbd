@@ -18,10 +18,12 @@ import '../../design/components/surfaces.dart';
 import '../../design/tokens.dart';
 import '../couriers/courier_compare_screen.dart';
 import '../products/inventory_sheets.dart';
+import '../risk/external_risk_card.dart';
 import '../risk/risk_review_sheet.dart';
 import '../shared/data_state.dart';
 import 'courier_booking_sheet.dart';
 import 'dispatch_sheet.dart';
+import 'order_documents.dart';
 import 'order_status.dart';
 import '../../l10n/app_strings.dart';
 
@@ -152,7 +154,20 @@ class _OrderBody extends ConsumerWidget {
     return DetailScaffold(
       title: order.orderNumber,
       subtitle: '${order.statusLabel} · ${formatRelative(order.createdAt)}',
-      actions: <Widget>[SyncBadge(state: syncState)],
+      actions: <Widget>[
+        if (syncState != LocalSyncState.localOnly)
+          IconButton(
+            key: const ValueKey('od.print'),
+            tooltip: context.tr('doc.print'),
+            icon: const Icon(Icons.print_outlined),
+            onPressed: () => showOrderPrintSheet(
+              context,
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+            ),
+          ),
+        SyncBadge(state: syncState),
+      ],
       children: <Widget>[
         if (syncState == LocalSyncState.conflict) ...<Widget>[
           ProviderHealthBanner(
@@ -205,6 +220,8 @@ class _OrderBody extends ConsumerWidget {
                   ),
                 ),
               ],
+              if (order.customerId != null)
+                CourierHistoryChip(customerId: order.customerId!),
               if (order.deliveryAddress?.isNotEmpty == true) ...<Widget>[
                 const SizedBox(height: EcomsbdSpacing.sm),
                 // The seller's own words. A courier's normalisation never

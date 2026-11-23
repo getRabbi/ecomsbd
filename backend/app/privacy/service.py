@@ -187,6 +187,7 @@ class PrivacyService:
         steps["sessions_revoked"] = await self._revoke_sessions(tenant_id)
         steps["devices_revoked"] = await self._revoke_devices(tenant_id)
         steps["integrations_disabled"] = await self._disable_integrations(tenant_id)
+        steps["device_keys_revoked"] = await self._revoke_device_keys(tenant_id)
         settings = get_settings()
         if settings.r2_configured:
             from app.common.object_storage import ObjectStorage
@@ -343,6 +344,12 @@ class PrivacyService:
             device.revoked_at = now
             device.push_token = None
         return len(devices)
+
+    async def _revoke_device_keys(self, tenant_id: uuid.UUID) -> int:
+        """Linked phones and extensions stop capturing (V4 WP1.1)."""
+        from app.device_links.service import revoke_tenant_keys
+
+        return await revoke_tenant_keys(self._db, tenant_id)
 
     async def _disable_integrations(self, tenant_id: uuid.UUID) -> int:
         """Turn off anything that would keep calling out on the shop's behalf.

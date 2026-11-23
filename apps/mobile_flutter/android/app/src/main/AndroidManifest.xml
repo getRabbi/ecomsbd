@@ -7,7 +7,19 @@
            READ_SMS           - never. OTP uses the SMS Retriever one-time-code
                                 flow, which needs no inbox access.
            READ_CONTACTS      - never.
-           location / call log - never. -->
+           location / call log - never.
+           SYSTEM_ALERT_WINDOW - never. Order auto-detect (V4 WP1.4) uses a
+                                heads-up notification and a translucent
+                                activity, not an overlay (rule L6).
+           BIND_ACCESSIBILITY_SERVICE - never. Chats are read only from the
+                                notifications the seller grants access to.
+           READ_CALL_LOG / READ_SMS - never (rule L6).
+
+         Order auto-detect needs no permission here: the listener service is
+         guarded by BIND_NOTIFICATION_LISTENER_SERVICE (only the system can
+         bind it) and runs only after the seller turns on Notification Access.
+         WorkManager merges its scheduler permissions (WAKE_LOCK,
+         ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
@@ -53,6 +65,61 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- V4 WP1.4 order auto-detect. The system binds the listener only
+             after the seller turns on Notification Access for ecomsbd. -->
+        <service
+            android:name=".intake.OrderNotificationListener"
+            android:label="@string/intake_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+        </service>
+        <!-- Create on the heads-up lands on this invisible launcher: it opens the
+             quick order inside the app when the app is open, else the sheet. -->
+        <activity
+            android:name=".intake.QuickOrderLauncherActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.ecomsbd.app.quickorder"
+            android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Share target (V4 WP1.5): text shared from a chat app opens the
+             same quick order. The text stays in memory, never in an intent
+             onward. -->
+        <activity
+            android:name=".intake.QuickOrderShareActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_target_label"
+            android:taskAffinity="com.ecomsbd.app.quickorder"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <!-- The translucent quick-order sheet (its own Flutter engine). -->
+        <activity
+            android:name=".intake.QuickOrderActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.ecomsbd.app.quickorder"
+            android:excludeFromRecents="true"
+            android:theme="@style/QuickOrderTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+        <!-- Ignore / "Ei sender ke ar na" on the heads-up. -->
+        <receiver
+            android:name=".intake.IntakeActionReceiver"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

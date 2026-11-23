@@ -7,6 +7,7 @@ import '../account/account_repository.dart';
 import '../account/models.dart';
 import '../commerce/commerce_providers.dart';
 import 'billing_repository.dart';
+import 'manual_payment.dart';
 import 'models.dart';
 
 /// Wiring for billing, account and privacy.
@@ -55,6 +56,20 @@ final usageProvider = FutureProvider<List<UsageLine>>((ref) {
 final billingHistoryProvider = FutureProvider<List<BillingEvent>>((ref) {
   return ref.watch(billingRepositoryProvider).history();
 });
+
+/// V4 WP2.5: whether bKash / Nagad TrxID payment is offered, and where to send.
+/// Only the owner may ask (`billing.manage`); anyone else gets a 403, which
+/// the plans screen treats as "not offered".
+final manualPaymentOptionsProvider =
+    FutureProvider.autoDispose<ManualPaymentOptions>((ref) {
+      ref.watch(entitlementsProvider);
+      return ref.watch(billingRepositoryProvider).manualPaymentOptions();
+    });
+
+final manualPaymentsProvider =
+    FutureProvider.autoDispose<List<ManualPaymentSubmission>>((ref) {
+      return ref.watch(billingRepositoryProvider).manualPayments();
+    });
 
 // --------------------------------------------------------------------------- //
 // Account

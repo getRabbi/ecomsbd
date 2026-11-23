@@ -16,6 +16,7 @@ Three rules shape it:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -85,6 +86,29 @@ class ProviderFact:
 
 
 @dataclass(frozen=True)
+class CourierCount:
+    """Parcels a provider saw for the number at one courier (V4 WP0.6)."""
+
+    courier: str
+    delivered: int
+    cancelled: int
+    total: int
+
+
+@dataclass(frozen=True)
+class CourierHistory:
+    """Per-courier delivery history, provider-neutral (V4 WP0.6).
+
+    ``aggregate`` is the provider's own total when it reports one (it may
+    cover couriers it does not itemise); otherwise the rows are summed.
+    """
+
+    provider_counts: tuple[CourierCount, ...] = ()
+    aggregate: CourierCount | None = None
+    as_of: datetime | None = None
+
+
+@dataclass(frozen=True)
 class ProviderResult:
     found: bool
     facts: tuple[ProviderFact, ...] = ()
@@ -94,6 +118,8 @@ class ProviderResult:
     sample_size: int | None = None
     confidence: str | None = None
     reference: str | None = None
+    #: Per-courier counts, when the provider itemises them (V4 WP0.6).
+    courier_history: CourierHistory | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +144,17 @@ class ProviderSpec:
     max_cache_ttl_hours: int = 24 * 30
     timeout_seconds: float = 8.0
     config_fields: tuple[str, ...] = field(default_factory=tuple)
+    #: The provider's terms allow a lookup only for a real, newly received order
+    #: awaiting verification (V4 WP0.6, BD Courier terms §3): the service then
+    #: refuses a lookup for a customer without one, before anything is sent.
+    new_orders_only: bool = False
+    #: Days the provider's answers may be kept, when its terms are stricter than
+    #: the service's own retention. ``None``: the service default.
+    retention_days: int | None = None
+    #: What the seller must know before connecting (the provider's terms), shown
+    #: on the settings screen. Empty: nothing beyond the usual copy.
+    notice_en: str = ""
+    notice_bn: str = ""
 
 
 class RiskProviderAdapter(Protocol):
@@ -154,3 +191,80 @@ def normalize_facts(facts: Iterable[ProviderFact]) -> tuple[list[dict], int]:
         seen.add(fact.code)
         kept.append({"code": fact.code, "value": fact.value, "period_days": fact.period_days})
     return kept, dropped
+
+
+# --------------------------------------------------------------------------- #
+# Courier history (V4 WP0.6)
+# --------------------------------------------------------------------------- #
+
+#: Below this many parcels a ratio is not shown: "kom data" (too little data).
+SAMPLE_FLOOR = 3
+_MAX_COURIERS = 12
+_COURIER_KEY = re.compile(r"^[a-z0-9][a-z0-9_]{0,31}$")
+
+
+def _courier_key(raw: str) -> str | None:
+    key = re.sub(r"[\s\-]+", "_", str(raw).strip().casefold())
+    return key if _COURIER_KEY.match(key) else None
+
+
+def _counts_ok(row: CourierCount) -> bool:
+    values = (row.delivered, row.cancelled, row.total)
+    return (
+        all(type(v) is int and 0 <= v <= MAX_FACT_VALUE for v in values)
+        and row.delivered + row.cancelled <= row.total
+    )
+
+
+def history_state(aggregate: dict | None) -> tuple[str, int | None]:
+    """``("OK", success_bps)`` or ``("INSUFFICIENT_DATA", None)`` under the floor."""
+    if not aggregate or int(aggregate.get("total") or 0) < SAMPLE_FLOOR:
+        return "INSUFFICIENT_DATA", None
+    total = int(aggregate["total"])
+    return "OK", int(aggregate["delivered"]) * 10_000 // total
+
+
+def normalize_courier_history(history: CourierHistory | None) -> dict | None:
+    """Validated, bounded courier history in storage shape, or ``None``.
+
+    A row with an unknown-shaped courier key, a negative or huge count, or
+    delivered + cancelled above total is dropped, not repaired: a count the
+    provider got wrong must not become a ratio the seller trusts.
+    """
+    if history is None:
+        return None
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for row in history.provider_counts:
+        key = _courier_key(row.courier)
+        if key is None or key in seen or not _counts_ok(row) or len(rows) >= _MAX_COURIERS:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "courier": key,
+                "delivered": row.delivered,
+                "cancelled": row.cancelled,
+                "total": row.total,
+            }
+        )
+    if history.aggregate is not None and _counts_ok(history.aggregate):
+        aggregate = {
+            "delivered": history.aggregate.delivered,
+            "cancelled": history.aggregate.cancelled,
+            "total": history.aggregate.total,
+        }
+    elif rows:
+        aggregate = {
+            name: sum(r[name] for r in rows) for name in ("delivered", "cancelled", "total")
+        }
+    else:
+        return None
+    state, success_bps = history_state(aggregate)
+    return {
+        "provider_counts": rows,
+        "aggregate": aggregate,
+        "as_of": history.as_of.isoformat() if history.as_of else None,
+        "state": state,
+        "success_bps": success_bps,
+    }

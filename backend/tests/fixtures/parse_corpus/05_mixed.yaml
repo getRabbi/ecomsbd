@@ -1,0 +1,168 @@
+# Mixed scripts and digits, two phones, missing address, price in text. See 01_seed.yaml.
+
+- id: mx-01
+  text: "নাম: Farzana\nphone: ০১৭০০০০০০৫১\naddress: Mohammadpur, ঢাকা\nabaya ২ pcs"
+  expect:
+    customer_name: Farzana
+    phones: ["+8801700000051"]
+    address: Mohammadpur, ঢাকা
+    items: [{name: abaya, quantity: 2, size: null}]
+  llm:
+    customer_name: Farzana
+    phones: ["০১৭০০০০০০৫১"]
+    address: Mohammadpur, ঢাকা
+    district: Dhaka
+    thana: Mohammadpur
+    items: [{name: abaya, quantity: 2, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.99, address: 0.95, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: mx-02
+  text: "Nasrin\n01700000052, 01700000053\nMotijheel, Dhaka\nBlue shari 1ta"
+  expect:
+    customer_name: Nasrin
+    phones: ["+8801700000052", "+8801700000053"]
+    address: Motijheel, Dhaka
+    items: [{name: Blue shari, quantity: 1, size: null}]
+  llm:
+    customer_name: Nasrin
+    phones: ["01700000052", "01700000053"]
+    address: Motijheel, Dhaka
+    district: Dhaka
+    thana: Motijheel
+    items: [{name: Blue shari, quantity: 1, size: null, color: Blue, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.9, address: 0.9, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: mx-03
+  text: "+880 1700-000054\nকালো জুতা ৪০ সাইজ ১ জোড়া\nদাম ১৯০০"
+  expect:
+    customer_name: null
+    phones: ["+8801700000054"]
+    address: null
+  llm:
+    customer_name: null
+    phones: ["+880 1700-000054"]
+    address: null
+    district: null
+    thana: null
+    items: [{name: কালো জুতা, quantity: 1, size: "40", color: কালো, unit_price_paisa: 190000}]
+    cod_amount_paisa: 190000
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.0, items: 0.8, cod_amount_paisa: 0.85}
+
+- id: mx-04
+  text: "Riya\n8801700000055\nkhilgaon, dhaka\nlipstick 3ta 450tk each"
+  expect:
+    customer_name: Riya
+    phones: ["+8801700000055"]
+    address: khilgaon, dhaka
+    items: [{name: lipstick, quantity: 3, size: null}]
+  llm:
+    customer_name: Riya
+    phones: ["8801700000055"]
+    address: khilgaon, dhaka
+    district: Dhaka
+    thana: Khilgaon
+    items: [{name: lipstick, quantity: 3, size: null, color: null, unit_price_paisa: 45000}]
+    cod_amount_paisa: 135000
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.7}
+
+- id: mx-05
+  text: "নাম: হাবিব\nফোন: ০১৭০০০০০০৫৬ অথবা ০১৭০০০০০০৫৭\nঠিকানা: নোয়াখালী, মাইজদী\nগেঞ্জি L ৩টা"
+  expect:
+    customer_name: হাবিব
+    phones: ["+8801700000056", "+8801700000057"]
+    address: নোয়াখালী, মাইজদী
+    items: [{name: গেঞ্জি, quantity: 3, size: L}]
+  llm:
+    customer_name: হাবিব
+    phones: ["০১৭০০০০০০৫৬", "০১৭০০০০০০৫৭"]
+    address: নোয়াখালী, মাইজদী
+    district: Noakhali
+    thana: Sudharam
+    items: [{name: গেঞ্জি, quantity: 3, size: L, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.97, phones: 0.9, address: 0.95, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: mx-06
+  text: "Shila\n01700000058\nblack borka XL 1ta\nwhite hijab 2ta"
+  expect:
+    customer_name: Shila
+    phones: ["+8801700000058"]
+    address: null
+    items:
+      - {name: black borka, quantity: 1, size: XL}
+      - {name: white hijab, quantity: 2, size: null}
+  llm:
+    customer_name: Shila
+    phones: ["01700000058"]
+    address: null
+    district: null
+    thana: null
+    items:
+      - {name: black borka, quantity: 1, size: XL, color: Black, unit_price_paisa: null}
+      - {name: white hijab, quantity: 2, size: null, color: White, unit_price_paisa: null}
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.85, phones: 0.99, address: 0.0, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: mx-07
+  text: "01700000059\nসাভার, আশুলিয়া\nপাঞ্জাবি ২টা M\nমোট: 2,600 টাকা"
+  expect:
+    customer_name: null
+    phones: ["+8801700000059"]
+    address: সাভার, আশুলিয়া
+    items: [{name: পাঞ্জাবি, quantity: 2, size: M}]
+    cod_amount_paisa: 260000
+  llm:
+    customer_name: null
+    phones: ["01700000059"]
+    address: সাভার, আশুলিয়া
+    district: Dhaka
+    thana: Ashulia
+    items: [{name: পাঞ্জাবি, quantity: 2, size: M, color: null, unit_price_paisa: 130000}]
+    cod_amount_paisa: 260000
+    notes: null
+    field_confidence: {customer_name: 0.0, phones: 0.99, address: 0.9, items: 0.9, cod_amount_paisa: 0.95}
+
+- id: mx-08
+  text: "Kona\n01700000060\nperfume 1ta"
+  expect:
+    customer_name: Kona
+    phones: ["+8801700000060"]
+    address: null
+    items: [{name: perfume, quantity: 1, size: null}]
+  llm:
+    customer_name: Kona
+    phones: ["01700000060"]
+    address: null
+    district: null
+    thana: null
+    items: [{name: perfume, quantity: 1, size: null, color: null, unit_price_paisa: null}]
+    cod_amount_paisa: null
+    notes: null
+    field_confidence: {customer_name: 0.8, phones: 0.99, address: 0.0, items: 0.9, cod_amount_paisa: 0.0}
+
+- id: mx-09
+  text: "Name: Arif\nPhone: 01700000061\nAddress: House 12 Road 3 Nikunja 2 Khilkhet Dhaka\nItem: Gaming mouse\nQty: 1\nPrice: ৳1,450"
+  expect:
+    customer_name: Arif
+    phones: ["+8801700000061"]
+    address: House 12 Road 3 Nikunja 2 Khilkhet Dhaka
+    items: [{name: Gaming mouse, quantity: 1, size: null}]
+    cod_amount_paisa: 145000
+  llm:
+    customer_name: Arif
+    phones: ["01700000061"]
+    address: House 12 Road 3 Nikunja 2 Khilkhet Dhaka
+    district: Dhaka
+    thana: Khilkhet
+    items: [{name: Gaming mouse, quantity: 1, size: null, color: null, unit_price_paisa: 145000}]
+    cod_amount_paisa: 145000
+    notes: null
+    field_confidence: {customer_name: 0.98, phones: 0.99, address: 0.97, items: 0.95, cod_amount_paisa: 0.95}

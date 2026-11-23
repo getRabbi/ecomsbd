@@ -519,6 +519,7 @@ String _providerName(String provider) => switch (provider) {
   'steadfast' => 'Steadfast',
   'pathao' => 'Pathao',
   'redx' => 'RedX',
+  'carrybee' => 'Carrybee',
   'manual' => _t('csc.recordedByHand'),
   _ => provider,
 };

@@ -1,0 +1,80 @@
+:root {
+  --bg: #ffffff;
+  --fg: #111827;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --brand: #0f766e;
+  --brand-fg: #ffffff;
+  --ok: #047857;
+  --warn-bg: #fef3c7;
+  --warn-fg: #92400e;
+  --danger: #b91c1c;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111827;
+    --fg: #f9fafb;
+    --muted: #9ca3af;
+    --line: #374151;
+    --brand: #14b8a6;
+    --brand-fg: #042f2e;
+    --ok: #34d399;
+    --warn-bg: #422006;
+    --warn-fg: #fde68a;
+    --danger: #f87171;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, 'Noto Sans Bengali', sans-serif;
+}
+
+header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+h1 { font-size: 15px; margin: 0; flex: 1; }
+h2 { font-size: 14px; margin: 0 0 8px; }
+.hint { color: var(--muted); margin: 8px 0; }
+
+form { display: grid; gap: 8px; }
+input {
+  font-size: 22px;
+  letter-spacing: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: progress; }
+button.primary { background: var(--brand); color: var(--brand-fg); border-color: var(--brand); }
+button.big { width: 100%; padding: 12px; font-size: 16px; font-weight: 600; }
+button.link { border: 0; padding: 4px 0; text-decoration: underline; }
+button.danger { color: var(--danger); margin-top: 16px; }
+#retry { margin-top: 8px; width: 100%; }
+
+#result { margin-top: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.fields { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 12px; }
+.fields dt { color: var(--muted); }
+.fields dd { margin: 0; }
+.fields dd.ok { color: var(--ok); }
+.fields dd.missing { color: var(--danger); }
+
+.notice { margin: 12px 0 0; }
+.notice--warn { padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-fg); }

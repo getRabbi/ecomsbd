@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "ecomsbd order capture",
+  "short_name": "ecomsbd",
+  "version": "0.0.0",
+  "description": "Capture an order from the open Messenger or WhatsApp Web chat into your ecomsbd shop.",
+  "minimum_chrome_version": "116",
+  "icons": { "128": "icon-128.png" },
+  "action": { "default_title": "ecomsbd order capture", "default_icon": { "128": "icon-128.png" } },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["storage", "sidePanel", "alarms"],
+  "host_permissions": [],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://business.facebook.com/*",
+        "https://www.messenger.com/*",
+        "https://web.whatsapp.com/*"
+      ],
+      "js": ["content/loader.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/main.js", "shared/*.js"],
+      "matches": [
+        "https://business.facebook.com/*",
+        "https://www.messenger.com/*",
+        "https://web.whatsapp.com/*"
+      ]
+    }
+  ]
+}

@@ -36,6 +36,18 @@ EXPIRED = "EXPIRED"
 OPEN_STATES = (COLLECTING, NEEDS_INFO, READY_FOR_REVIEW)
 FINAL_STATES = (CONFIRMED, IGNORED, EXPIRED)
 
+#: Where a message (and the draft it started) came from. Every source enters
+#: the one Intake service (V4 rule L1), so these are labels, not pipelines.
+META_WEBHOOK = "META_WEBHOOK"
+DEVICE_NOTIFICATION = "DEVICE_NOTIFICATION"
+SHARE = "SHARE"
+EXTENSION = "EXTENSION"
+PASTE = "PASTE"
+CAPTURE_SOURCES = (META_WEBHOOK, DEVICE_NOTIFICATION, SHARE, EXTENSION, PASTE)
+#: Provider of chat rows read on a linked phone, the extension or a paste:
+#: never treated as a Messenger PSID or a WhatsApp number.
+DEVICE = "DEVICE"
+
 
 class ChatIdentity(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     """One customer as one connected Page or number sees them.
@@ -51,7 +63,8 @@ class ChatIdentity(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     connection_id: Mapped[uuid.UUID] = mapped_column(
         GUID, sa.ForeignKey("integration_connections.id"), nullable=False
     )
-    #: MESSENGER or WHATSAPP.
+    #: MESSENGER, WHATSAPP or DEVICE (a conversation read on a linked phone, the
+    #: extension, or a shared/pasted message; ``account_ref`` is then the app).
     provider: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     #: Keyed hash of provider, account and sender id: the lookup key.
     external_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
@@ -90,9 +103,16 @@ class ChatMessage(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
         GUID, sa.ForeignKey("chat_identities.id"), nullable=False
     )
     provider: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    #: The provider's message id; for a device capture, a keyed hash of the
+    #: message (so a re-upload of the same notification is a no-op).
     provider_message_id: Mapped[str] = mapped_column(sa.String(200), nullable=False)
-    #: The Page id or phone_number_id it arrived on (the thread context).
+    #: The Page id or phone_number_id it arrived on (the thread context); for a
+    #: device capture, the app package.
     account_ref: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    #: One of :data:`CAPTURE_SOURCES`.
+    capture_source: Mapped[str] = mapped_column(
+        sa.String(24), nullable=False, default=META_WEBHOOK, server_default=META_WEBHOOK
+    )
     #: TEXT, IMAGE, AUDIO, VIDEO, DOCUMENT, STICKER or OTHER.
     message_type: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     #: TEXT only, capped. Never logged; deleted with the row at retention.
@@ -127,6 +147,13 @@ class ChatOrderDraft(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     )
     provider: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    #: The source of the message that started it (:data:`CAPTURE_SOURCES`).
+    capture_source: Mapped[str] = mapped_column(
+        sa.String(24), nullable=False, default=META_WEBHOOK, server_default=META_WEBHOOK
+    )
+    #: An order for the same phone made in the last 24 hours: this draft is
+    #: about it, so it is shown beside it and never announced as a new order.
+    duplicate_of_order_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
 
     #: The shop's customer this draft is for, when one is known or suggested.
     customer_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
@@ -143,7 +170,7 @@ class ChatOrderDraft(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
     items: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
     cod_amount_paisa: Mapped[int | None] = mapped_column(Paisa, nullable=True)
     #: PARSED (the customer wrote it) or CATALOG (price x quantity).
-    cod_source: Mapped[str | None] = mapped_column(sa.String(12), nullable=True)
+    cod_source: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
     warnings: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)
     uncertain_fields: Mapped[list] = mapped_column(JSONColumn, nullable=False, default=list)

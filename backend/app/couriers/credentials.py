@@ -31,9 +31,11 @@ Two storage facts this module encodes rather than documents:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.couriers.carrybee.client import CarrybeeCredentials
 from app.couriers.pathao.client import PathaoCredentials
 from app.couriers.redx.client import RedxCredentials
 from app.couriers.redx.contract import WEBHOOK_TOKEN_PARAM
@@ -44,6 +46,7 @@ __all__ = [
     "CredentialField",
     "ProviderCredentialSpec",
     "build_credentials",
+    "pack_secondary",
     "spec_for",
 ]
 
@@ -118,6 +121,11 @@ class ProviderCredentialSpec:
     webhook_help_en: str | None = None
     webhook_help_bn: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    #: Secret fields sealed *together* in the second slot, as one JSON object,
+    #: for a provider with more than two secrets (Carrybee: Client-Secret and
+    #: Client-Context). Empty for every other provider. Keeps the two-slot
+    #: shape: no migration, and both values stay encrypted.
+    packed_secondary: tuple[str, ...] = ()
 
     @property
     def is_single_secret(self) -> bool:
@@ -280,11 +288,70 @@ REDX_SPEC = ProviderCredentialSpec(
     supports_delivery_type=False,
 )
 
+CARRYBEE_SPEC = ProviderCredentialSpec(
+    provider="carrybee",
+    display_name="Carrybee",
+    # The three values on Carrybee's "API Credentials" page (CONTRACT.md §1),
+    # named as Carrybee names them.
+    fields=(
+        CredentialField(
+            name="client_id",
+            label_en="Client-ID",
+            label_bn="Client-ID",
+            help_en="Carrybee merchant panel → Developer → API Credentials.",
+            help_bn="Carrybee মার্চেন্ট প্যানেল → Developer → API Credentials।",
+            input_type="text",
+        ),
+        CredentialField(
+            name="client_secret",
+            label_en="Client-Secret",
+            label_bn="Client-Secret",
+            help_en="Carrybee merchant panel → Developer → API Credentials.",
+            help_bn="Carrybee মার্চেন্ট প্যানেল → Developer → API Credentials।",
+        ),
+        CredentialField(
+            name="client_context",
+            label_en="Client-Context",
+            label_bn="Client-Context",
+            help_en="Carrybee merchant panel → Developer → API Credentials.",
+            help_bn="Carrybee মার্চেন্ট প্যানেল → Developer → API Credentials।",
+        ),
+    ),
+    primary="client_id",
+    secondary="client_secret",
+    packed_secondary=("client_secret", "client_context"),
+    # Production and Sandbox each issue their own credentials.
+    supports_sandbox=True,
+    # store_id is required on every Carrybee create.
+    requires_store=True,
+    uses_webhook=True,
+    webhook_help_en=(
+        "Optional. Copy the webhook secret from Carrybee → Developer → Webhook "
+        "Integration into this account and save it first, then paste this URL into "
+        "Carrybee. ecomsbd checks the secret on every update. Parcel status is also "
+        "checked with Carrybee, so booking works without it."
+    ),
+    webhook_help_bn=(
+        "ঐচ্ছিক। প্রথমে Carrybee → Developer → Webhook Integration থেকে webhook "
+        "secret এই অ্যাকাউন্টে বসিয়ে সেভ করুন, তারপর এই URL টি Carrybee-তে দিন। "
+        "প্রতিটি আপডেটে ecomsbd secret মিলিয়ে নেয়। পার্সেলের স্ট্যাটাস Carrybee থেকেও "
+        "দেখা হয়, তাই এটি ছাড়াও বুকিং চলবে।"
+    ),
+    supports_delivery_type=False,
+)
+
+
 CREDENTIAL_SPECS: dict[str, ProviderCredentialSpec] = {
     STEADFAST_SPEC.provider: STEADFAST_SPEC,
     PATHAO_SPEC.provider: PATHAO_SPEC,
     REDX_SPEC.provider: REDX_SPEC,
+    CARRYBEE_SPEC.provider: CARRYBEE_SPEC,
 }
+
+
+def pack_secondary(spec: ProviderCredentialSpec, values: dict[str, str]) -> str:
+    """The second slot's value for a provider with packed secrets."""
+    return json.dumps({name: values[name] for name in spec.packed_secondary}, sort_keys=True)
 
 
 def spec_for(provider: str) -> ProviderCredentialSpec | None:
@@ -318,4 +385,17 @@ def build_credentials(
         # One secret. The second slot is an encrypted empty value and is
         # deliberately not read.
         return RedxCredentials(api_token=primary, sandbox=bool(settings.get("sandbox", False)))
+    if resolved == "carrybee":
+        try:
+            packed = json.loads(secondary) if secondary else {}
+        except ValueError:
+            packed = {}
+        if not isinstance(packed, dict):
+            packed = {}
+        return CarrybeeCredentials(
+            client_id=primary,
+            client_secret=str(packed.get("client_secret") or ""),
+            client_context=str(packed.get("client_context") or ""),
+            sandbox=bool(settings.get("sandbox", False)),
+        )
     raise ValueError(f"No credential shape is declared for {provider}")

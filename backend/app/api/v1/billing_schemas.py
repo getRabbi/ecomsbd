@@ -30,6 +30,12 @@ __all__ = [
     "CheckoutPayload",
     "CheckoutResponse",
     "ConfirmCheckoutPayload",
+    "ManualPaymentAccountResponse",
+    "ManualPaymentOptionsResponse",
+    "ManualPaymentPlanResponse",
+    "ManualPaymentQuoteResponse",
+    "ManualPaymentSubmissionResponse",
+    "ManualPaymentSubmitPayload",
     "PlayVerifyPayload",
     "PurchaseResultResponse",
     "RestorePurchase",
@@ -84,6 +90,10 @@ class SubscriptionResponse(BaseModel):
     #: Last four characters of the provider reference, for support. Never the
     #: reference itself.
     provider_reference_suffix: str | None = None
+    #: A manual grant the seller did not pay for. ``False`` for any provider
+    #: purchase and for an approved bKash / Nagad TrxID payment (V4 WP2.5),
+    #: which is also ``manual_admin`` but was paid.
+    support_credit: bool = False
 
 
 class BillingProviderStateResponse(BaseModel):
@@ -194,3 +204,64 @@ class SubscriptionEventResponse(BaseModel):
     provider: str
     reason: str | None
     occurred_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Manual bKash / Nagad payment (V4 WP2.5)
+# --------------------------------------------------------------------------- #
+
+
+class ManualPaymentAccountResponse(BaseModel):
+    """One of the operator's receiving wallets. Shown to the seller on purpose."""
+
+    method: str
+    number: str
+    label: str
+
+
+class ManualPaymentQuoteResponse(BaseModel):
+    months: int
+    #: Exactly what to send: catalogue price × months.
+    amount: MoneyAmount
+
+
+class ManualPaymentPlanResponse(BaseModel):
+    code: str
+    name: str
+    monthly_price: MoneyAmount
+    amounts: list[ManualPaymentQuoteResponse] = Field(default_factory=list)
+
+
+class ManualPaymentOptionsResponse(BaseModel):
+    available: bool
+    #: FEATURE_OFF, FREE_LAUNCH, CHANNEL or NO_ACCOUNTS when not available.
+    unavailable_reason: str | None = None
+    accounts: list[ManualPaymentAccountResponse] = Field(default_factory=list)
+    plans: list[ManualPaymentPlanResponse] = Field(default_factory=list)
+    min_months: int
+    max_months: int
+
+
+class ManualPaymentSubmitPayload(BaseModel):
+    plan_code: str = Field(min_length=1, max_length=32)
+    months: int = Field(ge=1, le=12)
+    method: str = Field(min_length=1, max_length=16)
+    #: The number the money was sent from. Stored masked only.
+    payer_number: str = Field(min_length=6, max_length=20)
+    trx_id: str = Field(min_length=1, max_length=40)
+
+
+class ManualPaymentSubmissionResponse(BaseModel):
+    id: uuid.UUID
+    plan: str
+    months: int
+    amount: MoneyAmount
+    method: str
+    payer_number_masked: str
+    trx_id: str
+    state: str
+    #: The rejection reason, when rejected.
+    reason: str | None = None
+    period_end: datetime | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime

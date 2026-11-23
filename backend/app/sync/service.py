@@ -34,12 +34,14 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.audit import AuditAction, record_audit
+from app.confirmations.service import start_for_new_order
 from app.core.clock import ensure_utc
+from app.core.context import current_context
 from app.core.errors import AppError, ErrorCode, ValidationError
 from app.core.logging import get_logger
 from app.customers.models import Customer
 from app.customers.service import CustomerService
-from app.orders.models import Order, OrderStatus
+from app.orders.models import Order, OrderChannel, OrderStatus
 from app.orders.service import OrderDraft, OrderItemDraft, OrderService
 from app.products.models import Product, StockMovementReason, StockMovementSource
 from app.products.service import ProductService, StockAdjustment, StockService
@@ -283,6 +285,10 @@ class SyncService:
         base_version: int | None,
     ) -> MutationOutcome:
         if operation is MutationOperation.CREATE:
+            from app.chat_orders import service as chat_orders
+
+            # A chat draft the quick-order sheet confirmed offline (V4 WP1.5).
+            draft = await chat_orders.offline_draft(self._db, entity_id)
             order, _ = await self._orders.create(
                 OrderDraft(
                     phone=str(body.get("phone", "")),
@@ -311,8 +317,24 @@ class SyncService:
                     # The client id is the entity id, which is what makes a
                     # replayed create resolve to the same order.
                     client_id=entity_id,
+                    channel=await chat_orders.offline_channel(self._db, draft)
+                    if draft is not None
+                    else OrderChannel.MANUAL,
                 ),
                 check_duplicates=False,
+            )
+            if draft is not None:
+                await chat_orders.adopt_offline_order(
+                    self._db, draft, order, current_context().user_id
+                )
+            # The quick-order sheet queued "Confirm & call" / "Already confirmed
+            # in chat" with the create (V4 WP2.1): one mutation, one transaction.
+            await start_for_new_order(
+                self._db,
+                self._orders,
+                order,
+                body.get("confirmation"),
+                actor_id=current_context().user_id,
             )
             return MutationOutcome(
                 mutation_id=entity_id,

@@ -32,6 +32,7 @@ _Fake _fake({
   required bool Function() enabled,
   List<Map<String, dynamic>> failures = const [],
   List<Map<String, dynamic>> recipes = const [],
+  String trigger = 'order.external_received',
 }) {
   final fake = buildFakeApi();
   fake.adapter.onJson('GET', '/automation/catalog', {
@@ -46,7 +47,7 @@ _Fake _fake({
         {
           'id': 'wf1',
           'name': 'Confirm website orders',
-          'trigger': 'order.external_received',
+          'trigger': trigger,
           'enabled': enabled(),
           'published_version': 2,
           'runs_7d': {'SUCCEEDED': 4, 'FAILED': 1},
@@ -263,4 +264,72 @@ void main() {
     expect(installs.length, 1);
     expect(installs.single.jsonBody['locale'], 'en');
   });
+
+  test('V4 confirmation triggers and outcomes have English and Bangla', () {
+    const keys = [
+      'auto.trigger.confirmation.confirmed',
+      'auto.trigger.confirmation.cancelled',
+      'auto.trigger.confirmation.no_answer',
+      'auto.trigger.confirmation.callback_requested',
+      'auto.trigger.intake.draft_ready',
+      'auto.reason.CONFIRMATION_ENGINE_DISABLED',
+      'auto.reason.ORDER_NOT_DRAFT',
+      'auto.reason.ALREADY_REQUESTED',
+      'auto.reason.AUTOPILOT_DISABLED',
+      'auto.reason.CALL',
+      'auto.reason.AUTO_CONFIRM',
+      'auto.reason.SELLER_REVIEW',
+    ];
+    for (final key in keys) {
+      expect(automationEn[key], isNotNull, reason: key);
+      expect(automationBn[key], matches(RegExp('[ঀ-৿]')), reason: key);
+    }
+  });
+
+  for (final language in ['en', 'bn']) {
+    testWidgets('a confirmation workflow and recipe read as text ($language)', (
+      tester,
+    ) async {
+      final strings = language == 'bn' ? automationBn : automationEn;
+      final fake = _fake(
+        manage: true,
+        enabled: () => true,
+        trigger: 'confirmation.confirmed',
+        recipes: [
+          {
+            'key': 'order_confirm_customer',
+            'name': {
+              'en': 'Order → confirm with the customer',
+              'bn': 'অর্ডার → গ্রাহকের কাছে নিশ্চিত করুন',
+            },
+            'trigger': 'order.created',
+            'needs': <String>[],
+            'installed': false,
+          },
+        ],
+      );
+      fake.adapter.onJson(
+        'POST',
+        '/automation/recipes/order_confirm_customer/install',
+        {'id': 'wf2', 'blocker': 'CONFIRMATION_ENGINE_DISABLED'},
+      );
+      await tester.pumpWidget(_app(fake, language));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(strings['auto.trigger.confirmation.confirmed']!),
+        findsOneWidget,
+      );
+      await tester.tap(find.text(strings['auto.tab.recipes']!));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+      // Switched off for the shop: kept as a draft, and the seller is told why.
+      expect(
+        find.textContaining(
+          strings['auto.reason.CONFIRMATION_ENGINE_DISABLED']!,
+        ),
+        findsOneWidget,
+      );
+    });
+  }
 }

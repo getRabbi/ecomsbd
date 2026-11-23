@@ -57,9 +57,9 @@ async def deliver_message(tenant_id: uuid.UUID, message_id: uuid.UUID) -> None:
             if row.first_attempt_at and utc_now() - row.first_attempt_at >= timedelta(hours=23):
                 row.status, row.last_error = "UNKNOWN", "PROVIDER_DEDUPE_WINDOW_EXPIRED"
                 return
-            if row.status == "SENDING" and row.channel == "WHATSAPP":
-                # A WhatsApp send has no provider idempotency key. A crash after
-                # the request left is never resent blind.
+            if row.status == "SENDING" and row.channel in providers.NO_IDEMPOTENCY:
+                # A WhatsApp or SMS send has no provider idempotency key. A crash
+                # after the request left is never resent blind.
                 row.status, row.last_error = "UNKNOWN", "SEND_INTERRUPTED"
                 return
             row.first_attempt_at = row.first_attempt_at or utc_now()
@@ -96,7 +96,11 @@ async def deliver_message(tenant_id: uuid.UUID, message_id: uuid.UUID) -> None:
             channel = await db.scalar(
                 sa.select(Channel).where(Channel.kind == conversation.channel)
             )
-            if not capability(conversation.channel)[0] or not channel or not channel.enabled:
+            if conversation.channel == "SMS":
+                on = (await providers.sms_capability(db))[0]
+            else:
+                on = capability(conversation.channel)[0]
+            if not on or not channel or not channel.enabled:
                 row.status, row.last_error = "FAILED", "CHANNEL_DISABLED"
                 row.failed_at = utc_now()
                 return

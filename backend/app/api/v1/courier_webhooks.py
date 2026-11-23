@@ -23,6 +23,8 @@ from app.api.deps import DbSession
 from app.core.context import use_context
 from app.core.logging import get_logger
 from app.couriers.accounts import resolve_account_by_webhook_token
+from app.couriers.carrybee.contract import WEBHOOK_SECRET_HEADER as CARRYBEE_SECRET_HEADER
+from app.couriers.carrybee.webhooks import CarrybeeWebhookParser, CarrybeeWebhookVerifier
 from app.couriers.pathao.webhooks import (
     WEBHOOK_INTEGRATION_SECRET_HEADER,
     WEBHOOK_INTEGRATION_SECRET_VALUE,
@@ -185,6 +187,80 @@ async def pathao_webhook(
         received=True,
         processed=result.was_processed,
         blocker=None if secret else "PATHAO_WEBHOOK_SECRET_NOT_CONFIGURED",
+        detail=result.message,
+    )
+
+
+CARRYBEE_WEBHOOK_BLOCKER = "CARRYBEE_WEBHOOK_SECRET_NOT_CONFIGURED"
+
+
+@router.post(
+    "/carrybee/{token}",
+    response_model=WebhookAck,
+    summary="Carrybee parcel status callback",
+    include_in_schema=False,
+)
+async def carrybee_webhook(
+    token: str,
+    request: Request,
+    response: Response,
+    db: DbSession,
+) -> WebhookAck:
+    """Receive a Carrybee callback for one shop (V4 WP7.2, CONTRACT.md §8).
+
+    Same order as Pathao: resolve the shop from the path token, become that
+    tenant, compare ``X-CB-Webhook-Integration-Header`` with the shop's own
+    secret in constant time, only then parse. A verified request is answered
+    202 with the header echoed, which is what Carrybee's integration event
+    requires; nothing is echoed to a request that failed the check.
+    """
+    body = await request.body()
+    headers = {key.lower(): value for key, value in request.headers.items()}
+
+    account = await resolve_account_by_webhook_token(db, provider="carrybee", token=token)
+    if account is None:
+        response.status_code = 202
+        log.warning(
+            "carrybee webhook for unknown token",
+            extra={"provider": "carrybee", "operation": "webhook_ingest"},
+        )
+        return WebhookAck(
+            received=True,
+            processed=False,
+            blocker=None,
+            detail="Received. This callback URL is not active.",
+        )
+
+    from app.api.deps import get_vault
+    from app.couriers.accounts import CourierAccountService
+
+    with use_context(tenant_id=account.tenant_id):
+        service = CourierAccountService(db, vault=get_vault())
+        secret = service.webhook_secret_for(account)
+        verifier = CarrybeeWebhookVerifier(secret)
+        receiver = WebhookReceiver(
+            db,
+            verifier=verifier,
+            parser=CarrybeeWebhookParser(),
+            provider="carrybee",
+            blocker=CARRYBEE_WEBHOOK_BLOCKER,
+            unconfigured_detail=(
+                "Add the webhook secret from Carrybee → Developer → Webhook Integration "
+                "to this courier account. Parcel status is also checked with Carrybee."
+            ),
+        )
+        result = await receiver.ingest(headers=headers, body=body)
+        verified = verifier.verify(headers=headers, body=body)
+
+    if verified and result.http_status in (200, 202):
+        response.status_code = 202
+        response.headers[CARRYBEE_SECRET_HEADER] = (secret or "").strip()
+    else:
+        response.status_code = result.http_status
+    return WebhookAck(
+        received=True,
+        processed=result.was_processed,
+        blocker=None if secret else CARRYBEE_WEBHOOK_BLOCKER,
         detail=result.message,
     )
 

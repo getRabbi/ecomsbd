@@ -244,6 +244,7 @@ async def test_four_messages_become_one_ready_draft_with_one_notification(client
     draft = drafts[0]
     assert draft.status == "READY_FOR_REVIEW" and draft.message_count == 4
     assert draft.selected_phone == "+8801712345678"
+    assert draft.capture_source == "META_WEBHOOK", "Meta still enters through the Intake service"
     assert draft.address == "মিরপুর 10 ঢাকা"
     (item,) = draft.items
     assert (item["quantity"], item["size"], item["color"]) == (2, "XL", "কালো")
@@ -584,3 +585,63 @@ async def test_legacy_paste_channel_is_accepted(client, unique_phone):
     shop = await signed_in_shop(client, unique_phone)
     created = await create_order(client, shop, channel="PASTE")
     assert created["order"]["channel"] == "PASTE_PARSE"
+
+
+# ------------------------------------------- V4 WP0.4 delivery rules ---
+
+
+async def _rules(client, shop, **values) -> None:
+    response = await client.patch("/v1/shop/delivery-rules", json=values, headers=auth_header(shop))
+    assert response.status_code == 200, response.text
+
+
+async def test_catalogue_cod_adds_the_zone_charge(client, unique_phone, delivery_rules_on):
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000, outside_dhaka_charge_paisa=12_000)
+
+    await _send_chat(client, CHAT)  # Mirpur 10, Dhaka: inside Dhaka
+    (draft,) = await _drafts(shop)
+    assert draft.cod_amount_paisa == 185_000 + 6_000 and draft.cod_source == "CATALOG"
+    assert "amount" in draft.uncertain_fields
+
+
+async def test_a_chat_amount_far_from_the_calculation_is_a_mismatch(
+    client, unique_phone, delivery_rules_on
+):
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000)
+
+    await _send_chat(client, [*CHAT, "মোট ২৫০০ টাকা"])
+    (draft,) = await _drafts(shop)
+    assert draft.cod_amount_paisa == 250_000, "a stated amount is never replaced"
+    assert draft.cod_source == "CHAT_MISMATCH"
+    assert "amount" in draft.uncertain_fields
+    assert "COD_MISMATCH" in draft.warnings
+
+
+async def test_a_chat_amount_within_the_zone_charge_stands(client, unique_phone, delivery_rules_on):
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000)
+
+    await _send_chat(client, [*CHAT, "মোট ১৮৫০ টাকা"])  # catalogue total, charge left out
+    (draft,) = await _drafts(shop)
+    assert draft.cod_amount_paisa == 185_000 and draft.cod_source == "PARSED"
+    assert "COD_MISMATCH" not in draft.warnings
+
+
+async def test_an_unknown_zone_adds_nothing_and_says_so(client, unique_phone, delivery_rules_on):
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000)
+
+    await _send_chat(client, [*CHAT[:3], "ঠিকানা: আগ্রাবাদ"])
+    (draft,) = await _drafts(shop)
+    assert draft.cod_amount_paisa == 185_000 and draft.cod_source == "CATALOG"
+    assert "ZONE_UNKNOWN" in draft.warnings

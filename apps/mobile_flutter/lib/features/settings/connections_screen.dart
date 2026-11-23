@@ -31,6 +31,18 @@ const _comingSoonIntegrations = <String>{
   'WHATSAPP',
 };
 
+// V4 Phase 6: the official Meta path opens per shop. Only the server's
+// `coming_soon: false` (App Review attested, the shop's flag on, a health
+// check passed) lifts the gate; no answer keeps it.
+const _serverGatedIntegrations = <String>{'MESSENGER', 'WHATSAPP'};
+
+/// Whether [row] shows as Coming soon.
+bool isLaunchGated(IntegrationRow row) {
+  if (!_comingSoonIntegrations.contains(row.provider)) return false;
+  if (!_serverGatedIntegrations.contains(row.provider)) return true;
+  return row.serverComingSoon != false;
+}
+
 /// Connections & Integrations: the one place a seller sees every store,
 /// sales channel and courier the shop is connected to, and what needs fixing.
 ///
@@ -97,13 +109,14 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     final couriers = ref.watch(_courierRowsProvider);
     final rows = hub.whenData(integrationRowsFromHub);
     final activeRows = rows.valueOrNull
-        ?.where((row) => !_comingSoonIntegrations.contains(row.provider))
+        ?.where((row) => !isLaunchGated(row))
         .toList();
     final comingSoonIds = <Object?>{
       for (final row in rows.valueOrNull ?? const <IntegrationRow>[])
-        if (_comingSoonIntegrations.contains(row.provider) &&
-            row.connection != null)
-          row.connection!['id'],
+        if (isLaunchGated(row) && row.connection != null) row.connection!['id'],
+    };
+    final openProviders = <String>{
+      for (final row in activeRows ?? const <IntegrationRow>[]) row.provider,
     };
 
     return DetailScaffold(
@@ -126,7 +139,8 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
           issues: (issues.valueOrNull ?? const <Map<String, dynamic>>[])
               .where(
                 (issue) =>
-                    !_comingSoonIntegrations.contains(issue['provider']) &&
+                    (!_comingSoonIntegrations.contains(issue['provider']) ||
+                        openProviders.contains(issue['provider'])) &&
                     !comingSoonIds.contains(issue['connection_id']),
               )
               .toList(),
@@ -385,7 +399,7 @@ class _IntegrationTile extends StatelessWidget {
     final providerName = integrationProviderName(context, row.provider);
     final icon = _integrationIcon(row.provider);
 
-    if (_comingSoonIntegrations.contains(row.provider)) {
+    if (isLaunchGated(row)) {
       return _HubTile(
         key: ValueKey(
           connection == null

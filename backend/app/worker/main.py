@@ -17,10 +17,15 @@ from typing import Any, ClassVar
 from arq import cron
 from arq.connections import RedisSettings
 
+import app.billing.jobs  # registers the billing outbox handlers
+import app.confirmations.jobs  # registers the confirmation outbox handlers
+import app.referrals.jobs  # registers the referral outbox handler
+import app.voice.jobs  # noqa: F401  (registers the voice outbox handlers)
 from app import __version__
 from app.analytics.network import build_network_benchmarks
 from app.automation.jobs import dispatch_automation, scan_segment_entries
 from app.chat_orders.jobs import chat_order_housekeeping, process_chat_messages
+from app.confirmations.jobs import dispatch_confirmation_calls, follow_up_confirmations
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.couriers.jobs import (
@@ -34,6 +39,7 @@ from app.db.session import dispose_engine, get_engine
 from app.db.tenancy import install_tenancy_guards
 from app.forecasting.jobs import snapshot_demand_forecasts
 from app.imports.jobs import commit_import_job, sweep_stuck_imports
+from app.intake.jobs import scan_device_health
 from app.integrations.jobs import (
     process_integration_events,
     run_integration_syncs,
@@ -113,6 +119,7 @@ class WorkerSettings:
         sync_inventories,
         process_chat_messages,
         chat_order_housekeeping,
+        scan_device_health,
         dispatch_outbox,
         snapshot_demand_forecasts,
         prune_external_risk_lookups,
@@ -154,6 +161,12 @@ class WorkerSettings:
         # every 15s; expiry and raw-message retention hourly.
         cron(process_chat_messages, second={8, 23, 38, 53}),
         cron(chat_order_housekeeping, minute={41}),
+        # V4 WP1.3: linked phones silent for a day need the seller's attention.
+        cron(scan_device_health, minute={47}),
+        # V4 WP2.3: retry / SMS link / seller after no answer; expired links.
+        cron(follow_up_confirmations, minute=set(range(4, 60, 5))),
+        # V4 WP3.2: due IVR confirmation calls; CALLING rows past 10 minutes.
+        cron(dispatch_confirmation_calls, second={14, 44}),
         cron(run_integration_syncs, second={25, 55}),
         cron(schedule_integrations, minute=set(range(0, 60, 5))),
         # Two-way stock: compare mapped items every 5 minutes (V3.2).

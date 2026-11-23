@@ -120,6 +120,7 @@ class SubscriptionState {
     this.graceUntil,
     this.statusReason,
     this.verifiedAt,
+    this.supportCredit,
   });
 
   factory SubscriptionState.fromJson(Map<String, dynamic> json) {
@@ -140,6 +141,7 @@ class SubscriptionState {
       graceUntil: parse('grace_until'),
       statusReason: json['status_reason'] as String?,
       verifiedAt: parse('verified_at'),
+      supportCredit: json['support_credit'] as bool?,
     );
   }
 
@@ -156,13 +158,17 @@ class SubscriptionState {
   final String? statusReason;
   final DateTime? verifiedAt;
 
+  /// The server's answer (V4 WP2.5): an approved bKash / Nagad payment is
+  /// also `manual_admin` but was paid. Absent from older servers.
+  final bool? supportCredit;
+
   bool get isPaymentFailing => status == 'GRACE' || status == 'PAST_DUE';
   bool get hasEnded =>
       status == 'EXPIRED' || status == 'CANCELLED' || status == 'REFUNDED';
 
   /// Support-issued credit. Worth naming on screen, because it explains why a
   /// plan is active that the seller does not remember paying for.
-  bool get isSupportCredit => provider == 'manual_admin';
+  bool get isSupportCredit => supportCredit ?? provider == 'manual_admin';
 }
 
 /// One metered entitlement's spend this period.
@@ -218,6 +224,7 @@ class UsageLine {
     'risk_checks_daily' => 'Risk checks today',
     'sms_segments_monthly' => 'SMS this month',
     'ai_parse_monthly' => 'AI paste-parse this month',
+    'voice_calls_monthly' => 'Confirmation calls this month',
     _ => entitlement,
   };
 }

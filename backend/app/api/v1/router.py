@@ -17,19 +17,26 @@ from app.api.v1 import (
     analytics,
     auth,
     automation,
+    autopilot,
     billing,
     campaigns,
     chat_orders,
+    confirmations,
+    confirmations_public,
     consignments,
     courier_webhooks,
     couriers,
     crm,
     customers,
+    delivery_rules,
     developers,
+    devices,
+    documents,
     external_risk,
     forecasting,
     imports,
     insights,
+    intake,
     integration_webhooks,
     integrations,
     integrations_sync,
@@ -45,15 +52,27 @@ from app.api.v1 import (
     providers,
     realtime,
     reconciliation,
+    referrals,
     rto,
     sync,
     team,
     tenants,
+    voice,
+    voice_webhooks,
     whatsapp_signup,
 )
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(delivery_rules.router)
+api_router.include_router(autopilot.router)
+api_router.include_router(devices.router)
+api_router.include_router(intake.router)
+api_router.include_router(confirmations.router)
+api_router.include_router(confirmations.queue_router)
+# Unauthenticated: the customer's SMS confirm link (GET reads only).
+api_router.include_router(confirmations_public.router)
+api_router.include_router(documents.router)
 api_router.include_router(messaging.router)
 # Unauthenticated: one-click unsubscribe links and signed provider receipts.
 api_router.include_router(messaging_public.public)
@@ -96,7 +115,14 @@ api_router.include_router(couriers.router)
 # Steadfast route stores what it receives and processes nothing, because no
 # verified signature contract exists (STEADFAST_WEBHOOK_CONTRACT_REQUIRED).
 api_router.include_router(courier_webhooks.router)
+# Unauthenticated: voice provider callbacks, stored, then verified by the
+# transport's signature check before anything is applied (V4 WP3.2).
+api_router.include_router(voice_webhooks.router)
+# V4 WP3.3: the shop's confirmation-call intro (settings.manage).
+api_router.include_router(voice.router)
 api_router.include_router(billing.router)
+# V4 WP7.4: shop referral code + 30-day credit after the first TrxID payment.
+api_router.include_router(referrals.router)
 api_router.include_router(analytics.router)
 api_router.include_router(rto.router)
 api_router.include_router(insights.router)

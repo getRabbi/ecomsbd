@@ -1,9 +1,16 @@
 # Cloudflare Workers deployment
 
 The web dashboard runs as one Worker, `ecomsbd-web`, built with the OpenNext
-adapter (`@opennextjs/cloudflare`). Vercel (`ecomsbd-web.vercel.app`, and the
-scalemyprints.com pages) keeps building the same app from `main` as the
-fallback.
+adapter (`@opennextjs/cloudflare`). It is the only live web host.
+
+The old Vercel project is no fallback any more: since November 2026 the Vercel
+account is blocked, and `ecomsbd-web.vercel.app` and `scalemyprints.com` answer
+402 `DEPLOYMENT_DISABLED` (checked 2026-11-23). Vercel's GitHub app still posts a
+failing "Vercel" status on pull requests; it deploys nothing and blocks nothing
+(`main` has no required checks).
+
+Nothing deploys the Worker automatically: no Cloudflare build is connected to the
+repository. After a merge to `main`, deploy from a clean checkout of `main` (below).
 
 | Host | Serves |
 | --- | --- |
@@ -12,7 +19,8 @@ fallback.
 | `www.ecomsbd.com` | 308 to `ecomsbd.com` |
 
 The host rules live in `next.config.ts` and match only these hostnames. The API
-stays `https://api.scalemyprints.com/v1`.
+is `https://api.ecomsbd.com/v1`; the old `https://api.scalemyprints.com/v1` stays
+served as an alias (`docs/runbooks/API_DOMAIN_MIGRATION.md`).
 
 ## Deploy
 
@@ -21,8 +29,10 @@ From `apps/web`:
 1. Log in once: `npx wrangler login`.
 2. Provide the three public build values in `.env.production.local` (git-ignored)
    or in the shell: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `NEXT_PUBLIC_API_BASE_URL=https://api.scalemyprints.com/v1`. They are the
-   same values as the Vercel project's.
+   `NEXT_PUBLIC_API_BASE_URL=https://api.ecomsbd.com/v1`. The Supabase values
+   are the same as the Vercel project's. Deploy with the new API value only once
+   `https://api.ecomsbd.com/health/live` answers (runbook steps 1–2); until then
+   keep `https://api.scalemyprints.com/v1`.
 3. `npm run cf:deploy`. The first deploy creates the three custom domains, their
    DNS records and certificates.
 
@@ -39,7 +49,7 @@ rules can only be checked against a preview without `routes`.
 
 - Supabase → Authentication → URL Configuration → Redirect URLs:
   `https://ecomsbd.com/**` and `https://app.ecomsbd.com/**`, next to the existing
-  `https://ecomsbd-web.vercel.app/**`. Site URL stays `https://scalemyprints.com`.
+  `https://ecomsbd-web.vercel.app/**`. Site URL: `https://app.ecomsbd.com`.
 - Northflank secret group `ecomsbd-production`: `CORS_ALLOW_ORIGINS` includes
   `https://ecomsbd.com,https://app.ecomsbd.com`; restart `ecomsbd-api` after
   editing it, since group edits do not restart running containers.
@@ -52,4 +62,4 @@ pages come from the read-only static-assets cache with cache interception, so
 they skip loading the Next.js server. The bundle is about 1.5 MiB gzipped, under
 the 3 MiB free-plan limit.
 
-Rollback: `npx wrangler rollback`, or send users back to the Vercel URL.
+Rollback: `npx wrangler rollback` (the Vercel URL no longer serves anything).

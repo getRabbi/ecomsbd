@@ -97,7 +97,10 @@ workflows:
           fire = plistlib.load(open("ios/Runner/GoogleService-Info.plist", "rb"))
           info = plistlib.load(open("ios/Runner/Info.plist", "rb"))
           problems = []
-          if env.get("ECOMSBD_API_BASE_URL") != "https://api.scalemyprints.com":
+          # V4 WP7.3: both production API origins are valid during the domain move
+          # (docs/runbooks/API_DOMAIN_MIGRATION.md); nothing else is.
+          production_apis = ("https://api.scalemyprints.com", "https://api.ecomsbd.com")
+          if env.get("ECOMSBD_API_BASE_URL") not in production_apis:
               problems.append("ECOMSBD_API_BASE_URL is not the production API")
           for key in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "GOOGLE_CLIENT_ID_WEB"):
               if not env.get(key):

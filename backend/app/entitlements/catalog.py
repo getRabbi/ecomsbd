@@ -60,6 +60,10 @@ class Entitlement(StrEnum):
     ADVANCED_PROFIT = "advanced_profit"
     SMS_SEGMENTS_MONTHLY = "sms_segments_monthly"
     AI_PARSE_MONTHLY = "ai_parse_monthly"
+    #: V4 WP3.4: IVR confirmation calls that reached the voice provider.
+    VOICE_CALLS_MONTHLY = "voice_calls_monthly"
+    #: V4 Phase 4: Autopilot may turn ready chat drafts into orders.
+    AUTOPILOT = "autopilot"
     TEAM_MEMBER_LIMIT = "team_member_limit"
     WEB_DASHBOARD = "web_dashboard"
     CSV_EXPORT = "csv_export"
@@ -109,6 +113,8 @@ PLANS: dict[PlanCode, PlanDefinition] = {
             Entitlement.ADVANCED_PROFIT: False,
             Entitlement.SMS_SEGMENTS_MONTHLY: 0,
             Entitlement.AI_PARSE_MONTHLY: 5,
+            Entitlement.VOICE_CALLS_MONTHLY: 0,
+            Entitlement.AUTOPILOT: False,
             Entitlement.TEAM_MEMBER_LIMIT: 1,
             Entitlement.WEB_DASHBOARD: False,
             Entitlement.CSV_EXPORT: False,
@@ -129,6 +135,8 @@ PLANS: dict[PlanCode, PlanDefinition] = {
             Entitlement.ADVANCED_PROFIT: False,
             Entitlement.SMS_SEGMENTS_MONTHLY: 300,
             Entitlement.AI_PARSE_MONTHLY: 100,
+            Entitlement.VOICE_CALLS_MONTHLY: 50,
+            Entitlement.AUTOPILOT: False,
             Entitlement.TEAM_MEMBER_LIMIT: 1,
             Entitlement.WEB_DASHBOARD: False,
             Entitlement.CSV_EXPORT: True,
@@ -149,6 +157,8 @@ PLANS: dict[PlanCode, PlanDefinition] = {
             Entitlement.ADVANCED_PROFIT: True,
             Entitlement.SMS_SEGMENTS_MONTHLY: 1000,
             Entitlement.AI_PARSE_MONTHLY: 500,
+            Entitlement.VOICE_CALLS_MONTHLY: 200,
+            Entitlement.AUTOPILOT: True,
             Entitlement.TEAM_MEMBER_LIMIT: 5,
             Entitlement.WEB_DASHBOARD: True,
             Entitlement.CSV_EXPORT: True,

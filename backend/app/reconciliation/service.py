@@ -69,6 +69,8 @@ from app.payouts.models import (
     PayoutSource,
 )
 from app.payouts.service import PayoutService
+from app.product_events.models import ProductEventName
+from app.product_events.service import ProductEventService
 from app.profit.models import ChargeKind, ChargeSource, ConsignmentCharge
 from app.profit.service import ProfitService
 from app.reconciliation.evaluation import (
@@ -436,6 +438,10 @@ class ReconciliationService:
                     "charge_only": report.charge_only,
                     "applied_paisa": report.applied_paisa,
                 },
+            )
+            # Shadow runs write nothing, so they are not a reconcile either.
+            await ProductEventService(self._db).core_action(
+                ProductEventName.FIRST_RECONCILE, tenant_id=payout.tenant_id
             )
         return report
 

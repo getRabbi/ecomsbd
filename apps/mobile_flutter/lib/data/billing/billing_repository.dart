@@ -1,4 +1,6 @@
 import '../../core/api/api_client.dart';
+import '../../core/money.dart';
+import 'manual_payment.dart';
 import 'models.dart';
 
 /// Billing, over the API.
@@ -137,5 +139,43 @@ class BillingRepository {
       },
     );
     return SubscriptionState.fromJson(json);
+  }
+
+  // --- bKash / Nagad TrxID (V4 WP2.5) ---------------------------------------
+
+  Future<ManualPaymentOptions> manualPaymentOptions() async {
+    return ManualPaymentOptions.fromJson(
+      await _api.get('/billing/manual-payments/options'),
+    );
+  }
+
+  Future<List<ManualPaymentSubmission>> manualPayments() async {
+    final rows = await _api.getList('/billing/manual-payments');
+    return <ManualPaymentSubmission>[
+      for (final row in rows)
+        ManualPaymentSubmission.fromJson(row as Map<String, dynamic>),
+    ];
+  }
+
+  /// Records the claim; nothing is granted until an operator checks it. The
+  /// same TrxID sent again for the same plan returns the first submission.
+  Future<ManualPaymentSubmission> submitManualPayment({
+    required String plan,
+    required int months,
+    required String method,
+    required String payerNumber,
+    required String trxId,
+  }) async {
+    final json = await _api.post(
+      '/billing/manual-payments',
+      body: <String, dynamic>{
+        'plan_code': plan,
+        'months': months,
+        'method': method,
+        'payer_number': normalizeDigits(payerNumber.trim()),
+        'trx_id': cleanTrxId(trxId),
+      },
+    );
+    return ManualPaymentSubmission.fromJson(json);
   }
 }

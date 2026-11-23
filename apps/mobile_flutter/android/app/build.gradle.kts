@@ -101,3 +101,14 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // V4 WP1.4: intake uploads, heartbeat and rules refresh survive process death
+    // and retry with exponential backoff.
+    implementation("androidx.work:work-runtime:2.10.1")
+
+    // JVM unit tests for the intake classifier and buffer (no device needed).
+    // org.json: android.jar only has stubs of it on the unit-test classpath.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+}

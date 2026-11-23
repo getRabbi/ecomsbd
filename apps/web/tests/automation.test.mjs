@@ -79,3 +79,23 @@ test('new actions start from safe defaults', () => {
   assert.deepEqual(defaultConfig('BOOK_COURIER', catalog, 'en'), { provider: 'pathao' });
   assert.equal(defaultConfig('SELLER_NOTIFICATION', catalog, 'en').audience, 'OPERATIONS');
 });
+
+test('V4 confirmation hooks: draft subject, empty configs and every outcome have copy', () => {
+  const catalog = {
+    workflow_triggers: [{ key: 'intake.draft_ready', subject: 'draft' }, { key: 'confirmation.confirmed', subject: 'order' }],
+    subjects: { order: ['customer', 'order'], draft: ['draft'] },
+  };
+  assert.deepEqual([...provides(catalog, 'intake.draft_ready')], ['draft']);
+  assert.deepEqual([...provides(catalog, 'confirmation.confirmed')].sort(), ['customer', 'order']);
+  assert.deepEqual(defaultConfig('REQUEST_CONFIRMATION', null, 'en'), {});
+  assert.deepEqual(defaultConfig('CONVERT_DRAFT_TO_ORDER', null, 'bn'), {});
+  const keys = [
+    'auto.cfg.confirmNote',
+    'auto.cfg.convertNote',
+    ...['CONFIRMATION_ENGINE_DISABLED', 'ORDER_NOT_DRAFT', 'ALREADY_REQUESTED', 'AUTOPILOT_DISABLED', 'CALL', 'AUTO_CONFIRM', 'SELLER_REVIEW', 'CONVERTED', 'DRAFT_NOT_CONVERTED'].map((code) => `auto.reason.${code}`),
+  ];
+  for (const key of keys) {
+    assert.ok(automationEn[key], `missing English: ${key}`);
+    assert.match(automationBn[key], /[ঀ-৿]/, `missing Bangla: ${key}`);
+  }
+});

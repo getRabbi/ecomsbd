@@ -420,6 +420,7 @@ export const opsEn = {
   'dash.alert.COURIER_ACCOUNT_PROBLEM': 'Courier account problem',
   'dash.alert.FOLLOW_UP_DUE': 'Customer follow-ups due',
   'dash.alert.CHAT_ORDER_READY': 'Chat orders ready to review',
+  'dash.alert.DEVICE_NEEDS_ATTENTION': 'Linked phone went quiet',
 
   // Notifications
   'notif.severity': 'Priority',
@@ -911,6 +912,7 @@ export const opsBn: Record<keyof typeof opsEn, string> = {
   'dash.alert.COURIER_ACCOUNT_PROBLEM': 'কুরিয়ার অ্যাকাউন্টে সমস্যা',
   'dash.alert.FOLLOW_UP_DUE': 'কাস্টমার ফলো-আপ বাকি',
   'dash.alert.CHAT_ORDER_READY': 'চ্যাট অর্ডার দেখার অপেক্ষায়',
+  'dash.alert.DEVICE_NEEDS_ATTENTION': 'লিংক করা ফোন থেকে সাড়া নেই',
 
   'notif.severity': 'গুরুত্ব',
   'notif.sev.ACTION': 'কাজ দরকার',

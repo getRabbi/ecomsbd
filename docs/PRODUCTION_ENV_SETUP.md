@@ -157,7 +157,9 @@ Must be `false`. Staging and production refuse to start otherwise. Not secret.
 
 ### `PUBLIC_WEB_URL`, `SUPPORT_EMAIL`
 
-Optional. `PUBLIC_WEB_URL` is reserved for a separate web client. Business email may use
+Optional. `PUBLIC_WEB_URL` is the web workspace origin, `https://app.ecomsbd.com`: the web
+return after a store / Meta sign-in, the WhatsApp Embedded Signup page and the customer
+confirm link are built from it. Business email may use
 `PUBLIC_BASE_URL`, where the backend serves verification and password-reset pages.
 `SUPPORT_EMAIL` is the reply-to on outbound mail and the address shown to a
 seller who needs help. Use a mailbox a person actually reads.
@@ -305,8 +307,10 @@ Supabase Dashboard actions:
 2. Authentication → JWT Signing Keys: create/activate an asymmetric ES256 or RS256
    key if the project still uses legacy HS256. Follow Supabase's key-rotation
    waiting periods. The backend never accepts the legacy shared-secret algorithm.
-3. Authentication → URL Configuration: Site URL `https://scalemyprints.com`;
-   allow exactly `com.smply.app://auth/callback` as a redirect URL. Flutter uses
+3. Authentication → URL Configuration: Site URL `https://app.ecomsbd.com`;
+   allow `com.ecomsbd.app://auth/callback` (the app) and the web hosts
+   `https://app.ecomsbd.com/**` and `https://ecomsbd.com/**` (`apps/web/CLOUDFLARE.md`)
+   as redirect URLs. Flutter uses
    PKCE, encrypted session/code-verifier storage, and this Android intent filter.
 4. Settings → API Keys: copy the public key to the backend and Flutter. Put
    `SUPABASE_SERVICE_ROLE_KEY` only in the backend secret group for the retryable
@@ -324,7 +328,7 @@ session routing row immediately. No custom production token path remains.
 Authentication → Providers → Google: supply the Web OAuth client ID and client
 secret; include allowed native client IDs as required by Supabase. Configure
 Google's authorized redirect URI to the project's `/auth/v1/callback` URL shown
-in Supabase. Register Android `com.smply.app` and its debug/release/Play signing
+in Supabase. Register Android `com.ecomsbd.app` and its debug/release/Play signing
 fingerprints in the same Google project. Set Flutter `GOOGLE_CLIENT_ID_WEB`
 (`serverClientId`); supply `GOOGLE_CLIENT_ID_IOS` only for a provisioned iOS app.
 Flutter exchanges the native ID token with Supabase `signInWithIdToken`.
@@ -343,7 +347,7 @@ private key); configure the Supabase callback in Apple's Services ID and renew
 the OAuth secret within six months. Native Apple login uses a hashed nonce with
 the original nonce supplied to Supabase. Android opens Supabase's hosted Apple
 OAuth flow in the external browser and exchanges the callback through the existing
-PKCE handler. Allow `com.smply.app://auth/callback` in Supabase and put the Apple
+PKCE handler. Allow `com.ecomsbd.app://auth/callback` in Supabase and put the Apple
 Services ID first in the provider Client IDs. Apple activation for the later iOS work requires that
 provider configuration. An iOS release still requires its native
 runner, signing and Sign in with Apple capability.
@@ -478,7 +482,7 @@ Two different artifacts, and confusing them is the usual mistake.
 | **Where to obtain** | Firebase Console → Project settings → Your apps → **Add app → Android** → enter the package name → **Download google-services.json** |
 | **Where it goes** | `apps/mobile_flutter/android/app/google-services.json` |
 | **Secret?** | It carries identifiers and an API key that ships inside every APK, so it is not a high-value secret — but it is gitignored, because it is per-project configuration that should not be copied between environments by accident. |
-| **Android package** | Final: `com.smply.app`. Firebase setup remains a separate external step; release certificate fingerprints require the owner's key. |
+| **Android package** | Final: `com.ecomsbd.app`. Firebase setup remains a separate external step; release certificate fingerprints require the owner's key. |
 
 An iOS build additionally needs `GoogleService-Info.plist` in the Xcode project;
 also gitignored.
@@ -506,7 +510,7 @@ delivery metrics stay honest.
 
 **Also required in the app** when push is enabled: the `POST_NOTIFICATIONS`
 permission in `AndroidManifest.xml`. It is now declared and requested by Firebase Messaging. Android Firebase
-configuration matches `com.smply.app`.
+configuration matches `com.ecomsbd.app`.
 
 **Verification completed.** FCM parsed the supplied service account and obtained
 its scoped Google OAuth token. No notification was sent. Full credential JSON
@@ -567,14 +571,17 @@ These are decisions, not secrets, and each belongs somewhere other than `.env`.
 
 ### Android package id — resolved
 
-The owner permanently selected **`com.smply.app`**. Gradle `applicationId`,
+The production package is **`com.ecomsbd.app`**. Gradle `applicationId`,
 namespace and the `MainActivity` package/path now match this decision.
+
+> History: builds before `3.0.3+303` used `com.smply.app`; see
+> `docs/ANDROID_PACKAGE_MIGRATION.md`.
 
 | | |
 |---|---|
 | **Where it belongs** | `apps/mobile_flutter/android/app/build.gradle.kts` — both `namespace` and `defaultConfig.applicationId` — plus the `MainActivity` package path |
 | **Why it is urgent** | Play rejects anything under `com.example`. The id is **permanent once published**: changing it means shipping a different app and losing every install, review and subscription. |
-| **Dependent configuration** | Future Google Android/Firebase/Play registrations use `com.smply.app`; the production `PLAY_PACKAGE_NAME` example already matches. No external provider has been configured by this change. |
+| **Dependent configuration** | Future Google Android/Firebase/Play registrations use `com.ecomsbd.app`; the production `PLAY_PACKAGE_NAME` example already matches. No external provider has been configured by this change. |
 
 Backend placeholder-rejection logic/tests and Apple identifiers are unchanged.
 

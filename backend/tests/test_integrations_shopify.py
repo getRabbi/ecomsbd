@@ -60,6 +60,7 @@ async def test_shopify_is_gated_until_the_platform_app_exists(client, unique_pho
         "provider": "SHOPIFY",
         "available": False,
         "blocker": "SHOPIFY_APP_SETUP_REQUIRED",
+        "coming_soon": True,
     }
     created = await client.post(
         "/v1/integrations", headers=auth_header(shop), json={"provider": "SHOPIFY", "name": "x"}

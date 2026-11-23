@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.orders.parser import DeterministicOrderParser, EnhancedOrderParser
+from app.orders.parser import DeterministicOrderParser
 from app.orders.parser.base import FieldConfidence, OrderTextParser
 
 
@@ -191,12 +191,38 @@ class TestParserContract:
         for field in ("phone", "address", "items", "amount"):
             assert field in payload["confidence"], field
 
-    def test_the_enhanced_parser_refuses_rather_than_pretending(self) -> None:
-        # It must not quietly fall through to the deterministic parser: that
-        # would report an LLM parse that never happened, and would hide the
-        # quota and prompt-injection work section 97 requires.
-        with pytest.raises(NotImplementedError, match="not implemented"):
-            EnhancedOrderParser().parse("anything")
+    async def test_the_enhanced_parser_never_pretends_a_model_ran(
+        self, system_db, settings
+    ) -> None:  # type: ignore[no-untyped-def]
+        # V4 WP0.3 replaced the "not implemented" stub. The rule it guarded
+        # stands: with no provider configured the result must not report an
+        # LLM parse that never happened. It is labelled deterministic and
+        # carries AI_PARSE_UNAVAILABLE, and order entry still gets the fields.
+        from app.common.cache import InMemoryBackend
+        from app.common.feature_flags import FeatureFlag, FlagKey, FlagScope
+        from app.orders.parser.enhanced import AI_PARSE_UNAVAILABLE, EnhancedOrderParser
+        from app.tenants.models import Tenant
+
+        tenant = Tenant(name="Boundary Shop", business_category="CLOTHING")
+        system_db.add(tenant)
+        await system_db.flush()
+        system_db.add(
+            FeatureFlag(
+                key=str(FlagKey.AI_PARSE_ENABLED),
+                scope=FlagScope.TENANT,
+                tenant_id=tenant.id,
+                enabled=True,
+                rollout_percentage=100,
+            )
+        )
+        await system_db.flush()
+
+        result = await EnhancedOrderParser(
+            system_db, settings, client=None, cache=InMemoryBackend()
+        ).parse("anything 01712345678", tenant_id=tenant.id)
+        assert result.parser == "deterministic"
+        assert AI_PARSE_UNAVAILABLE in result.warnings
+        assert result.phones == ["+8801712345678"]
 
     def test_the_parser_needs_no_network_or_model(self, parser: DeterministicOrderParser) -> None:
         # Section 97: "AI outage must not block business operations." This test
@@ -209,3 +235,94 @@ class TestParserContract:
             text = handle.read()
         for forbidden in ("httpx", "requests", "openai", "anthropic", "aiohttp"):
             assert forbidden not in text, f"parser must not import {forbidden}"
+
+
+class TestV4LabelAndDistrictRules:
+    """V4 WP0.3: label shapes and district lines seen in real messages."""
+
+    def test_dash_labels_are_labels(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("name- karim\naddress- kushtia sadar, kushtia\nproduct: watch 1 ta")
+        assert result.customer_name == "karim"
+        assert result.confidence["name"] == FieldConfidence.EXACT
+        assert result.address == "kushtia sadar, kushtia"
+        assert result.district == "Kushtia"
+        assert [item.name for item in result.items] == ["watch"]
+
+    def test_a_hyphenated_product_is_not_a_label(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("01700000001\nt-shirt XL 2ta")
+        assert result.customer_name is None
+        assert result.items[0].name == "t-shirt"
+
+    def test_number_label_without_separator(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Rina\nnumber 01700000002 / 01700000003\nMirpur 2, Dhaka\nabaya 1ta")
+        assert result.phones == ["+8801700000002", "+8801700000003"]
+        assert result.needs_phone_selection
+        assert result.customer_name == "Rina"
+
+    def test_a_lone_district_is_an_uncertain_address_not_a_name(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("01700000004\nTangail\n2ta tshirt L")
+        assert result.customer_name is None
+        assert result.address == "Tangail"
+        assert result.district == "Tangail"
+        # Only a district: offered as a guess, below the confirm threshold.
+        assert result.confidence["address"] < 0.5
+
+    def test_bangla_district_with_nukta_variants(self, parser: DeterministicOrderParser) -> None:
+        precomposed = "০১৭০০০০০০০৫\nবগুড়া\nহিজাব ১টা"
+        decomposed = "০১৭০০০০০০০৫\nবগুড়া\nহিজাব ১টা"
+        assert parser.parse(precomposed).district == "Bogura"
+        assert parser.parse(decomposed).district == "Bogura"
+
+    def test_one_line_message_is_split_into_parts(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse(
+            "Rahim 01700000006 Mirpur 10 Dhaka. Black panjabi XL 2 pcs. total 2450tk"
+        )
+        assert result.customer_name == "Rahim"
+        assert result.address == "Mirpur 10 Dhaka"
+        assert result.items[0].name == "Black panjabi"
+        assert result.items[0].quantity == 2
+        assert result.cod_amount_paisa == 245_000
+
+    def test_md_abbreviation_stays_with_the_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Md. Rahim Uddin\n01700000007\nSavar, Dhaka\ncap 1ta")
+        assert result.customer_name == "Md. Rahim Uddin"
+
+    def test_inline_bangla_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("আপু আমার নাম সুমি, ০১৭০০০০০০০৮, ঠিকানা: আগ্রাবাদ, চট্টগ্রাম।")
+        assert result.customer_name == "সুমি"
+        assert result.address == "আগ্রাবাদ, চট্টগ্রাম"
+
+    def test_phone_intro_words_are_not_a_name(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("My number is 01700000009\nUttara sector 4, Dhaka\nshirt L 1ta")
+        assert result.customer_name is None
+
+    def test_short_hints_only_match_whole_words(self, parser: DeterministicOrderParser) -> None:
+        # "po" inside "Polash" and "rd" inside "order" are not address words.
+        result = parser.parse("Polash\n01700000010\nmouse 1ta")
+        assert result.customer_name == "Polash"
+        assert result.address is None
+
+    def test_a_greeting_with_a_filler_word_is_not_a_name(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        assert parser.parse("hi apu\nprice koto?").customer_name is None
+
+    def test_thousands_separator_with_one_leading_digit(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("01700000011\nসাভার, আশুলিয়া\nপাঞ্জাবি ২টা M\nমোট: 2,600 টাকা")
+        assert result.cod_amount_paisa == 260_000
+
+    def test_line_price_is_the_unit_price_only_for_one_piece(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        one = parser.parse("01700000012\nproduct: watch 1 ta 1200")
+        assert one.items[0].unit_price_paisa == 120_000
+        two = parser.parse("01700000012\nproduct: watch 2 ta 2400")
+        assert two.items[0].unit_price_paisa is None
+
+    def test_a_size_number_is_not_a_unit_price(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("01700000013\nproduct: shoe size 40")
+        assert result.items[0].unit_price_paisa is None

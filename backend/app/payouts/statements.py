@@ -375,7 +375,17 @@ def parse_rows(
     The one place a statement row becomes money, whichever format it came in,
     so an XLSX can never grow its own looser amount handling.
     """
-    resolved = validate_mapping(mapping, headers) if mapping else autodetect_columns(headers)
+    if mapping:
+        resolved = validate_mapping(mapping, headers)
+    else:
+        # V4 WP0.7: a profile written from a real statement of this exact
+        # layout beats guessing by column name. None ships yet.
+        from app.payouts.profiles import match_profile
+
+        profile = match_profile(headers)
+        resolved = (
+            validate_mapping(profile.mapping, headers) if profile else autodetect_columns(headers)
+        )
 
     rows: list[StatementRow] = []
     for index, raw_row in enumerate(raw_rows, start=1):

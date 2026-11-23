@@ -63,7 +63,11 @@ async def provider_capability(
     enabled = [
         p["provider_id"] for p in catalog["providers"] if (p["connection"] or {}).get("enabled")
     ]
-    return {**capability(), "status": catalog["status"], "enabled_providers": enabled}
+    return {
+        **capability(available=catalog["status"] != "GATED"),
+        "status": catalog["status"],
+        "enabled_providers": enabled,
+    }
 
 
 @router.get("/providers")
@@ -129,7 +133,7 @@ async def customer_facts(
     """Stored provider facts for a customer. Never calls a provider."""
     await required(db, Customer, customer_id)
     view = await _service(db, principal, settings, limiter).customer_view(customer_id)
-    return {**capability(), **view}
+    return {**capability(available=view["status"] != "GATED"), **view}
 
 
 @router.post("/customers/{customer_id}/lookup")
@@ -149,4 +153,4 @@ async def lookup(
         trigger="REFRESH" if body.refresh else "MANUAL",
         actor_id=principal.user_id,
     )
-    return {**capability(), **view}
+    return {**capability(available=view["status"] != "GATED"), **view}

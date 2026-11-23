@@ -37,11 +37,14 @@ __all__ = [
     "BillingAttempt",
     "BillingAttemptState",
     "BillingEventType",
+    "BillingPaymentSubmission",
     "BillingProviderCustomer",
     "BillingProviderKind",
     "BillingTransaction",
     "BillingWebhookEvent",
     "DistributionChannel",
+    "ManualPaymentMethod",
+    "ManualPaymentState",
     "PlayPurchaseToken",
     "SubscriptionEvent",
     "TransactionKind",
@@ -433,3 +436,61 @@ class BillingWebhookEvent(Base, PrimaryKeyMixin):
     occurred_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     received_at: Mapped[datetime] = mapped_column(TZDateTime, nullable=False, default=utc_now)
     processed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+
+
+class ManualPaymentMethod(StrEnum):
+    """How a seller sent the money (V4 WP2.5)."""
+
+    BKASH = "BKASH"
+    NAGAD = "NAGAD"
+
+
+class ManualPaymentState(StrEnum):
+    SUBMITTED = "SUBMITTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class BillingPaymentSubmission(Base, TenantOwned, PrimaryKeyMixin, TimestampMixin):
+    """A seller's "I sent the money, here is the TrxID" (V4 WP2.5).
+
+    Nothing is granted when the row is written: an operator checks the TrxID
+    in the receiving account and approves or rejects it in the admin console.
+    Approval grants the plan through the manual billing provider with the
+    absolute ``period_end`` stored here, so a repeated approve grants nothing
+    more.
+
+    The TrxID is unique per method **across every shop and state**: the
+    constraint, not a tenant-filtered read, is what refuses one payment being
+    submitted twice, including by a second shop. The payer's number is kept
+    masked only.
+    """
+
+    __tablename__ = "billing_payment_submissions"
+    __table_args__ = (
+        sa.UniqueConstraint("method", "trx_id", name="uq_billing_payment_submissions_method_trx"),
+        sa.Index("ix_billing_payment_submissions_state_created", "state", "created_at"),
+        sa.CheckConstraint("months >= 1 AND months <= 12", name="months_in_range"),
+        sa.CheckConstraint("amount_paisa > 0", name="amount_positive"),
+    )
+
+    plan_code: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    months: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    #: Catalogue price × months when the seller submitted: what they were told
+    #: to send. Integer paisa.
+    amount_paisa: Mapped[int] = mapped_column(Paisa, nullable=False)
+    method: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    payer_number_masked: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    trx_id: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    state: Mapped[str] = mapped_column(
+        sa.String(16), nullable=False, default=ManualPaymentState.SUBMITTED
+    )
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    #: The admin's label (a bootstrap token has no admin id).
+    reviewed_by: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    #: Why it was rejected (shown to the seller), or the approver's note.
+    reason: Mapped[str | None] = mapped_column(sa.String(400), nullable=True)
+    #: Absolute end of the paid period, fixed at approval.
+    period_end: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    subscription_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)

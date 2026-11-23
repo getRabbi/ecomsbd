@@ -45,6 +45,8 @@ class FlagKey(StrEnum):
     STEADFAST_ENABLED = "steadfast_enabled"
     PATHAO_ENABLED = "pathao_enabled"
     REDX_ENABLED = "redx_enabled"
+    #: V4 WP7.2: the Carrybee courier integration.
+    CARRYBEE_ENABLED = "carrybee_enabled"
     PROVIDER_AUTO_ADDRESS = "provider_auto_address"
     RISK_AGGREGATOR_FALLBACK = "risk_aggregator_fallback"
     AI_PARSE_ENABLED = "ai_parse_enabled"
@@ -53,6 +55,47 @@ class FlagKey(StrEnum):
     COURIER_RECOMMENDATION_ENABLED = "courier_recommendation_enabled"
     RECONCILIATION_AUTO_MATCH = "reconciliation_auto_match"
     RECONCILIATION_SHADOW_MODE = "reconciliation_shadow_mode"
+    #: V4 WP0.2: server-side funnel events (``product_events``).
+    PRODUCT_EVENTS_ENABLED = "product_events_enabled"
+    #: V4 WP0.4: shop delivery rules API and zone-aware COD on chat drafts.
+    DELIVERY_RULES_ENABLED = "delivery_rules_enabled"
+    #: V4 WP0.5: invoice and shipping-label HTML.
+    ORDER_DOCUMENTS_ENABLED = "order_documents_enabled"
+    #: V4 WP1.1+: linked phones capture orders (DEVICE connections, ingest keys).
+    INTAKE_DEVICE_ENABLED = "intake_device_enabled"
+    #: V4 WP2.1+: customer confirmation of orders (``order_confirmations``).
+    CONFIRMATION_ENGINE_ENABLED = "confirmation_engine_enabled"
+    #: V4 WP2.3: after the last unanswered call, SMS the customer a confirm link.
+    CONFIRMATION_SMS_LINK_ENABLED = "confirmation_sms_link_enabled"
+    #: V4 WP2.5: a seller pays by bKash / Nagad send-money and submits the TrxID.
+    MANUAL_PAYMENTS_ENABLED = "manual_payments_enabled"
+    #: V4 Phase 3: IVR confirmation calls (``VoiceTransport``).
+    VOICE_CONFIRMATION_ENABLED = "voice_confirmation_enabled"
+    #: V4 Phase 4: Autopilot turns ready chat drafts into orders. Off is the
+    #: global kill switch; a shop's own row off is that shop's.
+    AUTOPILOT_ENABLED = "autopilot_enabled"
+    #: V4 Phase 5: the Chrome extension captures from Messenger / WhatsApp Web.
+    EXTENSION_ENABLED = "extension_enabled"
+    #: V4 Phase 6: Messenger / WhatsApp official connections cover the matching
+    #: phone apps and may leave "Coming soon" (with META_APP_REVIEW_APPROVED).
+    META_OFFICIAL_PATH_ENABLED = "meta_official_path_enabled"
+    #: V4 WP7.4: shop referral codes and the 30-day credit for both shops
+    #: after the referred shop's first approved TrxID payment.
+    REFERRALS_ENABLED = "referrals_enabled"
+    #: V4 WP7.1: the Alpha SMS gateway (sms.net.bd) sends customer SMS (the
+    #: confirm link, tracking SMS) once its admin-console account is on too.
+    ALPHA_SMS_ENABLED = "alpha_sms_enabled"
+    #: V4 WP0.6: the BD Courier (bdcourier.com) external risk lookup, with the
+    #: shop's own BD Courier API key.
+    BDCOURIER_ENABLED = "bdcourier_enabled"
+
+
+#: Which flag gates each built-in external risk provider adapter
+#: (:mod:`app.risk_providers.registry`). Off: the provider is not offered,
+#: and a shop that connected it before makes no lookups and sees no answers.
+RISK_PROVIDER_FLAGS: dict[str, str] = {
+    "bdcourier": FlagKey.BDCOURIER_ENABLED,
+}
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -63,6 +106,7 @@ COURIER_PROVIDER_FLAGS: dict[str, str] = {
     "steadfast": FlagKey.STEADFAST_ENABLED,
     "pathao": FlagKey.PATHAO_ENABLED,
     "redx": FlagKey.REDX_ENABLED,
+    "carrybee": FlagKey.CARRYBEE_ENABLED,
 }
 
 
@@ -73,6 +117,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.STEADFAST_ENABLED: False,
     FlagKey.PATHAO_ENABLED: False,
     FlagKey.REDX_ENABLED: False,
+    FlagKey.CARRYBEE_ENABLED: False,
     FlagKey.PROVIDER_AUTO_ADDRESS: True,
     FlagKey.RISK_AGGREGATOR_FALLBACK: False,
     FlagKey.AI_PARSE_ENABLED: False,
@@ -81,6 +126,20 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.COURIER_RECOMMENDATION_ENABLED: False,
     FlagKey.RECONCILIATION_AUTO_MATCH: False,
     FlagKey.RECONCILIATION_SHADOW_MODE: True,
+    FlagKey.PRODUCT_EVENTS_ENABLED: False,
+    FlagKey.DELIVERY_RULES_ENABLED: False,
+    FlagKey.ORDER_DOCUMENTS_ENABLED: False,
+    FlagKey.INTAKE_DEVICE_ENABLED: False,
+    FlagKey.CONFIRMATION_ENGINE_ENABLED: False,
+    FlagKey.CONFIRMATION_SMS_LINK_ENABLED: False,
+    FlagKey.MANUAL_PAYMENTS_ENABLED: False,
+    FlagKey.VOICE_CONFIRMATION_ENABLED: False,
+    FlagKey.AUTOPILOT_ENABLED: False,
+    FlagKey.EXTENSION_ENABLED: False,
+    FlagKey.META_OFFICIAL_PATH_ENABLED: False,
+    FlagKey.REFERRALS_ENABLED: False,
+    FlagKey.ALPHA_SMS_ENABLED: False,
+    FlagKey.BDCOURIER_ENABLED: False,
 }
 
 

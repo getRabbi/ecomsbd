@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 
 import { Chip, Drawer, ErrorState, Row } from '@/components/ui';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
+import { courierHistoryChip, latestCourierHistory } from '@/lib/courier-history';
 import {
   courierName,
   type BookableCourier,
@@ -13,6 +14,7 @@ import {
   type Tracking,
 } from '@/lib/couriers';
 import type { StringKey } from '@/lib/i18n';
+import type { RiskProfile } from '@/lib/risk';
 import { formatDate, formatPaisa } from '@/lib/money';
 import {
   RETURN_REASONS,
@@ -22,6 +24,7 @@ import {
   paisaToTaka,
   takaToPaisa,
 } from '@/lib/orders';
+import { LABEL_SIZES, printInvoice, printLabel, type LabelSize } from '@/lib/print';
 import { useSession } from '@/lib/session';
 import { useShop } from '@/lib/shop';
 import {
@@ -109,8 +112,28 @@ export function OrderPanel({
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [editing, setEditing] = useState(false);
+  const [labelSize, setLabelSize] = useState<LabelSize>('4x6');
+  const [maskPhone, setMaskPhone] = useState(false);
 
   const data = order.data;
+  // V4 WP0.6: an external provider's per-courier history, when one is stored.
+  const riskProfile = useApi<RiskProfile>(data?.customer_id ? `/customers/${data.customer_id}/risk-profile` : null);
+  const courierHistory = latestCourierHistory(riskProfile.data?.external.providers ?? []);
+  const courierChip = courierHistoryChip(courierHistory, t('risk.ext.komData'), t('risk.ext.allCouriers'));
+
+  async function print(work: () => Promise<void>) {
+    setBusy(true);
+    setFailure(null);
+    try {
+      await work();
+    } catch (caught) {
+      setFailure(
+        caught instanceof ApiError && caught.code === 'FEATURE_DISABLED' ? t('doc.notEnabled') : errorMessage(caught),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function run(work: () => Promise<unknown>, done?: string) {
     setBusy(true);
@@ -163,7 +186,41 @@ export function OrderPanel({
             <Chip {...describeOrderStatus(data.status, locale)} />
             {fulfillment ? <Chip label={fulfillment.label} tone={fulfillment.tone} /> : null}
             <Chip {...describeRisk(data.risk_state, locale)} />
+            {courierChip ? (
+              <Chip label={`${t('risk.ext.history')}: ${courierChip}`} tone={courierHistory?.state === 'OK' ? 'neutral' : 'warn'} />
+            ) : null}
             <span className="table__sub">{formatDate(data.created_at, { locale, withTime: true })} · {data.channel.replaceAll('_', ' ').toLowerCase()}</span>
+          </div>
+
+          {/* ---------------------------------------------------- printing */}
+          <div className="toolbar" style={{ padding: '0 0 10px', flexWrap: 'wrap', gap: 8 }}>
+            <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void print(() => printInvoice(data.id))}>
+              {t('doc.printInvoice')}
+            </button>
+            <select
+              className="select"
+              aria-label={t('doc.labelSize')}
+              value={labelSize}
+              onChange={(event) => setLabelSize(event.target.value as LabelSize)}
+            >
+              {LABEL_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {t(`doc.size.${size}` as StringKey)}
+                </option>
+              ))}
+            </select>
+            <label className="table__sub" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              <input type="checkbox" checked={maskPhone} onChange={(event) => setMaskPhone(event.target.checked)} />
+              {t('doc.maskPhone')}
+            </label>
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={busy}
+              onClick={() => void print(() => printLabel(data.id, labelSize, maskPhone))}
+            >
+              {t('doc.printLabel')}
+            </button>
           </div>
 
           {notice ? <div className="notice notice--good">{notice}</div> : null}

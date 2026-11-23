@@ -371,6 +371,116 @@ def _chat_order_ready(p: Params, locale: str) -> tuple[str, str]:
     return f"New order from {channel}", "Review it in the Inbox and confirm."
 
 
+def _device_needs_attention(p: Params, locale: str) -> tuple[str, str]:
+    if str(p.get("platform")) == "extension":
+        if locale == "bn":
+            return (
+                "ব্রাউজার এক্সটেনশন থেকে সাড়া নেই",
+                "এক দিনের বেশি সময় ধরে লিংক করা এক্সটেনশন থেকে কোনো সাড়া আসেনি। "
+                "ব্রাউজারে এক্সটেনশনটি চালু আছে কিনা দেখুন।",
+            )
+        return (
+            "A linked browser extension went quiet",
+            "The linked extension has not checked in for over a day. Check that it is "
+            "still installed and switched on.",
+        )
+    if locale == "bn":
+        return (
+            "লিংক করা ফোন থেকে সাড়া নেই",
+            "এক দিনের বেশি সময় ধরে লিংক করা একটি ফোন থেকে কোনো সাড়া আসেনি। ফোনে অ্যাপটি "
+            "খুলে নোটিফিকেশন অ্যাক্সেস চালু আছে কিনা দেখুন।",
+        )
+    return (
+        "A linked phone went quiet",
+        "A linked phone has not checked in for over a day, so new orders are not being "
+        "detected on it. Open the app on that phone and check notification access.",
+    )
+
+
+#: (en, bn) per reason. No customer name, phone or amount: a push is shown on
+#: a lock screen.
+_CONFIRMATION_REASONS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
+    "REVIEW_NEEDED": (
+        (
+            "An order needs your confirmation",
+            "We could not confirm this order with the customer. Call them, then mark it "
+            "confirmed or cancelled.",
+        ),
+        (
+            "একটি অর্ডার আপনার নিশ্চিত করা দরকার",
+            "কাস্টমারের সাথে অর্ডারটি নিশ্চিত করা যায়নি। কাস্টমারকে কল করে অর্ডারটি নিশ্চিত বা বাতিল করুন।",
+        ),
+    ),
+    "ORDER_CHANGED": (
+        (
+            "Customer answered, but the order changed",
+            "The order was edited after we asked the customer, so their answer was not "
+            "applied. Check the order and confirm it yourself.",
+        ),
+        (
+            "কাস্টমার উত্তর দিয়েছেন, কিন্তু অর্ডার বদলেছে",
+            "কাস্টমারকে জিজ্ঞেস করার পর অর্ডারটি এডিট হয়েছে, তাই উত্তরটি প্রয়োগ করা হয়নি। "
+            "অর্ডারটি দেখে নিজে নিশ্চিত করুন।",
+        ),
+    ),
+    "ORDER_NOT_DRAFT": (
+        (
+            "Customer answered after the order moved on",
+            "The order was already confirmed or cancelled when the customer answered, so "
+            "their answer was not applied. Check the order.",
+        ),
+        (
+            "অর্ডার এগিয়ে যাওয়ার পর কাস্টমার উত্তর দিয়েছেন",
+            "কাস্টমার উত্তর দেওয়ার আগেই অর্ডারটি নিশ্চিত বা বাতিল হয়ে গিয়েছিল, তাই "
+            "উত্তরটি প্রয়োগ করা হয়নি। অর্ডারটি দেখে নিন।",
+        ),
+    ),
+}
+
+
+def _confirmation_needs_attention(p: Params, locale: str) -> tuple[str, str]:
+    en, bn = _CONFIRMATION_REASONS.get(str(p.get("reason")), _CONFIRMATION_REASONS["REVIEW_NEEDED"])
+    return bn if locale == "bn" else en
+
+
+def _chat_callback_requested(_p: Params, locale: str) -> tuple[str, str]:
+    """No name or number: a push is shown on a lock screen."""
+    if locale == "bn":
+        return (
+            "কাস্টমার দোকানের সাথে কথা বলতে চান",
+            "কনফার্মেশন কলে কাস্টমার ৩ চেপেছেন। কল তালিকা খুলে কাস্টমারকে কল করুন।",
+        )
+    return (
+        "A customer wants to talk to the shop",
+        "On the confirmation call the customer pressed 3. Open the call queue and call them.",
+    )
+
+
+_PLAN_NAMES_BN = {"starter": "স্টার্টার", "pro": "প্রো"}
+
+
+def _billing_payment_reviewed(p: Params, locale: str) -> tuple[str, str]:
+    """No TrxID, number or rejection text: a push is shown on a lock screen."""
+    plan = str(p.get("plan") or "")
+    until = str(p.get("valid_until") or "")
+    if str(p.get("state")) == "APPROVED":
+        if locale == "bn":
+            return (
+                "পেমেন্ট গ্রহণ করা হয়েছে",
+                f"আপনার {_PLAN_NAMES_BN.get(plan, plan)} প্ল্যান চালু হয়েছে, মেয়াদ {until} পর্যন্ত।",
+            )
+        return "Payment approved", f"Your {plan.title()} plan is active until {until}."
+    if locale == "bn":
+        return (
+            "পেমেন্ট যাচাই করা যায়নি",
+            "আপনার বিকাশ/নগদ পেমেন্টটি গ্রহণ করা যায়নি। কারণ দেখতে বিলিং খুলুন।",
+        )
+    return (
+        "Payment not approved",
+        "We could not accept your bKash/Nagad payment. Open Billing to see why.",
+    )
+
+
 def _automation(p: Params, locale: str) -> tuple[str, str]:
     return str(p[f"title_{locale}"]), str(p[f"text_{locale}"])
 
@@ -378,6 +488,10 @@ def _automation(p: Params, locale: str) -> tuple[str, str]:
 _RENDERERS: dict[NotificationKind, Callable[[Params, str], tuple[str, str]]] = {
     NotificationKind.AUTOMATION: _automation,
     NotificationKind.CHAT_ORDER_READY: _chat_order_ready,
+    NotificationKind.DEVICE_NEEDS_ATTENTION: _device_needs_attention,
+    NotificationKind.CONFIRMATION_NEEDS_ATTENTION: _confirmation_needs_attention,
+    NotificationKind.CHAT_CALLBACK_REQUESTED: _chat_callback_requested,
+    NotificationKind.BILLING_PAYMENT_REVIEWED: _billing_payment_reviewed,
     NotificationKind.FOLLOW_UP_DUE: _follow_up_due,
     NotificationKind.PAYOUT_OVERDUE: _payout_overdue,
     NotificationKind.RECONCILIATION_DISCREPANCY: _reconciliation,

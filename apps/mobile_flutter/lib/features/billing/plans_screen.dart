@@ -13,6 +13,7 @@ import '../shared/responsive.dart';
 import '../../l10n/app_strings.dart';
 import '../../l10n/app_locale.dart';
 import 'free_launch_notice.dart';
+import 'manual_payment_screen.dart';
 
 /// Read where no `BuildContext` exists, so the active locale is resolved
 /// directly -- the same approach `formatRelative` and `order_status.dart` use.
@@ -181,6 +182,7 @@ class _Content extends ConsumerWidget {
             isCurrent: plan.code == data.entitlements.plan,
             channel: data.channel,
           ),
+        const _ManualPaymentEntry(),
 
         const SizedBox(height: EcomsbdSpacing.md),
         _DowngradeNotice(),
@@ -188,6 +190,43 @@ class _Content extends ConsumerWidget {
         const SizedBox(height: EcomsbdSpacing.md),
         _RestoreRow(),
       ],
+    );
+  }
+}
+
+/// V4 WP2.5: "Pay by bKash or Nagad", only when the server offers it — never
+/// in a store build, never in Free Launch Mode, only to the owner. Loading, a
+/// refusal or "not offered" all render nothing.
+class _ManualPaymentEntry extends ConsumerWidget {
+  const _ManualPaymentEntry();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offered =
+        ref.watch(manualPaymentOptionsProvider).valueOrNull?.available ?? false;
+    if (!offered) return const SizedBox.shrink();
+    return GlassCard(
+      key: const ValueKey('mp.entry'),
+      margin: const EdgeInsets.only(top: EcomsbdSpacing.sm),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const ManualPaymentScreen()),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.payments_rounded, size: 20),
+          const SizedBox(width: EcomsbdSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(context.tr('mp.title'), style: EcomsbdType.bodyStrong),
+                Text(context.tr('mp.entry'), style: EcomsbdType.caption),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
     );
   }
 }

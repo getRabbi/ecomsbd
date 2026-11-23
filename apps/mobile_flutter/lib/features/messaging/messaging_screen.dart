@@ -25,11 +25,18 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen>
   Map<String, dynamic>? _contact;
   String? _customer, _order, _sendKey;
   String _template = 'order_update';
+
+  /// V4 WP7.1: EMAIL, or SMS once the server says the SMS gateway is on.
+  String _channel = 'EMAIL';
+  bool _useSavedPhone = true;
   final _recipient = TextEditingController();
   final _evidence = TextEditingController();
   bool _consent = false, _busy = false;
   String? _error;
   bool get _bn => context.strings.locale == AppLocale.bn;
+  bool get _smsAvailable =>
+      _channels.any((c) => c['kind'] == 'SMS' && c['available'] == true);
+  bool get _sms => _smsAvailable && _channel == 'SMS';
   String tx(String en, String bn) => _bn ? bn : en;
 
   @override
@@ -151,6 +158,8 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen>
                         'Finish setup in Integrations',
                         'ইন্টিগ্রেশন থেকে সেটআপ শেষ করুন',
                       )
+                    : c['kind'] == 'SMS'
+                    ? tx('Order updates only', 'শুধু অর্ডারের আপডেট')
                     : tx('Order updates and offers', 'অর্ডারের আপডেট ও অফার'),
               ),
               value: c['enabled'] == true,
@@ -187,11 +196,46 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen>
                 ],
                 onChanged: (v) => setState(() => _customer = v),
               ),
-              TextField(
-                controller: _recipient,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(labelText: tx('Email', 'ইমেইল')),
-              ),
+              if (_smsAvailable)
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('contact-channel'),
+                  initialValue: _channel,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: tx('Channel', 'মাধ্যম'),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'EMAIL',
+                      child: Text(tx('Email', 'ইমেইল')),
+                    ),
+                    const DropdownMenuItem(value: 'SMS', child: Text('SMS')),
+                  ],
+                  onChanged: (v) => setState(() => _channel = v ?? 'EMAIL'),
+                ),
+              if (_sms)
+                CheckboxListTile(
+                  value: _useSavedPhone,
+                  onChanged: (v) => setState(() => _useSavedPhone = v == true),
+                  title: Text(
+                    tx(
+                      'Use the customer’s saved phone number',
+                      'গ্রাহকের সংরক্ষিত ফোন নম্বর ব্যবহার করুন',
+                    ),
+                  ),
+                ),
+              if (!_sms || !_useSavedPhone)
+                TextField(
+                  controller: _recipient,
+                  keyboardType: _sms
+                      ? TextInputType.phone
+                      : TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: _sms
+                        ? tx('Mobile number', 'মোবাইল নম্বর')
+                        : tx('Email', 'ইমেইল'),
+                  ),
+                ),
               TextField(
                 controller: _evidence,
                 maxLength: 500,
@@ -220,7 +264,11 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen>
                           '/messaging/conversations',
                           body: {
                             'customer_id': _customer,
-                            'recipient': _recipient.text,
+                            'channel': _sms ? 'SMS' : 'EMAIL',
+                            if (_sms && _useSavedPhone)
+                              'use_customer_phone': true
+                            else
+                              'recipient': _recipient.text,
                             'consent': _consent,
                             'evidence': _evidence.text,
                           },

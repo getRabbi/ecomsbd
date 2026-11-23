@@ -15,6 +15,7 @@ class RecordedRequest {
     required this.path,
     required this.query,
     this.body,
+    this.headers = const <String, dynamic>{},
   });
 
   final String method;
@@ -22,16 +23,23 @@ class RecordedRequest {
   final Map<String, dynamic> query;
   final Object? body;
 
+  /// What the client sent, lower-case names as Dio holds them.
+  final Map<String, dynamic> headers;
+
   Map<String, dynamic> get jsonBody =>
       body is Map<String, dynamic> ? body! as Map<String, dynamic> : const {};
 }
 
 /// A canned reply.
 class FakeReply {
-  const FakeReply(this.body, {this.statusCode = 200});
+  const FakeReply(this.body, {this.statusCode = 200}) : html = false;
+
+  /// A rendered document, sent as-is with `text/html`.
+  const FakeReply.html(String this.body, {this.statusCode = 200}) : html = true;
 
   final Object body;
   final int statusCode;
+  final bool html;
 }
 
 /// Serves canned replies to the real [ApiClient].
@@ -81,6 +89,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       path: options.path,
       query: Map<String, dynamic>.from(options.queryParameters),
       body: options.data,
+      headers: Map<String, dynamic>.from(options.headers),
     );
     requests.add(request);
 
@@ -107,6 +116,15 @@ class FakeApiAdapter implements HttpClientAdapter {
     }
 
     final reply = await handler(request);
+    if (reply.html) {
+      return ResponseBody.fromString(
+        reply.body as String,
+        reply.statusCode,
+        headers: const <String, List<String>>{
+          Headers.contentTypeHeader: <String>['text/html; charset=utf-8'],
+        },
+      );
+    }
     return ResponseBody.fromString(
       jsonEncode(reply.body),
       reply.statusCode,

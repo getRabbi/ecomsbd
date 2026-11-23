@@ -10,7 +10,12 @@ credential read here, by design (V3.4 section 4 and 16):
 * a courier booking goes through the V2 booking service and its
   BOOKING_UNKNOWN rules (see ``app.automation.jobs``);
 * store pushes and sync retries are the V3.1/V3.2 integration queue, keyed by
-  the same operation key the automatic sync uses.
+  the same operation key the automatic sync uses;
+* a confirmation request (V4) is the confirmation service's own ``start``: the
+  order moves only when its policy auto-confirms, exactly as for a request the
+  seller makes;
+* converting a chat draft into an order is Autopilot's (V4 Phase 4): both of
+  its gates, then the chat-order service's own ``confirm``.
 
 Every performer returns ``(status, result_id, outcome)`` and raises the
 application errors of the service it called when it cannot go ahead.
@@ -27,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_hasher, get_vault
 from app.automation.models import AutomationExecution, AutomationTask
+from app.automation.schemas import ACTION_NEEDS
 from app.consignments.models import Consignment, ConsignmentStatus
 from app.core.clock import utc_now
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -113,6 +119,14 @@ async def perform(
     action, config, step_id = step["action"], step.get("config") or {}, step["id"]
     subject = execution.snapshot.get("subject") or execution.snapshot
     key = key_for(execution, step_id)
+
+    if (
+        ACTION_NEEDS.get(action) in ("order", "customer")
+        and subject.get("draft_id")
+        and not subject.get("order_id")
+    ):
+        # A draft-triggered run whose draft Autopilot held: nothing to act on.
+        return "SKIPPED", None, "DRAFT_NOT_CONVERTED"
 
     if action == "SEND_TEMPLATE":
         order = await _order(db, subject)
@@ -388,5 +402,74 @@ async def perform(
             return "SKIPPED", None, reason
         return "SUCCEEDED", str(po.id), None
 
+    if action == "REQUEST_CONFIRMATION":
+        return await _request_confirmation(db, subject)
+
+    if action == "CONVERT_DRAFT_TO_ORDER":
+        return await _convert_draft(db, execution, subject)
+
     # No eval, arbitrary HTTP, ledger, stock, status or reconciliation action.
     raise ValidationError("Unsupported automation action")
+
+
+async def _convert_draft(
+    db: AsyncSession, execution: AutomationExecution, subject: dict[str, Any]
+) -> Outcome:
+    """Autopilot (V4 Phase 4, L11): both gates, then one order per draft.
+
+    A held draft stays with the seller and the step is ``SKIPPED`` with the
+    gate's reason. A made order joins the run's subject, so the steps after
+    this one (the recipe's ``REQUEST_CONFIRMATION``) act on it.
+    """
+    from app.autopilot.models import AutopilotOutcome
+    from app.autopilot.service import convert_draft
+
+    draft_id = _id(subject.get("draft_id"))
+    if draft_id is None:
+        raise ValidationError("This step needs a chat draft", details={"blocker": "NO_DRAFT"})
+    result = await convert_draft(db, draft_id, execution_id=execution.id)
+    if result.outcome is not AutopilotOutcome.CONVERTED or result.order_id is None:
+        return "SKIPPED", None, result.reason
+    snapshot = dict(execution.snapshot or {})
+    made = {
+        "order_id": str(result.order_id),
+        "customer_id": str(result.customer_id) if result.customer_id else None,
+    }
+    if isinstance(snapshot.get("subject"), dict):
+        snapshot["subject"] = {**snapshot["subject"], **made}
+    else:
+        snapshot.update(made)
+    execution.snapshot = snapshot
+    return "SUCCEEDED", str(result.order_id), "CONVERTED"
+
+
+async def _request_confirmation(db: AsyncSession, subject: dict[str, Any]) -> Outcome:
+    """Start the customer confirmation (V4 WP2.1); the WP2.2 policy decides.
+
+    The order's status moves only if the policy auto-confirms it, and then
+    through the confirmation service, never here. Idempotent per order like
+    every caller of ``ConfirmationService.start``: a repeat, or an order the
+    seller already sent to confirmation, returns the confirmation that exists.
+    """
+    from app.common.feature_flags import FeatureFlagService, FlagKey
+    from app.confirmations.service import ConfirmationService
+    from app.orders.service import OrderService
+
+    order = await _order(db, subject)
+    if not await FeatureFlagService(db).is_enabled(
+        FlagKey.CONFIRMATION_ENGINE_ENABLED, tenant_id=order.tenant_id
+    ):
+        return "SKIPPED", None, "CONFIRMATION_ENGINE_DISABLED"
+    customers = CustomerService(db, hasher=get_hasher(), vault=get_vault())
+    service = ConfirmationService(db, orders=OrderService(db, customers=customers))
+    try:
+        requested = await service.start(order.id, requested_by=None)
+    except ConflictError as exc:
+        # Raised before anything is written: the order is no longer a draft.
+        if (exc.details or {}).get("code") == "ORDER_NOT_DRAFT":
+            return "SKIPPED", None, "ORDER_NOT_DRAFT"
+        raise
+    row = requested.confirmation
+    if not requested.created:
+        return "SUCCEEDED", str(row.id), "ALREADY_REQUESTED"
+    return "SUCCEEDED", str(row.id), row.decision or row.state

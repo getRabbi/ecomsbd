@@ -77,6 +77,10 @@ dependencies:
   # on the next failed request. It is only a hint: reaching the API is still
   # what decides "online" (lib/core/network/network_monitor.dart).
   connectivity_plus: ^7.3.1
+  sentry_flutter: ^10.5.0
+  # V4 WP0.5: invoices and labels are HTML from the API; the OS print
+  # system (Android WebView print) shapes Bangla correctly and makes the PDF.
+  printing: ^5.15.1
 
   # Deliberately NOT included:
   #   - a chart package: every chart in the prototype is a CustomPainter, which

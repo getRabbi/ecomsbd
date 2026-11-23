@@ -64,6 +64,9 @@ class AuditAction(StrEnum):
     # Tenancy
     TENANT_CREATED = "tenant.created"
     TENANT_UPDATED = "tenant.updated"
+    DELIVERY_RULES_UPDATED = "delivery_rules.updated"
+    #: V4 WP1.2: the seller changed which apps a linked phone reads.
+    INTAKE_SETTINGS_UPDATED = "intake.settings_updated"
     TENANT_MEMBER_ADDED = "tenant.member_added"
     TENANT_MEMBER_ROLE_CHANGED = "tenant.member_role_changed"
     #: An offer of membership was sent. Distinct from MEMBER_ADDED, which is
@@ -125,6 +128,10 @@ class AuditAction(StrEnum):
     BILLING_WEBHOOK_RECEIVED = "billing.webhook_received"
     BILLING_WEBHOOK_REJECTED = "billing.webhook_rejected"
     BILLING_MANUAL_GRANT = "billing.manual_grant"
+    #: V4 WP2.5: a seller's bKash / Nagad TrxID, and the operator's review of it.
+    BILLING_MANUAL_PAYMENT_SUBMITTED = "billing.manual_payment_submitted"
+    BILLING_MANUAL_PAYMENT_APPROVED = "billing.manual_payment_approved"
+    BILLING_MANUAL_PAYMENT_REJECTED = "billing.manual_payment_rejected"
     BILLING_RECONCILED = "billing.reconciled"
     SUBSCRIPTION_STATE_CHANGED = "billing.subscription_state_changed"
     SUBSCRIPTION_CANCELLED = "billing.subscription_cancelled"
@@ -175,13 +182,33 @@ class AuditAction(StrEnum):
     RECONCILIATION_CASE_REOPENED = "money.case_reopened"
     DATA_EXPORTED = "data.exported"
     PHONE_REVEALED = "privacy.phone_revealed"
+    #: V4 WP0.5: invoices/labels printed (kind, size, count, masked; no phones).
+    DOCUMENTS_PRINTED = "privacy.documents_printed"
     ADMIN_REPAIR_ACTION = "admin.repair_action"
+    #: V4 WP1.2: an intake rule set version published (inactive) or activated.
+    ADMIN_INTAKE_RULES_CREATED = "admin.intake_rules_created"
+    ADMIN_INTAKE_RULES_ACTIVATED = "admin.intake_rules_activated"
+    #: V4 WP3.1: the platform's voice provider account connected, rotated or switched.
+    ADMIN_VOICE_PROVIDER_UPDATED = "admin.voice_provider_updated"
+    #: V4 WP7.1: the platform SMS gateway account connected, rotated or switched.
+    ADMIN_SMS_PROVIDER_UPDATED = "admin.sms_provider_updated"
+    #: V4 WP3.3: the operator uploaded a shop's intro recording.
+    ADMIN_VOICE_INTRO_UPLOADED = "admin.voice_intro_uploaded"
+    #: V4 WP3.4: the operator granted a shop a voice call pack.
+    ADMIN_VOICE_PACK_GRANTED = "admin.voice_pack_granted"
+    #: V4 WP3.3: a shop intro made by TTS, turned on (confirmation calls start
+    #: playing it) or turned off by the seller.
+    VOICE_INTRO_CREATED = "voice.intro_created"
+    VOICE_INTRO_TURNED_ON = "voice.intro_turned_on"
+    VOICE_INTRO_TURNED_OFF = "voice.intro_turned_off"
 
     # Integrations Hub (V3.1)
     INTEGRATION_CREATED = "integration.created"
     INTEGRATION_CONNECTED = "integration.connected"
     INTEGRATION_RECONNECTED = "integration.reconnected"
     INTEGRATION_DISCONNECTED = "integration.disconnected"
+    #: V4 WP1.1: a phone or extension linked (key last 4 only).
+    DEVICE_LINKED = "integration.device_linked"
     INTEGRATION_CONFIGURED = "integration.configured"
     INTEGRATION_KEY_ROTATED = "integration.key_rotated"
     INTEGRATION_SYNC_STARTED = "integration.sync_started"
@@ -190,6 +217,22 @@ class AuditAction(StrEnum):
     # Chat-to-order
     CHAT_ORDER_CONFIRMED = "chat_order.confirmed"
     CHAT_ORDER_IGNORED = "chat_order.ignored"
+
+    # V4 customer confirmation (WP2.1)
+    CONFIRMATION_REQUESTED = "confirmation.requested"
+    CONFIRMATION_STATE_CHANGED = "confirmation.state_changed"
+    #: WP2.3: the seller dialed from the call queue (quiet-hours override noted).
+    CONFIRMATION_CALL_STARTED = "confirmation.call_started"
+
+    # V4 Autopilot (Phase 4): the shop's switch, consent and "Pause 1 hour".
+    AUTOPILOT_UPDATED = "autopilot.updated"
+    AUTOPILOT_PAUSED = "autopilot.paused"
+    AUTOPILOT_RESUMED = "autopilot.resumed"
+
+    # V4 WP7.4 referrals: a shop joined with a code; the referral was
+    # rewarded (or made void). The grants themselves are billing.manual_grant.
+    REFERRAL_APPLIED = "referral.applied"
+    REFERRAL_REWARDED = "referral.rewarded"
 
     # Inventory + procurement (V3.5)
     SUPPLIER_SAVED = "procurement.supplier_saved"

@@ -5,8 +5,10 @@ shop's own WhatsApp Business Account on Meta's Cloud API, linked in the
 Integrations Hub, and only ever sends templates Meta approved. MESSENGER and
 SMS are listed so sellers see why they are unavailable: a Messenger marketing
 send needs Meta's per-person marketing opt-in (and V3.1 keeps no Page-scoped
-IDs), and customer SMS needs an approved Bangladeshi sender. Nothing here
-scrapes, automates a personal account or guesses a provider API.
+IDs). SMS (V4 WP7.1) carries order updates through the platform's Alpha SMS
+gateway, and only while that gateway sends: its flag ``alpha_sms_enabled`` and
+its admin-console account both on. Nothing here scrapes, automates a personal
+account or guesses a provider API.
 """
 
 from __future__ import annotations
@@ -25,7 +27,11 @@ from app.integrations.models import IntegrationConnection
 
 KINDS = ("EMAIL", "WHATSAPP", "MESSENGER", "SMS")
 #: Channels a customer contact can be recorded on.
-CONTACT_KINDS = ("EMAIL", "WHATSAPP")
+CONTACT_KINDS = ("EMAIL", "WHATSAPP", "SMS")
+#: Channels whose provider takes no idempotency key: a send that may have left
+#: is UNKNOWN and is never sent again.
+NO_IDEMPOTENCY = frozenset({"WHATSAPP", "SMS"})
+SMS_BLOCKER = "SMS_OFFICIAL_PROVIDER_REQUIRED"
 
 
 def reports(kind: str) -> tuple[str, ...]:
@@ -58,7 +64,17 @@ def capability(kind: str) -> tuple[bool, str | None]:
         return True, None
     if kind == "MESSENGER":
         return False, "MESSENGER_MARKETING_OPT_IN_REQUIRED"
+    # SMS needs the database to know (flag + gateway account): ``sms_capability``.
     return False, f"{kind}_OFFICIAL_PROVIDER_REQUIRED"
+
+
+async def sms_capability(db: AsyncSession) -> tuple[bool, str | None]:
+    """SMS is available only while the platform gateway sends (V4 WP7.1)."""
+    from app.sms_providers.service import active_sms_transport
+
+    if await active_sms_transport(db) is None:
+        return False, SMS_BLOCKER
+    return True, None
 
 
 async def whatsapp_connection(db: AsyncSession) -> IntegrationConnection | None:
@@ -109,6 +125,8 @@ async def send(db: AsyncSession, message: Outbound, *, email_transport: Any = No
         return await _email(message, email_transport)
     if message.channel == "WHATSAPP":
         return await _whatsapp(db, message)
+    if message.channel == "SMS":
+        return await _sms(db, message)
     return Sent("FAILED", message.channel.lower(), error="CHANNEL_NOT_SUPPORTED")
 
 
@@ -162,3 +180,31 @@ async def _whatsapp(db: AsyncSession, message: Outbound) -> Sent:
             return Sent("UNKNOWN", "whatsapp", error=exc.code)
         return Sent("FAILED", "whatsapp", error=exc.code)
     return Sent("SENT", "whatsapp", wamid)
+
+
+async def _sms(db: AsyncSession, message: Outbound) -> Sent:
+    """One order update through the Alpha SMS gateway. The gateway takes no
+    idempotency key, so only a provable non-send is retried."""
+    from app.notifications.transport import DeliveryOutcome, SmsMessage
+    from app.sms_providers.service import active_sms_transport
+
+    transport = await active_sms_transport(db)
+    if transport is None:
+        return Sent("FAILED", "sms", error=SMS_BLOCKER)
+    result = await transport.send(
+        SmsMessage(
+            phone_e164=message.to,
+            body=message.body,
+            idempotency_key=f"customer-message/{message.message_id}",
+        )
+    )
+    if result.outcome in (DeliveryOutcome.SENT, DeliveryOutcome.DUPLICATE):
+        return Sent("SENT", result.provider, result.provider_reference)
+    error = (result.detail or str(result.outcome))[:80]
+    if result.outcome is DeliveryOutcome.UNKNOWN:
+        # It may have reached the customer: never sent again.
+        return Sent("UNKNOWN", result.provider, result.provider_reference, error)
+    if result.outcome is DeliveryOutcome.FAILED:
+        # No connection, or the documented "insufficient balance": nothing left.
+        return Sent("RETRY", result.provider, error=error)
+    return Sent("FAILED", result.provider, error=error)

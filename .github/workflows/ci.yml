@@ -129,7 +129,10 @@ jobs:
         run: flutter analyze
 
       - name: Tests
-        run: flutter test
+        run: flutter test --exclude-tags perf
+
+      - name: Performance tests (alone, wall-clock budgets)
+        run: flutter test --tags perf --concurrency=1
 
       - name: Build debug APK
         # Compile with a synthetic debug-only Firebase project. Production
@@ -159,6 +162,34 @@ jobs:
           }), encoding="utf-8")
           PY
           flutter build apk --debug
+
+  extension:
+    name: Chrome extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (phone extractor, selector reader, API, manifest)
+        run: npm test
+
+      - name: Build
+        run: npm run build
 
   secrets-scan:
     name: Secret scan
@@ -247,15 +278,22 @@ jobs:
       # Master spec section 48: "do not claim backup safety unless restore has
       # been tested." Running the drill on every build is the only way that
       # claim stays true as the schema changes.
+      # pg_dump / pg_restore / psql run from the postgres:16-alpine image, so
+      # their major version is the server's: the runner's newer client writes
+      # settings (transaction_timeout) that PostgreSQL 16 refuses on restore.
       - name: Dump
         run: |
-          pg_dump --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_source             --format=custom --compress=9 --no-owner --no-acl             --file=/tmp/ecomsbd-ci.dump
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine pg_dump \
+            --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_source \
+            --format=custom --compress=9 --no-owner --no-acl --file=/tmp/ecomsbd-ci.dump
           test "$(wc -c < /tmp/ecomsbd-ci.dump)" -gt 4096
 
       - name: Restore into a separate database
         run: |
-          psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres             -c "CREATE DATABASE ecomsbd_restore_ci"
-          pg_restore --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_restore_ci             --no-owner --no-acl /tmp/ecomsbd-ci.dump
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine psql postgresql://ecomsbd:ecomsbd@localhost:5432/postgres             -c "CREATE DATABASE ecomsbd_restore_ci"
+          docker run --rm --network host -v /tmp:/tmp postgres:16-alpine pg_restore \
+            --dbname=postgresql://ecomsbd:ecomsbd@localhost:5432/ecomsbd_restore_ci \
+            --no-owner --no-acl /tmp/ecomsbd-ci.dump
 
       - name: Verify the restored database
         env:

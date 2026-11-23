@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { LIVE_COURIERS, courierName, verifiedCapabilities } from '../lib/couriers.ts';
+import { LIVE_COURIERS, bookingCouriers, courierName, defaultCourierOptions, verifiedCapabilities } from '../lib/couriers.ts';
 import { activeHref, NAV, QUICK_ACTIONS, allowed } from '../lib/nav.ts';
 import { STATUS_MOVES, isEditable, newClientId, paisaToTaka, takaToPaisa } from '../lib/orders.ts';
 import { opsBn, opsEn } from '../lib/ops-strings.ts';
@@ -52,6 +52,13 @@ test('quick actions for daily work follow permissions', () => {
 test('couriers stay live and only verified capabilities count', () => {
   assert.deepEqual([...LIVE_COURIERS], ['steadfast', 'pathao', 'redx']);
   assert.equal(courierName('redx'), 'RedX');
+  assert.equal(courierName('carrybee'), 'Carrybee');
+  const carrybee = { provider: 'carrybee', enabled: true, connect_form: {} };
+  assert.deepEqual(defaultCourierOptions([carrybee], null), ['steadfast', 'pathao', 'redx', 'carrybee']);
+  assert.deepEqual(defaultCourierOptions([{ ...carrybee, enabled: false }], null), ['steadfast', 'pathao', 'redx']);
+  assert.deepEqual(defaultCourierOptions([{ provider: 'manual', enabled: true, connect_form: null }], 'carrybee'), ['steadfast', 'pathao', 'redx', 'carrybee']);
+  assert.deepEqual(bookingCouriers(['carrybee', 'manual'], ''), ['carrybee']);
+  assert.deepEqual(bookingCouriers([], 'carrybee'), ['steadfast', 'pathao', 'redx', 'carrybee']);
   assert.equal(courierName('manual', 'Own delivery'), 'Own delivery');
   assert.deepEqual(verifiedCapabilities({ booking: 'true', quote: 'unknown', bulk: 'false' }), ['booking']);
 });

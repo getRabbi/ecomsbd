@@ -27,6 +27,7 @@ rather than by where it sits.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from app.common.money import paisa_from_taka
 from app.common.phone import extract_phones, normalize_digits
@@ -36,6 +37,7 @@ from app.orders.parser.base import (
     ParsedItem,
     ParsedOrder,
 )
+from app.orders.parser.districts import find_district, is_district_only
 
 __all__ = ["COLOR_EQUIVALENTS", "DeterministicOrderParser"]
 
@@ -104,6 +106,19 @@ _ADDRESS_HINTS = (
     "সাভার",
     "চট্টগ্রাম",
 )
+
+#: Hints short enough to hide inside ordinary words ("rd" in "order", "po" in
+#: "Polash") only count as whole words.
+_SHORT_HINT_RE = re.compile(
+    r"(?<![a-z])(?:" + "|".join(re.escape(h) for h in _ADDRESS_HINTS if len(h) <= 3) + r")(?![a-z])"
+)
+_LONG_HINTS = tuple(h for h in _ADDRESS_HINTS if len(h) > 3)
+
+
+def _address_hits(lowered: str) -> int:
+    """How many address hints a lower-cased line contains."""
+    return len(_SHORT_HINT_RE.findall(lowered)) + sum(1 for h in _LONG_HINTS if h in lowered)
+
 
 #: Clothing sizes, matched as whole tokens so "XL" in "XLARGE BAG" is not a size.
 _SIZES = ("xs", "s", "m", "l", "xl", "xxl", "xxxl", "2xl", "3xl", "free size", "freesize")
@@ -259,8 +274,19 @@ _FILLER_WORDS = frozenset(
         "kinte",
         "ta",
         "ti",
+        "দিয়েন",
+        "দেবেন",
+        "পাঠাবেন",
+        "diyen",
+        "dien",
+        "pathaben",
+        "send",
+        "din",
+        "each",
     }
 )
+#: "য়"/"ড়" arrive precomposed or as letter + nukta; accept both spellings.
+_FILLER_WORDS = _FILLER_WORDS | frozenset(unicodedata.normalize("NFC", w) for w in _FILLER_WORDS)
 
 #: Words that mark a line as the customer asking for something, never a name.
 _INTENT_WORDS = frozenset(
@@ -314,6 +340,9 @@ _NOISE_LINES = frozenset(
 
 _EDGE_PUNCTUATION = ",.!?।:;()\"'"
 
+#: Single-word greetings, so "hi apu" is conversation, not a name.
+_GREETING_WORDS = frozenset(word for word in _NOISE_LINES if " " not in word)
+
 #: The Bangla definite suffix on a noun ("পাঞ্জাবিটা" is "the panjabi").
 _DEFINITE_SUFFIXES = ("টা", "টি", "খানা")
 
@@ -331,7 +360,8 @@ _QUANTITY_RE = re.compile(
 )
 
 _AMOUNT_RE = re.compile(
-    r"(?<![\d.])(?:৳|tk\.?|taka|bdt)?\s*(\d{2,7}(?:[,\s]\d{3})*(?:\.\d{1,2})?)\s*"
+    r"(?<![\d.])(?:৳|tk\.?|taka|bdt)?\s*"
+    r"(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{2,7}(?:[,\s]\d{3})*(?:\.\d{1,2})?)\s*"
     r"(?:৳|tk\.?|taka|bdt|টাকা)?(?![\d.])",
     re.IGNORECASE,
 )
@@ -344,6 +374,37 @@ _SIZE_RE = re.compile(
 )
 
 _LABEL_SPLIT_RE = re.compile(r"^\s*([^:：]{1,24})\s*[:：]\s*(.*)$")
+
+#: ``name- karim`` / ``address — Mirpur``: a dash after a known label word.
+_LABEL_DASH_RE = re.compile(r"^\s*(\S+(?:\s+\S+)?)\s*[-–—=]+\s*(\S.*)$")
+
+#: ``number 01711223344`` / ``total 2450tk``: a phone or amount label followed
+#: directly by digits, with no separator at all.
+_LABEL_SPACE_RE = re.compile(r"^\s*(\S+(?:\s+\S+)?)\s+((?:\+|৳|tk\.?\s*)?\d.*)$", re.IGNORECASE)
+
+#: "আমার নাম সুমি" / "my name is Rahim" / "amar nam karim", after at most two
+#: words of greeting ("আপু ...").
+_INLINE_NAME_RE = re.compile(
+    r"^(?:\S+\s+){0,2}?(?:আমার\s+নাম|my\s+name\s+is|amar\s+nam|amar\s+name)"
+    r"\s*(?:হলো|হল|hocche|holo|is)?\s*[:\-]?\s*(?P<value>[^\d,।]+)$",
+    re.IGNORECASE,
+)
+
+#: A sentence boundary inside one line: "।", or "." / "!" after a word of at
+#: least three letters followed by a non-digit — so "Rd. 5" and "Md. Rahim"
+#: stay whole while "Dhaka. Black panjabi" splits.
+_SENTENCE_SPLIT_RE = re.compile(r"।+\s*|(?<=[A-Za-z]{3})[.!?]+\s+(?=\D)|(?<=\d)\.\s+(?=[^\W\d_])")
+
+#: Phone-shaped run, for cutting "Rahim 01812345678 Mirpur 10" into parts.
+_PHONE_SPAN_RE = re.compile(r"(?:\+?88)?[\s\-]*01[3-9](?:[\s\-]*\d){8}")
+
+#: Words that only introduce a phone number ("my number is", "আমার নাম্বার").
+_PHONE_INTRO_WORDS = frozenset(
+    {*_LABELS["phone"], "my", "is", "amar", "er", "hocche", "holo", "আমার", "হলো", "হচ্ছে"}
+)
+
+#: A lone district line is an address, but only a district: a guess.
+_DISTRICT_ONLY_CONFIDENCE = FieldConfidence.LOW
 
 #: Numbers that describe a measurement or a place, never an amount of money.
 _MEASUREMENT_RE = re.compile(
@@ -382,9 +443,10 @@ class DeterministicOrderParser:
 
         normalized = normalize_digits(working)
         lines = [
-            line.strip()
+            segment
             for line in normalized.splitlines()
-            if line.strip() and not self._is_noise(line)
+            for segment in self._segments(line)
+            if not self._is_noise(segment)
         ]
 
         labelled, unlabelled = self._split_labelled(lines)
@@ -401,6 +463,44 @@ class DeterministicOrderParser:
             result.warnings.append("Could not read this text. Please enter the order manually.")
         return result
 
+    # -------------------------------------------------------------- segments --
+
+    @staticmethod
+    def _segments(line: str) -> list[str]:
+        """Split one physical line into the parts a customer ran together.
+
+        "Rahim 01812345678 Mirpur 10 Dhaka. Black panjabi XL 2 pcs" is a name,
+        a phone, an address and a product on one line. Sentences are split
+        first, then an unlabelled sentence is cut around its phone number. A
+        ``Label: value`` sentence is never cut: its value belongs to its label.
+        """
+        parts: list[str] = []
+        for sentence in _SENTENCE_SPLIT_RE.split(line):
+            sentence = sentence.strip(" ,;")
+            if not sentence:
+                continue
+            spans = list(_PHONE_SPAN_RE.finditer(sentence))
+            labelled = _LABEL_SPLIT_RE.match(sentence) is not None or (
+                DeterministicOrderParser._exact_label(sentence.split()[0]) == "phone"
+            )
+            if not spans or labelled or not sentence.replace(spans[0].group(), "").strip(" ,"):
+                parts.append(sentence)
+                continue
+            cursor = 0
+            for span in spans:
+                before = sentence[cursor : span.start()]
+                # "My number is 017..." — the words before the number only
+                # introduce it, and kept they would be read as a name.
+                if not all(
+                    word.strip(_EDGE_PUNCTUATION) in _PHONE_INTRO_WORDS
+                    for word in before.casefold().split()
+                ):
+                    parts.append(before)
+                parts.append(span.group())
+                cursor = span.end()
+            parts.append(sentence[cursor:])
+        return [part.strip(" ,;/") for part in parts if part.strip(" ,;/")]
+
     # ----------------------------------------------------------------- noise --
 
     def _is_noise(self, line: str) -> bool:
@@ -414,12 +514,14 @@ class DeterministicOrderParser:
             return True
         if any(char.isdigit() for char in line):
             return False
-        if self._looks_like_product(line) or any(hint in folded for hint in _ADDRESS_HINTS):
+        if self._looks_like_product(line) or _address_hits(folded):
             return False
         if "?" in line:
             return True
         tokens = [token.strip(_EDGE_PUNCTUATION) for token in folded.split()]
-        return bool(tokens) and all(not token or token in _FILLER_WORDS for token in tokens)
+        return bool(tokens) and all(
+            not token or token in _FILLER_WORDS or token in _GREETING_WORDS for token in tokens
+        )
 
     # ------------------------------------------------------------ labelling --
 
@@ -433,6 +535,10 @@ class DeterministicOrderParser:
         unlabelled: list[str] = []
 
         for line in lines:
+            loose = self._loose_label(line)
+            if loose is not None:
+                labelled.setdefault(loose[0], []).append(loose[1])
+                continue
             match = _LABEL_SPLIT_RE.match(line)
             if match is None:
                 unlabelled.append(line)
@@ -456,6 +562,49 @@ class DeterministicOrderParser:
         for field, keywords in _LABELS.items():
             if any(keyword in raw_label for keyword in keywords):
                 return field
+        return None
+
+    @staticmethod
+    def _exact_label(raw_label: str) -> str | None:
+        """The field a label names when *every* word of it is a label word.
+
+        Stricter than :meth:`_classify_label` on purpose: without a colon the
+        label is only recognised when it cannot be part of the value, so
+        "t-shirt" is never read as a label "t".
+        """
+        words = raw_label.casefold().strip(_EDGE_PUNCTUATION).split()
+        fields: set[str] = set()
+        for word in words:
+            matched = {field for field, keywords in _LABELS.items() if word in keywords}
+            if not matched:
+                return None
+            fields |= matched
+        if len(fields) == 1:
+            return fields.pop()
+        # "phone number" / "মোবাইল নাম্বার": every word is a phone word.
+        return "phone" if words and all(w in _LABELS["phone"] for w in words) else None
+
+    def _loose_label(self, line: str) -> tuple[str, str] | None:
+        """A label written without a colon: ``name- karim``, ``number 017...``.
+
+        Also the inline "আমার নাম সুমি" introduction, which is a name label in
+        sentence form.
+        """
+        inline = _INLINE_NAME_RE.match(line)
+        if inline is not None:
+            value = inline.group("value").strip(_EDGE_PUNCTUATION + " ")
+            if value and len(value.split()) <= 3:
+                return "name", value
+        dash = _LABEL_DASH_RE.match(line)
+        if dash is not None and ":" not in dash.group(1):
+            field = self._exact_label(dash.group(1))
+            if field is not None:
+                return field, dash.group(2).strip()
+        space = _LABEL_SPACE_RE.match(line)
+        if space is not None:
+            field = self._exact_label(space.group(1))
+            if field in {"phone", "amount"}:
+                return field, space.group(2).strip()
         return None
 
     # --------------------------------------------------------------- phones --
@@ -507,7 +656,7 @@ class DeterministicOrderParser:
             lowered_line = line.lower()
             # An address line is full of numbers that are not money: house
             # numbers, road numbers, sector numbers.
-            if any(hint in lowered_line for hint in _ADDRESS_HINTS):
+            if _address_hits(lowered_line):
                 continue
             # "size 40" is a measurement, not forty taka.
             line = _MEASUREMENT_RE.sub(" ", line)
@@ -529,7 +678,9 @@ class DeterministicOrderParser:
         with_currency = [value for value, marked in candidates if marked]
         if with_currency:
             result.cod_amount_paisa = max(with_currency)
-            result.confidence["amount"] = FieldConfidence.HIGH
+            # Unlabelled, so below HIGH: confidence >= HIGH means "came from a
+            # label", which is what the enhanced parser trusts over a model.
+            result.confidence["amount"] = FieldConfidence.MEDIUM
             return
 
         # No currency marker: the largest plausible number is the usual answer,
@@ -570,17 +721,25 @@ class DeterministicOrderParser:
     ) -> None:
         if labelled.get("address"):
             result.address = labelled["address"][0]
+            result.district = find_district(result.address)
             result.confidence["address"] = FieldConfidence.EXACT
             return
 
         phone_digits = {phone.lstrip("+")[-10:] for phone in result.phones}
         scored: list[tuple[int, int, str]] = []
+        district_only: list[str] = []
 
         for line in unlabelled:
             if _NUMERIC_ONLY_RE.match(line) or self._looks_like_phone_line(line, phone_digits):
                 continue
             lowered = line.lower()
-            hits = sum(1 for hint in _ADDRESS_HINTS if hint in lowered)
+            if is_district_only(line):
+                district_only.append(line)
+                continue
+            hits = _address_hits(lowered)
+            if find_district(line) and not self._looks_like_product(line):
+                # "খুলনা সোনাডাঙ্গা": a district plus an area is an address.
+                hits += 1
             if hits:
                 scored.append((hits, len(line), line))
 
@@ -590,9 +749,19 @@ class DeterministicOrderParser:
             # look like addresses.
             scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
             result.address = scored[0][2]
-            result.confidence["address"] = (
-                FieldConfidence.HIGH if scored[0][0] >= 2 else FieldConfidence.MEDIUM
-            )
+            result.district = find_district(result.address)
+            # Picked by place-name hits, not a label: a guess however many hits
+            # it has (HIGH and above is reserved for labelled fields).
+            result.confidence["address"] = FieldConfidence.MEDIUM
+            return
+
+        if len(district_only) == 1:
+            # "Tangail" on its own line: a delivery area, not a person. Only a
+            # district, so it is offered as a guess the seller completes.
+            result.address = district_only[0]
+            result.district = find_district(result.address)
+            result.confidence["address"] = _DISTRICT_ONLY_CONFIDENCE
+            result.warnings.append("Only a district found — add the full address")
             return
 
         result.confidence["address"] = FieldConfidence.NONE
@@ -649,7 +818,7 @@ class DeterministicOrderParser:
             if _NUMERIC_ONLY_RE.match(line) or self._looks_like_phone_line(line, phone_digits):
                 continue
             lowered = line.lower()
-            if any(hint in lowered for hint in _ADDRESS_HINTS):
+            if _address_hits(lowered):
                 continue
             ordered.append(line)
             if self._looks_like_product(line):
@@ -787,12 +956,25 @@ class DeterministicOrderParser:
         if size_match is not None:
             size = size_match.group(1).upper()
             working = working[: size_match.start()] + " " + working[size_match.end() :]
+            # "M সাইজ": the word "size" after the size is not part of the name.
+            working = re.sub(r"(?i)(?:^|\s)(?:size|সাইজ)(?=$|\s)", " ", working)
 
         color: str | None = None
         for candidate in _COLORS:
             if re.search(rf"(?:^|\s){re.escape(candidate)}(?=$|\s)", working, re.IGNORECASE):
                 color = candidate.title() if candidate.isascii() else candidate
                 break
+
+        # A price on the product line is the unit price only when one piece is
+        # ordered; "2 pcs 2450" could be either, so it is left for the seller.
+        prices = [
+            value
+            for value in (
+                self._to_paisa(raw) for raw in _AMOUNT_RE.findall(_MEASUREMENT_RE.sub(" ", working))
+            )
+            if value is not None and 2_000 <= value <= 100_000_000
+        ]
+        unit_price = prices[0] if len(prices) == 1 and quantity == 1 else None
 
         # Strip a trailing price so it does not become part of the name.
         working = _AMOUNT_RE.sub(" ", working)
@@ -805,7 +987,9 @@ class DeterministicOrderParser:
                 return ParsedItem(name="", quantity=quantity, size=size, color=color)
             return None
 
-        return ParsedItem(name=name, quantity=quantity, size=size, color=color)
+        return ParsedItem(
+            name=name, quantity=quantity, size=size, color=color, unit_price_paisa=unit_price
+        )
 
     @staticmethod
     def _product_words(text: str) -> list[str]:

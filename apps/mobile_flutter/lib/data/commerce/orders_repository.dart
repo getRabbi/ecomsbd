@@ -169,6 +169,9 @@ class OrdersRepository extends CachingRepository {
     String? sourceText,
     String channel = 'MANUAL',
     String? clientId,
+    // V4 WP2.1: 'REQUEST' (confirm with the customer) or 'SELLER_CHAT'
+    // (already confirmed in chat). Travels with the create, also offline.
+    String? confirmation,
   }) async {
     // Minted before the attempt so a retry — online or offline — carries the
     // same id. This is what stops one sale becoming two orders.
@@ -189,6 +192,7 @@ class OrdersRepository extends CachingRepository {
         'source_text': sourceText,
       'channel': channel,
       'client_id': id,
+      'confirmation': ?confirmation,
     };
 
     try {

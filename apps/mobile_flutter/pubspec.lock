@@ -81,6 +81,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.1"
+  barcode:
+    dependency: transitive
+    description:
+      name: barcode
+      sha256: "7b6729c37e3b7f34233e2318d866e8c48ddb46c1f7ad01ff7bb2a8de1da2b9f4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.9"
+  bidi:
+    dependency: transitive
+    description:
+      name: bidi
+      sha256: "77f475165e94b261745cf1032c751e2032b8ed92ccb2bf5716036db79320637d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.13"
   boolean_selector:
     dependency: transitive
     description:
@@ -649,10 +665,10 @@ packages:
     dependency: transitive
     description:
       name: jni
-      sha256: f038e58b4dc2c9037f50e233175086337e0b305e356d28211bf55f21c504cbd3
+      sha256: "2e91e6087291affd10b31b6c872f3e3ac7dc5d93b51b5ba485d930c8f08bde6c"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.3"
+    version: "1.1.2"
   jni_flutter:
     dependency: transitive
     description:
@@ -813,6 +829,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  path_parsing:
+    dependency: transitive
+    description:
+      name: path_parsing
+      sha256: "883402936929eac138ee0a45da5b0f2c80f89913e6dc3bf77eb65b84b409c6ca"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
   path_provider:
     dependency: "direct main"
     description:
@@ -861,6 +885,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  pdf:
+    dependency: transitive
+    description:
+      name: pdf
+      sha256: "6e40827f370d196e97c6611724d923a3d86c431ce8e2ce1e59edd03a67a1a6e6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.13.1"
+  pdf_widget_wrapper:
+    dependency: transitive
+    description:
+      name: pdf_widget_wrapper
+      sha256: c930860d987213a3d58c7ec3b7ecf8085c3897f773e8dc23da9cae60a5d6d0f5
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.4"
   petitparser:
     dependency: transitive
     description:
@@ -917,6 +957,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.9.1"
+  printing:
+    dependency: "direct main"
+    description:
+      name: printing
+      sha256: "0f72f29f2e08b8453b7a45b6c7781eb792b1da3468bf0910be0eb3b1d6781f49"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.15.1"
   pub_semver:
     dependency: transitive
     description:
@@ -933,6 +981,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.6.0"
+  qr:
+    dependency: transitive
+    description:
+      name: qr
+      sha256: "2c0189dca64a3ab08dda7acd7911c89af2374f08eb4eaded3e8ef4609f3b9c8b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.3"
   realtime_client:
     dependency: transitive
     description:
@@ -965,6 +1021,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.6.1"
+  sentry:
+    dependency: transitive
+    description:
+      name: sentry
+      sha256: "490ff077d819c07511e4b1b07bcdf7117a87c3cb10b55b56081ac0a56d85d467"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.5.0"
+  sentry_flutter:
+    dependency: "direct main"
+    description:
+      name: sentry_flutter
+      sha256: "67e5cb6b78a5b32036472d75d9b553b8ca7e71d46243b79dc9e3e423945a7d9b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.5.0"
   shared_preferences:
     dependency: "direct main"
     description:

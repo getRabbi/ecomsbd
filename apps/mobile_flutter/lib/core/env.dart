@@ -46,11 +46,22 @@ class Env {
     'GOOGLE_CLIENT_ID_IOS',
   );
 
-  /// Host of the ecomsbd web dashboard (also serves the legal pages).
+  /// Host of the ecomsbd web workspace.
   ///
   /// Store and channel setup — a sign-in at Shopify or Meta, WooCommerce or
-  /// website keys — is done there, and the app links to its real pages.
-  static const String webDashboardHost = 'scalemyprints.com';
+  /// website keys — is done there, and the app links to its real pages. The
+  /// public host redirects workspace paths here (`apps/web/next.config.ts`).
+  static const String webDashboardHost = 'app.ecomsbd.com';
+
+  /// Host of the public site: privacy policy, account deletion and support.
+  static const String legalPagesHost = 'ecomsbd.com';
+
+  /// Only a directly distributed APK sets
+  /// `--dart-define=ECOMSBD_DIRECT_BUILD=true`. Every other build (Google
+  /// Play, App Store, the default) tells the API it is a store build, which is
+  /// the restrictive claim the server always believes: no out-of-app payment
+  /// option (bKash / Nagad TrxID, bKash web) is offered (master spec §27.1).
+  static const bool directBuild = bool.fromEnvironment('ECOMSBD_DIRECT_BUILD');
 
   /// Sentry DSN. Empty disables reporting.
   static const String sentryDsn = String.fromEnvironment('ECOMSBD_SENTRY_DSN');
