@@ -22,7 +22,7 @@
 - `extension_enabled` (default off) **and** `intake_device_enabled`. Off = pairing refused and every
   ingest call of a linked extension answers `FEATURE_DISABLED` (phones unaffected).
 - Build-time: `ECOMSBD_API_BASE_URL`, `ECOMSBD_WEB_BASE_URL` (https origins; defaults
-  `https://api.scalemyprints.com`, `https://app.ecomsbd.com`). The API origin is the only host permission.
+  `https://api.ecomsbd.com`, `https://app.ecomsbd.com`). The API origin is the only host permission.
   After an API domain move, build with the new `ECOMSBD_API_BASE_URL` and publish an update; the old
   origin keeps working while it is in `PUBLIC_BASE_URL_ALIASES` (runbook `API_DOMAIN_MIGRATION.md`).
 

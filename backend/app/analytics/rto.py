@@ -115,7 +115,7 @@ TREND_DEAD_BAND_BPS: Final = 200
 
 #: Providers with no live, documented integration. Their parcels count in the
 #: shop totals but no per-courier performance is claimed for them.
-NOT_LIVE_PROVIDERS: Final = frozenset({"redx"})
+NOT_LIVE_PROVIDERS: Final = frozenset({"redx", "carrybee"})
 
 #: Parcels read for one customer's history. Far above any real customer.
 _CUSTOMER_PARCEL_CAP: Final = 500

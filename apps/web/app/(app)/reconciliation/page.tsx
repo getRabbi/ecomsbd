@@ -910,6 +910,8 @@ function courierName(provider: string, t: Translate): string {
       return 'Pathao';
     case 'redx':
       return 'RedX';
+    case 'carrybee':
+      return 'Carrybee';
     case 'manual':
       return t('rv.manualCourier');
     default:

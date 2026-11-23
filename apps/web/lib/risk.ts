@@ -118,6 +118,10 @@ export interface ProviderCatalog {
     capabilities: string[];
     credential_fields: { name: string; label_en: string; label_bn: string; secret: boolean }[];
     cache_ttl_hours: { default: number; min: number; max: number };
+    /** V4 WP0.6: what the provider's terms require; absent or null when nothing. */
+    notice_en?: string | null;
+    notice_bn?: string | null;
+    new_orders_only?: boolean;
     connection: {
       enabled: boolean;
       credentials_set: boolean;
@@ -132,6 +136,15 @@ export interface ProviderCatalog {
       rate_limited_until: string | null;
     } | null;
   }[];
+}
+
+/** The provider's terms in the seller's language (V4 WP0.6), or null. */
+export function providerNotice(
+  provider: { notice_en?: string | null; notice_bn?: string | null },
+  locale: string,
+): string | null {
+  const text = locale === 'bn' ? provider.notice_bn || provider.notice_en : provider.notice_en;
+  return text ? text : null;
 }
 
 /** A cell's value in the seller's words. */

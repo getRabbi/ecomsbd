@@ -190,6 +190,8 @@ class AuditAction(StrEnum):
     ADMIN_INTAKE_RULES_ACTIVATED = "admin.intake_rules_activated"
     #: V4 WP3.1: the platform's voice provider account connected, rotated or switched.
     ADMIN_VOICE_PROVIDER_UPDATED = "admin.voice_provider_updated"
+    #: V4 WP7.1: the platform SMS gateway account connected, rotated or switched.
+    ADMIN_SMS_PROVIDER_UPDATED = "admin.sms_provider_updated"
     #: V4 WP3.3: the operator uploaded a shop's intro recording.
     ADMIN_VOICE_INTRO_UPLOADED = "admin.voice_intro_uploaded"
     #: V4 WP3.4: the operator granted a shop a voice call pack.

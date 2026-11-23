@@ -20,8 +20,9 @@ long as anything still calls them.
 - Clients: the phone app reads `ECOMSBD_API_BASE_URL` at build time (`env/production.json`); the
   Codemagic guard accepts exactly `https://api.scalemyprints.com` and `https://api.ecomsbd.com`. The
   web app reads `NEXT_PUBLIC_API_BASE_URL`; the Chrome extension `ECOMSBD_API_BASE_URL` at build time.
-- Not covered by this runbook: the web/legal host (`scalemyprints.com` pages, the app's
-  `webDashboardHost`, privacy-policy links) and Supabase Site URL — a separate web-domain move.
+- Web hosts (2026-11): workspace `https://app.ecomsbd.com`, public + legal pages
+  `https://ecomsbd.com` (`apps/web/next.config.ts`). The `scalemyprints.com` web pages answer
+  402 and no client links to them. Their values are in "2026-11 move: exact values" below.
 
 ## Order of work (dual-serve period)
 
@@ -61,6 +62,72 @@ long as anything still calls them.
 6. **Retire.** Only when old-host traffic is ~0 for 30 days and no courier callback still uses it:
    remove the old Meta redirect, remove `PUBLIC_BASE_URL_ALIASES`, keep the old DNS name redirecting
    (301) to the new one for unsubscribe links, deploy.
+
+## 2026-11 move: exact values
+
+Operator decision 2026-11-23: API `https://api.ecomsbd.com`, old `https://api.scalemyprints.com`
+kept as an alias; web workspace `https://app.ecomsbd.com`, public + legal `https://ecomsbd.com`.
+The code defaults moved on `v4/phase-8`; the server switch happens only after V4 is deployed.
+Copy-paste checklist in the order of work above. No secret appears here: tokens and keys stay
+where they are. URL list from `PUBLIC_BASE_URL=https://api.ecomsbd.com
+PUBLIC_BASE_URL_ALIASES=https://api.scalemyprints.com python -m app.core.public_urls`
+(run 2026-11-23 in a shell without `TRUSTED_HOSTS`, so it printed "Host allow-list: off"):
+
+```text
+API hosts served: api.ecomsbd.com, api.scalemyprints.com
+
+[primary] https://api.ecomsbd.com
+  meta_oauth_redirect      https://api.ecomsbd.com/v1/integration-callbacks/meta
+  meta_webhook             https://api.ecomsbd.com/v1/webhooks/integrations/meta
+  shopify_oauth_redirect   https://api.ecomsbd.com/v1/integration-callbacks/shopify
+  woocommerce_callback     https://api.ecomsbd.com/v1/integration-callbacks/woocommerce
+  store_webhook            https://api.ecomsbd.com/v1/webhooks/integrations/{provider}/{token}
+  integration_return       https://api.ecomsbd.com/v1/integration-callbacks/return
+  website_api              https://api.ecomsbd.com/public/v1
+  courier_webhook          https://api.ecomsbd.com/v1/webhooks/couriers/{provider}/{token}
+  email_verify             https://api.ecomsbd.com/auth/email/verify
+  password_reset           https://api.ecomsbd.com/auth/password/reset
+  unsubscribe              https://api.ecomsbd.com/v1/messaging/unsubscribe/{token}
+
+[alias] https://api.scalemyprints.com
+  (the same eleven paths on https://api.scalemyprints.com)
+```
+
+1. **DNS + TLS.** `api.ecomsbd.com` → custom domain on `ecomsbd-api` (HTTP port 8000), next to
+   `api.scalemyprints.com`. Check: `curl https://api.ecomsbd.com/health/live` → `{"status":"ok"}`.
+2. **Secret group `ecomsbd-production`** (API + worker; restart both, group edits do not restart
+   running containers):
+   - `PUBLIC_BASE_URL=https://api.ecomsbd.com`
+   - `PUBLIC_BASE_URL_ALIASES=https://api.scalemyprints.com`
+   - `PUBLIC_WEB_URL=https://app.ecomsbd.com` (exact origin, no path: the WhatsApp signup page
+     must post from it)
+   - `CORS_ALLOW_ORIGINS` contains `https://app.ecomsbd.com` and `https://ecomsbd.com` (keep the
+     other entries)
+   - `TRUSTED_HOSTS`, if set: add `api.ecomsbd.com` (the code adds both API hosts anyway)
+   - Check: `python -m app.check_production_config` → `URLS / CORS` OK, "2 API host(s)".
+3. **Registrations — add the new value, keep the old API one.**
+   - Meta app → Facebook Login for Business → Valid OAuth Redirect URIs: add
+     `https://api.ecomsbd.com/v1/integration-callbacks/meta` and
+     `https://app.ecomsbd.com/ecomsbd/whatsapp-connect`; keep
+     `https://api.scalemyprints.com/v1/integration-callbacks/meta` until step 6.
+   - Meta app → Allowed Domains for the JavaScript SDK (WhatsApp Embedded Signup):
+     `https://app.ecomsbd.com`. A `https://scalemyprints.com` entry serves nothing any more (402).
+   - Meta app → Webhooks → Page **and** WhatsApp Business Account: callback
+     `https://api.ecomsbd.com/v1/webhooks/integrations/meta`, same verify token.
+   - Supabase → Authentication → URL Configuration: Site URL `https://app.ecomsbd.com`;
+     Redirect URLs `com.ecomsbd.app://auth/callback`, `https://app.ecomsbd.com/**`,
+     `https://ecomsbd.com/**` (the web signs in and resets passwords on
+     `https://app.ecomsbd.com/sign-in` and `/reset-password`; the apex redirects both there).
+   - Google OAuth: nothing (no Google redirect names the API or web host; it is Supabase's).
+   - Shopify (launch-gated): add `https://api.ecomsbd.com/v1/integration-callbacks/shopify`, keep
+     the old one. WooCommerce: nothing to register (the callback is sent with each connect).
+   - Courier panels: sellers re-paste `courier_webhook` from Couriers → Settings when asked
+     (old host keeps working).
+4. **Apps.** Phone `env/production.json`: `"ECOMSBD_API_BASE_URL": "https://api.ecomsbd.com"`,
+   bump the version (Codemagic accepts it). Web (`apps/web/CLOUDFLARE.md`):
+   `NEXT_PUBLIC_API_BASE_URL=https://api.ecomsbd.com/v1`, `npm run cf:deploy`. Extension: a build
+   with no env now targets `https://api.ecomsbd.com`; publish the update.
+5. **Wait** and 6. **Retire** as above; the old API host is not removed in this move.
 
 ## Detection
 

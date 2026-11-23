@@ -7,6 +7,11 @@
 # Do not add a broad path here. If a scan flags something, triage the finding —
 # an allowlist entry that silences a whole directory silences a future real leak
 # in that directory too.
+#
+# An entry with both `paths` and `regexes` must say condition = "AND". gitleaks'
+# default is "OR": the path alone would then allowlist every finding in that
+# file, and the regex alone every match in any file. (CI scans with `gitleaks
+# git`, which honours "AND"; `gitleaks dir` in 8.30.1 still skips these paths.)
 
 title = "ecomsbd"
 
@@ -20,6 +25,7 @@ because the tests assert that the redaction layer scrubs exactly this shape
 (app/core/redaction.py). Replacing them with innocuous strings would make the
 tests stop proving anything. None is a real credential.
 """
+condition = "AND"
 paths = ['''backend/tests/test_platform_primitives\.py''']
 regexes = [
   '''sk_live_abcdef123456''',
@@ -33,6 +39,7 @@ Synthetic connection string in the configuration test. User `u`, password `p`,
 host `db` — a placeholder used to construct a valid production Settings object
 so the fail-fast validators can be exercised.
 """
+condition = "AND"
 paths = ['''backend/tests/test_config\.py''']
 regexes = ['''postgresql\+asyncpg://u:p@db:5432/ecomsbd''']
 
@@ -64,6 +71,7 @@ validator checks for: APPLE_PRIVATE_KEY must hold the contents of the .p8 file
 rather than a path to it, and a fixture without the header would make the test
 stop proving that. Scoped to the one file and the one literal.
 """
+condition = "AND"
 paths = ['''backend/tests/test_config\.py''']
 regexes = ['''bm90LWEtcmVhbC1rZXk=''']
 
@@ -87,6 +95,7 @@ production-shaped, which is exactly the pattern a scanner should flag, and the
 scanner was right to. The constant in the working tree has been renamed to
 `synthetic-courier-key-for-tests-...`, so nothing new matches this rule.
 """
+condition = "AND"
 paths = ['''backend/tests/test_courier_accounts\.py''']
 regexes = [
   '''sfk-live-0000-1111-2222-abcd''',
@@ -95,8 +104,19 @@ regexes = [
 
 [[allowlists]]
 description = "Pathao's published webhook response protocol constant; authenticates no merchant. Scoped to the documented handshake value."
+condition = "AND"
 paths = ['''docs/providers/pathao/CONTRACT\.md''']
 regexes = ['''f3992ecc\-59da\-4cbe\-a049\-a13da2018d51''']
+
+[[allowlists]]
+description = """
+BD Courier's published curl sample, transcribed verbatim into the contract
+(source: bdcourier.com/api-docs, 2026-11-23). `YOUR_API_KEY` is the provider's
+own placeholder, not a key.
+"""
+condition = "AND"
+paths = ['''docs/providers/bdcourier/CONTRACT\.md''']
+regexes = ['''^YOUR_API_KEY$''']
 
 [[allowlists]]
 description = """
@@ -106,8 +126,10 @@ tests prove that the API refuses keys without those prefixes, that the keys
 reach the store only as HTTPS Basic auth, and that no response ever echoes
 them. No store has ever issued any of these values.
 """
+condition = "AND"
 paths = [
   '''backend/tests/test_integrations\.py''',
+  '''backend/tests/test_integrations_sync\.py''',
   '''apps/mobile_flutter/test/features/integrations_screen_test\.dart''',
 ]
 regexes = [

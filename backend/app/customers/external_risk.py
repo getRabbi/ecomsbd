@@ -16,8 +16,12 @@ def configured_provider() -> object | None:
     return adapters[0] if adapters else None
 
 
-def capability() -> dict:
-    available = configured_provider() is not None
+def capability(available: bool | None = None) -> dict:
+    """The summary screens show. ``available``: whether the shop is offered a provider
+    (built-in adapters depend on the shop's flags, V4 WP0.6); default: one is registered.
+    """
+    if available is None:
+        available = configured_provider() is not None
     return {
         "status": "AVAILABLE" if available else "GATED",
         "available": available,

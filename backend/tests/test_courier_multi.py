@@ -309,7 +309,7 @@ async def test_a_courier_with_nothing_to_connect_is_not_a_booking_option() -> No
     rows = _by_provider(await _service([]).bookable_couriers())
 
     assert "manual" not in rows
-    assert set(rows) == {"steadfast", "pathao", "redx"}
+    assert set(rows) == {"steadfast", "pathao", "redx", "carrybee"}
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ from app.messaging.models import (
     Message,
     MessageTemplate,
 )
-from app.messaging.providers import CONTACT_KINDS, shop_blocker
+from app.messaging.providers import CONTACT_KINDS, shop_blocker, sms_capability
 from app.messaging.providers import capability as provider_capability
 from app.orders.models import Order
 
@@ -76,6 +76,9 @@ TEMPLATE_FIELDS = (
 )
 _PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 _EMAIL = re.compile(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+")
+#: An SMS template stays within three segments (estimate) in each language:
+#: the gateway publishes no maximum length or price (V4 WP7.1).
+SMS_MAX_SEGMENTS = 3
 MARKETING_FOOTER = {
     "en": "\n\n—\nYou receive this because you agreed to offers from {shop_name}. "
     "Unsubscribe: {unsubscribe_url}",
@@ -85,6 +88,13 @@ MARKETING_FOOTER = {
 
 def capability(kind: str) -> tuple[bool, str | None]:
     return provider_capability(kind)
+
+
+async def available(db: AsyncSession, kind: str) -> tuple[bool, str | None]:
+    """Platform availability. SMS asks the database (V4 WP7.1: flag + gateway)."""
+    if kind == "SMS":
+        return await sms_capability(db)
+    return capability(kind)
 
 
 async def required(db: AsyncSession, model: Any, row_id: uuid.UUID) -> Any:
@@ -113,6 +123,21 @@ def validate_template(values: dict[str, Any]) -> None:
                 "Unsupported placeholder",
                 details={"allowed": list(allowed), "code": "TEMPLATE_PLACEHOLDER"},
             )
+    if channel == "SMS":
+        from app.notifications.transport import count_sms_segments
+
+        if purpose != TRANSACTIONAL:
+            # Bulk / offer SMS needs an approved content id the gateway's page
+            # does not describe: SMS carries order updates only.
+            raise ValidationError(
+                "SMS carries order updates only", details={"code": "SMS_ORDER_UPDATES_ONLY"}
+            )
+        for key in ("body_en", "body_bn"):
+            if count_sms_segments(values[key]) > SMS_MAX_SEGMENTS:
+                raise ValidationError(
+                    "An SMS template must fit in three SMS parts",
+                    details={"code": "SMS_TOO_LONG", "field": key, "max": SMS_MAX_SEGMENTS},
+                )
     if channel == "WHATSAPP":
         name = values.get("provider_name") or ""
         if not re.fullmatch(r"[a-z0-9_]{1,512}", name):
@@ -203,7 +228,7 @@ def _normalise(channel: str, recipient: str) -> tuple[str, str]:
             raise ValidationError("A valid email recipient is required")
         local, domain = recipient.rsplit("@", 1)
         return recipient, f"{local[:1]}***@{domain}"
-    if channel == "WHATSAPP":
+    if channel in ("WHATSAPP", "SMS"):
         number = try_normalize_bd_phone(recipient)
         if number is None:
             raise ValidationError("A valid Bangladeshi mobile number is required")
@@ -228,7 +253,7 @@ async def set_contact(
         raise ValidationError(
             "Choose an official channel", details={"code": "CHANNEL_NOT_SUPPORTED"}
         )
-    if use_customer_phone and channel == "WHATSAPP":
+    if use_customer_phone and channel in ("WHATSAPP", "SMS"):
         from app.customers.service import CustomerService
 
         recipient = (
@@ -317,8 +342,8 @@ def marketing_block(row: Conversation) -> str | None:
 
 
 async def channel_blocker(db: AsyncSession, kind: str) -> str | None:
-    available, blocker = capability(kind)
-    if not available:
+    on, blocker = await available(db, kind)
+    if not on:
         return blocker or "CHANNEL_DISABLED"
     channel = await db.scalar(sa.select(Channel).where(Channel.kind == kind))
     if channel is None or not channel.enabled:

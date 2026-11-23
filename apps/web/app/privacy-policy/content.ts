@@ -5,11 +5,11 @@ export const policySections = [
   {
     id: 'scope',
     en: { title: '1. About this policy', paragraphs: [
-      'ecomsbd is a Bangladesh-first seller operations and commerce management platform. This Privacy Policy explains how we collect, use, store and share information through the ecomsbd Android app (com.ecomsbd.app) and the web platform at scalemyprints.com. “We”, “us” and “our” refer to the operation of ecomsbd.',
+      'ecomsbd is a Bangladesh-first seller operations and commerce management platform. This Privacy Policy explains how we collect, use, store and share information through the ecomsbd Android app (com.ecomsbd.app) and the web platform at ecomsbd.com (workspace at app.ecomsbd.com). “We”, “us” and “our” refer to the operation of ecomsbd.',
       'This policy applies to sellers, shop owners, their team members and visitors to our website. It also describes how we process information about customers and suppliers that sellers enter, import or sync into the service. Sellers are responsible for their own customer notices, permissions and lawful use of that information.'
     ] },
     bn: { title: '১. এই নীতি সম্পর্কে', paragraphs: [
-      'ecomsbd বাংলাদেশের বিক্রেতাদের জন্য তৈরি বিক্রয় কার্যক্রম ও বাণিজ্য ব্যবস্থাপনা প্ল্যাটফর্ম। ecomsbd Android অ্যাপ (com.ecomsbd.app) এবং scalemyprints.com ওয়েব প্ল্যাটফর্মের মাধ্যমে আমরা কীভাবে তথ্য সংগ্রহ, ব্যবহার, সংরক্ষণ ও শেয়ার করি, তা এই গোপনীয়তা নীতিতে বলা হয়েছে। “আমরা” ও “আমাদের” বলতে ecomsbd-এর পরিচালনাকে বোঝানো হয়েছে।',
+      'ecomsbd বাংলাদেশের বিক্রেতাদের জন্য তৈরি বিক্রয় কার্যক্রম ও বাণিজ্য ব্যবস্থাপনা প্ল্যাটফর্ম। ecomsbd Android অ্যাপ (com.ecomsbd.app) এবং ecomsbd.com ওয়েব প্ল্যাটফর্মের (ওয়ার্কস্পেস app.ecomsbd.com) মাধ্যমে আমরা কীভাবে তথ্য সংগ্রহ, ব্যবহার, সংরক্ষণ ও শেয়ার করি, তা এই গোপনীয়তা নীতিতে বলা হয়েছে। “আমরা” ও “আমাদের” বলতে ecomsbd-এর পরিচালনাকে বোঝানো হয়েছে।',
       'এই নীতি বিক্রেতা, দোকানের মালিক, তাঁদের দলের সদস্য এবং আমাদের ওয়েবসাইটের দর্শকদের জন্য প্রযোজ্য। বিক্রেতারা সেবায় যে ক্রেতা ও সরবরাহকারীর তথ্য লেখেন, আমদানি করেন বা সিঙ্ক করেন, তা কীভাবে প্রক্রিয়া করা হয়, সেটিও এতে বলা হয়েছে। ক্রেতাদের প্রয়োজনীয় নোটিশ দেওয়া, অনুমতি নেওয়া এবং সেই তথ্য আইনসম্মতভাবে ব্যবহার করার দায়িত্ব বিক্রেতার।'
     ] }
   },

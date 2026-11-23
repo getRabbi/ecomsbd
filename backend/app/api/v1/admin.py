@@ -54,6 +54,9 @@ from app.api.v1.admin_schemas import (
     RepairResultResponse,
     RevealPhonePayload,
     RevealPhoneResponse,
+    SmsProviderConnectionView,
+    SmsProviderResponse,
+    SmsProviderUpdatePayload,
     SupportCaseCreatePayload,
     SupportCaseResponse,
     SupportCaseUpdatePayload,
@@ -466,6 +469,70 @@ async def update_voice_provider(
         actor=admin.label,
     )
     return await _voice_response(db, provider, service.manifest(provider), row)
+
+
+# --------------------------------------------------------------------------- #
+# SMS gateway (V4 WP7.1)
+# --------------------------------------------------------------------------- #
+
+
+async def _sms_response(db: AsyncSession, provider: str, row: Any) -> SmsProviderResponse:
+    from app.common.feature_flags import FeatureFlagService
+    from app.sms_providers.service import PROVIDER_FLAGS, connection_view, sms_manifests
+
+    manifest = sms_manifests().get(provider)
+    flag = PROVIDER_FLAGS.get(provider)
+    view = connection_view(row)
+    return SmsProviderResponse(
+        provider=provider,
+        manifest=manifest.as_dict() if manifest is not None else None,
+        connection=SmsProviderConnectionView.model_validate(view) if view else None,
+        flag_enabled=bool(flag) and await FeatureFlagService(db).is_enabled(str(flag)),
+    )
+
+
+@router.get("/sms/providers", response_model=list[SmsProviderResponse], summary="SMS gateways")
+async def list_sms_providers(
+    admin: CurrentAdmin, db: AdminDb, settings: SettingsDep
+) -> list[SmsProviderResponse]:
+    """Every gateway with a verified manifest, and any stored account. Never a secret."""
+    from app.sms_providers.service import SmsProviderService, sms_manifests
+
+    admin.require(AdminPermission.OPS_READ)
+    rows = {row.provider: row for row in await SmsProviderService(db, get_vault(settings)).list()}
+    return [
+        await _sms_response(db, provider, rows.get(provider))
+        for provider in sorted(set(sms_manifests()) | set(rows))
+    ]
+
+
+@router.put(
+    "/sms/providers/{provider}",
+    response_model=SmsProviderResponse,
+    summary="Connect, rotate or switch the platform SMS gateway",
+)
+async def update_sms_provider(
+    provider: str,
+    payload: SmsProviderUpdatePayload,
+    admin: CurrentAdmin,
+    db: AdminDb,
+    settings: SettingsDep,
+) -> SmsProviderResponse:
+    """Only a provider whose manifest exists (a verified contract) can be connected."""
+    from app.sms_providers.service import SmsAccountUpdate, SmsProviderService
+
+    admin.require(AdminPermission.PROVIDER_CREDENTIALS_WRITE)
+    row = await SmsProviderService(db, get_vault(settings)).update(
+        provider,
+        SmsAccountUpdate(
+            credentials=payload.credentials,
+            sender_id=payload.sender_id,
+            enabled=payload.enabled,
+            reason=payload.reason,
+        ),
+        actor=admin.label,
+    )
+    return await _sms_response(db, provider, row)
 
 
 async def _voice_intros(db: AsyncSession, tenant_id: uuid.UUID) -> VoiceIntrosAdminResponse:

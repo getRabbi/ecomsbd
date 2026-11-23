@@ -1,5 +1,5 @@
 // Build: `tsc` to dist/, then the static files and the manifest.
-//   ECOMSBD_API_BASE_URL  (default https://api.scalemyprints.com)
+//   ECOMSBD_API_BASE_URL  (default https://api.ecomsbd.com)
 //   ECOMSBD_WEB_BASE_URL  (default https://app.ecomsbd.com)
 // Output: apps/extension/dist — load it unpacked, or zip it for the store.
 
@@ -12,7 +12,7 @@ import { baseUrl, buildManifest } from './manifest.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
-const DEFAULT_API = 'https://api.scalemyprints.com';
+const DEFAULT_API = 'https://api.ecomsbd.com';
 const DEFAULT_WEB = 'https://app.ecomsbd.com';
 const api = baseUrl(process.env.ECOMSBD_API_BASE_URL || DEFAULT_API, 'ECOMSBD_API_BASE_URL');
 const web = baseUrl(process.env.ECOMSBD_WEB_BASE_URL || DEFAULT_WEB, 'ECOMSBD_WEB_BASE_URL');

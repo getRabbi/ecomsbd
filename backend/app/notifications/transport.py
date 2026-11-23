@@ -22,7 +22,9 @@ Push uses FCM HTTP v1; business email uses Resend. Supabase owns auth emails.
 *   ``SMS_PROVIDER_REQUIRED`` — no Bangladeshi gateway has been chosen, and
     section 22 forbids assuming segment counting or per-segment cost that has
     not been verified against the chosen provider. So
-    :class:`SmsGatewayTransport` does the same.
+    :class:`SmsGatewayTransport` does the same. (V4 WP7.1: customer SMS can now
+    go through Alpha SMS, :mod:`app.sms_providers`, behind its own flag and an
+    admin-console account; this settings transport is unchanged.)
 *   ``TRANSACTIONAL_EMAIL_PROVIDER_REQUIRED`` — configure a Resend account,
     sending domain and API key for :class:`ProviderApiEmailTransport`.
 
@@ -96,6 +98,9 @@ class DeliveryOutcome(StrEnum):
     SUPPRESSED = "SUPPRESSED"
     #: Recognised as already sent. Sending again would be a duplicate.
     DUPLICATE = "DUPLICATE"
+    #: The provider may have accepted it (no answer came back, or an answer
+    #: that proves nothing). Never retried: the gateway has no idempotency key.
+    UNKNOWN = "UNKNOWN"
 
 
 @dataclass(frozen=True, slots=True)

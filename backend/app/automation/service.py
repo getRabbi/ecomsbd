@@ -75,7 +75,7 @@ REPEAT_LIMIT = 5
 #: Enabled workflows a shop can have.
 MAX_WORKFLOWS = 50
 
-COURIERS = ("steadfast", "pathao", "redx", "manual")
+COURIERS = ("steadfast", "pathao", "redx", "carrybee", "manual")
 STORE_PROVIDERS = ("SHOPIFY", "WOOCOMMERCE", "CUSTOM_WEBSITE", "API", "NONE")
 
 #: Kept for V2 callers and tests: >0 while a run's step is executing.
@@ -217,7 +217,8 @@ async def _action_config(
             problems.append("TEMPLATE_NOT_TRANSACTIONAL")
         elif enabling:
             channel = await db.scalar(sa.select(Channel).where(Channel.kind == config["channel"]))
-            if not messaging.capability(config["channel"])[0] or not channel or not channel.enabled:
+            on = (await messaging.available(db, config["channel"]))[0]
+            if not on or not channel or not channel.enabled:
                 problems.append("CHANNEL_DISABLED")
     if step.action == "CREATE_TEAM_TASK" and config.get("assignee_id"):
         member = await db.scalar(

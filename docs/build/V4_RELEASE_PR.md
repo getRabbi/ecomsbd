@@ -272,3 +272,118 @@ against the compose database with an explicit local `DATABASE_URL`:
     `migrations/env.py` stopped disabling existing loggers (F2). `tests/conftest.py` sets the
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
+
+## Phase 8 (runs 5–11, branch `v4/phase-8`, 2026-11-23)
+
+Branched from `v4/phase-7`; merge after (or with) PR #42.
+
+**Adds**
+- WP7.1 Alpha SMS (`sms.net.bd`) behind the existing `SmsTransport` port, used by the WP2.3
+  confirm link. Contract `docs/providers/alpha_sms/CONTRACT.md` (the provider's own API page).
+  POST form fields (key never in a URL), every documented error code mapped; a send that may
+  have reached the provider is the new `DeliveryOutcome.UNKNOWN` and is never re-sent (the API
+  has no idempotency key). Credentials only through the admin console
+  (`GET/PUT /v1/admin/sms/providers`, vault-sealed, audited `admin.sms_provider_updated`).
+  **Run 6 — tracking SMS:** order updates (the recipes' tracking step, any `SEND_TEMPLATE`
+  step, a manual send) can go by SMS through the same gateway. Messaging channel `SMS` is
+  available only while the gateway sends (flag + console account); each shop switches its own
+  SMS channel on (`messaging_channels`, default off; no migration). SMS contacts = a BD mobile
+  or the customer's saved phone; SMS templates = order updates only, no subject, ≤ 3 parts per
+  language. A lost answer or a crash mid-send is `UNKNOWN`, never resent; only a provable
+  non-send (no connection, 417) is retried. Web: Customer messaging contact + template forms,
+  recipe channel, workflow step channel; Flutter: contact form Email / SMS.
+- WP7.2 Carrybee courier (`app/couriers/carrybee/`), from Carrybee's own developer reference
+  (`docs/providers/carrybee/CONTRACT.md`): credentials check (store list), pickup stores,
+  single create sent once (ambiguous -> `BOOKING_UNKNOWN`), status lookup (raw
+  `transfer_status`, no state claim: values unpublished), cancel, shared-secret webhook
+  (`/v1/webhooks/couriers/carrybee/{token}`, 202 + header echo after verification). Three
+  credentials fit the two sealed slots (Client-Secret + Client-Context packed together).
+  **Run 6 — display check:** connect / store / webhook were already server-driven; fixed the
+  hard-coded names (Carrybee, not `carrybee`, on web orders / money / returns / reconciliation /
+  insights, mobile accounts / order courier card / receivables / RTO, and the printed invoice /
+  label), the default-courier pickers (web + mobile offer Carrybee when the server reports it on
+  for the shop; a saved value always shows) and the web workflow BOOK_COURIER picker (connected
+  couriers).
+- **Run 9 — WP0.6 BD Courier** external risk lookup (`app/risk_providers/bdcourier.py`) on the
+  existing port, from bdcourier.com/api-docs (`docs/providers/bdcourier/CONTRACT.md`; the page is
+  client-rendered, its text came from the site's own bundle, hash recorded). Each shop connects
+  its own BD Courier key (the provider's terms forbid one account serving many clients; there is
+  no platform key). `POST /courier-check` per-courier parcel counts feed the courier-history chip,
+  `TOTAL_PARCELS` / `DELIVERED_PARCELS` and `external_success_bps`; BD Courier's own verdict,
+  ratio and reports are dropped. Terms built in: a lookup only for a customer with a DRAFT /
+  CONFIRMED order from the last 3 days (`NEW_ORDER_REQUIRED`, nothing sent), only on a seller's
+  tap, cache ≤ 72 h, answers pruned after 30 days. The flag off hides it everywhere (catalog,
+  answers, workflows, confirmation policy). Web Settings → Risk provider shows the terms note.
+- CI restore drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (on `v4/phase-7`).
+- **Run 11 — domain defaults moved; server switch only after V4 is deployed.** API default
+  `https://api.ecomsbd.com` (old `https://api.scalemyprints.com` stays an alias) in the extension
+  (`src/shared/config.ts`, `scripts/build.mjs`: a build with no env targets it),
+  `apps/mobile_flutter/env/production.example.json`, `.env.production.example` (also
+  `PUBLIC_BASE_URL_ALIASES` and `PUBLIC_WEB_URL=https://app.ecomsbd.com`) and
+  `apps/web/CLOUDFLARE.md`. Web hosts: workspace `app.ecomsbd.com`, legal pages `ecomsbd.com`
+  (Flutter `Env.webDashboardHost` / new `Env.legalPagesHost`; the privacy policy text no longer names
+  scalemyprints.com, whose pages answer 402). No backend code change (every URL already comes from
+  `PUBLIC_BASE_URL` / `PUBLIC_WEB_URL`), no flag, no migration. The operator's copy-paste values are
+  in `docs/runbooks/API_DOMAIN_MIGRATION.md` → "2026-11 move: exact values". Tests: backend
+  `test_api_domain` + `test_whatsapp_signup` + `test_supabase_auth` 32 passed / 1 skipped; web
+  typecheck + lint, 114 tests; extension build (no env) → `host_permissions` `https://api.ecomsbd.com/*`,
+  31 tests; Flutter `billing_screens_test` + `whatsapp_signup_test` 28 passed (1 new), analyze +
+  format clean on changed files.
+
+**Migration** `a48001` (`20261123_0100_a48001_v4_phase8.py`, down_revision `a47001`):
+`sms_provider_connections` (platform table, RLS on, client roles revoked). Single head `a48001`.
+
+**Flags (default off):** `alpha_sms_enabled`, `carrybee_enabled`, `bdcourier_enabled` (run 9).
+**Environment variables:** none new (Carrybee hosts come from its reference; the SMS key only
+from the admin console).
+**Runbooks:** `SMS_ALPHA.md`, `COURIER_CARRYBEE.md`, `EXTERNAL_RISK_BDCOURIER.md`.
+**Before `bdcourier_enabled` goes on for real shops (operator):** BD Courier's written OK for
+sellers using their own keys inside ecomsbd, and the privacy policy / Play Data safety text.
+
+**Still blocked / deferred:** WP0.7 statement profiles (no fixtures),
+voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
+are operator checks (runbooks).
+
+**CI on PR #43 (`v4/phase-8` @ 5cd3934, run 10, 2026-11-23):** green, including run 9's BD Courier
+code. Backend SQLite "2607 passed, 6 skipped in 963.27s"; PostgreSQL 16 "2612 passed, 1 skipped in
+1171.07s"; migration sanity from an empty PostgreSQL to `a48001`; lint, format, mypy, SDK checks,
+dependency scan; Flutter, backup restore drill, backend image, Chrome extension, secret scan. Run 10
+changed CI config only: the secret scan flagged BD Courier's published `Bearer YOUR_API_KEY` sample in
+the contract (allowlisted as that literal in that file), and every path-scoped `.gitleaks.toml` entry
+now needs path AND value (the default "OR" let a path silence a whole file). Vercel: "Account is
+blocked".
+
+**Earlier CI on PR #43 (`v4/phase-8` @ 4cd0a5e, 2026-11-23):** green. Backend SQLite "2566 passed,
+6 skipped in 748.71s"; PostgreSQL 16 "2571 passed, 1 skipped in 905.53s"; migrations on an empty
+PostgreSQL base → head (`a48001`) → base; lint, format, mypy, SDK checks, dependency scan; Flutter,
+backup restore drill, backend image, Chrome extension, secret scan. Two fixes on the way, no
+behaviour change: whole-tree ruff (`app/models.py` import order) and a stale `test_insights`
+expectation (Carrybee not-live). The Vercel check fails with "Account is blocked" (account, not
+code). The commands below remain for a local run.
+
+**Tests run in run 9 (one targeted pass at the end):** backend `test_risk_provider_bdcourier` 41
+(new) + `test_external_risk`, `test_risk_network_v37`, `test_courier_history`,
+`test_confirmation_policy` = 117 passed; ruff + format on changed files, mypy clean (403 files);
+web typecheck + lint, 114 tests (3 new `bdcourier.test.mjs`); Flutter external_risk_card + courier_history_chip 12 passed (2 new: skipped lookup says NEW_ORDER_REQUIRED, EN + BN at 360×800), analyze + dart format clean on changed files.
+
+**Tests run in run 6 (targeted only):** backend `test_messaging_sms` 10 (new) + `test_messaging`,
+`test_campaigns`, `test_automation`, `test_automation_workflows`, `test_sms_alpha`,
+`test_automation_confirmation_hooks` = 106, `test_documents` 23 (1 new: every manifest courier
+prints by name); web typecheck + lint, 111 tests (3 new `messaging-sms.test.mjs`, Carrybee cases
+in `ops.test.mjs`); Flutter `messaging_screen_test` 5 (3 new), `delivery_rules_screen_test` 11
+(2 new), courier / RTO / insights / courier-history suites 47; ruff + format + mypy and
+`flutter analyze` + `dart format` on changed files.
+
+**Tests run in run 5 (targeted only, operator rule):** `test_sms_alpha` 40,
+`test_confirmation_links` + `test_transports` + `test_realtime` 74, `test_migrations` 11,
+voice admin 4, `test_courier_carrybee` 29, courier manifests / multi / redx / pathao / accounts /
+security, `test_rto`, `test_risk_network_v37`, `test_automation`; ruff + format + mypy on changed
+files. **Pending (operator):**
+
+```
+cd backend
+python -m pytest -q -p no:cacheprovider
+TEST_DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd_test python -m pytest -q -p no:cacheprovider
+DATABASE_URL=postgresql+asyncpg://ecomsbd:ecomsbd@localhost:5432/ecomsbd alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+python -m ruff check app tests migrations && python -m ruff format --check app tests migrations && python -m mypy
+```

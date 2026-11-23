@@ -157,7 +157,9 @@ Must be `false`. Staging and production refuse to start otherwise. Not secret.
 
 ### `PUBLIC_WEB_URL`, `SUPPORT_EMAIL`
 
-Optional. `PUBLIC_WEB_URL` is reserved for a separate web client. Business email may use
+Optional. `PUBLIC_WEB_URL` is the web workspace origin, `https://app.ecomsbd.com`: the web
+return after a store / Meta sign-in, the WhatsApp Embedded Signup page and the customer
+confirm link are built from it. Business email may use
 `PUBLIC_BASE_URL`, where the backend serves verification and password-reset pages.
 `SUPPORT_EMAIL` is the reply-to on outbound mail and the address shown to a
 seller who needs help. Use a mailbox a person actually reads.
@@ -305,8 +307,10 @@ Supabase Dashboard actions:
 2. Authentication → JWT Signing Keys: create/activate an asymmetric ES256 or RS256
    key if the project still uses legacy HS256. Follow Supabase's key-rotation
    waiting periods. The backend never accepts the legacy shared-secret algorithm.
-3. Authentication → URL Configuration: Site URL `https://scalemyprints.com`;
-   allow exactly `com.ecomsbd.app://auth/callback` as a redirect URL. Flutter uses
+3. Authentication → URL Configuration: Site URL `https://app.ecomsbd.com`;
+   allow `com.ecomsbd.app://auth/callback` (the app) and the web hosts
+   `https://app.ecomsbd.com/**` and `https://ecomsbd.com/**` (`apps/web/CLOUDFLARE.md`)
+   as redirect URLs. Flutter uses
    PKCE, encrypted session/code-verifier storage, and this Android intent filter.
 4. Settings → API Keys: copy the public key to the backend and Flutter. Put
    `SUPABASE_SERVICE_ROLE_KEY` only in the backend secret group for the retryable

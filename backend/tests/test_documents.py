@@ -288,3 +288,14 @@ async def test_another_shops_order_is_not_found(
     assert response.status_code == 404
     assert order["order_number"] not in response.text
     assert re.search(r"0170000004\d", response.text) is None
+
+
+def test_every_courier_with_a_manifest_prints_by_name() -> None:
+    """A label or invoice never shows a raw provider key (V4 WP7.2: Carrybee)."""
+    from app.couriers.capabilities import load_all_manifests
+    from app.documents.service import COURIER_NAMES
+
+    for provider, manifest in load_all_manifests().items():
+        assert provider in COURIER_NAMES, provider
+        if provider != "manual":
+            assert COURIER_NAMES[provider] == manifest.display_name, provider

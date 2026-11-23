@@ -130,6 +130,10 @@ class ErrorCode(StrEnum):
     #: V4 WP3.1: the voice provider cannot be turned on yet (manifest, credentials
     #: or callback secret missing).
     VOICE_PROVIDER_NOT_READY = "VOICE_PROVIDER_NOT_READY"
+    #: V4 WP7.1: no manifest (no verified contract) for this SMS provider.
+    SMS_PROVIDER_UNKNOWN = "SMS_PROVIDER_UNKNOWN"
+    #: V4 WP7.1: the SMS provider cannot be turned on yet (credentials missing).
+    SMS_PROVIDER_NOT_READY = "SMS_PROVIDER_NOT_READY"
     #: V4 WP3.3: the recording is not a WAV/MP3 we can use (size, length, format).
     VOICE_AUDIO_INVALID = "VOICE_AUDIO_INVALID"
     #: V4 WP3.3: an intro can be turned on only after a seller played it.
@@ -401,6 +405,18 @@ _CATALOG: dict[ErrorCode, tuple[int, str, str, bool]] = {
         409,
         "ভয়েস প্রোভাইডার এখনো চালু করা যাবে না। তথ্য সম্পূর্ণ করুন।",
         "This voice provider cannot be turned on yet.",
+        False,
+    ),
+    ErrorCode.SMS_PROVIDER_UNKNOWN: (
+        404,
+        "এই SMS প্রোভাইডারের যাচাই করা চুক্তি নেই।",
+        "This SMS provider has no verified contract.",
+        False,
+    ),
+    ErrorCode.SMS_PROVIDER_NOT_READY: (
+        409,
+        "SMS প্রোভাইডার এখনো চালু করা যাবে না। তথ্য সম্পূর্ণ করুন।",
+        "This SMS provider cannot be turned on yet.",
         False,
     ),
     ErrorCode.VOICE_AUDIO_INVALID: (

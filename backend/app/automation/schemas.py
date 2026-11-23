@@ -68,7 +68,7 @@ class RuleInput(Input):
 class TemplateAction(Input):
     template_key: str = Field(min_length=1, max_length=80)
     locale: Literal["en", "bn"] = "bn"
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
 
 
 class FollowupAction(Input):
@@ -98,7 +98,7 @@ class NoticeAction(Input):
 
 class CourierAction(Input):
     #: A courier connected to the shop; booked through the V2 booking service.
-    provider: Literal["steadfast", "pathao", "redx"]
+    provider: Literal["steadfast", "pathao", "redx", "carrybee"]
 
 
 class EmptyAction(Input):
@@ -441,8 +441,8 @@ class TestRunInput(PreviewInput):
 
 class RecipeInput(Input):
     locale: Literal["en", "bn"] = "bn"
-    provider: Literal["steadfast", "pathao", "redx"] | None = None
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    provider: Literal["steadfast", "pathao", "redx", "carrybee"] | None = None
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
     enable: bool = True
 
 

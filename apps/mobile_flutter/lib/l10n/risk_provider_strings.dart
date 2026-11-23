@@ -25,6 +25,7 @@ const riskProviderEn = <String, String>{
   'xr.check': 'Check with provider',
   'xr.refresh': 'Refresh',
   'xr.cached': 'The stored answer is still current.',
+  'xr.skipped': 'Not checked: {reason}.',
   'xr.fact.DELIVERED_PARCELS': 'Delivered parcels',
   'xr.fact.RETURNED_PARCELS': 'Returned parcels',
   'xr.fact.CANCELLED_ORDERS': 'Cancelled orders',
@@ -35,6 +36,8 @@ const riskProviderEn = <String, String>{
   'xr.err.PROVIDER_AUTH_FAILED': 'the provider rejected the credentials',
   'xr.err.PROVIDER_REJECTED': 'the provider refused the request',
   'xr.err.PROVIDER_BAD_RESPONSE': 'the provider’s answer could not be read',
+  'xr.err.NEW_ORDER_REQUIRED':
+      'this provider checks only a customer with a new order (draft or confirmed, last 3 days)',
   'xr.net.title': 'Network context',
   'xr.net.hint':
       'Anonymous monthly figures from consenting shops. About the network, not this customer.',
@@ -67,6 +70,7 @@ const riskProviderBn = <String, String>{
   'xr.check': 'প্রোভাইডারে দেখুন',
   'xr.refresh': 'আবার দেখুন',
   'xr.cached': 'সংরক্ষিত উত্তর এখনো হালনাগাদ।',
+  'xr.skipped': 'দেখা হয়নি: {reason}।',
   'xr.fact.DELIVERED_PARCELS': 'ডেলিভারি হওয়া পার্সেল',
   'xr.fact.RETURNED_PARCELS': 'ফেরত আসা পার্সেল',
   'xr.fact.CANCELLED_ORDERS': 'বাতিল অর্ডার',
@@ -77,6 +81,8 @@ const riskProviderBn = <String, String>{
   'xr.err.PROVIDER_AUTH_FAILED': 'প্রোভাইডার ক্রেডেনশিয়াল গ্রহণ করেনি',
   'xr.err.PROVIDER_REJECTED': 'প্রোভাইডার অনুরোধটি ফিরিয়ে দিয়েছে',
   'xr.err.PROVIDER_BAD_RESPONSE': 'প্রোভাইডারের উত্তর পড়া যায়নি',
+  'xr.err.NEW_ORDER_REQUIRED':
+      'এই প্রোভাইডার শুধু নতুন অর্ডার (গত ৩ দিনের খসড়া বা কনফার্ম) থাকা গ্রাহককে চেক করে',
   'xr.net.title': 'নেটওয়ার্কের প্রেক্ষাপট',
   'xr.net.hint':
       'সম্মত শপগুলোর মাসিক বেনামি হিসাব। নেটওয়ার্কের কথা, এই গ্রাহকের নয়।',

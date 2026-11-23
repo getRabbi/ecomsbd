@@ -41,7 +41,8 @@ async def external_history(db: AsyncSession, customer_id: uuid.UUID) -> External
     providers = [
         row.provider_id
         for row in connections
-        if row.credentials_enc and registry.get(row.provider_id) is not None
+        if row.credentials_enc
+        and await registry.get_for_tenant(db, row.tenant_id, row.provider_id) is not None
     ]
     if not providers:
         return None

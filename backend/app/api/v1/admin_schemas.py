@@ -388,6 +388,37 @@ class VoiceReportResponse(BaseModel):
     rows: list[VoiceReportRow]
 
 
+class SmsProviderConnectionView(BaseModel):
+    """The platform SMS gateway account as the console sees it (V4 WP7.1). No secrets."""
+
+    enabled: bool
+    has_credentials: bool
+    masked_identifier: str | None
+    sender_id: str | None
+    credentials_rotated_at: datetime | None
+    updated_at: datetime | None
+    updated_by: str
+
+
+class SmsProviderResponse(BaseModel):
+    provider: str
+    #: ``None`` when a connection outlived its manifest (contract withdrawn).
+    manifest: dict[str, Any] | None
+    connection: SmsProviderConnectionView | None
+    #: The provider's own flag (default off); both it and ``connection.enabled`` send.
+    flag_enabled: bool
+
+
+class SmsProviderUpdatePayload(BaseModel):
+    """Connect, rotate or switch. Omitted credentials keep the stored ones;
+    an empty ``sender_id`` clears it."""
+
+    credentials: dict[str, str] | None = None
+    sender_id: str | None = Field(default=None, max_length=20)
+    enabled: bool = False
+    reason: str = Field(min_length=8, max_length=400)
+
+
 class VoiceProviderUpdatePayload(BaseModel):
     """Connect, rotate or switch. An omitted secret keeps the stored one."""
 

@@ -56,6 +56,12 @@ DEFAULT_RETRY_AFTER_SECONDS = 60
 MAX_RETRY_AFTER_SECONDS = 24 * 3600
 #: Lookups older than this are deleted by the daily prune.
 RETENTION_DAYS = 180
+#: V4 WP0.6: a ``new_orders_only`` provider is asked only about a customer with an
+#: order this new that still waits for confirmation (DRAFT or CONFIRMED).
+NEW_ORDER_WINDOW = timedelta(days=3)
+NEW_ORDER_STATUSES = ("DRAFT", "CONFIRMED")
+#: Lookup outcome code when a ``new_orders_only`` provider has no order to check for.
+NEW_ORDER_REQUIRED = "NEW_ORDER_REQUIRED"
 
 #: Provider failure → the code the seller sees (screens translate it).
 SELLER_CODES: dict[FailureKind, str] = {
@@ -94,6 +100,10 @@ def catalog_entry(adapter: RiskProviderAdapter) -> dict[str, Any]:
             "min": spec.min_cache_ttl_hours,
             "max": spec.max_cache_ttl_hours,
         },
+        "new_orders_only": spec.new_orders_only,
+        "retention_days": spec.retention_days or RETENTION_DAYS,
+        "notice_en": spec.notice_en or None,
+        "notice_bn": spec.notice_bn or None,
     }
 
 
@@ -147,8 +157,8 @@ class ExternalRiskService:
 
     # ------------------------------------------------------------ settings ---
 
-    def _adapter(self, provider_id: str) -> RiskProviderAdapter:
-        adapter = registry.get(provider_id)
+    async def _adapter(self, provider_id: str) -> RiskProviderAdapter:
+        adapter = await registry.get_for_tenant(self.db, self.tenant_id, provider_id)
         if adapter is None:
             raise NotFoundError(
                 "This risk provider is not available",
@@ -170,7 +180,7 @@ class ExternalRiskService:
             for row in (await self.db.scalars(sa.select(RiskProviderConnection))).all()
         }
         providers = []
-        for adapter in registry.available():
+        for adapter in await registry.for_tenant(self.db, self.tenant_id):
             row = rows.get(adapter.spec.provider_id)
             providers.append(
                 {**catalog_entry(adapter), "connection": connection_view(row) if row else None}
@@ -189,7 +199,7 @@ class ExternalRiskService:
         config: dict[str, str] | None,
         cache_ttl_hours: int | None,
     ) -> RiskProviderConnection:
-        adapter = self._adapter(provider_id)
+        adapter = await self._adapter(provider_id)
         spec = adapter.spec
         row = await self.connection(provider_id)
         if row is None:
@@ -255,7 +265,7 @@ class ExternalRiskService:
         return row
 
     async def set_enabled(self, provider_id: str, enabled: bool) -> RiskProviderConnection:
-        self._adapter(provider_id)
+        await self._adapter(provider_id)
         row = await self.connection(provider_id)
         if row is None or not row.credentials_enc:
             raise ValidationError(
@@ -307,7 +317,7 @@ class ExternalRiskService:
         )
 
     async def test(self, provider_id: str) -> dict[str, Any]:
-        adapter = self._adapter(provider_id)
+        adapter = await self._adapter(provider_id)
         row = await self.connection(provider_id)
         if row is None or not row.credentials_enc:
             raise ValidationError(
@@ -386,6 +396,21 @@ class ExternalRiskService:
 
     # ------------------------------------------------------------ lookups ---
 
+    async def _has_new_order(self, customer_id: uuid.UUID, now: datetime) -> bool:
+        from app.orders.models import Order
+
+        found = await self.db.scalar(
+            sa.select(Order.id)
+            .where(
+                Order.customer_id == customer_id,
+                Order.status.in_(NEW_ORDER_STATUSES),
+                Order.deleted_at.is_(None),
+                Order.created_at >= now - NEW_ORDER_WINDOW,
+            )
+            .limit(1)
+        )
+        return found is not None
+
     async def _enabled(self) -> list[tuple[RiskProviderConnection, RiskProviderAdapter]]:
         rows = (
             await self.db.scalars(
@@ -396,7 +421,7 @@ class ExternalRiskService:
         ).all()
         pairs = []
         for row in rows:
-            adapter = registry.get(row.provider_id)
+            adapter = await registry.get_for_tenant(self.db, self.tenant_id, row.provider_id)
             if adapter is not None and row.credentials_enc:
                 pairs.append((row, adapter))
         return pairs
@@ -415,11 +440,12 @@ class ExternalRiskService:
     async def customer_view(self, customer_id: uuid.UUID) -> dict[str, Any]:
         """What is stored for a customer. Never calls a provider."""
         now = utc_now()
-        adapters = registry.available()
+        adapters = await registry.for_tenant(self.db, self.tenant_id)
+        offered = {adapter.spec.provider_id: adapter for adapter in adapters}
         connections = (await self.db.scalars(sa.select(RiskProviderConnection))).all()
         sections = []
         for row in connections:
-            adapter = registry.get(row.provider_id)
+            adapter = offered.get(row.provider_id)
             if adapter is None:
                 continue
             answer = await self._latest(customer_id, row.provider_id, answered=True)
@@ -498,6 +524,14 @@ class ExternalRiskService:
             recent = cached.checked_at > now - MIN_REFRESH_INTERVAL
             if (fresh and not force) or recent:
                 return {"provider_id": provider_id, "outcome": "CACHED", "error_code": None}
+        if adapter.spec.new_orders_only and not await self._has_new_order(customer.id, now):
+            # The provider's terms: a lookup belongs to a new order waiting for
+            # confirmation. Nothing is sent, nothing is counted.
+            return {
+                "provider_id": provider_id,
+                "outcome": "SKIPPED",
+                "error_code": NEW_ORDER_REQUIRED,
+            }
         if row.rate_limited_until is not None and row.rate_limited_until > now:
             return {
                 "provider_id": provider_id,
@@ -633,21 +667,22 @@ async def external_success_bps(db: AsyncSession, customer_id: uuid.UUID) -> int 
     ``None`` when no provider has itemised history for the customer, or when it
     covers fewer than ``SAMPLE_FLOOR`` parcels ("kom data"): too little to judge.
     """
-    rows = (
-        await db.scalars(
-            sa.select(ExternalRiskLookup.courier_history)
-            .where(
-                ExternalRiskLookup.customer_id == customer_id,
-                ExternalRiskLookup.status == "FOUND",
-                ExternalRiskLookup.courier_history.is_not(None),
-            )
-            .order_by(ExternalRiskLookup.checked_at.desc())
-            .limit(1)
+    row = await db.scalar(
+        sa.select(ExternalRiskLookup)
+        .where(
+            ExternalRiskLookup.customer_id == customer_id,
+            ExternalRiskLookup.status == "FOUND",
+            ExternalRiskLookup.courier_history.is_not(None),
         )
-    ).all()
-    if not rows or not isinstance(rows[0], dict):
+        .order_by(ExternalRiskLookup.checked_at.desc())
+        .limit(1)
+    )
+    if row is None or not isinstance(row.courier_history, dict):
         return None
-    _, success_bps = history_state(rows[0].get("aggregate"))
+    # A provider switched off by its flag no longer feeds workflows (V4 WP0.6).
+    if await registry.get_for_tenant(db, row.tenant_id, row.provider_id) is None:
+        return None
+    _, success_bps = history_state(row.courier_history.get("aggregate"))
     return success_bps
 
 
@@ -668,12 +703,31 @@ async def external_data_state(db: AsyncSession, customer_id: uuid.UUID) -> str:
 
 
 async def prune_external_risk_lookups(ctx: dict[str, Any] | None = None) -> dict[str, int]:
-    """Delete lookups past retention. Daily; idempotent."""
+    """Delete lookups past retention. Daily; idempotent.
+
+    A provider whose terms keep answers shorter (``retention_days``, V4 WP0.6
+    BD Courier: 30) is pruned on its own, shorter clock.
+    """
     from app.db.session import system_session
 
-    cutoff = utc_now() - timedelta(days=RETENTION_DAYS)
+    now = utc_now()
+    deleted = 0
     async with system_session("prune external risk lookups past retention") as db:
         result = await db.execute(
-            sa.delete(ExternalRiskLookup).where(ExternalRiskLookup.checked_at < cutoff)
+            sa.delete(ExternalRiskLookup).where(
+                ExternalRiskLookup.checked_at < now - timedelta(days=RETENTION_DAYS)
+            )
         )
-        return {"deleted": int(getattr(result, "rowcount", 0) or 0)}
+        deleted += int(getattr(result, "rowcount", 0) or 0)
+        for adapter in registry.known():
+            days = adapter.spec.retention_days
+            if days is None or days >= RETENTION_DAYS:
+                continue
+            result = await db.execute(
+                sa.delete(ExternalRiskLookup).where(
+                    ExternalRiskLookup.provider_id == adapter.spec.provider_id,
+                    ExternalRiskLookup.checked_at < now - timedelta(days=days),
+                )
+            )
+            deleted += int(getattr(result, "rowcount", 0) or 0)
+        return {"deleted": deleted}

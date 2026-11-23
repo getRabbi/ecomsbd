@@ -235,5 +235,7 @@ SILENT_TABLES: frozenset[str] = frozenset(
         "voice_credit_packs",
         "voice_daily_usage",
         "voice_intro_audio",
+        # V4 WP7.1: the platform SMS gateway account (admin console only)
+        "sms_provider_connections",
     }
 )

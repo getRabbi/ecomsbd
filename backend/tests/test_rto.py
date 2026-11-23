@@ -315,7 +315,7 @@ class TestBreakdowns:
         assert set(rows) == {"steadfast", "pathao"}
         assert rows["steadfast"]["counts"]["rto_rate_basis_points"] == 5000
         assert rows["steadfast"]["trend"] == "INSUFFICIENT_DATA"
-        assert body["excluded_providers"] == ["redx"]
+        assert body["excluded_providers"] == ["carrybee", "redx"]
 
     async def test_areas_are_not_reported_on_thin_or_patchy_data(self, shop: _Shop) -> None:
         await shop.parcel("RETURNED", district="Dhaka")

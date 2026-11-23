@@ -41,9 +41,9 @@ class ChannelInput(Input):
 
 class ContactInput(Input):
     customer_id: uuid.UUID
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
     recipient: str | None = Field(default=None, min_length=3, max_length=254)
-    #: WhatsApp only: use the phone number already on the customer.
+    #: WhatsApp / SMS only: use the phone number already on the customer.
     use_customer_phone: bool = False
     consent: bool
     marketing_consent: bool = False
@@ -51,7 +51,8 @@ class ContactInput(Input):
 
     @model_validator(mode="after")
     def address(self) -> ContactInput:
-        if not self.recipient and not (self.use_customer_phone and self.channel == "WHATSAPP"):
+        phone = self.channel in ("WHATSAPP", "SMS")
+        if not self.recipient and not (self.use_customer_phone and phone):
             raise ValueError("recipient is required")
         return self
 
@@ -64,7 +65,7 @@ class ConsentInput(Input):
 class TemplateInput(Input):
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{2,79}$")
     purpose: Purpose = "TRANSACTIONAL"
-    channel: Literal["EMAIL", "WHATSAPP"] = "EMAIL"
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] = "EMAIL"
     subject_en: str = Field(default="", max_length=160)
     subject_bn: str = Field(default="", max_length=160)
     body_en: str = Field(min_length=1, max_length=2000)
@@ -109,7 +110,7 @@ async def channels(db: DbSession, _: Reader) -> dict[str, Any]:
     configured = {row.kind: row.enabled for row in (await db.scalars(sa.select(Channel))).all()}
     items = []
     for kind in providers.KINDS:
-        available, blocker = service.capability(kind)
+        available, blocker = await service.available(db, kind)
         shop = await providers.shop_blocker(db, kind) if available else None
         items.append(
             {
@@ -133,10 +134,9 @@ async def configure_channel(
     _: Manager,
 ) -> dict[str, Any]:
     await lock_shop(db)
-    if body.enabled and not service.capability(kind)[0]:
-        raise ConflictError(
-            "Official provider is required", details={"blocker": service.capability(kind)[1]}
-        )
+    available, blocker = await service.available(db, kind)
+    if body.enabled and not available:
+        raise ConflictError("Official provider is required", details={"blocker": blocker})
     if body.enabled:
         blocker = await providers.shop_blocker(db, kind)
         if blocker:
@@ -172,6 +172,9 @@ async def save_template(body: TemplateInput, db: DbSession, _: Manager) -> dict[
     else:
         values |= {"provider_name": None, "provider_language_bn": None}
         values |= {"provider_language_en": None, "variables": None}
+    if body.channel == "SMS":
+        # An SMS has no subject: the body is the whole message.
+        values |= {"subject_en": "", "subject_bn": ""}
     row = MessageTemplate(**values)
     db.add(row)
     await db.flush()
@@ -205,7 +208,7 @@ async def conversations(
     db: DbSession,
     _: Reader,
     customer_id: uuid.UUID | None = None,
-    channel: Literal["EMAIL", "WHATSAPP"] | None = None,
+    channel: Literal["EMAIL", "WHATSAPP", "SMS"] | None = None,
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     query = sa.select(Conversation)

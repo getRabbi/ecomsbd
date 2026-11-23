@@ -144,6 +144,17 @@ class ProviderSpec:
     max_cache_ttl_hours: int = 24 * 30
     timeout_seconds: float = 8.0
     config_fields: tuple[str, ...] = field(default_factory=tuple)
+    #: The provider's terms allow a lookup only for a real, newly received order
+    #: awaiting verification (V4 WP0.6, BD Courier terms §3): the service then
+    #: refuses a lookup for a customer without one, before anything is sent.
+    new_orders_only: bool = False
+    #: Days the provider's answers may be kept, when its terms are stricter than
+    #: the service's own retention. ``None``: the service default.
+    retention_days: int | None = None
+    #: What the seller must know before connecting (the provider's terms), shown
+    #: on the settings screen. Empty: nothing beyond the usual copy.
+    notice_en: str = ""
+    notice_bn: str = ""
 
 
 class RiskProviderAdapter(Protocol):
