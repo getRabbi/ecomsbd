@@ -306,8 +306,10 @@ class TestCouriers:
         body = await shop.get(f"{BASE}/couriers", days=30)
         providers = [card["provider"] for card in body["items"]]
         assert providers == sorted(providers)
-        assert "redx" not in providers
-        assert body["excluded_providers"] == ["redx"]
+        assert "redx" not in providers and "carrybee" not in providers
+        # V4 WP7.2: Carrybee has no published status values yet, so no
+        # per-courier performance is claimed for it either.
+        assert body["excluded_providers"] == ["carrybee", "redx"]
         by = {card["provider"]: card for card in body["items"]}
         assert by["steadfast"]["counts"]["rto"] == 1
         assert by["steadfast"]["counts"]["sufficient"] is False
