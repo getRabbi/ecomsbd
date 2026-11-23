@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/shell';
 import { Card, Chip, ErrorState, Row } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { StringKey } from '@/lib/i18n';
-import { when, type ProviderCatalog } from '@/lib/risk';
+import { providerNotice, when, type ProviderCatalog } from '@/lib/risk';
 import { useSession } from '@/lib/session';
 import { useApi } from '@/lib/useApi';
 
@@ -85,6 +85,11 @@ function ProviderCard({ provider, onChange }: { provider: Provider; onChange: ()
     >
       {error ? <ErrorState error={error} /> : null}
       {message ? <p className="card__hint">{message}</p> : null}
+      {providerNotice(provider, locale) ? (
+        <p className="card__hint" role="note">
+          <strong>{t('rp.terms')}:</strong> {providerNotice(provider, locale)}
+        </p>
+      ) : null}
       <Row label={t('rp.capabilities')} value={provider.capabilities.map((c) => t(`rp.cap.${c}` as StringKey)).join(' · ')} />
       <h3 className="card__title" style={{ marginTop: 16 }}>{t('rp.credentials')}</h3>
       <p className="card__hint">

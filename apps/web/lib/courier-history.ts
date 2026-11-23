@@ -28,6 +28,9 @@ const NAMES: Record<string, string> = {
   ecourier: 'eCourier',
   carrybee: 'CarryBee',
   sundarban: 'Sundarban',
+  // V4 WP0.6: BD Courier's own keys (docs/providers/bdcourier/CONTRACT.md §2).
+  parceldex: 'ParcelDex',
+  courrierfast: 'CourrierFast',
 };
 
 export function courierLabel(key: string): string {

@@ -26,6 +26,9 @@ const _courierNames = <String, String>{
   'ecourier': 'eCourier',
   'carrybee': 'CarryBee',
   'sundarban': 'Sundarban',
+  // V4 WP0.6: BD Courier's own keys (docs/providers/bdcourier/CONTRACT.md).
+  'parceldex': 'ParcelDex',
+  'courrierfast': 'CourrierFast',
 };
 
 String courierLabel(String key) {
@@ -197,11 +200,23 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
             body: {'refresh': refresh},
           );
       final outcomes = body['outcomes'] as List? ?? const [];
-      if (mounted &&
-          outcomes.isNotEmpty &&
-          (outcomes.first as Map)['outcome'] == 'CACHED') {
+      final first = outcomes.isNotEmpty ? outcomes.first as Map : null;
+      if (mounted && first?['outcome'] == 'CACHED') {
         messenger?.showSnackBar(
           SnackBar(content: Text(context.tr('xr.cached'))),
+        );
+      } else if (mounted &&
+          first?['outcome'] == 'SKIPPED' &&
+          first?['error_code'] is String) {
+        // V4 WP0.6: e.g. BD Courier checks only a customer with a new order.
+        messenger?.showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr('xr.skipped', {
+                'reason': context.tr('xr.err.${first?['error_code']}'),
+              }),
+            ),
+          ),
         );
       }
       ref.invalidate(customerRiskProfileProvider(widget.customerId));
