@@ -273,7 +273,7 @@ against the compose database with an explicit local `DATABASE_URL`:
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
 
-## Phase 8 (runs 5–10, branch `v4/phase-8`, 2026-11-23)
+## Phase 8 (runs 5–11, branch `v4/phase-8`, 2026-11-23)
 
 Branched from `v4/phase-7`; merge after (or with) PR #42.
 
@@ -315,6 +315,20 @@ Branched from `v4/phase-7`; merge after (or with) PR #42.
   tap, cache ≤ 72 h, answers pruned after 30 days. The flag off hides it everywhere (catalog,
   answers, workflows, confirmation policy). Web Settings → Risk provider shows the terms note.
 - CI restore drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (on `v4/phase-7`).
+- **Run 11 — domain defaults moved; server switch only after V4 is deployed.** API default
+  `https://api.ecomsbd.com` (old `https://api.scalemyprints.com` stays an alias) in the extension
+  (`src/shared/config.ts`, `scripts/build.mjs`: a build with no env targets it),
+  `apps/mobile_flutter/env/production.example.json`, `.env.production.example` (also
+  `PUBLIC_BASE_URL_ALIASES` and `PUBLIC_WEB_URL=https://app.ecomsbd.com`) and
+  `apps/web/CLOUDFLARE.md`. Web hosts: workspace `app.ecomsbd.com`, legal pages `ecomsbd.com`
+  (Flutter `Env.webDashboardHost` / new `Env.legalPagesHost`; the privacy policy text no longer names
+  scalemyprints.com, whose pages answer 402). No backend code change (every URL already comes from
+  `PUBLIC_BASE_URL` / `PUBLIC_WEB_URL`), no flag, no migration. The operator's copy-paste values are
+  in `docs/runbooks/API_DOMAIN_MIGRATION.md` → "2026-11 move: exact values". Tests: backend
+  `test_api_domain` + `test_whatsapp_signup` + `test_supabase_auth` 32 passed / 1 skipped; web
+  typecheck + lint, 114 tests; extension build (no env) → `host_permissions` `https://api.ecomsbd.com/*`,
+  31 tests; Flutter `billing_screens_test` + `whatsapp_signup_test` 28 passed (1 new), analyze +
+  format clean on changed files.
 
 **Migration** `a48001` (`20261123_0100_a48001_v4_phase8.py`, down_revision `a47001`):
 `sms_provider_connections` (platform table, RLS on, client roles revoked). Single head `a48001`.
