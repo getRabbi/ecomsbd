@@ -18,6 +18,8 @@ Spec: docs/V4_MASTER_BUILD_SPEC.md · Started: 2026-11-17 · Branch: v4/phase-0
 - **End run (operator, elsewhere, `v4/phase-7` @ 43b1090):** SQLite "2 failed, 2484 passed, 6 skipped in 1115.27s"; PostgreSQL 16 "2 failed, 2489 passed, 1 skipped in 1162.50s"; PostgreSQL migrations single head `a47001`, base → head, head → `a39001` → head, `-1` → head OK. The same 2 failures on both, fixed test-only (no app change): the Shopify hub test expects WP6's `coming_soon`; `tests/conftest.py` quiets the test client's `httpx` / `httpcore` request lines. Then the operator actions list: provider docs, pilots, store submissions, the API domain move when wanted.
 
 ## Now
+RUN 7 (operator, 2026-11-23): no queue and no new provider file (no `docs/providers/bdcourier/`, no `backend/tests/fixtures/statements/`, voice still only the checklist). Operator chose: open the Phase 8 PR. — DONE: PR #43 `v4/phase-8` → `v4/phase-7` (stacked on #42), body = `V4_RELEASE_PR.md` Phase 8. No code change.
+
 QUEUE (operator, 2026-11-23 run 6 — fixed order on `v4/phase-8`; resume prompt: "Continue ecomsbd V4 as run 6."):
 - RULES: same as run 5 (OPERATOR DECISIONS line below): official provider docs only, unknown = unsupported, one flag per provider default off, credentials only via the admin console; targeted tests + ruff / format / mypy on changed files only; no full suite, no PostgreSQL, no docker. Checkpoint after 2 items.
 - R1 WP7.1 finish: tracking SMS = an SMS channel in messaging through the existing Alpha SMS transport (behind `alpha_sms_enabled` + a shop setting, default off), SMS toggle in web and Flutter wherever email / WhatsApp tracking is offered. Build only what WP7.1 / WP2.3 ask. — DONE (a6a8305 backend, 3463c46 web, 6d60404 mobile + docs). Plan (done):
@@ -367,6 +369,7 @@ Statuses: TODO · IN_PROGRESS · DONE · BLOCKED: <CODE> · PARTIAL: <what remai
 - 2026-11-17 env: `backend/.venv` points at another Windows user's Python; this machine uses `C:\Users\userw\.venvs\ecomsbd-backend` (uv, `pip install -e .[dev]`). Git runs with `-c safe.directory=E:/ecomsbd` (repo owned by another SID); no global config changed.
 
 ## Session log (newest first, one line each)
+- 2026-11-23 run 7: nothing open; PR #43 opened (`v4/phase-8` → `v4/phase-7`, stacked on #42). No code.
 - 2026-11-23 run 6: R2 Carrybee display DONE (names, default-courier pickers, workflow picker, label); FINISH: summary, release notes, status, push.
 - 2026-11-23 run 6: R1 WP7.1 DONE — tracking SMS through Alpha SMS (messaging SMS channel, web + Flutter pickers), WP7.1 now DONE; R3 BD Courier file absent → BLOCKED, no code; R4 nothing (no Operator line).
 - 2026-11-23 run 5 FINISH: final summary, IMPLEMENTATION_STATUS phase 8 row, `V4_RELEASE_PR.md` Phase 8 section, full-suite commands under operator actions; pushed `v4/phase-8`.
