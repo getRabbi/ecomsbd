@@ -273,7 +273,7 @@ against the compose database with an explicit local `DATABASE_URL`:
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
 
-## Phase 8 (runs 5–6, branch `v4/phase-8`, 2026-11-23)
+## Phase 8 (runs 5–9, branch `v4/phase-8`, 2026-11-23)
 
 Branched from `v4/phase-7`; merge after (or with) PR #42.
 
@@ -304,19 +304,29 @@ Branched from `v4/phase-7`; merge after (or with) PR #42.
   label), the default-courier pickers (web + mobile offer Carrybee when the server reports it on
   for the shop; a saved value always shows) and the web workflow BOOK_COURIER picker (connected
   couriers).
+- **Run 9 — WP0.6 BD Courier** external risk lookup (`app/risk_providers/bdcourier.py`) on the
+  existing port, from bdcourier.com/api-docs (`docs/providers/bdcourier/CONTRACT.md`; the page is
+  client-rendered, its text came from the site's own bundle, hash recorded). Each shop connects
+  its own BD Courier key (the provider's terms forbid one account serving many clients; there is
+  no platform key). `POST /courier-check` per-courier parcel counts feed the courier-history chip,
+  `TOTAL_PARCELS` / `DELIVERED_PARCELS` and `external_success_bps`; BD Courier's own verdict,
+  ratio and reports are dropped. Terms built in: a lookup only for a customer with a DRAFT /
+  CONFIRMED order from the last 3 days (`NEW_ORDER_REQUIRED`, nothing sent), only on a seller's
+  tap, cache ≤ 72 h, answers pruned after 30 days. The flag off hides it everywhere (catalog,
+  answers, workflows, confirmation policy). Web Settings → Risk provider shows the terms note.
 - CI restore drill runs pg_dump / pg_restore / psql from `postgres:16-alpine` (on `v4/phase-7`).
 
 **Migration** `a48001` (`20261123_0100_a48001_v4_phase8.py`, down_revision `a47001`):
 `sms_provider_connections` (platform table, RLS on, client roles revoked). Single head `a48001`.
 
-**Flags (default off):** `alpha_sms_enabled`, `carrybee_enabled`.
+**Flags (default off):** `alpha_sms_enabled`, `carrybee_enabled`, `bdcourier_enabled` (run 9).
 **Environment variables:** none new (Carrybee hosts come from its reference; the SMS key only
 from the admin console).
-**Runbooks:** `SMS_ALPHA.md`, `COURIER_CARRYBEE.md`.
+**Runbooks:** `SMS_ALPHA.md`, `COURIER_CARRYBEE.md`, `EXTERNAL_RISK_BDCOURIER.md`.
+**Before `bdcourier_enabled` goes on for real shops (operator):** BD Courier's written OK for
+sellers using their own keys inside ecomsbd, and the privacy policy / Play Data safety text.
 
-**Still blocked / deferred:** WP0.6 BD Courier (`EXTERNAL_RISK_CONTRACT_REQUIRED`:
-bdcourier.com/api-docs renders by JavaScript; the operator saves it as
-`docs/providers/bdcourier/BD Courier API.html`), WP0.7 statement profiles (no fixtures),
+**Still blocked / deferred:** WP0.7 statement profiles (no fixtures),
 voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
 are operator checks (runbooks).
 
@@ -327,6 +337,11 @@ backup restore drill, backend image, Chrome extension, secret scan. Two fixes on
 behaviour change: whole-tree ruff (`app/models.py` import order) and a stale `test_insights`
 expectation (Carrybee not-live). The Vercel check fails with "Account is blocked" (account, not
 code). The commands below remain for a local run.
+
+**Tests run in run 9 (one targeted pass at the end):** backend `test_risk_provider_bdcourier` 41
+(new) + `test_external_risk`, `test_risk_network_v37`, `test_courier_history`,
+`test_confirmation_policy` = 117 passed; ruff + format on changed files, mypy clean (403 files);
+web typecheck + lint, 114 tests (3 new `bdcourier.test.mjs`); Flutter external_risk_card + courier_history_chip 12 passed (2 new: skipped lookup says NEW_ORDER_REQUIRED, EN + BN at 360×800), analyze + dart format clean on changed files.
 
 **Tests run in run 6 (targeted only):** backend `test_messaging_sms` 10 (new) + `test_messaging`,
 `test_campaigns`, `test_automation`, `test_automation_workflows`, `test_sms_alpha`,
