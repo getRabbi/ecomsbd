@@ -85,6 +85,17 @@ class FlagKey(StrEnum):
     #: V4 WP7.1: the Alpha SMS gateway (sms.net.bd) sends customer SMS (the
     #: confirm link, tracking SMS) once its admin-console account is on too.
     ALPHA_SMS_ENABLED = "alpha_sms_enabled"
+    #: V4 WP0.6: the BD Courier (bdcourier.com) external risk lookup, with the
+    #: shop's own BD Courier API key.
+    BDCOURIER_ENABLED = "bdcourier_enabled"
+
+
+#: Which flag gates each built-in external risk provider adapter
+#: (:mod:`app.risk_providers.registry`). Off: the provider is not offered,
+#: and a shop that connected it before makes no lookups and sees no answers.
+RISK_PROVIDER_FLAGS: dict[str, str] = {
+    "bdcourier": FlagKey.BDCOURIER_ENABLED,
+}
 
 
 #: Which flag gates each courier provider. Manual mode has no flag: it must
@@ -128,6 +139,7 @@ _DEFAULTS: dict[str, bool] = {
     FlagKey.META_OFFICIAL_PATH_ENABLED: False,
     FlagKey.REFERRALS_ENABLED: False,
     FlagKey.ALPHA_SMS_ENABLED: False,
+    FlagKey.BDCOURIER_ENABLED: False,
 }
 
 
