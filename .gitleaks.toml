@@ -100,6 +100,17 @@ regexes = ['''f3992ecc\-59da\-4cbe\-a049\-a13da2018d51''']
 
 [[allowlists]]
 description = """
+BD Courier's published curl sample, transcribed verbatim into the contract
+(source: bdcourier.com/api-docs, 2026-11-23). `YOUR_API_KEY` is the provider's
+own placeholder, not a key. condition = "AND": only this literal, only in this
+file (with the default "OR" the path alone would silence the whole file).
+"""
+condition = "AND"
+paths = ['''docs/providers/bdcourier/CONTRACT\.md''']
+regexes = ['''^YOUR_API_KEY$''']
+
+[[allowlists]]
+description = """
 Synthetic WooCommerce REST API keys in the V3.1 Integrations Hub tests. They
 are made up to match WooCommerce's documented `ck_`/`cs_` prefixes, because the
 tests prove that the API refuses keys without those prefixes, that the keys
