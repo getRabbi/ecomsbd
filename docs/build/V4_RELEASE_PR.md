@@ -273,7 +273,7 @@ against the compose database with an explicit local `DATABASE_URL`:
     `httpx` / `httpcore` loggers to WARNING; production lines go through the redacting
     `JsonFormatter`. The test is unchanged.
 
-## Phase 8 (runs 5–9, branch `v4/phase-8`, 2026-11-23)
+## Phase 8 (runs 5–10, branch `v4/phase-8`, 2026-11-23)
 
 Branched from `v4/phase-7`; merge after (or with) PR #42.
 
@@ -330,7 +330,16 @@ sellers using their own keys inside ecomsbd, and the privacy policy / Play Data 
 voice / TTS / Paperfly (deferred by the operator). Carrybee live create and Alpha SMS live send
 are operator checks (runbooks).
 
-**CI on PR #43 (`v4/phase-8` @ 4cd0a5e, 2026-11-23):** green. Backend SQLite "2566 passed,
+**CI on PR #43 (`v4/phase-8` @ 5cd3934, run 10, 2026-11-23):** green, including run 9's BD Courier
+code. Backend SQLite "2607 passed, 6 skipped in 963.27s"; PostgreSQL 16 "2612 passed, 1 skipped in
+1171.07s"; migration sanity from an empty PostgreSQL to `a48001`; lint, format, mypy, SDK checks,
+dependency scan; Flutter, backup restore drill, backend image, Chrome extension, secret scan. Run 10
+changed CI config only: the secret scan flagged BD Courier's published `Bearer YOUR_API_KEY` sample in
+the contract (allowlisted as that literal in that file), and every path-scoped `.gitleaks.toml` entry
+now needs path AND value (the default "OR" let a path silence a whole file). Vercel: "Account is
+blocked".
+
+**Earlier CI on PR #43 (`v4/phase-8` @ 4cd0a5e, 2026-11-23):** green. Backend SQLite "2566 passed,
 6 skipped in 748.71s"; PostgreSQL 16 "2571 passed, 1 skipped in 905.53s"; migrations on an empty
 PostgreSQL base → head (`a48001`) → base; lint, format, mypy, SDK checks, dependency scan; Flutter,
 backup restore drill, backend image, Chrome extension, secret scan. Two fixes on the way, no
