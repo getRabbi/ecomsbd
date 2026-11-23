@@ -27,7 +27,10 @@ dependencies = [
     # data_only=True: no formula evaluation, and the sheet is streamed rather
     # than loaded, so a large file cannot be turned into a memory spike.
     "openpyxl>=3.1,<4",
-    "sentry-sdk[fastapi]>=2.19",
+    # Below 3: sentry-sdk 3.0.0 (2026-11-23) drops send_default_pii and refuses
+    # unknown init options with TypeError, so app startup would fail with a DSN
+    # set. Moving to 3.x is its own change (observability.py privacy options).
+    "sentry-sdk[fastapi]>=2.19,<3",
     # Asia/Dhaka must resolve identically on every host. Windows has no system
     # tz database and slim Linux images usually drop it, so it is a hard
     # dependency rather than an environment assumption: business dates and the
