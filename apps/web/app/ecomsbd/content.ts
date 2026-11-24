@@ -106,7 +106,7 @@ const en = {
     titleAccent: 'from one place.',
     lead: 'Orders, customers, courier delivery, COD payments, inventory and profit — managed together for Bangladesh’s online sellers.',
     points: ['Free during launch', 'No card needed', 'Browser + Android app'],
-    hint: 'New here? Choose “Create account” on the sign-in page, or continue with Google or Apple.',
+    hint: 'New here? Choose “Create account” on the sign-in page, or continue with Google (or Apple, on the web).',
     caption: 'Sample shop with illustrative figures.',
   },
   heroUi: {
@@ -153,6 +153,9 @@ const en = {
           'Repeat-order warning for a similar order from the same number',
           'Customer history: past orders, deliveries and returns',
           'Customer notes, tags and follow-ups',
+          'Confirmation call queue for new orders, plus an SMS confirm link where the shop turns it on',
+          'Auto order detect on Android: chat notifications become order drafts (coming with app 3.1)',
+          'Chrome extension for WhatsApp Web and Messenger (coming to the Chrome Web Store)',
         ],
       },
       {
@@ -164,6 +167,8 @@ const en = {
           'Bulk-book confirmed orders in one go',
           'Follow delivery status on every order',
           'Compare what each courier supports',
+          'Delivery charges by zone, added to the COD for you',
+          'Print invoices and 4×6 courier labels with Bangla text and a barcode',
         ],
       },
       {
@@ -406,7 +411,7 @@ const en = {
       { title: 'Role-based team access', body: 'Invite staff and choose what each role can see and do, money figures included.' },
       { title: 'Shop-separated data', body: 'Each shop’s orders, customers and money records are kept apart from every other shop.' },
       { title: 'Audited sensitive actions', body: 'Important changes are recorded with who made them and when.' },
-      { title: 'Secure workspace', body: 'HTTPS throughout and signed-in access with email, Google or Apple.' },
+      { title: 'Secure workspace', body: 'HTTPS throughout and signed-in access with email or Google, and Apple on the web.' },
       { title: 'Encrypted credentials', body: 'Courier and connected-service credentials are encrypted and only shown back masked.' },
     ],
     link: 'Read the Privacy Policy',
@@ -527,7 +532,7 @@ const bn: SiteCopy = {
     titleAccent: 'এক জায়গা থেকে।',
     lead: 'অর্ডার, কাস্টমার, কুরিয়ার ডেলিভারি, COD পেমেন্ট, স্টক আর লাভ — বাংলাদেশের অনলাইন সেলারদের জন্য সব একসাথে।',
     points: ['লঞ্চের সময় বিনামূল্যে', 'কার্ড লাগবে না', 'ব্রাউজার + Android অ্যাপ'],
-    hint: 'নতুন? সাইন-ইন পাতায় “অ্যাকাউন্ট তৈরি করুন” বেছে নিন, অথবা Google বা Apple দিয়ে চালিয়ে যান।',
+    hint: 'নতুন? সাইন-ইন পাতায় “অ্যাকাউন্ট তৈরি করুন” বেছে নিন, অথবা Google দিয়ে (ওয়েবে Apple দিয়েও) চালিয়ে যান।',
     caption: 'নমুনা দোকান, উদাহরণের জন্য দেওয়া সংখ্যা।',
   },
   heroUi: {
@@ -574,6 +579,9 @@ const bn: SiteCopy = {
           'একই নম্বর থেকে একই রকম অর্ডারে রিপিট-অর্ডার সতর্কতা',
           'কাস্টমারের ইতিহাস: আগের অর্ডার, ডেলিভারি আর ফেরত',
           'কাস্টমার নোট, ট্যাগ আর ফলো-আপ',
+          'নতুন অর্ডারের জন্য কনফার্মেশন কল কিউ, আর দোকান চালু করলে SMS-এ কনফার্ম লিংক',
+          'Android-এ অটো অর্ডার শনাক্ত: চ্যাটের নোটিফিকেশন থেকে অর্ডারের খসড়া (অ্যাপ ৩.১-এ আসছে)',
+          'WhatsApp Web ও Messenger-এর জন্য Chrome এক্সটেনশন (শীঘ্রই Chrome Web Store-এ)',
         ],
       },
       {
@@ -585,6 +593,8 @@ const bn: SiteCopy = {
           'নিশ্চিত অর্ডারগুলো একসাথে বাল্ক বুক',
           'প্রতিটি অর্ডারে ডেলিভারির অবস্থা',
           'কোন কুরিয়ার কী সাপোর্ট করে তার তুলনা',
+          'জোন অনুযায়ী ডেলিভারি চার্জ, COD-তে নিজে থেকে যোগ হয়',
+          'বাংলা লেখা ও বারকোডসহ ইনভয়েস আর ৪×৬ কুরিয়ার লেবেল প্রিন্ট',
         ],
       },
       {
@@ -827,7 +837,7 @@ const bn: SiteCopy = {
       { title: 'রোল অনুযায়ী টিমের অ্যাক্সেস', body: 'স্টাফ যুক্ত করুন, প্রতিটি রোল কী দেখবে ও করবে ঠিক করুন — টাকার সংখ্যাসহ।' },
       { title: 'দোকান-ভিত্তিক আলাদা তথ্য', body: 'প্রতিটি দোকানের অর্ডার, কাস্টমার আর টাকার হিসাব অন্য সব দোকান থেকে আলাদা।' },
       { title: 'সংবেদনশীল কাজের রেকর্ড', body: 'গুরুত্বপূর্ণ পরিবর্তন কে করেছেন আর কখন — রেকর্ড থাকে।' },
-      { title: 'নিরাপদ ওয়ার্কস্পেস', body: 'সব জায়গায় HTTPS, আর ইমেইল, Google বা Apple দিয়ে সাইন-ইন করা অ্যাক্সেস।' },
+      { title: 'নিরাপদ ওয়ার্কস্পেস', body: 'সব জায়গায় HTTPS, আর ইমেইল বা Google দিয়ে সাইন-ইন করা অ্যাক্সেস (ওয়েবে Apple দিয়েও)।' },
       { title: 'এনক্রিপ্ট করা ক্রেডেনশিয়াল', body: 'কুরিয়ার ও যুক্ত সার্ভিসের ক্রেডেনশিয়াল এনক্রিপ্ট করা, আর শুধু আংশিক লুকানো অবস্থায় দেখানো হয়।' },
     ],
     link: 'গোপনীয়তা নীতি পড়ুন',
