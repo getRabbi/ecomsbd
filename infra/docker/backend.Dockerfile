@@ -12,9 +12,11 @@ WORKDIR /build
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY pyproject.toml ./
+COPY pyproject.toml constraints.txt ./
 COPY app ./app
-RUN pip install --upgrade pip && pip install .
+# Pinned to the versions CI tested (constraints.txt); a dependency without a
+# pin there would float, which tests/test_constraints.py refuses.
+RUN pip install --upgrade pip && pip install -c constraints.txt .
 
 # --------------------------------------------------------------------------- #
 
