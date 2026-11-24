@@ -49,10 +49,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: |
+            backend/pyproject.toml
+            backend/constraints.txt
 
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" -c constraints.txt
 
       - name: Lint
         run: ruff check app tests migrations
@@ -266,7 +268,7 @@ jobs:
 
       - name: Install
         working-directory: backend
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" -c constraints.txt
 
       - name: Build a database to back up
         working-directory: backend
