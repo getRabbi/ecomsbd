@@ -65,6 +65,17 @@ log = get_logger(__name__)
 #: job, not a busy shop, and the centre already holds everything.
 MAX_PUSHES_PER_TENANT_HOUR = 6
 
+#: First-scan quiet mode (``SMART_ALERTS_PUSH_FROM``, launch run 14): an alert
+#: the scan raised before that moment carries ``payload.quiet_start`` and stays
+#: in the centre, except that one CRITICAL alert of these kinds may push once
+#: per shop — a rejected courier key or money the courier owes.
+QUIET_START_PUSH_KINDS: frozenset[str] = frozenset(
+    {str(NotificationKind.COURIER_ACCOUNT_PROBLEM), str(NotificationKind.PAYOUT_OVERDUE)}
+)
+QUIET_START_REASON = (
+    "first full alert scan (before SMART_ALERTS_PUSH_FROM): kept in the centre, not pushed"
+)
+
 #: Backoff between delivery attempts. Short, because a push that arrives an
 #: hour late about money is worse than useless.
 _RETRY_BACKOFF = (timedelta(minutes=1), timedelta(minutes=5), timedelta(minutes=30))
@@ -284,6 +295,11 @@ class NotificationDispatcher:
                 )
             ]
 
+        if (notification.payload or {}).get("quiet_start") and not await self._quiet_start_may_push(
+            notification
+        ):
+            return [await self._record_suppressed(notification, QUIET_START_REASON)]
+
         recipients = await self._recipients(notification)
         if not recipients:
             return [
@@ -366,6 +382,32 @@ class NotificationDispatcher:
             Recipient(user_id=user_id, locale=locale or "bn", preference=own.get(user_id, shop))
             for user_id, locale in members
         ]
+
+    async def _quiet_start_may_push(self, notification: Notification) -> bool:
+        """The one push a shop may get from the quiet first scan.
+
+        Only a CRITICAL courier-account or overdue-payout alert, and only if no
+        other quiet-start alert of those kinds already went to a device for
+        this shop (a suppressed attempt reached nobody and does not count).
+        """
+        if str(notification.kind) not in QUIET_START_PUSH_KINDS or str(
+            notification.severity
+        ) != str(Severity.CRITICAL):
+            return False
+        earlier = await self._db.execute(
+            sa.select(Notification.payload)
+            .join(NotificationDelivery, NotificationDelivery.notification_id == Notification.id)
+            .where(
+                Notification.tenant_id == notification.tenant_id,
+                Notification.id != notification.id,
+                Notification.kind.in_(sorted(QUIET_START_PUSH_KINDS)),
+                NotificationDelivery.channel == str(Channel.PUSH),
+                NotificationDelivery.state.not_in(
+                    [str(DeliveryState.SUPPRESSED), str(DeliveryState.NOT_CONFIGURED)]
+                ),
+            )
+        )
+        return not any((payload or {}).get("quiet_start") for (payload,) in earlier)
 
     async def _rate_limited(self, notification: Notification) -> str | None:
         """Section 95's cap: a runaway job must not become forty pushes."""
