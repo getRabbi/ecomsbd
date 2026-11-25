@@ -1,6 +1,9 @@
 # Android 3.1.0 release kit (launch run 12, 2026-11-25)
 
-App `com.ecomsbd.app`, version `3.1.0+311` (`apps/mobile_flutter/pubspec.yaml`, PR #47). Signing, upload
+App `com.ecomsbd.app`, version `3.1.0+312` (`apps/mobile_flutter/pubspec.yaml`; +311 in PR #47, +312 in PR #56).
+Run 13 (2026-11-25): `android/key.properties` is readable on this machine now, but its `storeFile`
+(`C:/Users/User/ecomsbd-upload.jks`) does not exist here (no `C:\Users\User` profile; no ecomsbd keystore
+on C: or E:). Copy the upload keystore to this machine and point `storeFile` at it, then §2. Signing, upload
 and the Play Console forms are the operator's (the release key is not readable on the build machine).
 Claims below come only from what is live on the server (`docs/launch/LAUNCH_STATUS.md`).
 
@@ -13,7 +16,7 @@ Claims below come only from what is live on the server (`docs/launch/LAUNCH_STAT
 | `GOOGLE_CLIENT_ID_WEB` / `_IOS` | same | production OAuth clients | set |
 | `PHONE_OTP_LOGIN_ENABLED` | same | `false` (no OTP SMS provider) | `false` |
 | `ECOMSBD_SENTRY_DSN` | same | the Sentry project DSN, or empty = no crash reports | **empty** → Data safety "Crash logs: not collected" for this build |
-| `version` | `pubspec.yaml` | `3.1.0+311` (higher than the live versionCode) | OK |
+| `version` | `pubspec.yaml` | `3.1.0+312` (higher than the live versionCode) | OK |
 | Signing | `android/key.properties` + upload keystore | release key | operator |
 
 ## 2. Exact build command (operator's machine with the release key)
@@ -26,6 +29,14 @@ E:\flutter\flutter\bin\flutter.bat clean
 E:\flutter\flutter\bin\flutter.bat pub get
 E:\flutter\flutter\bin\flutter.bat build appbundle --release --dart-define-from-file=env/production.json
 # output: build\app\outputs\bundle\release\app-release.aab
+E:\flutter\flutter\bin\flutter.bat build apk --release --dart-define-from-file=env/production.json
+# output: build\app\outputs\flutter-apk\app-release.apk
+
+# The signer must be the upload key, never "Android Debug":
+$env:JAVA_HOME = "E:\Android\jbr"
+& "$env:JAVA_HOME\bin\keytool.exe" -printcert -jarfile build\app\outputs\bundle\release\app-release.aab
+& "$env:JAVA_HOME\bin\keytool.exe" -printcert -jarfile build\app\outputs\flutter-apk\app-release.apk
+# Owner must not be "CN=Android Debug"; SHA-256 must match Play Console → App integrity → Upload key.
 ```
 
 On an 8 GB machine add `--android-skip-build-dependency-validation` only if Gradle asks, and keep
