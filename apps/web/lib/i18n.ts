@@ -19,6 +19,7 @@ import { referralEn, referralBn } from './referral';
 import { voiceIntroEn, voiceIntroBn } from './voice-intro';
 import { autopilotEn, autopilotBn } from './autopilot';
 import { extensionEn, extensionBn } from './extension';
+import { smsSettingsEn, smsSettingsBn } from './sms-settings';
 
 /**
  * English and Bangla for the dashboard.
@@ -53,6 +54,7 @@ export const strings = {
     ...voiceIntroEn,
     ...autopilotEn,
     ...extensionEn,
+    ...smsSettingsEn,
     'nav.insights': 'Insights',
     'ins.desktopSub': 'Period activity compared with the previous period. COD balances and stock show the current position.',
     'ins.custom': 'Custom range',
@@ -696,6 +698,7 @@ export const strings = {
     ...voiceIntroBn,
     ...autopilotBn,
     ...extensionBn,
+    ...smsSettingsBn,
     'nav.insights': 'ব্যবসার বিশ্লেষণ',
     'ins.desktopSub': 'আগের সময়ের সঙ্গে এই সময়ের তুলনা। বাকি COD ও স্টক বর্তমান অবস্থার হিসাব।',
     'ins.custom': 'নিজের সময়সীমা',

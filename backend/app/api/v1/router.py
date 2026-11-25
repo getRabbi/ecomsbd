@@ -54,6 +54,7 @@ from app.api.v1 import (
     reconciliation,
     referrals,
     rto,
+    sms_settings,
     sync,
     team,
     tenants,
@@ -65,6 +66,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(delivery_rules.router)
+api_router.include_router(sms_settings.router)
 api_router.include_router(autopilot.router)
 api_router.include_router(devices.router)
 api_router.include_router(intake.router)
