@@ -12,7 +12,7 @@ the iPhone app, Shopify / WooCommerce, or any "partner" status with a courier.
 > ecomsbd Android অ্যাপে "অটো অর্ডার শনাক্ত" চালু করুন — WhatsApp Business বা Business Suite-এ কাস্টমার অর্ডারের মতো মেসেজ দিলেই নোটিফিকেশন আসবে। Create চাপুন, ফোন-ঠিকানা-পণ্যসহ অর্ডার তৈরি। আপনি না চাপলে কোনো মেসেজ কোথাও যায় না।
 > লঞ্চের সময় পুরো ফ্রি। 👉 app.ecomsbd.com
 
-**পোস্ট ২ — ফেক অর্ডার কমান, পাঠানোর আগে কনফার্ম**
+**পোস্ট ২ — ফেক অর্ডার কমান, পাঠানোর আগে কনফার্ম** (post only after `confirmation_engine_enabled` is global; see LAUNCH_STATUS)
 
 > পার্সেল ফেরত মানেই ডেলিভারি চার্জ লস। ecomsbd-এর কল তালিকায় প্রতিটি নতুন অর্ডার সাজানো থাকে — নিজের ফোন থেকে কল দিন, এক চাপে "কনফার্ম", "বাতিল" বা "ধরেনি"। কনফার্ম হওয়া অর্ডারগুলো একসাথে Steadfast-এ বুক করুন।
 > ফ্রি, কার্ড লাগবে না। 👉 app.ecomsbd.com

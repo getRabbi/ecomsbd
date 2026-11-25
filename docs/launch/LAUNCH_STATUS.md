@@ -11,12 +11,21 @@ every feature free, billing off. Exact flag changes, times and rollbacks: `docs/
 |---|---|---|---|
 | Steadfast, Pathao, RedX booking + status + COD | `steadfast_enabled`, `pathao_enabled`, `redx_enabled` (global) | 2026-10-01 (V3) | connects their own courier account |
 | First-party usage milestones (funnel) | `product_events_enabled` (global) | 2026-11-25 01:00 | nothing (no customer data) |
-| Delivery charges by zone + default courier | `delivery_rules_enabled` (global) | see Launch log (L3) | Settings → Delivery rules; nothing changes until saved |
-| Invoice + 4×6 label print (Bangla, barcode) | `order_documents_enabled` (global) | L3 | Print invoice / Print label |
-| Paste / share / Auto order detect into drafts | `intake_device_enabled` (global) | L3 | links a phone (Android 3.1) and grants Notification access; paste on the web works now |
-| Browser extension pairing + capture | `extension_enabled` (global, needs intake) | L3 | installs the extension (Chrome Web Store review pending) |
-| Confirmation call queue | `confirmation_engine_enabled` (global) | L3 | picks "Confirm & call customer" per order; calls from their own phone |
-| SMS order updates through Alpha SMS | `alpha_sms_enabled` (global platform switch) | L3 | turns SMS on in Messaging → Channels (default off) |
+| Delivery charges by zone + default courier | `delivery_rules_enabled` (global) | 2026-11-25 01:32 | Settings → Delivery rules; nothing changes until saved |
+| Invoice + 4×6 label print (Bangla, barcode) | `order_documents_enabled` (global) | 2026-11-25 02:03 | Print invoice / Print label |
+| SMS order updates through Alpha SMS | `alpha_sms_enabled` (global platform switch) | 2026-11-25 01:48 | turns SMS on in Messaging → Channels (default off) |
+
+## Checked on the test shop, not yet widened (one admin call each when the operator says go)
+
+| Feature | Flag | State |
+|---|---|---|
+| Paste / share / Auto order detect into drafts | `intake_device_enabled` | test shop only. Server check passed (L2.7); the 10-minute global watch was stopped before it ran (machine asleep + low memory). Safe to widen: seller opt-in (link a phone + Notification access); privacy policy covers it |
+| Browser extension pairing + capture | `extension_enabled` (needs intake) | test shop only, same reason. Sellers cannot install it until the Chrome Web Store approves it |
+| Confirmation call queue | `confirmation_engine_enabled` | test shop only, same reason. Creates no customer contact by itself (Launch log L3.1e) |
+
+Widening = `POST /v1/admin/repairs/disable_provider_capability` `{"params": {"flag": "<flag>", "enabled": true}, "tenant_id": null, ...}`, then 10 minutes of health / 5xx / worker / pool checks; in that order: intake → extension → confirmation engine.
+
+**Copy ahead of the product until then:** the public site (live since 01:49) and the Play / marketing texts already name the confirmation call queue and paste-to-draft. Widen `confirmation_engine_enabled` and `intake_device_enabled` before promoting them, or the claim is true only for the test shop.
 
 ## Seller opt-in, switched on per shop on request
 
