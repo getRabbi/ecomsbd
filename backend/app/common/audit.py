@@ -142,6 +142,9 @@ class AuditAction(StrEnum):
     ADMIN_TENANT_VIEWED = "admin.tenant_viewed"
     ADMIN_PII_REVEALED = "admin.pii_revealed"
     ADMIN_SUPPORT_BUNDLE_EXPORTED = "admin.support_bundle_exported"
+    #: A per-operator platform_admins token created (``python -m app.admin.issue_token``).
+    #: Carries the label and role, never the token.
+    ADMIN_TOKEN_ISSUED = "admin.token_issued"
     SUPPORT_CASE_OPENED = "support.case_opened"
     SUPPORT_CASE_UPDATED = "support.case_updated"
 

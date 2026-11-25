@@ -744,7 +744,19 @@ default production admin credential and none is generated for you.
 **Recommended sequence**
 
 1. Set one strong bootstrap token; deploy.
-2. Use it to create real `platform_admins` rows, one per operator.
+2. Create real `platform_admins` rows, one per operator. In the API container's
+   shell (Northflank → `ecomsbd-api` → Shell), where the deployment's own
+   `JWT_SIGNING_KEY` and `DATABASE_URL` are loaded:
+
+   ```
+   python -m app.admin.issue_token --label <name> --role SUPERADMIN   # or OPS / SUPPORT
+   ```
+
+   It prints the token once on stdout and stores only its keyed hash. Issuing is
+   audited as `admin.token_issued` (label and role, never the token). Optional
+   `--expires-in-days N`. A second active token under the same label is refused:
+   revoke the old row first (`docs/runbooks/CREDENTIAL_LEAK.md`). Check it with
+   `GET /v1/admin/me` → your label, `is_bootstrap: false`.
 3. Clear `ADMIN_API_TOKENS` and redeploy.
 
 A bootstrap token cannot be revoked without a redeploy, and everything it does

@@ -210,6 +210,13 @@ export const opsEn = {
   'cour.no': 'No',
   'cour.unknown': 'Not verified',
   'cour.compareNote': '“Not verified” means the courier’s documentation does not confirm it — not that it is unavailable. Delivery prices are quoted per order when booking.',
+  'cour.why.NOT_ENABLED': 'Not available for your shop yet',
+  'cour.why.NO_VERIFIED_CREATE': 'Not available yet',
+  'cour.why.NOT_CONNECTED': 'Not connected — connect it under Couriers',
+  'cour.why.NEEDS_RECONNECT': 'Needs reconnecting under Couriers',
+  'cour.why.NEEDS_PICKUP_STORE': 'Choose a pickup store under Couriers',
+  'cour.why.PROVIDER_UNAVAILABLE': 'Not accepting bookings right now',
+  'cour.why.UNKNOWN': 'Not available right now',
 
   // Money ledger
   'ml.receivablesSub': 'COD owed to you, parcel by parcel.',
@@ -709,6 +716,13 @@ export const opsBn: Record<keyof typeof opsEn, string> = {
   'cour.no': 'না',
   'cour.unknown': 'যাচাই হয়নি',
   'cour.compareNote': '“যাচাই হয়নি” মানে কুরিয়ারের ডকুমেন্টে নিশ্চিত নয় — নেই এমন নয়। ডেলিভারির দাম বুক করার সময় অর্ডার ধরে দেখানো হয়।',
+  'cour.why.NOT_ENABLED': 'আপনার দোকানে এখনো চালু হয়নি',
+  'cour.why.NO_VERIFIED_CREATE': 'এখনও পাওয়া যাচ্ছে না',
+  'cour.why.NOT_CONNECTED': 'যুক্ত নেই — কুরিয়ার পাতায় যুক্ত করুন',
+  'cour.why.NEEDS_RECONNECT': 'কুরিয়ার পাতায় আবার যুক্ত করতে হবে',
+  'cour.why.NEEDS_PICKUP_STORE': 'কুরিয়ার পাতায় একটি পিকআপ স্টোর বাছুন',
+  'cour.why.PROVIDER_UNAVAILABLE': 'এখন বুকিং নিচ্ছে না',
+  'cour.why.UNKNOWN': 'এখন পাওয়া যাচ্ছে না',
 
   'ml.receivablesSub': 'আপনার পাওনা COD, পার্সেল ধরে।',
   'ml.payoutsSub': 'কুরিয়ার যে টাকা দিয়েছে, আর তা কোন পার্সেলের সাথে মিলেছে।',

@@ -191,3 +191,27 @@ export function verifiedCapabilities(capabilities: Record<string, string>): stri
     .filter(([, value]) => value === 'true')
     .map(([key]) => key);
 }
+
+/**
+ * Every reason `GET /v1/couriers/bookable` gives for a courier that cannot
+ * take a booking (`BookableReason` in `app/couriers/accounts.py`). The API
+ * sends the code; the seller must see words, in their language.
+ */
+export const BOOKABLE_REASONS = [
+  'NOT_ENABLED',
+  'NO_VERIFIED_CREATE',
+  'NOT_CONNECTED',
+  'NEEDS_RECONNECT',
+  'NEEDS_PICKUP_STORE',
+  'PROVIDER_UNAVAILABLE',
+] as const;
+export type BookableReason = (typeof BOOKABLE_REASONS)[number];
+export type BookableReasonKey = `cour.why.${BookableReason}` | 'cour.why.UNKNOWN';
+
+/** The string key that explains `reason`; a code this build does not know reads as "not available right now". */
+export function bookableReasonKey(reason: string | null): BookableReasonKey {
+  if (reason === null) return 'cour.why.NOT_CONNECTED';
+  return (BOOKABLE_REASONS as readonly string[]).includes(reason)
+    ? (`cour.why.${reason}` as BookableReasonKey)
+    : 'cour.why.UNKNOWN';
+}
