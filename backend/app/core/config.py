@@ -25,7 +25,14 @@ from functools import lru_cache
 from typing import Annotated, Any, Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    Field,
+    SecretStr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Development placeholders. Any value carrying this prefix is rejected in production.
@@ -508,6 +515,13 @@ class Settings(BaseSettings):
     push_transport: str = "disabled"
     sms_transport: str = "disabled"
     notification_max_attempts: int = 5
+    #: Launch run 14, first-scan quiet mode. The first full smart-alert scan
+    #: (every earlier one hit the worker's timeout) finds every condition that
+    #: has been true for weeks at once. Alerts a scan raises before this moment
+    #: go to the notification centre only; per shop, one CRITICAL
+    #: courier-account or overdue-payout alert may still push. Unset: every
+    #: alert follows the normal push rules.
+    smart_alerts_push_from: AwareDatetime | None = None
 
     # -------------------------------------------------------------- voice ---
     #: V4 Phase 3 IVR confirmation calls. ``disabled`` places nothing

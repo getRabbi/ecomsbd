@@ -105,9 +105,18 @@ class AlertCondition:
 class AlertLifecycle:
     """Decides, per alert identity, whether anything should be written."""
 
-    def __init__(self, session: AsyncSession, notifications: NotificationService) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        notifications: NotificationService,
+        *,
+        quiet_until: datetime | None = None,
+    ) -> None:
         self._db = session
         self._notifications = notifications
+        #: ``SMART_ALERTS_PUSH_FROM``: alerts written before it are marked
+        #: ``quiet_start`` and the dispatcher keeps them in the centre.
+        self._quiet_until = quiet_until
 
     async def sync(
         self,
@@ -224,6 +233,14 @@ class AlertLifecycle:
             target = {"route": condition.entity_type, "id": str(condition.entity_id)}
         elif condition.target_params:
             target["params"] = dict(condition.target_params)
+        payload: dict[str, Any] = {
+            "params": condition.params,
+            "magnitude": condition.magnitude,
+            "reason": reason,
+            "target": target,
+        }
+        if self._quiet_until is not None and now < self._quiet_until:
+            payload["quiet_start"] = True
         try:
             async with self._db.begin_nested():
                 written = await self._notifications.notify(
@@ -236,12 +253,7 @@ class AlertLifecycle:
                     entity_id=condition.entity_id,
                     amount_paisa=condition.amount_paisa,
                     item_count=condition.item_count,
-                    payload={
-                        "params": condition.params,
-                        "magnitude": condition.magnitude,
-                        "reason": reason,
-                        "target": target,
-                    },
+                    payload=payload,
                     occurred_at=now,
                     category=rule.category,
                     audience=condition.audience or rules.audience_for(condition.kind),
@@ -271,11 +283,15 @@ class SmartAlerts:
     """The V2.2 detectors, run for one shop on its tenant-scoped session."""
 
     def __init__(
-        self, session: AsyncSession, *, notifications: NotificationService | None = None
+        self,
+        session: AsyncSession,
+        *,
+        notifications: NotificationService | None = None,
+        quiet_until: datetime | None = None,
     ) -> None:
         self._db = session
         self._notifications = notifications or NotificationService(session)
-        self.lifecycle = AlertLifecycle(session, self._notifications)
+        self.lifecycle = AlertLifecycle(session, self._notifications, quiet_until=quiet_until)
 
     async def run(self) -> int:
         """Every detector, each isolated: one failing costs only its own alert."""

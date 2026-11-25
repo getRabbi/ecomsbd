@@ -195,9 +195,14 @@ class AlertService:
         :mod:`app.analytics.rto` (``RETURNED`` and courier ``CANCELLED``), not
         by counting ``RETURNED`` alone.
         """
+        from app.core.config import get_settings
         from app.notifications.smart import SmartAlerts
 
-        return await SmartAlerts(self._db, notifications=self._notifications).run()
+        return await SmartAlerts(
+            self._db,
+            notifications=self._notifications,
+            quiet_until=get_settings().smart_alerts_push_from,
+        ).run()
 
     # -------------------------------------------------------- friday summary --
 
