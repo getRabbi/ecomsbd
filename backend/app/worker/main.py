@@ -103,6 +103,10 @@ def _redis_settings() -> RedisSettings:
     return RedisSettings.from_dsn(settings.redis_url)
 
 
+#: The daily smart-alert scan over every shop (launch run 13 D2 follow-up).
+SCAN_ALERTS_TIMEOUT_S = 1800
+
+
 class WorkerSettings:
     """ARQ configuration."""
 
@@ -186,7 +190,10 @@ class WorkerSettings:
         cron(snapshot_demand_forecasts, hour={2}, minute=50),
         # External risk lookups past retention (V3.7). Idempotent.
         cron(prune_external_risk_lookups, hour={4}, minute=20),
-        cron(scan_alerts, hour={3, 9}, minute=30),
+        # One job walks every active shop (each in its own transaction); with
+        # the worker's 120 s default it timed out every run in production
+        # (52 shops, launch run 13), so no smart alert was ever written.
+        cron(scan_alerts, hour={3, 9}, minute=30, timeout=SCAN_ALERTS_TIMEOUT_S),
         # Hourly, because the job decides for itself whether the *tenant's*
         # clock has reached Friday 18:00 (master spec section 42). ARQ crons
         # fire on host local time, and pinning the weekly summary to one UTC
