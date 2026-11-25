@@ -7,6 +7,7 @@ import { Chip, Drawer, ErrorState, Row } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { courierHistoryChip, latestCourierHistory } from '@/lib/courier-history';
 import {
+  bookableReasonKey,
   courierName,
   type BookableCourier,
   type BookingReport,
@@ -582,7 +583,7 @@ function CourierBooking({ order, onBooked }: { order: OrderDetail; onBooked: () 
                       </label>
                       {row.store_name ? <div className="table__sub">{t('cour.store')}: {row.store_name}</div> : null}
                     </td>
-                    <td>{row.bookable ? <Chip label={t('od.canBook')} tone="good" /> : <span className="table__sub">{row.reason ?? t('cour.notConnected')}</span>}</td>
+                    <td>{row.bookable ? <Chip label={t('od.canBook')} tone="good" /> : <span className="table__sub">{t(bookableReasonKey(row.reason))}</span>}</td>
                     <td className="num">{typeof result === 'object' && result.available ? formatPaisa(result.delivery_fee_paisa, { locale }) : '—'}</td>
                     <td className="num">{typeof result === 'object' && result.available ? formatPaisa(result.cod_fee_paisa, { locale }) : '—'}</td>
                     <td>

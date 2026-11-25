@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/shell';
 import { Card, Chip, Drawer, ErrorState, Row, type Tone } from '@/components/ui';
 import { api } from '@/lib/api';
 import {
+  bookableReasonKey,
   verifiedCapabilities,
   type BookableCourier,
   type ConnectForm,
@@ -125,7 +126,7 @@ export default function CouriersPage() {
                       bookableBy.get(provider.provider)?.bookable ? (
                         <Chip label={t('od.canBook')} tone="good" />
                       ) : (
-                        <span className="table__sub">{bookableBy.get(provider.provider)?.reason ?? '—'}</span>
+                        <span className="table__sub">{t(bookableReasonKey(bookableBy.get(provider.provider)?.reason ?? null))}</span>
                       )
                     }
                   />
