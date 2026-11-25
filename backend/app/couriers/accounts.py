@@ -292,6 +292,8 @@ class CourierAccountService:
         account.connected_by = context.user_id
 
         await self._db.flush()
+        if outcome.is_valid:
+            await self._reconnect_alert(account)
 
         await record_audit(
             self._db,
@@ -344,6 +346,7 @@ class CourierAccountService:
         account.last_validation_result = None
         account.last_validation_message = None
         await self._db.flush()
+        await self._reconnect_alert(account)
 
         await record_audit(
             self._db,
@@ -409,6 +412,7 @@ class CourierAccountService:
         await self._db.flush()
 
         if account.status != previous:
+            await self._reconnect_alert(account)
             await record_audit(
                 self._db,
                 AuditAction.PROVIDER_HEALTH_CHANGED,
@@ -422,6 +426,28 @@ class CourierAccountService:
                 },
             )
         return account
+
+    async def _reconnect_alert(self, account: CourierAccount) -> None:
+        """Raise the reconnect alert on entering ``NEEDS_RECONNECT``, else clear it.
+
+        Launch run 13 D2: one push when a key starts being rejected. A failure
+        here is logged and never fails the check, the save or the disconnect.
+        """
+        from app.notifications.smart import courier_account_status_changed
+
+        try:
+            async with self._db.begin_nested():
+                await courier_account_status_changed(
+                    self._db,
+                    account_id=account.id,
+                    provider=account.provider,
+                    needs_reconnect=account.account_status is CourierAccountStatus.NEEDS_RECONNECT,
+                )
+        except Exception as exc:
+            log.warning(
+                "courier reconnect alert failed",
+                extra={"provider": account.provider, "error": type(exc).__name__},
+            )
 
     async def _validate_with(self, adapter: CourierAdapter, credentials: Any) -> ValidationOutcome:
         """Ask the provider, and classify the answer into four outcomes."""

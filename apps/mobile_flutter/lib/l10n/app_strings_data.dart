@@ -1650,6 +1650,11 @@ const Map<String, String> _secEn = <String, String>{
       'Find these in your {provider} merchant panel. They are stored encrypted and are never shown again after you save them.',
   'ca.needsReconnectProviderSub':
       '{provider} stopped accepting these details. Enter them again to keep booking.',
+  'ca.reconnectBannerTitle': '{provider}: saved API key rejected',
+  'ca.reconnectBannerBody':
+      'Booking and parcel status updates through this account are paused. Get a fresh API key and secret from the courier panel and reconnect.',
+  'ca.reconnectBannerAskOwner':
+      'Booking and parcel status updates through this account are paused. Ask the shop owner to reconnect it.',
   'ca.needsStoreSub':
       'Choose a pickup store before booking — this courier needs one on every parcel.',
   'ca.noStoreChosen': 'Not chosen yet',
@@ -2487,6 +2492,11 @@ const Map<String, String> _secBn = <String, String>{
       'এগুলো আপনার {provider} মার্চেন্ট প্যানেলে পাবেন। এগুলো এনক্রিপ্ট করে রাখা হয় এবং সেভ করার পর আর কখনও দেখানো হয় না।',
   'ca.needsReconnectProviderSub':
       '{provider} এই তথ্য আর নিচ্ছে না। বুকিং চালু রাখতে আবার দিন।',
+  'ca.reconnectBannerTitle': '{provider}: সংরক্ষিত API key গ্রহণ হয়নি',
+  'ca.reconnectBannerBody':
+      'এই অ্যাকাউন্টে বুকিং ও পার্সেলের স্ট্যাটাস আপডেট বন্ধ আছে। কুরিয়ারের প্যানেল থেকে নতুন API key ও secret নিয়ে আবার যুক্ত করুন।',
+  'ca.reconnectBannerAskOwner':
+      'এই অ্যাকাউন্টে বুকিং ও পার্সেলের স্ট্যাটাস আপডেট বন্ধ আছে। দোকানের মালিককে আবার যুক্ত করতে বলুন।',
   'ca.needsStoreSub':
       'বুক করার আগে একটি পিকআপ স্টোর বাছুন — এই কুরিয়ারের প্রতিটি পার্সেলেই সেটি লাগে।',
   'ca.noStoreChosen': 'এখনও বাছা হয়নি',

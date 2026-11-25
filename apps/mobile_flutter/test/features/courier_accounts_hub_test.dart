@@ -321,6 +321,41 @@ void main() {
       expectNoOverflow(tester);
     });
 
+    testWidgets('a rejected key leads the screen with a reconnect banner', (
+      tester,
+    ) async {
+      // Launch run 13 D2.
+      final server = _Server(
+        accounts: <Map<String, dynamic>>[
+          _account(),
+          _account(provider: 'pathao', status: 'NEEDS_RECONNECT'),
+        ],
+      );
+      await pumpCommerceScreen(
+        tester,
+        const CourierAccountsScreen(),
+        harness: server.harness,
+        size: _tall,
+      );
+      expect(
+        find.byKey(const ValueKey('ca.reconnectBanner.pathao')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('ca.reconnectBanner.steadfast')),
+        findsNothing,
+      );
+      expect(find.text('Pathao: saved API key rejected'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ca.reconnectBanner.pathao')),
+          matching: find.text('Reconnect'),
+        ),
+        findsOneWidget,
+      );
+      expectNoOverflow(tester);
+    });
+
     testWidgets('a courier switched off for this shop offers no Connect', (
       tester,
     ) async {

@@ -1485,6 +1485,11 @@ kbd {
   background: var(--warn-soft);
 }
 
+.notice--bad {
+  border-color: #efc3c5;
+  background: var(--bad-soft);
+}
+
 @media (max-width: 640px) {
   .formgrid {
     grid-template-columns: minmax(0, 1fr);

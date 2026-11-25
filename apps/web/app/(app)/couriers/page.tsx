@@ -84,12 +84,36 @@ export default function CouriersPage() {
   }
 
   const capabilityKeys = Array.from(new Set(rows.flatMap((row) => Object.keys(row.capabilities)))).sort();
+  // Launch run 13 D2: a rejected key must be impossible to miss on this page.
+  const toReconnect = rows.filter((provider) => byProvider.get(provider.provider)?.needs_reconnect);
 
   return (
     <>
       <PageHeader title={t('cour.title')} subtitle={t('cour.subtitleManage')} />
 
       <div className="content">
+        {toReconnect.length ? (
+          <div className="notice notice--bad" role="alert" data-testid="courier-reconnect-banner" style={{ display: 'block', marginBottom: 14 }}>
+            <strong>{t('cour.reconnectBannerTitle', { couriers: toReconnect.map((provider) => provider.display_name).join(', ') })}</strong>
+            <p>{t('cour.reconnectBannerBody')}</p>
+            {manage ? (
+              <div className="toolbar" style={{ padding: '8px 0 0', flexWrap: 'wrap' }}>
+                {toReconnect.map((provider) => (
+                  <button
+                    key={provider.provider}
+                    type="button"
+                    className="btn btn--sm btn--primary"
+                    onClick={() => setPanel({ kind: 'connect', provider: provider.provider })}
+                  >
+                    {t('cour.reconnectNamed', { courier: provider.display_name })}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p>{t('cour.reconnectAskOwner')}</p>
+            )}
+          </div>
+        ) : null}
         {providers.error ? (
           <Card>
             <ErrorState error={providers.error} onRetry={providers.reload} />

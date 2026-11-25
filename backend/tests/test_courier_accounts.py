@@ -401,3 +401,78 @@ class TestCourierApi:
             "/v1/couriers/accounts/steadfast", headers=auth_header(refreshed)
         )
         assert blocked.status_code == 403
+
+
+# ------------------------------------------- reconnect alert (run 13 D2) --
+
+
+async def _reconnect_alerts(db: Any) -> list[Any]:
+    from app.notifications.models import Notification, NotificationKind
+
+    return list(
+        (
+            await db.scalars(
+                sa.select(Notification)
+                .where(Notification.kind == str(NotificationKind.COURIER_ACCOUNT_PROBLEM))
+                .order_by(Notification.created_at)
+            )
+        ).all()
+    )
+
+
+async def test_entering_needs_reconnect_raises_one_alert_for_a_push(db, settings, shop) -> None:
+    from app.notifications.models import Severity
+    from app.notifications.smart import SmartAlerts
+
+    transport = FakeSteadfastTransport().enqueue("GET", "/get_balance", body=bodies.BALANCE_OK)
+    service = _service(db, transport, settings)
+    account, _ = await service.connect(_connect())
+    assert await _reconnect_alerts(db) == []
+
+    transport.always(status_code=401, body="{}")
+    for _ in range(AUTH_FAILURES_BEFORE_RECONNECT - 1):
+        await service.test_connection("steadfast")
+    assert await _reconnect_alerts(db) == [], "one rejection is not a reconnect"
+
+    await service.test_connection("steadfast")
+    assert account.account_status is CourierAccountStatus.NEEDS_RECONNECT
+    [alert] = await _reconnect_alerts(db)
+    # CRITICAL deserves a push; only members who may enter credentials get it.
+    assert alert.severity == str(Severity.CRITICAL)
+    assert alert.audience == "courier.credential_manage"
+    assert alert.payload["params"] == {"provider": "steadfast"}
+    assert alert.payload["target"] == {"route": "courier_account", "id": str(account.id)}
+    assert API_KEY not in str(alert.payload) + alert.title + alert.body
+
+    # Still rejected, and the daily scan: the same identity, nothing new.
+    await service.test_connection("steadfast")
+    await SmartAlerts(db).run()
+    assert len(await _reconnect_alerts(db)) == 1
+
+
+async def test_reconnecting_with_a_working_key_clears_the_alert(db, settings, shop) -> None:
+    from app.notifications.models import NotificationState
+
+    transport = FakeSteadfastTransport().enqueue("GET", "/get_balance", body=bodies.BALANCE_OK)
+    service = _service(db, transport, settings)
+    await service.connect(_connect())
+    transport.always(status_code=403, body="{}")
+    for _ in range(AUTH_FAILURES_BEFORE_RECONNECT):
+        await service.test_connection("steadfast")
+    [alert] = await _reconnect_alerts(db)
+
+    transport.always(body=bodies.BALANCE_OK)
+    account, _ = await service.connect(_connect())
+    assert account.account_status is CourierAccountStatus.CONNECTED
+    await db.refresh(alert)
+    assert alert.state is NotificationState.RESOLVED
+
+
+async def test_a_wrong_key_typed_while_connecting_raises_no_alert(db, settings, shop) -> None:
+    from app.core.errors import ValidationError
+
+    transport = FakeSteadfastTransport().always(status_code=401, body="{}")
+    service = _service(db, transport, settings)
+    with pytest.raises(ValidationError):
+        await service.connect(_connect())
+    assert await _reconnect_alerts(db) == [], "the seller sees the answer on the spot"
