@@ -14,6 +14,7 @@ The properties that matter:
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -56,6 +57,18 @@ async def shop(client: AsyncClient, unique_phone: str) -> dict:
 
 def _phone() -> str:
     return f"018{uuid.uuid4().int % 100_000_000:08d}"
+
+
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+
+
+def _without_ids(text: str) -> str:
+    """The text a person reads: identifiers (row ids in targets) taken out.
+
+    A leak check on raw text fails whenever a random id happens to contain the
+    fragment (a UUIDv7 with ``…-7401-…`` once failed the "401" check).
+    """
+    return _UUID.sub("<id>", text)
 
 
 async def _alerts(db: AsyncSession, kind: NotificationKind | None = None) -> list[Notification]:
@@ -343,6 +356,10 @@ class TestOtherDetectors:
         from app.couriers.models import CourierAccount, CourierAccountStatus
 
         account = CourierAccount(
+            # The id itself holds every forbidden fragment, so the check below
+            # must tell an identifier from leaked text on every run, not only
+            # when a random id happens to contain one. Random tail: unique.
+            id=uuid.UUID(f"abc12398-7640-4401-8abc-{uuid.uuid4().hex[:12]}"),
             provider="steadfast",
             status=str(CourierAccountStatus.NEEDS_RECONNECT),
             masked_identifier="****9876",
@@ -355,8 +372,9 @@ class TestOtherDetectors:
         await db.commit()
         [alert] = await _alerts(db, NotificationKind.COURIER_ACCOUNT_PROBLEM)
         assert alert.payload["params"] == {"provider": "steadfast"}
-        text = alert.title + alert.body + str(alert.payload)
-        assert "9876" not in text and "abc123" not in text and "401" not in text
+        text = _without_ids(alert.title + alert.body + str(alert.payload))
+        for leaked in ("9876", "abc123", "401", "Unauthorized", "api key"):
+            assert leaked not in text, leaked
         assert alert.audience == "courier.credential_manage"
         assert alert.payload["target"] == {"route": "courier_account", "id": str(account.id)}
 
