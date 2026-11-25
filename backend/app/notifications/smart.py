@@ -43,6 +43,7 @@ __all__ = [
     "AlertCondition",
     "AlertLifecycle",
     "SmartAlerts",
+    "courier_account_status_changed",
     "last_moved_at",
     "stuck_parcel_clause",
 ]
@@ -539,19 +540,7 @@ class SmartAlerts:
                 CourierAccount.status == str(CourierAccountStatus.NEEDS_RECONNECT)
             )
         )
-        return [
-            AlertCondition(
-                kind=NotificationKind.COURIER_ACCOUNT_PROBLEM,
-                subject=f"account:{account_id}",
-                # Provider name only: no identifier, key or message from the
-                # provider is ever copied into a notification.
-                params={"provider": provider},
-                magnitude=1,
-                entity_type="courier_account",
-                entity_id=account_id,
-            )
-            for account_id, provider in rows
-        ]
+        return [_courier_account_condition(account_id, provider) for account_id, provider in rows]
 
     # -------------------------------------------------------- returns --
 
@@ -950,3 +939,39 @@ class SmartAlerts:
             if await self.import_alert(import_id) is not None:
                 created += 1
         return created
+
+
+# ------------------------------------------------------ courier accounts --
+
+
+def _courier_account_condition(account_id: uuid.UUID, provider: str) -> AlertCondition:
+    """The reconnect alert for one account: the scan and the transition share it."""
+    return AlertCondition(
+        kind=NotificationKind.COURIER_ACCOUNT_PROBLEM,
+        subject=f"account:{account_id}",
+        # Provider name only: no identifier, key or message from the
+        # provider is ever copied into a notification.
+        params={"provider": provider},
+        magnitude=1,
+        entity_type="courier_account",
+        entity_id=account_id,
+    )
+
+
+async def courier_account_status_changed(
+    session: AsyncSession, *, account_id: uuid.UUID, provider: str, needs_reconnect: bool
+) -> int:
+    """Raise the reconnect alert the moment an account enters ``NEEDS_RECONNECT``.
+
+    Launch run 13 D2: the seller hears about a rejected key once, when it
+    happens, instead of waiting for the daily scan. It is the same alert
+    identity the scan uses (``account:<id>``), so the scan never repeats it
+    before the rule's cooldown, and reconnecting resolves it. The push goes
+    out with the next notification dispatch, to members who may enter
+    courier credentials. Returns how many alerts were new (0 or 1).
+    """
+    lifecycle = AlertLifecycle(session, NotificationService(session))
+    conditions = [_courier_account_condition(account_id, provider)] if needs_reconnect else []
+    return await lifecycle.sync(
+        NotificationKind.COURIER_ACCOUNT_PROBLEM, conditions, scope=f"account:{account_id}"
+    )

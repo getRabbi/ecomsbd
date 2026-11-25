@@ -256,9 +256,46 @@ class _CourierList extends ConsumerWidget {
           for (final row in rows)
             if (row.provider != CourierAccountsScreen.manual) row,
         ];
+        // Launch run 13 D2: a rejected key leads the screen, in words.
+        final toReconnect = <CourierProviderInfo>[
+          for (final info in couriers)
+            if (viewOnly
+                ? bookableCourierOf(bookable, info.provider)?.block ==
+                      BookableBlock.needsReconnect
+                : courierAccountOf(
+                        accounts.valueOrNull,
+                        info.provider,
+                      )?.status ==
+                      CourierAccountStatus.needsReconnect)
+              info,
+        ];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            for (final info in toReconnect) ...<Widget>[
+              ProviderHealthBanner(
+                key: ValueKey('ca.reconnectBanner.${info.provider}'),
+                tone: Tone.bad,
+                provider: context
+                    .tr('ca.reconnectBannerTitle')
+                    .replaceAll('{provider}', info.displayName),
+                detail: context.tr(
+                  viewOnly
+                      ? 'ca.reconnectBannerAskOwner'
+                      : 'ca.reconnectBannerBody',
+                ),
+                actionLabel: viewOnly ? null : context.tr('ca.reconnect'),
+                onAction: viewOnly
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              CourierAccountManageScreen(info: info),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: EcomsbdSpacing.md),
+            ],
             for (final info in couriers) ...<Widget>[
               _CourierRow(
                 info: info,
