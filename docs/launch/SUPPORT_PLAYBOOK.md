@@ -23,7 +23,7 @@ GET /v1/admin/tenants/{tenant_id}/support-bundle        (one export for a hard c
 | # | Seller says | Check | Fix / flag to turn off |
 |---|---|---|---|
 | 1 | "Steadfast connect fails" | `GET /v1/admin/ops/provider-health` (steadfast row); bundle → courier account `last_validation_result` | Wrong key/secret → seller re-copies from the Steadfast panel. Provider outage → `refresh_provider_health` repair; if bookings fail for everyone: `steadfast_enabled` off globally (manual courier still works) |
-| 2 | "Parcel status not updating" | Steadfast has no webhook: the poller runs every ~10 min. Worker logs `poll_courier_statuses` (`errors`), bundle → consignment `last_polled_at` | Wait one cycle; if `errors` > 0 for that shop → `refresh_provider_health`; credentials expired → seller reconnects |
+| 2 | "Parcel status not updating" | Steadfast has no webhook: the poller runs every ~10 min. Worker logs `poll_courier_statuses` (`errors`), bundle → consignment `last_polled_at` + courier account `status`. The poller only asks for shops whose account is `CONNECTED`: after 3 failed daily key checks the account becomes `NEEDS_RECONNECT` and that shop's parcels stop being polled (no error in the logs, `checked` stays 0) | Wait one cycle; if `errors` > 0 for that shop → `refresh_provider_health`; account `NEEDS_RECONNECT` → the seller pastes the current API key + secret from the Steadfast panel (Settings → Courier accounts → Reconnect); the next poll picks up every overdue parcel by itself, no repair needed |
 | 3 | "Booked by mistake, cancel it" | Steadfast cancel is not in the API (manifest `cancel: false`) | Seller cancels in the Steadfast panel; the next poll brings the status back |
 | 4 | "COD is wrong / delivery charge added twice" | `GET /v1/shop/delivery-rules` as the seller (or bundle): zone charges; the draft's `cod_source` (`CATALOG` / `CHAT` / `CHAT_MISMATCH`) | Seller edits the COD before saving, or fixes the zone charges. Wide problem: `delivery_rules_enabled` off for that shop |
 | 5 | "Auto order detect shows nothing" | `GET /v1/admin/flags?tenant_id=` (`intake_device_enabled`); bundle → device link `listener_state` (`NO_PERMISSION` = Notification access off) and last heartbeat; `GET /v1/admin/intake-rules` (active version) | Seller turns Notification access on / picks the chat app in Settings → Auto order detect. Bad detection everywhere → activate the previous rules version (`POST /v1/admin/intake-rules/{version}/activate`); last resort `intake_device_enabled` off |
@@ -36,6 +36,20 @@ GET /v1/admin/tenants/{tenant_id}/support-bundle        (one export for a hard c
 Queues to look at daily: `GET /v1/admin/ops/counts` (outbox / notification / webhook failures),
 `GET /v1/admin/ops/webhooks`, `GET /v1/admin/support-cases`. Repairs list: `GET /v1/admin/repairs`
 (`retry_outbox_event`, `retry_notification`, `refresh_provider_health`, `revoke_courier_credential`, …).
+
+## Open cases
+
+- **Steadfast parcel with no status since 2026-10-29** (found run 12, cause found run 13, 2026-11-25).
+  Shop `01a18256-…`, consignment `01a1825d-…` (Steadfast id `•••••553`), booked 2026-10-28 11:55 UTC,
+  still `BOOKED` / raw `in_review` from the booking answer. Cause: the **seller's Steadfast key**. It
+  passed the connect check at 11:50 and booked at 11:55. From 12:12 Steadfast rejected it on every call:
+  payments 29×, status lookup 11×, the daily key check 3×. The account went `CONNECTED` →
+  `NEEDS_RECONNECT` on 2026-10-29 17:25 UTC, so the poller skips the shop (by design, table row 2).
+  It is not our code: the same worker validates other shops' keys (382 successes, the last
+  2026-11-25 05:25 UTC). Nothing was changed. To do: contact the seller and ask them to reconnect Steadfast
+  with the current key + secret, and whether the parcel shipped. After the reconnect, check
+  `last_polled_at` moves on the next run. This is the only non-terminal provider parcel with no check in 24 h.
+  The other two are `manual` parcels, which are never polled.
 
 Escalate (operator): anything about money moving (ledger, payouts, reconciliation reversals), a
 cross-shop data report, a provider-wide outage longer than an hour, or a request to switch a feature
