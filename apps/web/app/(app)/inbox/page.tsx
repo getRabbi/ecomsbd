@@ -20,6 +20,8 @@ interface DraftItem {
   unit_price_paisa?: number | null;
   size?: string | null;
   color?: string | null;
+  /** The catalogue product the server matched, with its price. */
+  match?: { unit_price_paisa?: number | null } | null;
 }
 
 interface ChatDraft {
@@ -34,6 +36,8 @@ interface ChatDraft {
   address: string | null;
   items: DraftItem[];
   cod_amount_paisa: number | null;
+  /** The zone charge inside a calculated COD; null when unknown. */
+  delivery_fee_paisa?: number | null;
   notes: string | null;
   missing_fields: string[];
   uncertain_fields: string[];
@@ -169,10 +173,11 @@ function Drafts({ onReview }: { onReview: (prefill: OrderPrefill) => void }) {
                           items: draft.items.map((item) => ({
                             name: item.name ?? '',
                             quantity: item.quantity ?? 1,
-                            unit_price_paisa: item.unit_price_paisa ?? null,
+                            unit_price_paisa: item.unit_price_paisa ?? item.match?.unit_price_paisa ?? null,
                             variant_label: [item.size, item.color].filter(Boolean).join(' / ') || null,
                           })),
                           cod_amount_paisa: draft.cod_amount_paisa,
+                          delivery_fee_paisa: draft.delivery_fee_paisa ?? null,
                           note: draft.notes ?? undefined,
                         })
                       }

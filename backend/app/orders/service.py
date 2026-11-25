@@ -73,6 +73,11 @@ def _items_signature(items: list[OrderItem]) -> list[tuple[object, ...]]:
     ]
 
 
+def _order_total(order: Order) -> int:
+    """Items minus discount plus delivery charge: what COD defaults to."""
+    return max(0, order.subtotal_paisa - order.discount_paisa + order.delivery_fee_paisa)
+
+
 @dataclass(slots=True)
 class OrderItemDraft:
     """One requested line."""
@@ -456,6 +461,11 @@ class OrderService:
         rule: a client that read version 3 and sends version 3 wins; one that
         read an older copy is told its edit conflicts instead of silently
         overwriting someone else's change.
+
+        COD (spec WP0.4): an explicit ``cod_amount_paisa`` is kept as sent.
+        Without one, a COD that equalled the order total is recomputed when the
+        items, discount or delivery charge change; a COD that did not equal it
+        was set by hand and stays.
         """
         order = await self.get(order_id)
 
@@ -472,6 +482,10 @@ class OrderService:
 
         changed: list[str] = []
         items_changed = False
+        # A COD that equals the order total follows the total; one that does not
+        # was set on purpose (typed by the seller, or stated in chat) and is
+        # kept when the items, discount or delivery charge change. Spec WP0.4.
+        followed_total = order.cod_amount_paisa == _order_total(order)
 
         if items is not None:
             before = _items_signature(order.items)
@@ -488,11 +502,10 @@ class OrderService:
         if cod_amount_paisa is not None:
             order.cod_amount_paisa = cod_amount_paisa
             changed.append("cod_amount")
-        elif "items" in changed or "discount" in changed or "delivery_fee" in changed:
-            order.cod_amount_paisa = max(
-                0,
-                order.subtotal_paisa - order.discount_paisa + order.delivery_fee_paisa,
-            )
+        elif followed_total and (
+            "items" in changed or "discount" in changed or "delivery_fee" in changed
+        ):
+            order.cod_amount_paisa = _order_total(order)
         if note is not None:
             order.note = note
             changed.append("note")

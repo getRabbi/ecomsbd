@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/cod.dart';
 import '../../core/money.dart';
 import '../../data/chat_orders/chat_orders.dart';
 import '../../data/commerce/commerce_providers.dart';
@@ -145,7 +146,11 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
   late final TextEditingController _name;
   late final TextEditingController _address;
   late final TextEditingController _cod;
+  late final TextEditingController _delivery;
   late List<_Line> _lines;
+
+  /// The seller typed the COD (spec WP0.4); otherwise it is the order total.
+  late bool _codByHand;
   bool _saving = false;
 
   /// The confirmation mode of the button being sent, for its label.
@@ -169,12 +174,22 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
     );
     _name = TextEditingController(text: draft.customerName ?? '');
     _address = TextEditingController(text: draft.address ?? '');
-    _cod = TextEditingController(
-      text: draft.codAmountPaisa == null ? '' : _taka(draft.codAmountPaisa!),
+    _delivery = TextEditingController(
+      text: draft.deliveryFeePaisa == null
+          ? ''
+          : _taka(draft.deliveryFeePaisa!),
     );
     _lines = draft.items.isEmpty
         ? <_Line>[_Line.empty()]
         : <_Line>[for (final item in draft.items) _Line(item)];
+    // A draft COD equal to the total it would follow is not the seller's own
+    // figure: the field stays blank and follows the total.
+    _codByHand = codSetByHand(draft.codAmountPaisa, _pricedTotal);
+    _cod = TextEditingController(
+      text: _codByHand && draft.codAmountPaisa != null
+          ? _taka(draft.codAmountPaisa!)
+          : '',
+    );
   }
 
   @override
@@ -183,6 +198,7 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
     _name.dispose();
     _address.dispose();
     _cod.dispose();
+    _delivery.dispose();
     for (final line in _lines) {
       line.dispose();
     }
@@ -202,9 +218,22 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
     return total;
   }
 
-  /// Blank COD means "the items total", as the hint under it shows.
-  int get _codAmount =>
-      _cod.text.trim().isEmpty ? _subtotal : (_paisa(_cod.text) ?? _subtotal);
+  int get _deliveryFee => _paisa(_delivery.text) ?? 0;
+
+  /// Items + delivery charge: what COD is unless the seller typed one.
+  int get _total => orderTotal(items: _subtotal, delivery: _deliveryFee);
+
+  /// The total, or null while a named line has no price to add up.
+  int? get _pricedTotal {
+    for (final line in _lines) {
+      if (line.name.text.trim().isEmpty) continue;
+      if ((_paisa(line.price.text) ?? 0) <= 0) return null;
+    }
+    return _total;
+  }
+
+  /// Blank COD means "the order total", as the hint under it shows.
+  int get _codAmount => _codByHand ? (_paisa(_cod.text) ?? _total) : _total;
 
   Future<void> _choose(_Line line) async {
     final picked = await ProductPickerSheet.show(
@@ -288,6 +317,7 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
       if (_name.text.trim().isNotEmpty) 'customer_name': _name.text.trim(),
       if (_address.text.trim().isNotEmpty) 'address': _address.text.trim(),
       'cod_amount_paisa': _codAmount,
+      'delivery_fee_paisa': _deliveryFee,
       'confirmation': ?confirmation,
     };
     final chats = ref.read(chatOrdersRepositoryProvider);
@@ -332,6 +362,7 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
             customerName: body['customer_name'] as String?,
             address: body['address'] as String?,
             codAmountPaisa: body['cod_amount_paisa'] as int,
+            deliveryFeePaisa: body['delivery_fee_paisa'] as int,
             channel: 'PASTE_PARSE',
             clientId: _draft.id,
             confirmation: body['confirmation'] as String?,
@@ -516,6 +547,21 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
               onChoose: () => unawaited(_choose(_lines[i])),
             ),
           const SizedBox(height: EcomsbdSpacing.md),
+          LabelledField(
+            key: const ValueKey('qo.deliveryField'),
+            label: context.tr('qo.delivery'),
+            controller: _delivery,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9০-৯.,]')),
+            ],
+            hint: '0',
+            onChanged: (_) => setState(() {}),
+            validator: (value) => _paisa(value ?? '') == null
+                ? context.tr('qo.amountError')
+                : null,
+          ),
+          const SizedBox(height: EcomsbdSpacing.sm),
           _Marked(
             show: _marked('amount'),
             child: LabelledField(
@@ -528,12 +574,28 @@ class _QuickOrderFormState extends ConsumerState<QuickOrderForm> {
               inputFormatters: <TextInputFormatter>[
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9০-৯.,]')),
               ],
-              hint: _subtotal == 0 ? null : Money(_subtotal).format(),
+              // Blank follows the order total; typing sets it by hand.
+              hint: _total == 0 ? null : Money(_total).format(),
+              onChanged: (value) =>
+                  setState(() => _codByHand = value.trim().isNotEmpty),
               validator: (value) => _paisa(value ?? '') == null
                   ? context.tr('qo.amountError')
                   : null,
             ),
           ),
+          if (codDiffers(
+            byHand: _codByHand,
+            typed: _paisa(_cod.text),
+            total: _pricedTotal,
+          ))
+            _Notice(
+              key: const ValueKey('qo.codDiffers'),
+              text: context
+                  .tr('qo.codDiffers')
+                  .replaceAll('{cod}', Money(_paisa(_cod.text) ?? 0).format())
+                  .replaceAll('{total}', Money(_total).format()),
+              tone: Tone.warning,
+            ),
           if (draft.warnings.contains('COD_MISMATCH'))
             _Notice(
               key: const ValueKey('qo.codMismatch'),

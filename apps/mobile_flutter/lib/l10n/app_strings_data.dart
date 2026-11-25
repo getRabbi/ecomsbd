@@ -2041,6 +2041,8 @@ const Map<String, String> _secEn = <String, String>{
   'ns.whatWeTell': 'What we tell you about',
   'oc.addItem': 'Add item',
   'oc.amountError': 'Enter an amount like 1250',
+  'oc.codDiffers':
+      'COD {cod} is not the order total {total}. The courier will collect {cod}. Clear the field to use the total.',
   'oc.checkTitle': 'Check before saving',
   'oc.deliveryAddress': 'Delivery address',
   'oc.editText': 'Edit text',
@@ -2870,6 +2872,8 @@ const Map<String, String> _secBn = <String, String>{
   'ns.whatWeTell': 'কী কী বিষয়ে জানানো হবে',
   'oc.addItem': 'পণ্য যোগ করুন',
   'oc.amountError': 'টাকার অঙ্ক দিন, যেমন ১২৫০',
+  'oc.codDiffers':
+      'COD {cod}, কিন্তু অর্ডারের মোট {total}। কুরিয়ার {cod} নেবে। মোট টাকা নিতে ঘরটি খালি করুন।',
   'oc.checkTitle': 'সেভ করার আগে দেখে নিন',
   'oc.deliveryAddress': 'ডেলিভারির ঠিকানা',
   'oc.editText': 'লেখা এডিট করুন',

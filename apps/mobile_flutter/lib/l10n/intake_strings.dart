@@ -113,6 +113,9 @@ const intakeEn = <String, String>{
   'qo.pickVariant': 'Choose size or colour',
   'qo.notInCatalog': 'Not in your catalogue; saved as written.',
   'qo.cod': 'COD to collect (৳)',
+  'qo.delivery': 'Delivery charge (৳)',
+  'qo.codDiffers':
+      'COD {cod} is not the order total {total}. The courier will collect {cod}. Clear the field to use the total.',
   'qo.codCatalog': 'Worked out from your prices and delivery charge. Check it.',
   'qo.codMismatch':
       'The amount in the chat does not match your prices and delivery '
@@ -258,6 +261,9 @@ const intakeBn = <String, String>{
   'qo.pickVariant': 'সাইজ বা রং বেছে নিন',
   'qo.notInCatalog': 'আপনার ক্যাটালগে নেই; যেমন লেখা তেমন সেভ হবে।',
   'qo.cod': 'যত টাকা COD নেবেন (৳)',
+  'qo.delivery': 'ডেলিভারি চার্জ (৳)',
+  'qo.codDiffers':
+      'COD {cod}, কিন্তু অর্ডারের মোট {total}। কুরিয়ার {cod} নেবে। মোট টাকা নিতে ঘরটি খালি করুন।',
   'qo.codCatalog': 'আপনার দাম আর ডেলিভারি চার্জ থেকে হিসাব করা। দেখে নিন।',
   'qo.codMismatch':
       'চ্যাটে লেখা টাকা আপনার দাম আর ডেলিভারি চার্জের হিসাবের সাথে মেলে না। '

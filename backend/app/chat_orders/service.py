@@ -582,6 +582,22 @@ async def _apply_delivery_rules(
     draft.cod_amount_paisa, draft.cod_source = calculated, "CATALOG"
 
 
+def draft_delivery_fee(draft: ChatOrderDraft) -> int | None:
+    """The delivery charge inside a draft's calculated COD, or ``None``.
+
+    A ``CATALOG`` COD is the catalogue total plus the zone charge (zero when no
+    zone or rule applied), so the charge is the difference. It is handed to the
+    seller as the order's delivery charge, so the order's total and its COD
+    agree (spec WP0.4). A COD stated in chat says nothing about delivery.
+    """
+    if draft.cod_source != "CATALOG" or draft.cod_amount_paisa is None:
+        return None
+    items_total = _catalogue_total(draft.items)
+    if items_total is None or draft.cod_amount_paisa < items_total:
+        return None
+    return draft.cod_amount_paisa - items_total
+
+
 def _catalogue_total(items: list[dict[str, Any]]) -> int | None:
     total = 0
     for item in items:
@@ -870,7 +886,9 @@ async def confirm(
             area=payload.area,
             cod_amount_paisa=payload.cod_amount_paisa,
             discount_paisa=payload.discount_paisa,
-            delivery_fee_paisa=payload.delivery_fee_paisa,
+            delivery_fee_paisa=payload.delivery_fee_paisa
+            if payload.delivery_fee_paisa is not None
+            else (draft_delivery_fee(draft) or 0),
             note=payload.note,
             # The chat itself is not copied onto the order: raw messages have
             # their own, shorter retention.
@@ -993,6 +1011,8 @@ def draft_view(
         "items": draft.items,
         "cod_amount_paisa": draft.cod_amount_paisa,
         "cod_source": draft.cod_source,
+        # The zone charge inside a calculated COD (spec WP0.4); null when unknown.
+        "delivery_fee_paisa": draft_delivery_fee(draft),
         "notes": draft.notes,
         "warnings": draft.warnings,
         "uncertain_fields": draft.uncertain_fields,

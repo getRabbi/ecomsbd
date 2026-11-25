@@ -63,7 +63,9 @@ class ConfirmPayload(BaseModel):
     area: str | None = Field(default=None, max_length=120)
     cod_amount_paisa: int | None = Field(default=None, ge=0)
     discount_paisa: int = Field(default=0, ge=0)
-    delivery_fee_paisa: int = Field(default=0, ge=0)
+    #: Omitted: the zone charge already inside the draft's calculated COD
+    #: (``delivery_fee_paisa`` in the draft view), else 0. Spec WP0.4.
+    delivery_fee_paisa: int | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=4000)
     #: V4 WP2.1: "Confirm & call customer" (``REQUEST``) or "Already confirmed in
     #: chat" (``SELLER_CHAT``). Ignored while ``confirmation_engine_enabled`` is off.

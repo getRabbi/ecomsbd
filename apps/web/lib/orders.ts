@@ -75,6 +75,8 @@ export interface OrderPrefill {
   address?: string;
   items?: { name: string; quantity: number; unit_price_paisa: number | null; variant_label?: string | null }[];
   cod_amount_paisa?: number | null;
+  /** A chat draft's zone charge (its COD already includes it). */
+  delivery_fee_paisa?: number | null;
   note?: string;
   source_text?: string;
   channel?: 'MANUAL' | 'PASTE_PARSE';

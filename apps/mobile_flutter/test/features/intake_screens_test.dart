@@ -684,6 +684,76 @@ void main() {
       expect(finish, {'conversationId': 'c1', 'created': true});
     });
 
+    testWidgets('the zone charge is the delivery charge and COD follows it', (
+      tester,
+    ) async {
+      // Spec WP0.4 / launch run 13 D1: 2 × 900 + 60 zone charge = 1860.
+      final setup = await open(
+        tester,
+        'en',
+        reply({...draft(), 'delivery_fee_paisa': 6000}),
+      );
+      setup.fake.adapter.onJson('POST', '/chat-orders/d1/confirm', {
+        'order': orderJson(id: 'o1', number: 'CP-20261119-0001'),
+        'duplicate_check': null,
+        'replayed': false,
+      });
+      // The calculated COD follows the total: the field is blank, the
+      // delivery charge carries the zone charge.
+      expect(find.text('60'), findsWidgets);
+      await _reveal(tester, 'qo.deliveryField');
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('qo.deliveryField')),
+          matching: find.byType(TextFormField),
+        ),
+        '100',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('qo.codDiffers')), findsNothing);
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+      final body = setup.fake.adapter
+          .to('POST', '/chat-orders/d1/confirm')
+          .single
+          .jsonBody;
+      expect(body['delivery_fee_paisa'], 10000);
+      expect(body['cod_amount_paisa'], 190000);
+    });
+
+    testWidgets('a COD typed on the sheet is kept and flagged', (tester) async {
+      final setup = await open(
+        tester,
+        'en',
+        reply({...draft(), 'delivery_fee_paisa': 6000}),
+      );
+      setup.fake.adapter.onJson('POST', '/chat-orders/d1/confirm', {
+        'order': orderJson(id: 'o1', number: 'CP-20261119-0001'),
+        'duplicate_check': null,
+        'replayed': false,
+      });
+      await _reveal(tester, 'qo.codField');
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('qo.codField')),
+          matching: find.byType(TextFormField),
+        ),
+        '1800',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('qo.codDiffers')), findsOneWidget);
+      await _reveal(tester, 'qo.create');
+      await tester.tap(find.byKey(const ValueKey('qo.create')));
+      await tester.pumpAndSettle();
+      final body = setup.fake.adapter
+          .to('POST', '/chat-orders/d1/confirm')
+          .single
+          .jsonBody;
+      expect(body['cod_amount_paisa'], 180000);
+      expect(body['delivery_fee_paisa'], 6000);
+    });
+
     testWidgets('an ambiguous product must be chosen before creating', (
       tester,
     ) async {

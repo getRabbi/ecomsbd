@@ -153,6 +153,7 @@ class ChatDraft {
     this.address,
     this.codAmountPaisa,
     this.codSource,
+    this.deliveryFeePaisa,
     this.notes,
     this.messageCount = 0,
     this.attachmentCount = 0,
@@ -190,6 +191,7 @@ class ChatDraft {
       ],
       codAmountPaisa: json['cod_amount_paisa'] as int?,
       codSource: json['cod_source'] as String?,
+      deliveryFeePaisa: json['delivery_fee_paisa'] as int?,
       notes: json['notes'] as String?,
       warnings: strings('warnings'),
       uncertainFields: strings('uncertain_fields'),
@@ -229,6 +231,10 @@ class ChatDraft {
   /// charge when delivery rules are on) or CHAT_MISMATCH (written, but far from
   /// the calculation).
   final String? codSource;
+
+  /// The zone charge inside a CATALOG COD, as the order's delivery charge
+  /// (spec WP0.4); null when the server does not know one.
+  final int? deliveryFeePaisa;
   final String? notes;
   final List<String> warnings;
   final List<String> uncertainFields;
