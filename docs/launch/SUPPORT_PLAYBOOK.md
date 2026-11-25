@@ -50,6 +50,12 @@ Queues to look at daily: `GET /v1/admin/ops/counts` (outbox / notification / web
   with the current key + secret, and whether the parcel shipped. After the reconnect, check
   `last_polled_at` moves on the next run. This is the only non-terminal provider parcel with no check in 24 h.
   The other two are `manual` parcels, which are never polled.
+- **Two courier accounts already in `NEEDS_RECONNECT`** (run 13 D2, 2026-11-25). The Steadfast one above
+  and a Pathao account of shop `01a196e1-…` (since 2026-11-01 12:39 UTC). Neither seller was ever told:
+  the daily alert scan times out before it reaches them (draft PR #59). From PR #57 a seller gets **one
+  push** the moment an account enters `NEEDS_RECONNECT`, and the Couriers page (web + phone) shows a red
+  banner with Reconnect. These two entered the state before that, so they get the banner but no push:
+  contact both sellers and ask them to reconnect with a fresh API key + secret from the courier panel.
 
 Escalate (operator): anything about money moving (ledger, payouts, reconciliation reversals), a
 cross-shop data report, a provider-wide outage longer than an hour, or a request to switch a feature
