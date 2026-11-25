@@ -122,6 +122,10 @@ export const strings = {
     'common.nothingHere': 'Nothing here yet',
     'common.language': 'Language',
     'legal.privacy': 'Privacy Policy',
+    'legal.terms': 'Terms of Service',
+    'auth.agreePrefix': 'By creating an account you agree to the',
+    'auth.agreeAnd': 'and the',
+    'auth.agreeSuffix': '.',
     'legal.deletion': 'Account deletion help',
     'legal.title': 'Legal',
 
@@ -761,6 +765,10 @@ export const strings = {
     'common.nothingHere': 'এখনও কিছু নেই',
     'common.language': 'ভাষা',
     'legal.privacy': 'গোপনীয়তা নীতি',
+    'legal.terms': 'সেবার শর্তাবলি',
+    'auth.agreePrefix': 'অ্যাকাউন্ট খুললে আপনি',
+    'auth.agreeAnd': 'ও',
+    'auth.agreeSuffix': ' মেনে নিচ্ছেন।',
     'legal.deletion': 'অ্যাকাউন্ট মুছে ফেলার সহায়তা',
     'legal.title': 'আইনি তথ্য',
 

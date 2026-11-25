@@ -5,6 +5,14 @@ Production: API `https://api.ecomsbd.com` (alias `https://api.scalemyprints.com`
 every feature free, billing off. Exact flag changes, times and rollbacks: `docs/build/PROGRESS.md`
 → "Launch log".
 
+## Legal pages
+
+| Page | Status |
+|---|---|
+| Privacy Policy `/privacy-policy` + `/privacy-policy/bn` | live (updated 2026-11-25, run 12) |
+| Account deletion `/account-deletion` + `/account-deletion/bn` | live |
+| Terms of Service `/terms` + `/terms/bn` | **draft, pending legal review** — written 2026-11-25 (launch run 13 D3) from what the product does (Free Launch Mode, the seller owns their data, courier accounts are the seller's, no guarantee of courier delivery). Linked from the site footer, the sign-up form, the sign-in footer, the legal pages and the workspace menu. Not reviewed by a lawyer: have it reviewed, then change this row to live. |
+
 ## Live for every shop
 
 | Feature | Flag (scope) | Since | What the seller does |

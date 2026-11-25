@@ -9,6 +9,7 @@ import {
   COURIERS,
   copy,
   deletionPath,
+  termsPath,
   fill,
   homeUrl,
   links,
@@ -1037,6 +1038,9 @@ export function HomePage({ locale }: { locale: Locale }) {
           <nav aria-label={t.footer.legal}>
             <p>{t.footer.legal}</p>
             <ul>
+              <li>
+                <Link href={termsPath[locale]}>{t.footer.terms}</Link>
+              </li>
               <li>
                 <Link href={privacyPath[locale]}>{t.footer.privacy}</Link>
               </li>

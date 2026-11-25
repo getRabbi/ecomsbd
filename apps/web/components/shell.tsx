@@ -297,6 +297,15 @@ function AccountMenu() {
             <span className="menuitem__main">{t('nav.settings')}</span>
           </Link>
           <Link
+            href={bn ? '/terms/bn' : '/terms'}
+            className="menuitem"
+            role="menuitem"
+            onClick={close}
+          >
+            <Icon name="document" size={16} />
+            <span className="menuitem__main">{t('legal.terms')}</span>
+          </Link>
+          <Link
             href={bn ? '/privacy-policy/bn' : '/privacy-policy'}
             className="menuitem"
             role="menuitem"
