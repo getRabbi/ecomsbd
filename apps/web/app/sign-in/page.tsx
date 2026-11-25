@@ -496,6 +496,15 @@ export default function SignInPage() {
 
                 {shownError ? <p className="formerror" role="alert">{shownError}</p> : null}
                 {info ? <div className="notice notice--good" role="status">{info}</div> : null}
+                {mode === 'signUp' ? (
+                  <p className="field__hint" data-testid="signup-terms">
+                    {t('auth.agreePrefix')}{' '}
+                    <Link href={bn ? '/terms/bn' : '/terms'}>{t('legal.terms')}</Link>{' '}
+                    {t('auth.agreeAnd')}{' '}
+                    <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'}>{t('legal.privacy')}</Link>
+                    {t('auth.agreeSuffix')}
+                  </p>
+                ) : null}
 
                 <button
                   type="submit"
@@ -518,6 +527,9 @@ export default function SignInPage() {
         </div>
 
         <footer className="auth__footer">
+          <Link href={bn ? '/terms/bn' : '/terms'} className="btn btn--ghost btn--sm">
+            {t('legal.terms')}
+          </Link>
           <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'} className="btn btn--ghost btn--sm">
             {t('legal.privacy')}
           </Link>

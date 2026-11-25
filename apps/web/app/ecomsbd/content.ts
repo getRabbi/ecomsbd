@@ -29,6 +29,7 @@ export const links = {
 export const homeUrl: Record<Locale, string> = { en: `${SITE_URL}/`, bn: `${SITE_URL}/bn` };
 export const privacyPath: Record<Locale, string> = { en: '/privacy-policy', bn: '/privacy-policy/bn' };
 export const deletionPath: Record<Locale, string> = { en: '/account-deletion', bn: '/account-deletion/bn' };
+export const termsPath: Record<Locale, string> = { en: '/terms', bn: '/terms/bn' };
 
 /** In-page sections the header links to; each must exist as an element id. */
 export const sectionIds = {
@@ -487,6 +488,7 @@ const en = {
     webApp: 'Web app',
     android: 'Android app',
     ios: 'iPhone app · Coming soon',
+    terms: 'Terms of Service',
     privacy: 'Privacy Policy',
     deletion: 'Account deletion',
     rights: 'All rights reserved.',
@@ -913,6 +915,7 @@ const bn: SiteCopy = {
     webApp: 'ওয়েব অ্যাপ',
     android: 'Android অ্যাপ',
     ios: 'iPhone অ্যাপ · শীঘ্রই আসছে',
+    terms: 'সেবার শর্তাবলি',
     privacy: 'গোপনীয়তা নীতি',
     deletion: 'অ্যাকাউন্ট মুছে ফেলা',
     rights: 'সর্বস্বত্ব সংরক্ষিত।',

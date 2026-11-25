@@ -7,6 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const home = { en: SITE_URL, bn: homeUrl.bn };
   const privacy = { en: `${SITE_URL}/privacy-policy`, bn: `${SITE_URL}/privacy-policy/bn` };
   const deletion = { en: `${SITE_URL}/account-deletion`, bn: `${SITE_URL}/account-deletion/bn` };
+  const terms = { en: `${SITE_URL}/terms`, bn: `${SITE_URL}/terms/bn` };
   return [
     { url: home.en, alternates: { languages: home } },
     { url: home.bn, alternates: { languages: home } },
@@ -15,5 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: privacy.bn, alternates: { languages: privacy } },
     { url: deletion.en, alternates: { languages: deletion } },
     { url: deletion.bn, alternates: { languages: deletion } },
+    { url: terms.en, alternates: { languages: terms } },
+    { url: terms.bn, alternates: { languages: terms } },
   ];
 }

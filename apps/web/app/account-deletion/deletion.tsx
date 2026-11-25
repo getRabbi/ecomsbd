@@ -59,6 +59,7 @@ export function AccountDeletion({ locale }: { locale: PolicyLocale }) {
       </main>
       <footer className={styles.footer}>
         <span>ecomsbd · ecomsbd.com</span>
+        <Link href={bn ? '/terms/bn' : '/terms'}>{bn ? 'সেবার শর্তাবলি' : 'Terms of Service'}</Link>
         <Link href={bn ? '/privacy-policy/bn' : '/privacy-policy'}>{bn ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}</Link>
         <Link href={bn ? '/account-deletion/bn' : '/account-deletion'}>{bn ? 'অ্যাকাউন্ট মুছে ফেলা' : 'Account deletion'}</Link>
         <StoreLinks locale={locale} compact className={styles.footerApps} />

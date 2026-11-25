@@ -79,6 +79,8 @@ test('support and legal pages name ecomsbd.com as canonical', async () => {
     'privacy-policy/bn/page.tsx': ['https://ecomsbd.com/privacy-policy/bn', 'https://ecomsbd.com/privacy-policy'],
     'account-deletion/page.tsx': ['https://ecomsbd.com/account-deletion', 'https://ecomsbd.com/account-deletion/bn'],
     'account-deletion/bn/page.tsx': ['https://ecomsbd.com/account-deletion/bn', 'https://ecomsbd.com/account-deletion'],
+    'terms/page.tsx': ['https://ecomsbd.com/terms', 'https://ecomsbd.com/terms/bn'],
+    'terms/bn/page.tsx': ['https://ecomsbd.com/terms/bn', 'https://ecomsbd.com/terms'],
   };
   for (const [file, urls] of Object.entries(pages)) {
     const source = await readFile(new URL(`../app/${file}`, import.meta.url), 'utf8');
