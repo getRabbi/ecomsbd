@@ -87,6 +87,36 @@ class TestOrderCreation:
         result = await create_order(client, session, cod_amount_paisa=100_000)
         assert result["order"]["cod_amount_paisa"] == 100_000
 
+    async def test_a_cod_that_follows_the_total_follows_a_new_delivery_charge(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        # Spec WP0.4 / launch run 13 D1: COD = items + delivery charge.
+        session = await signed_in_shop(client, unique_phone)
+        order = (await create_order(client, session))["order"]
+        assert order["cod_amount_paisa"] == 125_000
+        response = await client.patch(
+            f"/v1/orders/{order['id']}",
+            json={"delivery_fee_paisa": 6_000},
+            headers=auth_header(session),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["cod_amount_paisa"] == 131_000
+
+    async def test_a_hand_typed_cod_survives_a_new_delivery_charge(
+        self, client: AsyncClient, unique_phone: str
+    ) -> None:
+        session = await signed_in_shop(client, unique_phone)
+        order = (await create_order(client, session, cod_amount_paisa=100_000))["order"]
+        response = await client.patch(
+            f"/v1/orders/{order['id']}",
+            json={"delivery_fee_paisa": 6_000, "discount_paisa": 1_000},
+            headers=auth_header(session),
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["cod_amount_paisa"] == 100_000, "a COD set by hand is never recomputed"
+        assert body["delivery_fee_paisa"] == 6_000
+
     async def test_an_order_needs_at_least_one_item(
         self, client: AsyncClient, unique_phone: str
     ) -> None:

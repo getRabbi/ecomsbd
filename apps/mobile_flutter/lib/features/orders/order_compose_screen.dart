@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/cod.dart';
 import '../../core/money.dart';
 import '../../data/commerce/commerce_providers.dart';
 import '../../data/commerce/models.dart';
@@ -121,6 +122,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
 
   String? _sourceText;
 
+  /// The seller typed the COD (spec WP0.4). Otherwise the field stays blank
+  /// and COD is the order total, recomputed on every change.
+  bool _codByHand = false;
+
   @override
   void initState() {
     super.initState();
@@ -176,14 +181,34 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
 
   /// What the seller will collect.
   ///
-  /// A blank COD field means "the items total", which is exactly what the hint
-  /// under it shows. Reading blank as ৳0 would send a zero-COD order for a
-  /// parcel the courier is about to collect money for.
+  /// A blank COD field means "the order total" (items + delivery charge),
+  /// which is exactly what the hint under it shows (spec WP0.4). Reading
+  /// blank as ৳0 would send a zero-COD order for a parcel the courier is
+  /// about to collect money for.
   int get _codAmount {
-    if (_cod.text.trim().isEmpty) {
-      return _subtotal;
+    if (!_codByHand || _cod.text.trim().isEmpty) {
+      return _total;
     }
-    return _paisa(_cod.text) ?? _subtotal;
+    return _paisa(_cod.text) ?? _total;
+  }
+
+  int get _total =>
+      orderTotal(items: _subtotal, delivery: _paisa(_delivery.text) ?? 0);
+
+  /// The total, or null while an item has no price to add up.
+  int? get _pricedTotal {
+    for (final item in _items) {
+      if (item.name.text.trim().isEmpty) continue;
+      if ((_paisa(item.price.text) ?? 0) <= 0) return null;
+    }
+    return _total;
+  }
+
+  /// A COD that came with the form (parsed, or a chat draft's): kept as the
+  /// seller's own figure only when it is not the total it would follow.
+  void _takeCod(int? cod) {
+    _codByHand = codSetByHand(cod, _pricedTotal);
+    _cod.text = _codByHand && cod != null ? _DraftItem._taka(cod) : '';
   }
 
   int get _subtotal {
@@ -240,9 +265,6 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
           ? ''
           : (parsed.selectedPhone ?? '');
       _address.text = parsed.address ?? '';
-      _cod.text = parsed.codAmountPaisa == null
-          ? ''
-          : _DraftItem._taka(parsed.codAmountPaisa!);
       _note.text = parsed.notes ?? '';
       _items = parsed.items.isEmpty
           ? <_DraftItem>[_DraftItem()]
@@ -258,6 +280,8 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         for (final field in <String>['name', 'phone', 'address', 'amount'])
           if (parsed.isUncertain(field)) field,
       };
+      // After the items: a chat amount equal to them follows the total.
+      _takeCod(parsed.codAmountPaisa);
       _pasting = false;
     });
   }
@@ -301,9 +325,12 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
         for (final field in <String>['name', 'phone', 'address', 'amount'])
           if (draft.isUncertain(field) || draft.isMissing(field)) field,
       };
-      if (draft.codAmountPaisa == null) {
-        _cod.text = '';
+      // The zone charge inside a calculated COD is the delivery charge, so
+      // the order's total and its COD agree.
+      if (draft.deliveryFeePaisa != null) {
+        _delivery.text = _DraftItem._taka(draft.deliveryFeePaisa!);
       }
+      _takeCod(draft.codAmountPaisa);
     });
   }
 
@@ -725,9 +752,10 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                                 RegExp(r'[0-9০-৯.]'),
                               ),
                             ],
-                            hint: _subtotal == 0
-                                ? null
-                                : Money(_subtotal).format(),
+                            hint: _total == 0 ? null : Money(_total).format(),
+                            onChanged: (value) => setState(
+                              () => _codByHand = value.trim().isNotEmpty,
+                            ),
                             validator: (value) => _paisa(value ?? '') == null
                                 ? context.tr('oc.amountError')
                                 : null,
@@ -748,10 +776,32 @@ class _OrderComposeScreenState extends ConsumerState<OrderComposeScreen> {
                             ),
                           ],
                           hint: context.tr('common.optional'),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
                     ],
                   ),
+                  if (codDiffers(
+                    byHand: _codByHand,
+                    typed: _paisa(_cod.text),
+                    total: _pricedTotal,
+                  ))
+                    Padding(
+                      key: const ValueKey('oc.codDiffers'),
+                      padding: const EdgeInsets.only(top: EcomsbdSpacing.sm),
+                      child: Text(
+                        context
+                            .tr('oc.codDiffers')
+                            .replaceAll(
+                              '{cod}',
+                              Money(_paisa(_cod.text) ?? 0).format(),
+                            )
+                            .replaceAll('{total}', Money(_total).format()),
+                        style: EcomsbdType.caption.copyWith(
+                          color: EcomsbdColors.amber,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: EcomsbdSpacing.md),
                   Row(
                     children: <Widget>[

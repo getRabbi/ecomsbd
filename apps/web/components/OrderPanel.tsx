@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 
 import { Chip, Drawer, ErrorState, Row } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
+import { codDiffers, codSetByHand, effectiveCod, orderTotalPaisa } from '@/lib/cod';
 import { courierHistoryChip, latestCourierHistory } from '@/lib/courier-history';
 import {
   bookableReasonKey,
@@ -321,6 +322,11 @@ export function OrderPanel({
           {data.discount_paisa ? <Row label={t('oc.discount')} value={`-${formatPaisa(data.discount_paisa, { locale })}`} /> : null}
           <Row label={t('oc.deliveryFee')} value={formatPaisa(data.delivery_fee_paisa, { locale })} />
           <Row label={<strong>{t('orders.cod')}</strong>} value={<strong>{formatPaisa(data.cod_amount_paisa, { locale })}</strong>} />
+          {data.cod_amount_paisa !== storedTotal(data) ? (
+            <p className="card__hint" data-testid="cod-differs-saved">
+              <Chip label={t('od.codDiffers', { total: formatPaisa(storedTotal(data), { locale }) })} tone="warn" />
+            </p>
+          ) : null}
           {can('money.view') ? (
             <Row
               label={t('orders.profit')}
@@ -403,22 +409,42 @@ export function OrderPanel({
   );
 }
 
-/** Delivery details, items' money fields and the note — while the order is still editable. */
+/** Items − discount + delivery charge, as the saved order has them. */
+function storedTotal(order: Pick<OrderDetail, 'subtotal_paisa' | 'discount_paisa' | 'delivery_fee_paisa'>): number {
+  return Math.max(0, order.subtotal_paisa - order.discount_paisa + order.delivery_fee_paisa);
+}
+
+/**
+ * Delivery details, items' money fields and the note — while the order is still editable.
+ *
+ * COD (spec WP0.4): a COD equal to the saved total follows the new delivery
+ * charge and discount; one that differed was set by hand and stays, with a
+ * warning while it differs.
+ */
 function EditDetails({ order, onSaved }: { order: OrderDetail; onSaved: () => void }) {
-  const { t } = useSession();
+  const { t, locale } = useSession();
   const [address, setAddress] = useState(order.delivery_address_raw ?? '');
   const [district, setDistrict] = useState(order.delivery_district ?? '');
   const [area, setArea] = useState(order.delivery_area ?? '');
-  const [cod, setCod] = useState(paisaToTaka(order.cod_amount_paisa));
+  const [codByHand, setCodByHand] = useState(() => codSetByHand(order.cod_amount_paisa, storedTotal(order)));
+  const [cod, setCod] = useState(() => (codByHand ? paisaToTaka(order.cod_amount_paisa) : ''));
   const [fee, setFee] = useState(paisaToTaka(order.delivery_fee_paisa));
   const [discount, setDiscount] = useState(paisaToTaka(order.discount_paisa));
   const [note, setNote] = useState(order.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The items are not edited here, so the saved subtotal is the items' part.
+  const total = orderTotalPaisa(
+    [{ unitPricePaisa: order.subtotal_paisa, quantity: 1 }],
+    takaToPaisa(fee || '0'),
+    takaToPaisa(discount || '0'),
+  );
+  const typed = takaToPaisa(cod);
+
   async function save(event: FormEvent) {
     event.preventDefault();
-    const codPaisa = takaToPaisa(cod);
+    const codPaisa = effectiveCod(codByHand, typed, total);
     const feePaisa = takaToPaisa(fee || '0');
     const discountPaisa = takaToPaisa(discount || '0');
     if (codPaisa === null || feePaisa === null || discountPaisa === null) {
@@ -463,7 +489,16 @@ function EditDetails({ order, onSaved }: { order: OrderDetail; onSaved: () => vo
         </label>
         <label className="field">
           <span className="field__label">{t('orders.cod')}</span>
-          <input className="input" inputMode="decimal" value={cod} onChange={(event) => setCod(event.target.value)} />
+          <input
+            className="input"
+            inputMode="decimal"
+            value={codByHand ? cod : paisaToTaka(total)}
+            onChange={(event) => {
+              setCod(event.target.value);
+              setCodByHand(event.target.value.trim() !== '');
+            }}
+          />
+          <span className="field__hint">{t('oc.codHint')}</span>
         </label>
         <label className="field">
           <span className="field__label">{t('oc.deliveryFee')}</span>
@@ -478,6 +513,21 @@ function EditDetails({ order, onSaved }: { order: OrderDetail; onSaved: () => vo
           <textarea className="textarea" rows={2} maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
       </div>
+      {codDiffers(codByHand, typed, total) ? (
+        <div className="notice notice--warn" style={{ display: 'block' }} role="status">
+          {t('oc.codDiffers', { cod: formatPaisa(typed ?? 0, { locale }), total: formatPaisa(total ?? 0, { locale }) })}{' '}
+          <button
+            type="button"
+            className="linkbtn"
+            onClick={() => {
+              setCod('');
+              setCodByHand(false);
+            }}
+          >
+            {t('oc.useTotal')}
+          </button>
+        </div>
+      ) : null}
       {error ? <p className="formerror">{error}</p> : null}
       <p className="card__hint">{t('od.editHint')}</p>
       <button type="submit" className="btn btn--primary btn--sm" disabled={busy}>

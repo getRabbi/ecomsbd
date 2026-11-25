@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { Chip, Drawer, Row } from '@/components/ui';
 import { api, type Page } from '@/lib/api';
+import { codDiffers, codSetByHand, effectiveCod, orderTotalPaisa, type TotalLine } from '@/lib/cod';
 import { formatPaisa } from '@/lib/money';
 import {
   errorMessage,
@@ -80,6 +81,19 @@ function blankLine(): Line {
   };
 }
 
+/** The named lines as the COD rule sees them (blank rows are not items). */
+function totalLines(lines: Line[]): TotalLine[] {
+  return lines
+    .filter((line) => line.productId || line.productName.trim())
+    .map((line) => {
+      const quantity = Number(line.quantity);
+      return {
+        unitPricePaisa: line.price.trim() ? takaToPaisa(line.price) : null,
+        quantity: Number.isInteger(quantity) ? quantity : null,
+      };
+    });
+}
+
 /**
  * The order composer — new order, paste review and chat-draft review all end
  * here, so there is one form and one set of rules.
@@ -89,6 +103,10 @@ function blankLine(): Line {
  * duplicate warning comes from `/orders/check-duplicates`, the same advisory
  * check the phone uses. A warning never blocks saving — a customer ordering
  * twice in a day is a real workflow, and the seller is the one who knows.
+ *
+ * COD (spec WP0.4): the field shows items + delivery − discount and follows
+ * every change until the seller types an amount; a typed amount is kept and
+ * warned about while it differs from the total (`lib/cod.ts`).
  */
 export function OrderComposer({
   prefill,
@@ -118,9 +136,20 @@ export function OrderComposer({
         }))
       : [blankLine()],
   );
-  const [deliveryFee, setDeliveryFee] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState(paisaToTaka(prefill?.delivery_fee_paisa ?? null));
   const [discount, setDiscount] = useState('');
-  const [cod, setCod] = useState(paisaToTaka(prefill?.cod_amount_paisa ?? null));
+  // A prefilled COD equal to the total it would follow is not the seller's own figure.
+  const [codByHand, setCodByHand] = useState(() =>
+    codSetByHand(
+      prefill?.cod_amount_paisa,
+      orderTotalPaisa(
+        (prefill?.items ?? []).map((item) => ({ unitPricePaisa: item.unit_price_paisa, quantity: item.quantity || 1 })),
+        prefill?.delivery_fee_paisa ?? 0,
+        0,
+      ),
+    ),
+  );
+  const [cod, setCod] = useState(() => (codByHand ? paisaToTaka(prefill?.cod_amount_paisa ?? null) : ''));
   const [note, setNote] = useState(prefill?.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,8 +184,14 @@ export function OrderComposer({
 
   const itemNames = lines.map((line) => line.productName.trim()).filter(Boolean);
   const codPaisa = takaToPaisa(cod);
+  const total = orderTotalPaisa(
+    totalLines(lines),
+    deliveryFee.trim() ? takaToPaisa(deliveryFee) : 0,
+    discount.trim() ? takaToPaisa(discount) : 0,
+  );
+  const collect = effectiveCod(codByHand, codPaisa, total);
   const probe = useDebounced(
-    JSON.stringify({ phone: settledPhone, cod: codPaisa ?? 0, items: itemNames }),
+    JSON.stringify({ phone: settledPhone, cod: collect ?? 0, items: itemNames }),
     600,
   );
   const [duplicates, setDuplicates] = useState<DuplicateCheck | null>(null);
@@ -230,7 +265,7 @@ export function OrderComposer({
     }
     const fee = deliveryFee.trim() ? takaToPaisa(deliveryFee) : 0;
     const off = discount.trim() ? takaToPaisa(discount) : 0;
-    if (fee === null || off === null || (cod.trim() && codPaisa === null)) {
+    if (fee === null || off === null || (codByHand && cod.trim() && codPaisa === null)) {
       setError(t('oc.badAmount'));
       return;
     }
@@ -242,7 +277,9 @@ export function OrderComposer({
       address: address.trim() || undefined,
       district: district.trim() || undefined,
       area: area.trim() || undefined,
-      cod_amount_paisa: cod.trim() ? codPaisa : undefined,
+      // Set by hand: sent as typed. Otherwise left out, so the API's own total
+      // (items + delivery − discount, catalogue prices included) is the COD.
+      cod_amount_paisa: codByHand && cod.trim() ? codPaisa : undefined,
       delivery_fee_paisa: fee,
       discount_paisa: off,
       note: note.trim() || undefined,
@@ -386,7 +423,17 @@ export function OrderComposer({
           </label>
           <label className="field">
             <span className="field__label">{t('orders.cod')}</span>
-            <input className="input" inputMode="decimal" value={cod} onChange={(event) => setCod(event.target.value)} />
+            <input
+              className="input"
+              inputMode="decimal"
+              value={codByHand ? cod : paisaToTaka(total)}
+              placeholder={total === null ? t('oc.codTotal') : undefined}
+              onChange={(event) => {
+                setCod(event.target.value);
+                // Clearing the field hands COD back to the total.
+                setCodByHand(event.target.value.trim() !== '');
+              }}
+            />
             <span className="field__hint">{t('oc.codHint')}</span>
           </label>
           <label className="field formgrid__full">
@@ -394,6 +441,22 @@ export function OrderComposer({
             <textarea className="textarea" rows={2} maxLength={4000} value={note} onChange={(event) => setNote(event.target.value)} />
           </label>
         </div>
+
+        {codDiffers(codByHand, codPaisa, total) ? (
+          <div className="notice notice--warn" style={{ display: 'block' }} role="status" data-testid="cod-differs">
+            {t('oc.codDiffers', { cod: formatPaisa(codPaisa ?? 0, { locale }), total: formatPaisa(total ?? 0, { locale }) })}{' '}
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => {
+                setCod('');
+                setCodByHand(false);
+              }}
+            >
+              {t('oc.useTotal')}
+            </button>
+          </div>
+        ) : null}
 
         {duplicates?.possible_duplicate ? (
           <div className="notice notice--warn" style={{ display: 'block' }} role="status">

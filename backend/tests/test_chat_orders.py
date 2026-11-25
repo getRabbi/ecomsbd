@@ -607,6 +607,52 @@ async def test_catalogue_cod_adds_the_zone_charge(client, unique_phone, delivery
     assert "amount" in draft.uncertain_fields
 
 
+async def test_the_zone_charge_becomes_the_order_delivery_charge(
+    client, unique_phone, delivery_rules_on
+):
+    """COD = items + delivery charge on the order too (spec WP0.4, launch run 13 D1).
+
+    The zone charge inside a calculated COD is shown as the draft's delivery
+    charge, and a confirm that leaves the delivery charge and COD out gets
+    both from the draft, so the invoice total and the COD agree.
+    """
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    product = await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000)
+    await _send_chat(client, CHAT)
+    (draft,) = await _drafts(shop)
+    headers = auth_header(shop)
+
+    view = (await client.get(f"/v1/chat-orders/{draft.id}", headers=headers)).json()
+    assert view["cod_amount_paisa"] == 191_000 and view["delivery_fee_paisa"] == 6_000
+
+    variant = next(v for v in product["variants"] if v["name"] == "Black / XL")
+    body = {
+        "phone": "01712345678",
+        "address": "Mirpur 10, Dhaka",
+        "items": [{"product_id": product["id"], "variant_id": variant["id"], "quantity": 2}],
+    }
+    confirmed = await client.post(f"/v1/chat-orders/{draft.id}/confirm", headers=headers, json=body)
+    assert confirmed.status_code == 200, confirmed.text
+    order = confirmed.json()["order"]
+    assert order["delivery_fee_paisa"] == 6_000
+    assert order["cod_amount_paisa"] == 191_000 == order["subtotal_paisa"] + 6_000
+
+
+async def test_a_stated_chat_amount_carries_no_delivery_charge(
+    client, unique_phone, delivery_rules_on
+):
+    shop = await signed_in_shop(client, unique_phone)
+    await _connect(shop, "MESSENGER", PAGE)
+    await _panjabi_catalogue(client, shop)
+    await _rules(client, shop, inside_dhaka_charge_paisa=6_000)
+    await _send_chat(client, [*CHAT, "মোট ১৮৫০ টাকা"])
+    (draft,) = await _drafts(shop)
+    view = (await client.get(f"/v1/chat-orders/{draft.id}", headers=auth_header(shop))).json()
+    assert view["cod_source"] == "PARSED" and view["delivery_fee_paisa"] is None
+
+
 async def test_a_chat_amount_far_from_the_calculation_is_a_mismatch(
     client, unique_phone, delivery_rules_on
 ):

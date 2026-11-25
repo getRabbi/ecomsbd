@@ -212,6 +212,83 @@ void main() {
     });
   });
 
+  // Spec WP0.4 / launch run 13 D1: COD = items + delivery charge unless the
+  // seller typed it. Field order: 0 phone … 5 item, 6 qty, 7 price, 8 COD,
+  // 9 delivery charge.
+  group('COD follows the order total', () {
+    testWidgets('a pasted chat amount follows a delivery charge typed later', (
+      tester,
+    ) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson('POST', '/orders/parse', <String, dynamic>{
+          'customer_name': 'LAUNCH TEST',
+          'phones': <String>['01700000012'],
+          'selected_phone': '01700000012',
+          'address': 'Mirpur 10, Dhaka',
+          'items': <dynamic>[
+            <String, dynamic>{
+              'name': 'Panjabi',
+              'quantity': 1,
+              'unit_price_paisa': 120000,
+            },
+          ],
+          'cod_amount_paisa': 120000,
+          'confidence': <String, dynamic>{'amount': 1.0},
+          'warnings': <String>[],
+          'needs_phone_selection': false,
+          'is_low_confidence': false,
+          'source_text': '1ta Panjabi, 1200 taka',
+        })
+        ..adapter.onJson('POST', '/orders', <String, dynamic>{
+          'order': orderJson(),
+          'duplicate_check': null,
+        });
+      await pumpCommerceScreen(
+        tester,
+        const OrderComposeScreen(startWithPaste: true),
+        harness: harness,
+      );
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        '1ta Panjabi, 1200 taka',
+      );
+      await tester.tap(find.text('Read the message'));
+      await settle(tester);
+
+      await tester.enterText(find.byType(TextFormField).at(9), '60');
+      await settle(tester, frames: 2);
+      await tapAfterScroll(tester, find.text('Save order'));
+
+      final body = harness.adapter.to('POST', '/orders').single.jsonBody;
+      expect(body['delivery_fee_paisa'], 6000);
+      expect(body['cod_amount_paisa'], 126000);
+      expect(find.byKey(const ValueKey('oc.codDiffers')), findsNothing);
+    });
+
+    testWidgets('a COD typed by hand is kept and flagged', (tester) async {
+      final harness = CommerceHarness()
+        ..adapter.onJson('POST', '/orders', <String, dynamic>{
+          'order': orderJson(),
+          'duplicate_check': null,
+        });
+      await pumpCommerceScreen(
+        tester,
+        const OrderComposeScreen(),
+        harness: harness,
+      );
+      await _fillOrderForm(tester);
+      await tester.enterText(find.byType(TextFormField).at(9), '60');
+      await tester.enterText(find.byType(TextFormField).at(8), '1200');
+      await settle(tester, frames: 2);
+      expect(find.byKey(const ValueKey('oc.codDiffers')), findsOneWidget);
+
+      await tapAfterScroll(tester, find.text('Save order'));
+      final body = harness.adapter.to('POST', '/orders').single.jsonBody;
+      expect(body['cod_amount_paisa'], 120000);
+      expect(body['delivery_fee_paisa'], 6000);
+    });
+  });
+
   group('Adjust stock', () {
     testWidgets('sends a signed movement, never a new total', (tester) async {
       final harness = CommerceHarness()
