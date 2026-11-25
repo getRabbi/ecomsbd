@@ -394,6 +394,11 @@ async def test_the_confirm_link_goes_out_through_alpha_sms_and_unknown_is_never_
 
     monkeypatch.setattr(sms_service, "AlphaSmsTransport", with_fake)
     monkeypatch.setattr(links, "public_base", lambda: "https://app.ecomsbd.com")
+
+    async def switched_on(db: Any, tenant_id: Any) -> bool:
+        return True  # the shop's own switch (launch run 14)
+
+    monkeypatch.setattr(links, "shop_link_switch", switched_on)
     assert (await _connect(client, credentials={"api_key": KEY}, enabled=True)).status_code == 200
 
     from app.common.feature_flags import FlagKey

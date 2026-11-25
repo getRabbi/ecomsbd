@@ -1,7 +1,8 @@
 """The SMS confirm link (V4 WP2.3).
 
 After the last unanswered call, and only with ``confirmation_sms_link_enabled``
-on, an SMS transport configured and ``PUBLIC_WEB_URL`` set, the customer gets
+on, the shop's own switch on (Settings → SMS, default off; launch run 14), an
+SMS transport configured and ``PUBLIC_WEB_URL`` set, the customer gets
 one Banglish SMS with a link to a page where they confirm or cancel:
 
     ``<shop>: order Tk 1,250. Confirm/cancel: <PUBLIC_WEB_URL>/c/<token>``
@@ -58,6 +59,7 @@ if TYPE_CHECKING:
     from app.orders.service import OrderService
 
 __all__ = [
+    "SHOP_LINK_SWITCH",
     "SHOP_NAME_MAX",
     "FollowUp",
     "LinkService",
@@ -67,7 +69,10 @@ __all__ = [
     "hash_token",
     "link_text",
     "link_url",
+    "links_available",
+    "links_on",
     "public_base",
+    "shop_link_switch",
     "sms_transport",
 ]
 
@@ -135,7 +140,21 @@ def link_text(shop_name: str, cod_paisa: int, url: str) -> str:
     return f"{shop}: order Tk {format_taka(cod_paisa)}. Confirm/cancel: {url}"
 
 
-async def links_on(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+#: ``Tenant.settings`` key: the shop's own switch for the SMS confirm link
+#: (launch run 14). Off until the seller turns it on in Settings → SMS, because
+#: every link is an SMS that costs from the SMS balance.
+SHOP_LINK_SWITCH = "confirmation_sms_link"
+
+
+async def shop_link_switch(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    from app.tenants.models import Tenant
+
+    settings = await db.scalar(sa.select(Tenant.settings).where(Tenant.id == tenant_id))
+    return (settings or {}).get(SHOP_LINK_SWITCH) is True
+
+
+async def links_available(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    """The platform side: flag, a sending SMS transport and ``PUBLIC_WEB_URL``."""
     from app.common.feature_flags import FeatureFlagService, FlagKey
 
     return (
@@ -145,6 +164,11 @@ async def links_on(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
         )
         and (await current_sms_transport(db)).is_configured
     )
+
+
+async def links_on(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    """A link may go out: the shop switched it on and the platform can send."""
+    return await shop_link_switch(db, tenant_id) and await links_available(db, tenant_id)
 
 
 @dataclass(frozen=True, slots=True)
