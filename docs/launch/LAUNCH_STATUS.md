@@ -1,4 +1,4 @@
-# Launch status — what is live (written 2026-11-25, launch run 12)
+# Launch status — what is live (written 2026-11-25, launch run 12; updated 2026-11-26, run 14)
 
 Production: API `https://api.ecomsbd.com` (alias `https://api.scalemyprints.com`), web
 `https://app.ecomsbd.com` + `https://ecomsbd.com`, database migration `a48001`. Free Launch Mode:
@@ -25,12 +25,14 @@ every feature free, billing off. Exact flag changes, times and rollbacks: `docs/
 | Paste / share / Auto order detect into drafts | `intake_device_enabled` (global) | 2026-11-25 11:17 | links a phone (Android 3.1) and grants Notification access; paste on the web works now |
 | Browser extension pairing + capture | `extension_enabled` (global, needs intake) | 2026-11-25 11:28 | installs the extension once the Chrome Web Store approves it (unpacked for testing) |
 | Confirmation call queue | `confirmation_engine_enabled` (global) | 2026-11-25 ~11:40 | picks "Confirm & call customer" per order; calls from their own phone (no automatic calls or SMS) |
+| SMS confirm link (after an unanswered call the customer gets a link to Confirm / Cancel) | `confirmation_sms_link_enabled` (global) + the shop's own switch | 2026-11-26 01:03 (run 14) | turns it on in Settings → SMS (default off; every link is an SMS from the SMS balance); nothing is sent during quiet hours |
+| Smart alerts (daily scan 09:30 + 15:30) | no flag; first full scan 2026-11-26 09:30 in quiet mode (`SMART_ALERTS_PUSH_FROM`) | 2026-11-26 | nothing; alerts are in the notification centre. **Push is not delivered yet:** the FCM key is refused (operator item) |
 
 ## Seller opt-in, switched on per shop on request
 
 | Feature | Flag | Why not global |
 |---|---|---|
-| SMS confirm link (after an unanswered call the customer gets a link to Confirm / Cancel) | `confirmation_sms_link_enabled` (tenant rows only; on for the test shop) | No per-shop switch in the app: with the flag on, marking "Dhoreni" sends an SMS to the customer by itself (`app/confirmations/links.py` `after_seller_no_answer`), and every SMS is paid from the platform's Alpha SMS balance. Turn it on for a shop that asks. |
+| _(none right now)_ | | |
 
 ## Not live, and why
 

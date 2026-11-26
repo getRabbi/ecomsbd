@@ -7,6 +7,17 @@ on C: or E:). Copy the upload keystore to this machine and point `storeFile` at 
 and the Play Console forms are the operator's (the release key is not readable on the build machine).
 Claims below come only from what is live on the server (`docs/launch/LAUNCH_STATUS.md`).
 
+Run 14 (2026-11-26): the upload keystore is on this machine at
+`D:\secretscach\.ecomsbd-signing\ecomsbd-upload-backup.jks` (alias `ecomsbd-upload`, SHA-1
+`A6:65:21:D5:5B:86:A6:C4:A7:6F:24:DD:DF:A7:23:8A:8A:E2:12:6F`). `key.properties` still names the old path and
+is read-only for this Windows user, so point the build at it with the environment variable the Gradle file
+reads first: `$env:ECOMSBD_RELEASE_STORE_FILE = "D:\secretscach\.ecomsbd-signing\ecomsbd-upload-backup.jks"`.
+Built in run 14: `build\app\outputs\bundle\release\app-release.aab`, 3.1.0+313, 71.6 MB, sha256
+`5dcdc91a43aaf670eff3ad38138e5aec260340da0a7312125407857c7bd2916a`, signer SHA-1 = the upload key. The release
+APK build was stopped for low memory: close other apps (or stop Docker) and run the APK command in §2.
+The phone's Play build is signed by Google Play's app-signing key (SHA-1 `72:2D:6D:FC:…`), so an upload-key
+APK cannot be installed over it; test through Play internal testing instead.
+
 ## 1. Build values checklist (before building)
 
 | Value | Where | Must be | 2026-11-25 |
@@ -16,7 +27,7 @@ Claims below come only from what is live on the server (`docs/launch/LAUNCH_STAT
 | `GOOGLE_CLIENT_ID_WEB` / `_IOS` | same | production OAuth clients | set |
 | `PHONE_OTP_LOGIN_ENABLED` | same | `false` (no OTP SMS provider) | `false` |
 | `ECOMSBD_SENTRY_DSN` | same | the Sentry project DSN, or empty = no crash reports | **empty** → Data safety "Crash logs: not collected" for this build |
-| `version` | `pubspec.yaml` | `3.1.0+312` (higher than the live versionCode) | OK |
+| `version` | `pubspec.yaml` | `3.1.0+313` (higher than the live versionCode 310) | OK (run 14) |
 | Signing | `android/key.properties` + upload keystore | release key | operator |
 
 ## 2. Exact build command (operator's machine with the release key)
