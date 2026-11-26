@@ -18,6 +18,14 @@ APK build was stopped for low memory: close other apps (or stop Docker) and run 
 The phone's Play build is signed by Google Play's app-signing key (SHA-1 `72:2D:6D:FC:…`), so an upload-key
 APK cannot be installed over it; test through Play internal testing instead.
 
+Run 15 (2026-11-26): **do not upload the run 14 AAB (3.1.0+313)** — every 3.1.0 release build up to +313 crashes at
+start-up (`NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init>`). WorkManager 2.10.1 (WP1.4) brings
+Room 2.6.1, whose consumer rule keeps `RoomDatabase` subclasses without their no-arg constructors, and R8 full mode
+drops them. Debug/profile builds do not shrink, so device QA on those never saw it. Fixed by
+`android/app/proguard-rules.pro` (`-keep class * extends androidx.room.RoomDatabase { void <init>(); }`) and the
+version is now `3.1.0+314`. Rebuild the AAB from `main` before uploading. The operator allowed uninstalling the phone's
+Play build, so the upload-key release APK is now installed on the test phone.
+
 ## 1. Build values checklist (before building)
 
 | Value | Where | Must be | 2026-11-25 |
