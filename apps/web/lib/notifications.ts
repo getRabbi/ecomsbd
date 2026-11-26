@@ -21,6 +21,7 @@ export const NOTIFICATION_CATEGORIES = [
   'INVENTORY',
   'IMPORTS',
   'CRM',
+  'ORDERS',
 ] as const;
 
 export interface AppNotification {
