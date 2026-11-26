@@ -65,6 +65,8 @@ class AuditAction(StrEnum):
     TENANT_CREATED = "tenant.created"
     TENANT_UPDATED = "tenant.updated"
     DELIVERY_RULES_UPDATED = "delivery_rules.updated"
+    #: Launch run 14: the shop switched the SMS confirm link on or off.
+    SMS_SETTINGS_UPDATED = "sms.settings_updated"
     #: V4 WP1.2: the seller changed which apps a linked phone reads.
     INTAKE_SETTINGS_UPDATED = "intake.settings_updated"
     TENANT_MEMBER_ADDED = "tenant.member_added"

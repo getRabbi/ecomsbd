@@ -93,10 +93,18 @@ async def engine_on(settings: Any) -> AsyncIterator[None]:
 
 
 @pytest.fixture
-async def link_on(settings: Any, engine_on: None) -> AsyncIterator[None]:
+async def link_on(
+    settings: Any, engine_on: None, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[None]:
+    """The platform flag on, and every shop's own switch on (launch run 14);
+    ``test_sms_settings.py`` covers the switch itself."""
     from app.common.feature_flags import FlagKey
     from tests.conftest import _global_flag_on
 
+    async def switched_on(db: Any, tenant_id: uuid.UUID) -> bool:
+        return True
+
+    monkeypatch.setattr(links, "shop_link_switch", switched_on)
     async for _ in _global_flag_on(settings, str(FlagKey.CONFIRMATION_SMS_LINK_ENABLED)):
         yield
 
@@ -391,7 +399,7 @@ async def test_before_the_last_call_the_sweep_calls_again(
     assert row.state == "CALL_QUEUED" and sms.sent == []
 
 
-@pytest.mark.parametrize("missing", ["flag", "transport", "url"])
+@pytest.mark.parametrize("missing", ["flag", "switch", "transport", "url"])
 async def test_without_the_flag_a_transport_or_a_url_the_seller_gets_the_row(
     client: AsyncClient,
     unique_phone: str,
@@ -412,6 +420,12 @@ async def test_without_the_flag_a_transport_or_a_url_the_seller_gets_the_row(
         monkeypatch.setattr(links, "sms_transport", lambda: _Disabled())
     if missing == "url":
         monkeypatch.setattr(links, "public_base", lambda: None)
+    if missing != "switch":  # the shop's own switch (launch run 14), off by default
+
+        async def switched_on(db: Any, tenant_id: uuid.UUID) -> bool:
+            return True
+
+        monkeypatch.setattr(links, "shop_link_switch", switched_on)
 
     if missing == "flag":
         outcome = await _follow(shop, confirmation_id, NOON)

@@ -27,6 +27,7 @@ import 'connections_screen.dart';
 import 'order_sources_screen.dart';
 import 'network_screen.dart';
 import 'delivery_rules_screen.dart';
+import 'sms_settings_screen.dart';
 import '../autopilot/autopilot_screen.dart';
 import '../intake/auto_detect_screen.dart';
 import 'automation_screen.dart';
@@ -130,6 +131,17 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const DeliveryRulesScreen(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  key: const ValueKey('settings.sms'),
+                  leading: const Icon(Icons.sms_outlined),
+                  title: Text(context.tr('ss.title')),
+                  subtitle: Text(context.tr('ss.subtitle')),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SmsSettingsScreen(),
                     ),
                   ),
                 ),

@@ -141,7 +141,7 @@ export default function NotificationsPage() {
           <label className="field" style={{ margin: 0, marginLeft: 'auto' }}>
             <span className="field__label">{t('notif.severity')}</span>
             <select className="select" value={severity} onChange={(event) => setSeverity(event.target.value)}>
-              <option value="">{t('notif.cat.all')}</option>
+              <option value="">{t('notif.sev.all')}</option>
               {(['ACTION', 'WARNING', 'CRITICAL', 'INFO'] as const).map((value) => (
                 <option key={value} value={value}>
                   {t(`notif.sev.${value}` as StringKey)}
