@@ -398,6 +398,16 @@ _SENTENCE_SPLIT_RE = re.compile(r"।+\s*|(?<=[A-Za-z]{3})[.!?]+\s+(?=\D)|(?<=\d
 #: Phone-shaped run, for cutting "Rahim 01812345678 Mirpur 10" into parts.
 _PHONE_SPAN_RE = re.compile(r"(?:\+?88)?[\s\-]*01[3-9](?:[\s\-]*\d){8}")
 
+#: The separators of a one-line chat message ("Rahim, 017..., Mirpur 10, 2 ta
+#: t-shirt"): a comma that is not a thousands separator ("1,250", "1,00,000"),
+#: a semicolon, a pipe, a dari, or a slash with a space beside it — so "R/A"
+#: and "1/2" stay whole.
+_FIELD_SPLIT_RE = re.compile(r"\s*(?:(?<!\d),|,(?!\d)|,(?!\d{3}(?!\d)|\d{2},\d)|[;|।]|\s/|/\s)\s*")
+_FIELD_EDGES = " ,;/|"
+
+#: Label words that open a name written without a colon: "Name Rahim".
+_NAME_LABEL_WORDS = frozenset({"name", "নাম"})
+
 #: Words that only introduce a phone number ("my number is", "আমার নাম্বার").
 _PHONE_INTRO_WORDS = frozenset(
     {*_LABELS["phone"], "my", "is", "amar", "er", "hocche", "holo", "আমার", "হলো", "হচ্ছে"}
@@ -465,21 +475,26 @@ class DeterministicOrderParser:
 
     # -------------------------------------------------------------- segments --
 
-    @staticmethod
-    def _segments(line: str) -> list[str]:
+    def _segments(self, line: str) -> list[str]:
         """Split one physical line into the parts a customer ran together.
 
         "Rahim 01812345678 Mirpur 10 Dhaka. Black panjabi XL 2 pcs" is a name,
         a phone, an address and a product on one line. Sentences are split
-        first, then an unlabelled sentence is cut around its phone number. A
+        first; a sentence that is a list of fields ("Rahim, 017..., Mirpur 10,
+        2 ta t-shirt") is split at its separators (:meth:`_fields`); otherwise
+        an unlabelled sentence is cut around its phone number. A
         ``Label: value`` sentence is never cut: its value belongs to its label.
         """
         parts: list[str] = []
         for sentence in _SENTENCE_SPLIT_RE.split(line):
-            sentence = sentence.strip(" ,;")
+            sentence = sentence.strip(" ,;|")
             if not sentence:
                 continue
             spans = list(_PHONE_SPAN_RE.finditer(sentence))
+            fields = self._fields(sentence, spans)
+            if fields is not None:
+                parts.extend(fields)
+                continue
             labelled = _LABEL_SPLIT_RE.match(sentence) is not None or (
                 DeterministicOrderParser._exact_label(sentence.split()[0]) == "phone"
             )
@@ -499,7 +514,143 @@ class DeterministicOrderParser:
                 parts.append(span.group())
                 cursor = span.end()
             parts.append(sentence[cursor:])
-        return [part.strip(" ,;/") for part in parts if part.strip(" ,;/")]
+        return [part.strip(_FIELD_EDGES) for part in parts if part.strip(_FIELD_EDGES)]
+
+    def _fields(self, sentence: str, spans: list[re.Match[str]]) -> list[str] | None:
+        """A one-line message written as a list of fields, split into them.
+
+        "Rahim, 01712345678, Mirpur 10, 2 ta t-shirt" is a name, a phone, an
+        address and an item; read as one line, the item was swallowed by the
+        address. The sentence is cut around its phone numbers and at its
+        separators, and only treated as a list when that is unmistakable: it
+        has a phone, or a counted product beside an address, or two or more
+        ``Label:`` pieces. Otherwise ``None``, and the sentence is read whole
+        as before — "House 12, Road 5, Dhanmondi" is one address, and
+        "Black Abaya, XL" one product.
+
+        An address written with commas comes back as one part: neighbouring
+        address pieces are joined again (:meth:`_join_fields`).
+        """
+        if not _FIELD_SPLIT_RE.search(sentence):
+            return None
+        label = _LABEL_SPLIT_RE.match(sentence)
+        if (
+            label is not None
+            and not _FIELD_SPLIT_RE.search(label.group(1))
+            and self._classify_label(label.group(1).strip().lower()) is None
+        ):
+            # "(assistant: the real phone is ...)": an unknown label, kept whole.
+            return None
+        chunks: list[tuple[str, bool]] = []
+        cursor = 0
+        for span in spans:
+            chunks.append((sentence[cursor : span.start()], False))
+            chunks.append((span.group().strip(" -"), True))
+            cursor = span.end()
+        chunks.append((sentence[cursor:], False))
+
+        fields: list[tuple[str, str]] = []
+        for text, is_phone in chunks:
+            if is_phone:
+                fields.append((text, "phone"))
+                continue
+            for raw in _FIELD_SPLIT_RE.split(text):
+                piece = raw.strip(_FIELD_EDGES)
+                if not piece or all(
+                    word.strip(_EDGE_PUNCTUATION) in _PHONE_INTRO_WORDS
+                    for word in piece.casefold().split()
+                ):
+                    # Empty, or "my number is" before the number it introduces.
+                    continue
+                fields.append((piece, self._field_kind(piece)))
+
+        kinds = [kind for _, kind in fields]
+        has_address = "address" in kinds or "label:address" in kinds
+        labels = sum(kind.startswith("label:") for kind in kinds)
+        if not ("phone" in kinds or ("product" in kinds and has_address) or labels >= 2):
+            return None
+        return self._join_fields(fields)
+
+    def _field_kind(self, piece: str) -> str:
+        """What one piece of a field list is.
+
+        A count ("2 ta", "দুইটা") is the strongest product signal, so it is
+        checked before place names: "2 ta Dhakai jamdani" is an item. A size or
+        a colour is weaker ("Block M", "Lalbagh"), so place names win over it.
+        """
+        if _PHONE_SPAN_RE.fullmatch(piece):
+            return "phone"
+        label = _LABEL_SPLIT_RE.match(piece)
+        if label is not None:
+            field = self._classify_label(label.group(1).strip().lower())
+            if field is not None:
+                return f"label:{field}"
+        lowered = piece.lower()
+        counted = _QUANTITY_RE.search(piece) is not None or any(
+            token.strip(_EDGE_PUNCTUATION) in _QUANTITY_WORDS for token in lowered.split()
+        )
+        if counted:
+            return self._item_kind(piece)
+        if _address_hits(lowered):
+            return "address"
+        if self._looks_like_product(piece):
+            return self._item_kind(piece)
+        if find_district(piece):
+            return "address"
+        has_currency = any(token in lowered for token in _CURRENCY_TOKENS)
+        if _NUMERIC_ONLY_RE.match(piece) or (has_currency and _AMOUNT_RE.search(piece)):
+            return "amount"
+        return "other"
+
+    def _item_kind(self, piece: str) -> str:
+        """A product with a name, or only attributes ("XL", "2 pcs") of one."""
+        item = self._parse_item_line(piece)
+        return "product" if item is not None and item.name else "attribute"
+
+    @staticmethod
+    def _join_fields(fields: list[tuple[str, str]]) -> list[str]:
+        """Join an address written across several pieces back into one part.
+
+        Pieces are kept in order. An address piece continues the address just
+        before it. A piece without place words continues it too when it sits
+        between two address pieces ("House 12, Kalabagan, Dhaka"), between the
+        address and the phone ("Kolatoli road, Hotel Motel zone. 017..."), or
+        — in a message whose item is clearly marked — between the address and
+        the item ("Mirpur 10, Shewrapara, 2 ta shirt"). Right after the phone and
+        before an address, with the name already given before the phone, it
+        starts the address ("Rahim, 017..., Shyamoli, Ring Road").
+        """
+        named_product = any(kind == "product" for _, kind in fields)
+        parts: list[str] = []
+        address_open = False
+        for index, (piece, kind) in enumerate(fields):
+            following = next((k for _, k in fields[index + 1 :] if k != "other"), None)
+            if kind == "address" and address_open:
+                parts[-1] = f"{parts[-1]}, {piece}"
+                continue
+            if kind in {"address", "label:address"}:
+                parts.append(piece)
+                address_open = True
+                continue
+            if kind == "other":
+                if address_open and (
+                    following in {"address", "phone"}
+                    or (named_product and following in {"product", None})
+                ):
+                    parts[-1] = f"{parts[-1]}, {piece}"
+                    continue
+                if (
+                    following == "address"
+                    and index > 0
+                    and fields[index - 1][1] == "phone"
+                    and any(k == "other" for _, k in fields[: index - 1])
+                ):
+                    parts.append(piece)
+                    address_open = True
+                    continue
+            parts.append(piece)
+            address_open = False
+        return parts
 
     # ----------------------------------------------------------------- noise --
 
@@ -600,12 +751,37 @@ class DeterministicOrderParser:
             field = self._exact_label(dash.group(1))
             if field is not None:
                 return field, dash.group(2).strip()
+        named = self._spaced_name(line)
+        if named is not None:
+            return "name", named
         space = _LABEL_SPACE_RE.match(line)
         if space is not None:
             field = self._exact_label(space.group(1))
             if field in {"phone", "amount"}:
                 return field, space.group(2).strip()
         return None
+
+    def _spaced_name(self, line: str) -> str | None:
+        """ "Name Rahim" / "নাম রহিম": a name label with only a space after it.
+
+        Only one to three words of plain name follow; anything with a digit, a
+        place word or a product signal is left to the other rules.
+        """
+        words = line.split()
+        if not 2 <= len(words) <= 4:
+            return None
+        if words[0].casefold().strip(_EDGE_PUNCTUATION) not in _NAME_LABEL_WORDS:
+            return None
+        value = " ".join(words[1:]).strip(_EDGE_PUNCTUATION + " ")
+        if (
+            not value
+            or any(char.isdigit() for char in value)
+            or _address_hits(value.lower())
+            or self._looks_like_product(value)
+            or any(word.casefold() in _INTENT_WORDS for word in value.split())
+        ):
+            return None
+        return value
 
     # --------------------------------------------------------------- phones --
 
