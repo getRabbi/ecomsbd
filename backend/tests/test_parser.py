@@ -326,3 +326,254 @@ class TestV4LabelAndDistrictRules:
     def test_a_size_number_is_not_a_unit_price(self, parser: DeterministicOrderParser) -> None:
         result = parser.parse("01700000013\nproduct: shoe size 40")
         assert result.items[0].unit_price_paisa is None
+
+
+#: One-line chat messages, fields separated by commas, dari, slashes, pipes,
+#: semicolons or a newline (run 16). (text, name, phone, address part, item, qty)
+_ONE_LINE_CASES = [
+    # English
+    (
+        "Rahim, 01700000101, Mirpur 10, 2 ta t-shirt",
+        "Rahim",
+        "+8801700000101",
+        "Mirpur 10",
+        "t-shirt",
+        2,
+    ),
+    (
+        "Karim Uddin, 01800000102, House 12, Road 5, Dhanmondi, Dhaka, 1 pc Black Panjabi XL",
+        "Karim Uddin",
+        "+8801800000102",
+        "House 12, Road 5, Dhanmondi, Dhaka",
+        "Panjabi",
+        1,
+    ),
+    (
+        "Nusrat, 01900000103, Uttara Sector 7, 3 pcs hijab",
+        "Nusrat",
+        "+8801900000103",
+        "Uttara Sector 7",
+        "hijab",
+        3,
+    ),
+    (
+        "Tania, 01700000104, Chittagong Agrabad, 2 pcs three piece",
+        "Tania",
+        "+8801700000104",
+        "Agrabad",
+        "three piece",
+        2,
+    ),
+    (
+        "Rahim,01700000105,Mirpur 10,2 ta t-shirt",
+        "Rahim",
+        "+8801700000105",
+        "Mirpur 10",
+        "t-shirt",
+        2,
+    ),
+    (
+        "2 ta t-shirt, Rahim, 01700000106, Mirpur 10",
+        "Rahim",
+        "+8801700000106",
+        "Mirpur 10",
+        "t-shirt",
+        2,
+    ),
+    (
+        "Name Rahim, 01700000107, Mirpur 10, 2 ta tshirt",
+        "Rahim",
+        "+8801700000107",
+        "Mirpur 10",
+        "tshirt",
+        2,
+    ),
+    # Banglish
+    (
+        "Sumi Akter, 01600000108, Savar, Dhaka, 2 ta kurti",
+        "Sumi Akter",
+        "+8801600000108",
+        "Savar, Dhaka",
+        "kurti",
+        2,
+    ),
+    (
+        "Mitu, 01700000109, Khulna Sonadanga, duita jersey",
+        "Mitu",
+        "+8801700000109",
+        "Khulna Sonadanga",
+        "jersey",
+        2,
+    ),
+    (
+        "Rafiq, 01700000110, Mirpur 2, Dhaka, 2 ta t shirt L size",
+        "Rafiq",
+        "+8801700000110",
+        "Mirpur 2, Dhaka",
+        "t shirt",
+        2,
+    ),
+    (
+        "Hasan, 01700000111, Rajshahi Shaheb Bazar, 4 ta cap",
+        "Hasan",
+        "+8801700000111",
+        "Shaheb Bazar",
+        "cap",
+        4,
+    ),
+    (
+        "Arif Hossain, 01700000112, Bashundhara R/A Block C, 1 ta wallet",
+        "Arif Hossain",
+        "+8801700000112",
+        "Bashundhara R/A Block C",
+        "wallet",
+        1,
+    ),
+    # Bangla, with Bangla digits
+    ("রহিম, ০১৭০০০০০১১৩, মিরপুর ১০, ২টা টি-শার্ট", "রহিম", "+8801700000113", "মিরপুর 10", "টি-শার্ট", 2),
+    (
+        "করিম, 01800000114, উত্তরা সেক্টর ৭, ঢাকা, ১টি পাঞ্জাবি",
+        "করিম",
+        "+8801800000114",
+        "উত্তরা সেক্টর 7, ঢাকা",
+        "পাঞ্জাবি",
+        1,
+    ),
+    ("রাকিব, ০১৭০০০০০১১৫, সাভার, ঢাকা, ২ টা জার্সি", "রাকিব", "+8801700000115", "সাভার, ঢাকা", "জার্সি", 2),
+    (
+        "নাসরিন, 01700000116, গ্রাম: চরপাড়া, থানা: সদর, জেলা: ময়মনসিংহ, দুইটা শাড়ি",
+        "নাসরিন",
+        "+8801700000116",
+        "গ্রাম: চরপাড়া, থানা: সদর, জেলা: ময়মনসিংহ",
+        "শাড়ি",
+        2,
+    ),
+    # Other separators: dari, slash, pipe, semicolon, newline
+    (
+        "সুমি আক্তার। ০১৯০০০০০১১৭। ধানমন্ডি ২৭, ঢাকা। ৩ পিস হিজাব",
+        "সুমি আক্তার",
+        "+8801900000117",
+        "ধানমন্ডি 27",
+        "হিজাব",
+        3,
+    ),
+    (
+        "Jamal / 01500000118 / Gulshan 1 / 1 ta watch",
+        "Jamal",
+        "+8801500000118",
+        "Gulshan 1",
+        "watch",
+        1,
+    ),
+    (
+        "Mim | 01700000119 | Narayanganj Fatullah | 1 ta bag",
+        "Mim",
+        "+8801700000119",
+        "Narayanganj Fatullah",
+        "bag",
+        1,
+    ),
+    (
+        "Polash; 01700000120; Gazipur Tongi; 2 ta shoe",
+        "Polash",
+        "+8801700000120",
+        "Gazipur Tongi",
+        "shoe",
+        2,
+    ),
+    (
+        "Rahim, 01700000121\nMirpur 10, 2 ta t-shirt",
+        "Rahim",
+        "+8801700000121",
+        "Mirpur 10",
+        "t-shirt",
+        2,
+    ),
+    # Mixed script and separators
+    (
+        "Shakil, 01700000122, Banani, 2 ta polo shirt, 1200 tk",
+        "Shakil",
+        "+8801700000122",
+        "Banani",
+        "polo shirt",
+        2,
+    ),
+    ("রুমা / 01700000123, Mirpur 1, দুইটা থ্রি পিস", "রুমা", "+8801700000123", "Mirpur 1", "থ্রি পিস", 2),
+]
+
+
+class TestOneLineFieldLists:
+    """ "Rahim, 017..., Mirpur 10, 2 ta t-shirt": every field, not one long address."""
+
+    @pytest.mark.parametrize(
+        ("text", "name", "phone", "address", "item", "quantity"),
+        _ONE_LINE_CASES,
+        ids=[case[0][:40] for case in _ONE_LINE_CASES],
+    )
+    def test_each_field_is_read(
+        self,
+        parser: DeterministicOrderParser,
+        text: str,
+        name: str,
+        phone: str,
+        address: str,
+        item: str,
+        quantity: int,
+    ) -> None:
+        result = parser.parse(text)
+
+        assert result.customer_name == name
+        assert result.selected_phone == phone
+        assert result.address is not None
+        assert address in result.address
+        assert item not in result.address
+        assert len(result.items) == 1, result.items
+        assert item.lower() in result.items[0].name.lower()
+        assert result.items[0].quantity == quantity
+
+    def test_the_amount_piece_is_the_cod(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Shakil, 01700000122, Banani, 2 ta polo shirt, 1200 tk")
+        assert result.cod_amount_paisa == 120_000
+
+    def test_a_size_piece_stays_with_its_product(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse("Rafiq, 01700000110, Mirpur 2, Dhaka, 2 ta t shirt L size")
+        assert result.items[0].size == "L"
+
+    def test_a_comma_address_line_is_still_one_address(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse(
+            "Rahim\n01700000124\nHouse 12, Road 5, Kalabagan, Dhaka\nBlack Abaya XL"
+        )
+        assert result.address == "House 12, Road 5, Kalabagan, Dhaka"
+        assert result.items[0].name == "Black Abaya"
+
+    def test_a_comma_product_line_is_still_one_product(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("Rahim\n01700000125\nMirpur 10\nBlack Abaya, XL")
+        assert len(result.items) == 1
+        assert result.items[0].size == "XL"
+
+    def test_thousands_separators_are_not_field_separators(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("Rahim, 01700000126, Mirpur 10, 1 ta watch, 1,250 tk")
+        assert result.cod_amount_paisa == 125_000
+
+    def test_an_area_before_the_road_stays_in_the_address(
+        self, parser: DeterministicOrderParser
+    ) -> None:
+        result = parser.parse("Rahim, 01700000127, Shyamoli, Ring Road, Dhaka, 1 ta bag")
+        assert result.address == "Shyamoli, Ring Road, Dhaka"
+        assert [item.name for item in result.items] == ["bag"]
+
+    def test_labelled_fields_on_one_line(self, parser: DeterministicOrderParser) -> None:
+        result = parser.parse(
+            "Name: Rahim, Phone: 01700000128, Address: House 3, Road 2, Mirpur 10, Product: 2 ta shirt"
+        )
+        assert result.customer_name == "Rahim"
+        assert result.selected_phone == "+8801700000128"
+        assert result.address == "House 3, Road 2, Mirpur 10"
+        assert result.items[0].name == "shirt"
+        assert result.items[0].quantity == 2
